@@ -111,3 +111,23 @@ CREATE TABLE IF NOT EXISTS work_topics (
 CREATE INDEX IF NOT EXISTS idx_projects_department ON projects(department);
 CREATE INDEX IF NOT EXISTS idx_work_topics_department ON work_topics(department);
 CREATE INDEX IF NOT EXISTS idx_project_owners_user ON project_owners(user_id);
+
+-- Schema: โมดูลวันลา (ขอลา/อนุมัติ) + วันหมดอายุใบประกอบวิชาชีพ
+
+ALTER TABLE staff_profiles ADD COLUMN license_expiry_date TEXT;
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    leave_type    TEXT NOT NULL CHECK (leave_type IN ('sick','personal','maternity','other')),
+    reason        TEXT,
+    start_date    TEXT NOT NULL,
+    end_date      TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+    approved_by   INTEGER REFERENCES users(id),
+    approved_at   TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+CREATE INDEX IF NOT EXISTS idx_leave_requests_user ON leave_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
