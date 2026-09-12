@@ -1,0 +1,9 @@
+{
+  "name": "banpadeng-school",
+  "compatibility_date": "2024-09-23",
+  "main": "src/index.js",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  }
+}
