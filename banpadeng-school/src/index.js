@@ -679,7 +679,7 @@ async function handleListStaff(request, env) {
 
   const { results } = await env.DB.prepare(
     `SELECT u.id, u.full_name, u.email, u.role,
-            p.position, p.subjects, p.phone, p.homeroom_classroom
+            p.position, p.subjects, p.phone, p.homeroom_classroom, p.license_expiry_date
      FROM users u
      LEFT JOIN staff_profiles p ON p.user_id = u.id
      WHERE u.status = 'active' AND u.role IS NOT NULL
@@ -715,17 +715,19 @@ async function handleUpdateStaff(request, env, targetId) {
   const subjects = body.subjects || null;
   const phone = body.phone || null;
   const homeroom_classroom = body.homeroom_classroom || null;
+  const license_expiry_date = body.license_expiry_date || null;
 
   await env.DB.prepare(
-    `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom, license_expiry_date)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        position = excluded.position,
        subjects = excluded.subjects,
        phone = excluded.phone,
-       homeroom_classroom = excluded.homeroom_classroom`
+       homeroom_classroom = excluded.homeroom_classroom,
+       license_expiry_date = excluded.license_expiry_date`
   )
-    .bind(targetId, position, subjects, phone, homeroom_classroom)
+    .bind(targetId, position, subjects, phone, homeroom_classroom, license_expiry_date)
     .run();
 
   return jsonResponse({ ok: true });
@@ -1016,6 +1018,160 @@ async function handleDeleteTopic(request, env, topicId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- วันลา ----------
+const LEAVE_TYPES = ["sick", "personal", "maternity", "other"];
+
+// ---------- /api/leave-requests (GET) ----------
+async function handleListLeaveRequests(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+
+  let query, binds;
+  if (isAdmin(user)) {
+    query = `SELECT lr.*, u.full_name, ap.full_name as approver_name
+              FROM leave_requests lr
+              JOIN users u ON u.id = lr.user_id
+              LEFT JOIN users ap ON ap.id = lr.approved_by
+              ORDER BY lr.status ASC, lr.created_at DESC`;
+    binds = [];
+  } else {
+    query = `SELECT lr.*, u.full_name, ap.full_name as approver_name
+              FROM leave_requests lr
+              JOIN users u ON u.id = lr.user_id
+              LEFT JOIN users ap ON ap.id = lr.approved_by
+              WHERE lr.user_id = ?
+              ORDER BY lr.created_at DESC`;
+    binds = [user.id];
+  }
+
+  const { results } = await env.DB.prepare(query).bind(...binds).all();
+  return jsonResponse({ leave_requests: results });
+}
+
+// ---------- /api/leave-requests (POST) ----------
+async function handleCreateLeaveRequest(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const leaveType = body.leave_type;
+  if (!LEAVE_TYPES.includes(leaveType)) return jsonResponse({ error: "กรุณาเลือกประเภทการลา" }, 400);
+
+  const reason = (body.reason || "").trim();
+  if (leaveType === "other" && !reason) {
+    return jsonResponse({ error: "กรุณาระบุเหตุผลเมื่อเลือกประเภท 'อื่นๆ'" }, 400);
+  }
+
+  if (!body.start_date || !body.end_date) {
+    return jsonResponse({ error: "กรุณาระบุวันที่เริ่มและสิ้นสุดการลา" }, 400);
+  }
+  if (body.end_date < body.start_date) {
+    return jsonResponse({ error: "วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม" }, 400);
+  }
+
+  const result = await env.DB.prepare(
+    `INSERT INTO leave_requests (user_id, leave_type, reason, start_date, end_date)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(user.id, leaveType, reason || null, body.start_date, body.end_date)
+    .run();
+
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+
+// ---------- /api/leave-requests/:id (PATCH) — อนุมัติ/ไม่อนุมัติ (admin เท่านั้น) ----------
+async function handleUpdateLeaveRequest(request, env, leaveId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่อนุมัติได้" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  if (!["approved", "rejected"].includes(body.status)) {
+    return jsonResponse({ error: "สถานะไม่ถูกต้อง" }, 400);
+  }
+
+  await env.DB.prepare(
+    "UPDATE leave_requests SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?"
+  )
+    .bind(body.status, user.id, new Date().toISOString(), leaveId)
+    .run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/leave-requests/:id (DELETE) — ผู้ยื่นยกเลิกคำขอที่ยังรอดำเนินการ ----------
+async function handleDeleteLeaveRequest(request, env, leaveId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+
+  const row = await env.DB.prepare("SELECT user_id, status FROM leave_requests WHERE id = ?")
+    .bind(leaveId)
+    .first();
+  if (!row) return jsonResponse({ error: "ไม่พบคำขอลานี้" }, 404);
+  if (row.user_id !== user.id && !isAdmin(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์ยกเลิกคำขอนี้" }, 403);
+  }
+  if (row.status !== "pending" && !isAdmin(user)) {
+    return jsonResponse({ error: "ยกเลิกได้เฉพาะคำขอที่ยังรอดำเนินการ" }, 400);
+  }
+
+  await env.DB.prepare("DELETE FROM leave_requests WHERE id = ?").bind(leaveId).run();
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/overview (GET) — ภาพรวมสำหรับหน้าแดชบอร์ด ----------
+async function handleOverview(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+
+  const studentsEnrolled = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM students WHERE status = 'enrolled'"
+  ).first();
+  const staffCount = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM users WHERE status = 'active' AND role IS NOT NULL"
+  ).first();
+  const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
+  const overdueTasks = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now')"
+  ).first();
+  const ongoingProjects = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing'"
+  ).first();
+  const pendingLeave = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'"
+  ).first();
+
+  const { results: licensesExpiring } = await env.DB.prepare(
+    `SELECT u.full_name, sp.license_expiry_date
+     FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
+     WHERE sp.license_expiry_date IS NOT NULL
+       AND sp.license_expiry_date <= date('now', '+90 days')
+     ORDER BY sp.license_expiry_date ASC`
+  ).all();
+
+  return jsonResponse({
+    students_enrolled: studentsEnrolled.count,
+    staff_count: staffCount.count,
+    open_tasks: openTasks.count,
+    overdue_tasks: overdueTasks.count,
+    ongoing_projects: ongoingProjects.count,
+    pending_leave_requests: pendingLeave.count,
+    licenses_expiring: licensesExpiring,
+  });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -1087,6 +1243,15 @@ export default {
       const topicMatch = pathname.match(/^\/api\/topics\/(\d+)$/);
       if (topicMatch && method === "PATCH") return await handleUpdateTopic(request, env, Number(topicMatch[1]));
       if (topicMatch && method === "DELETE") return await handleDeleteTopic(request, env, Number(topicMatch[1]));
+
+      if (pathname === "/api/leave-requests" && method === "GET") return await handleListLeaveRequests(request, env);
+      if (pathname === "/api/leave-requests" && method === "POST") return await handleCreateLeaveRequest(request, env);
+
+      const leaveMatch = pathname.match(/^\/api\/leave-requests\/(\d+)$/);
+      if (leaveMatch && method === "PATCH") return await handleUpdateLeaveRequest(request, env, Number(leaveMatch[1]));
+      if (leaveMatch && method === "DELETE") return await handleDeleteLeaveRequest(request, env, Number(leaveMatch[1]));
+
+      if (pathname === "/api/overview" && method === "GET") return await handleOverview(request, env);
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);

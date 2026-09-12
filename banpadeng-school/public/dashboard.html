@@ -5,56 +5,75 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>หน้าหลัก — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css" />
+<style>
+  .layout { display:flex; min-height:100vh; }
+  .sidebar {
+    width:240px; flex-shrink:0; background:var(--color-forest-900);
+    color:#fff; padding:24px 16px; display:flex; flex-direction:column;
+  }
+  .sidebar-brand { display:flex; align-items:center; gap:10px; font-weight:600; margin-bottom:28px; padding:0 8px; }
+  .sidebar-brand .brand-mark { width:30px; height:30px; border-radius:8px; background:rgba(255,255,255,0.15); flex-shrink:0; }
+  .sidebar nav { display:flex; flex-direction:column; gap:2px; flex:1; }
+  .sidebar nav a {
+    color:rgba(255,255,255,0.85); text-decoration:none; padding:10px 12px;
+    border-radius:8px; font-size:14px; transition:background .15s;
+  }
+  .sidebar nav a:hover { background:rgba(255,255,255,0.08); }
+  .sidebar-footer { border-top:1px solid rgba(255,255,255,0.15); padding-top:14px; margin-top:14px; font-size:13px; }
+  .sidebar-footer .role-chip { background:rgba(255,255,255,0.15); color:#fff; margin-bottom:8px; display:inline-block; }
+  .sidebar-footer a { color:rgba(255,255,255,0.75); text-decoration:underline; display:block; margin-top:8px; }
+  .main-content { flex:1; padding:32px 40px; max-width:1080px; }
+  .overview-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:16px; margin-top:24px; }
+  .overview-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:20px; }
+  .overview-number { font-size:30px; font-weight:700; color:var(--color-forest-900); }
+  .overview-label { font-size:13px; color:var(--color-text-muted); margin-top:4px; }
+  .overview-number.warn { color:var(--color-danger); }
+  .license-panel { margin-top:32px; }
+  @media (max-width: 720px) {
+    .layout { flex-direction:column; }
+    .sidebar { width:100%; flex-direction:row; align-items:center; padding:14px 16px; flex-wrap:wrap; }
+    .sidebar-brand { margin-bottom:0; }
+    .sidebar nav { flex-direction:row; flex-wrap:wrap; }
+    .sidebar-footer { display:none; }
+    .main-content { padding:24px 20px; }
+  }
+</style>
 </head>
 <body>
-<div class="app-shell">
-  <div class="app-topbar">
-    <div class="brand">
+<div class="layout">
+  <div class="sidebar">
+    <div class="sidebar-brand">
       <div class="brand-mark"></div>
       โรงเรียนบ้านป่าเด็ง
     </div>
-    <div class="app-user">
+    <nav>
+      <a href="/tasks.html">จัดการงาน</a>
+      <a href="/students.html">ข้อมูลนักเรียน</a>
+      <a href="/staff.html">ข้อมูลครู/บุคลากร</a>
+      <a href="/leave.html">วันลา</a>
+      <a href="/departments.html">4 ฝ่ายงาน</a>
+      <a href="/reports.html">รายงาน</a>
+      <a href="/admin-users.html" id="adminNavLink" style="display:none;">จัดการผู้ใช้งาน</a>
+    </nav>
+    <div class="sidebar-footer">
       <span class="role-chip" id="roleChip">—</span>
-      <span id="userName">—</span>
+      <div id="userName">—</div>
       <a href="#" id="logoutLink">ออกจากระบบ</a>
     </div>
   </div>
 
-  <div class="app-main">
-    <h2 id="greeting">สวัสดีครับ/ค่ะ</h2>
-    <p style="color: var(--color-text-muted);">เลือกงานที่ต้องการใช้งานจากรายการด้านล่าง</p>
+  <div class="main-content">
+    <h2 id="greeting" style="margin-bottom:2px;">สวัสดีครับ/ค่ะ</h2>
+    <p style="color:var(--color-text-muted); margin:0;">ภาพรวมของโรงเรียนบ้านป่าเด็ง</p>
 
-    <div class="card-grid">
-      <div class="module-card">
-        <h3>จัดการงาน</h3>
-        <p>มอบหมายงาน ติดตามสถานะ ปฏิทิน และแจ้งเตือน</p>
-        <a href="/tasks.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้าจัดการงาน</a>
-      </div>
-      <div class="module-card">
-        <h3>ข้อมูลนักเรียน</h3>
-        <p>ทะเบียนนักเรียน ผู้ปกครอง การมาเรียน และข้อมูลสุขภาพ</p>
-        <a href="/students.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้าข้อมูลนักเรียน</a>
-      </div>
-      <div class="module-card">
-        <h3>ข้อมูลครู/บุคลากร</h3>
-        <p>ทะเบียนครูและบุคลากร วิชาที่สอน ครูประจำชั้น</p>
-        <a href="/staff.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้าข้อมูลครู/บุคลากร</a>
-      </div>
-      <div class="module-card">
-        <h3>รายงาน</h3>
-        <p>สรุปงานคงค้าง สถิติการมาเรียน ส่งออก Excel/PDF</p>
-        <a href="/reports.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้ารายงาน</a>
-      </div>
-      <div class="module-card">
-        <h3>4 ฝ่ายงาน</h3>
-        <p>รวมงาน โครงการ และงบประมาณของแต่ละฝ่าย</p>
-        <a href="/departments.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้า 4 ฝ่ายงาน</a>
-      </div>
-      <div class="module-card" id="adminCard" style="display:none;">
-        <h3>จัดการผู้ใช้งาน</h3>
-        <p>อนุมัติสมาชิกใหม่และกำหนดสิทธิ์การใช้งาน</p>
-        <a href="/admin-users.html" class="btn btn-primary" style="margin-top:12px;">เปิดหน้าจัดการ</a>
-      </div>
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="overview-grid" id="overviewGrid"></div>
+
+    <div class="license-panel">
+      <h3 style="margin-bottom:12px;">ใบประกอบวิชาชีพใกล้หมดอายุ (ภายใน 90 วัน)</h3>
+      <div class="panel" id="licensePanel"></div>
+      <div class="empty-state" id="licenseEmpty" style="display:none;">ไม่มีใบประกอบวิชาชีพที่ใกล้หมดอายุ</div>
     </div>
   </div>
 </div>
@@ -77,7 +96,39 @@
     document.getElementById("greeting").textContent = `สวัสดีครับ/ค่ะ คุณ${user.full_name}`;
 
     if (user.is_admin) {
-      document.getElementById("adminCard").style.display = "block";
+      document.getElementById("adminNavLink").style.display = "block";
+    }
+
+    const errorBox = document.getElementById("errorBox");
+    try {
+      const data = await apiRequest("/api/overview");
+
+      document.getElementById("overviewGrid").innerHTML = `
+        <div class="overview-card"><div class="overview-number">${data.students_enrolled}</div><div class="overview-label">นักเรียนกำลังศึกษาอยู่</div></div>
+        <div class="overview-card"><div class="overview-number">${data.staff_count}</div><div class="overview-label">ครู/บุคลากรทั้งหมด</div></div>
+        <div class="overview-card"><div class="overview-number">${data.open_tasks}</div><div class="overview-label">งานที่ยังเปิดอยู่</div></div>
+        <div class="overview-card"><div class="overview-number ${data.overdue_tasks > 0 ? "warn" : ""}">${data.overdue_tasks}</div><div class="overview-label">งานเลยกำหนด</div></div>
+        <div class="overview-card"><div class="overview-number">${data.ongoing_projects}</div><div class="overview-label">โครงการที่กำลังดำเนินการ</div></div>
+        <div class="overview-card"><div class="overview-number ${data.pending_leave_requests > 0 ? "warn" : ""}">${data.pending_leave_requests}</div><div class="overview-label">คำขอลารอดำเนินการ</div></div>
+      `;
+
+      const licensePanel = document.getElementById("licensePanel");
+      const licenseEmpty = document.getElementById("licenseEmpty");
+      if (data.licenses_expiring.length === 0) {
+        licensePanel.innerHTML = "";
+        licenseEmpty.style.display = "block";
+      } else {
+        licenseEmpty.style.display = "none";
+        licensePanel.innerHTML = `<table>
+          <thead><tr><th>ชื่อ</th><th>วันหมดอายุ</th></tr></thead>
+          <tbody>${data.licenses_expiring
+            .map((r) => `<tr><td>${r.full_name}</td><td>${r.license_expiry_date}</td></tr>`)
+            .join("")}</tbody>
+        </table>`;
+      }
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
     }
   })();
 

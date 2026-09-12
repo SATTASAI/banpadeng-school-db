@@ -51,6 +51,10 @@
       <label>ครูประจำชั้น/ที่ปรึกษาห้อง</label>
       <input type="text" id="fHomeroom" placeholder="เช่น ป.4/1 (เว้นว่างถ้าไม่ได้เป็น)" />
     </div>
+    <div class="field">
+      <label>วันหมดอายุใบประกอบวิชาชีพ</label>
+      <input type="date" id="fLicenseExpiry" />
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
       <button class="btn btn-primary" id="saveStaffBtn">บันทึก</button>
@@ -73,6 +77,7 @@
           s.subjects,
           s.phone,
           s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
+          s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
         ]
           .filter(Boolean)
           .join(" · ");
@@ -113,6 +118,7 @@
     document.getElementById("fSubjects").value = staffMember.subjects || "";
     document.getElementById("fPhone").value = staffMember.phone || "";
     document.getElementById("fHomeroom").value = staffMember.homeroom_classroom || "";
+    document.getElementById("fLicenseExpiry").value = staffMember.license_expiry_date || "";
     document.getElementById("staffModal").style.display = "flex";
   }
 
@@ -129,6 +135,7 @@
           subjects: document.getElementById("fSubjects").value.trim(),
           phone: document.getElementById("fPhone").value.trim(),
           homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
+          license_expiry_date: document.getElementById("fLicenseExpiry").value || "",
         },
       });
       document.getElementById("staffModal").style.display = "none";
