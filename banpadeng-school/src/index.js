@@ -223,6 +223,227 @@ async function handleAdminUpdateUser(request, env, targetId) {
   return jsonResponse({ user: updated });
 }
 
+// ---------- /api/users (GET) — รายชื่อผู้ใช้งานที่ active ไว้เลือกเป็นผู้รับมอบหมาย ----------
+async function handleListUsers(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  const { results } = await env.DB.prepare(
+    "SELECT id, full_name, role FROM users WHERE status = 'active' AND role IS NOT NULL ORDER BY full_name"
+  ).all();
+
+  return jsonResponse({ users: results });
+}
+
+// ---------- /api/tasks (GET) ----------
+async function handleListTasks(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  let taskRows;
+  if (isAdmin(user)) {
+    taskRows = await env.DB.prepare(
+      `SELECT t.*, u.full_name as creator_name FROM tasks t
+       JOIN users u ON u.id = t.created_by
+       ORDER BY t.status ASC, t.due_date IS NULL, t.due_date ASC, t.created_at DESC`
+    ).all();
+  } else {
+    taskRows = await env.DB.prepare(
+      `SELECT DISTINCT t.*, u.full_name as creator_name FROM tasks t
+       JOIN users u ON u.id = t.created_by
+       LEFT JOIN task_assignees ta ON ta.task_id = t.id
+       WHERE t.created_by = ? OR ta.user_id = ?
+       ORDER BY t.status ASC, t.due_date IS NULL, t.due_date ASC, t.created_at DESC`
+    ).bind(user.id, user.id).all();
+  }
+
+  const tasks = taskRows.results;
+  if (tasks.length === 0) return jsonResponse({ tasks: [] });
+
+  const taskIds = tasks.map((t) => t.id);
+  const placeholders = taskIds.map(() => "?").join(",");
+  const { results: assigneeRows } = await env.DB.prepare(
+    `SELECT ta.task_id, ta.user_id, ta.status, u.full_name
+     FROM task_assignees ta JOIN users u ON u.id = ta.user_id
+     WHERE ta.task_id IN (${placeholders})`
+  )
+    .bind(...taskIds)
+    .all();
+
+  const assigneesByTask = {};
+  for (const row of assigneeRows) {
+    if (!assigneesByTask[row.task_id]) assigneesByTask[row.task_id] = [];
+    assigneesByTask[row.task_id].push({
+      user_id: row.user_id,
+      full_name: row.full_name,
+      status: row.status,
+    });
+  }
+
+  const enriched = tasks.map((t) => ({ ...t, assignees: assigneesByTask[t.id] || [] }));
+  return jsonResponse({ tasks: enriched });
+}
+
+// ---------- /api/tasks (POST) ----------
+async function handleCreateTask(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const title = (body.title || "").trim();
+  const description = (body.description || "").trim();
+  const priority = ["low", "normal", "high"].includes(body.priority) ? body.priority : "normal";
+  const dueDate = body.due_date || null;
+  const assigneeIds = Array.isArray(body.assignee_ids) ? body.assignee_ids.map(Number) : [];
+
+  if (!title) {
+    return jsonResponse({ error: "กรุณากรอกชื่องาน" }, 400);
+  }
+  if (assigneeIds.length === 0) {
+    return jsonResponse({ error: "กรุณาเลือกผู้รับผิดชอบอย่างน้อย 1 คน" }, 400);
+  }
+
+  const result = await env.DB.prepare(
+    `INSERT INTO tasks (title, description, priority, due_date, created_by) VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(title, description || null, priority, dueDate, user.id)
+    .run();
+
+  const taskId = result.meta.last_row_id;
+
+  const inserts = assigneeIds.map((uid) =>
+    env.DB.prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)").bind(taskId, uid)
+  );
+  await env.DB.batch(inserts);
+
+  return jsonResponse({ id: taskId }, 201);
+}
+
+// ---------- helpers ----------
+async function canManageTask(env, user, taskId) {
+  if (isAdmin(user)) return true;
+  const task = await env.DB.prepare("SELECT created_by FROM tasks WHERE id = ?").bind(taskId).first();
+  return !!task && task.created_by === user.id;
+}
+
+// ---------- /api/tasks/:id (PATCH) — แก้ไขงาน/ปิดงาน/เปลี่ยนผู้รับผิดชอบ (ผู้สร้างหรือแอดมิน) ----------
+async function handleUpdateTask(request, env, taskId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!(await canManageTask(env, user, taskId))) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขงานนี้" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const updates = [];
+  const values = [];
+  if (body.title !== undefined) {
+    updates.push("title = ?");
+    values.push(String(body.title).trim());
+  }
+  if (body.description !== undefined) {
+    updates.push("description = ?");
+    values.push(body.description ? String(body.description).trim() : null);
+  }
+  if (body.priority !== undefined && ["low", "normal", "high"].includes(body.priority)) {
+    updates.push("priority = ?");
+    values.push(body.priority);
+  }
+  if (body.due_date !== undefined) {
+    updates.push("due_date = ?");
+    values.push(body.due_date || null);
+  }
+  if (body.status !== undefined && ["open", "closed"].includes(body.status)) {
+    updates.push("status = ?");
+    values.push(body.status);
+  }
+
+  if (updates.length > 0) {
+    values.push(taskId);
+    await env.DB.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  }
+
+  if (Array.isArray(body.assignee_ids)) {
+    const assigneeIds = body.assignee_ids.map(Number);
+    await env.DB.prepare("DELETE FROM task_assignees WHERE task_id = ?").bind(taskId).run();
+    if (assigneeIds.length > 0) {
+      const inserts = assigneeIds.map((uid) =>
+        env.DB.prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)").bind(taskId, uid)
+      );
+      await env.DB.batch(inserts);
+    }
+  }
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/tasks/:id (DELETE) ----------
+async function handleDeleteTask(request, env, taskId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!(await canManageTask(env, user, taskId))) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์ลบงานนี้" }, 403);
+  }
+
+  await env.DB.prepare("DELETE FROM task_assignees WHERE task_id = ?").bind(taskId).run();
+  await env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(taskId).run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/tasks/:id/status (PATCH) — ผู้รับมอบหมายอัปเดตสถานะของตัวเอง ----------
+async function handleUpdateMyTaskStatus(request, env, taskId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  if (!["pending", "in_progress", "done"].includes(body.status)) {
+    return jsonResponse({ error: "สถานะไม่ถูกต้อง" }, 400);
+  }
+
+  const result = await env.DB.prepare(
+    "UPDATE task_assignees SET status = ? WHERE task_id = ? AND user_id = ?"
+  )
+    .bind(body.status, taskId, user.id)
+    .run();
+
+  if (result.meta.changes === 0) {
+    return jsonResponse({ error: "คุณไม่ได้เป็นผู้รับผิดชอบงานนี้" }, 403);
+  }
+
+  return jsonResponse({ ok: true });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -241,6 +462,19 @@ export default {
       if (adminUserMatch && method === "PATCH") {
         return await handleAdminUpdateUser(request, env, Number(adminUserMatch[1]));
       }
+
+      if (pathname === "/api/users" && method === "GET") return await handleListUsers(request, env);
+      if (pathname === "/api/tasks" && method === "GET") return await handleListTasks(request, env);
+      if (pathname === "/api/tasks" && method === "POST") return await handleCreateTask(request, env);
+
+      const taskStatusMatch = pathname.match(/^\/api\/tasks\/(\d+)\/status$/);
+      if (taskStatusMatch && method === "PATCH") {
+        return await handleUpdateMyTaskStatus(request, env, Number(taskStatusMatch[1]));
+      }
+
+      const taskMatch = pathname.match(/^\/api\/tasks\/(\d+)$/);
+      if (taskMatch && method === "PATCH") return await handleUpdateTask(request, env, Number(taskMatch[1]));
+      if (taskMatch && method === "DELETE") return await handleDeleteTask(request, env, Number(taskMatch[1]));
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);

@@ -17,3 +17,26 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- Schema: โมดูลจัดการงาน (มอบหมายงาน/ติดตามสถานะ)
+
+CREATE TABLE IF NOT EXISTS tasks (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  title         TEXT NOT NULL,
+  description   TEXT,
+  priority      TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low','normal','high')),
+  due_date      TEXT,
+  status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
+  created_by    INTEGER NOT NULL REFERENCES users(id),
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS task_assignees (
+  task_id  INTEGER NOT NULL REFERENCES tasks(id),
+  user_id  INTEGER NOT NULL REFERENCES users(id),
+  status   TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','in_progress','done')),
+  PRIMARY KEY (task_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_assignees_user ON task_assignees(user_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by);
