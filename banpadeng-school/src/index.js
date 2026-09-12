@@ -668,6 +668,69 @@ async function handleDeleteGuardian(request, env, guardianId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- ข้อมูลครู/บุคลากร ----------
+
+// ---------- /api/staff (GET) — ทำเนียบบุคลากร ----------
+async function handleListStaff(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  const { results } = await env.DB.prepare(
+    `SELECT u.id, u.full_name, u.email, u.role,
+            p.position, p.subjects, p.phone, p.homeroom_classroom
+     FROM users u
+     LEFT JOIN staff_profiles p ON p.user_id = u.id
+     WHERE u.status = 'active' AND u.role IS NOT NULL
+     ORDER BY u.full_name`
+  ).all();
+
+  return jsonResponse({ staff: results });
+}
+
+// ---------- /api/staff/:id (PATCH) — แก้ไขข้อมูลตำแหน่ง/วิชา/ติดต่อ ----------
+async function handleUpdateStaff(request, env, targetId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!isAdmin(user) && user.id !== targetId) {
+    return jsonResponse({ error: "แก้ไขได้เฉพาะข้อมูลของตัวเอง หรือต้องเป็นผู้ดูแลระบบ/ผู้บริหาร" }, 403);
+  }
+
+  const target = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND role IS NOT NULL")
+    .bind(targetId)
+    .first();
+  if (!target) return jsonResponse({ error: "ไม่พบบุคลากรนี้" }, 404);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const position = body.position || null;
+  const subjects = body.subjects || null;
+  const phone = body.phone || null;
+  const homeroom_classroom = body.homeroom_classroom || null;
+
+  await env.DB.prepare(
+    `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       position = excluded.position,
+       subjects = excluded.subjects,
+       phone = excluded.phone,
+       homeroom_classroom = excluded.homeroom_classroom`
+  )
+    .bind(targetId, position, subjects, phone, homeroom_classroom)
+    .run();
+
+  return jsonResponse({ ok: true });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -716,6 +779,11 @@ export default {
       const guardianMatch = pathname.match(/^\/api\/guardians\/(\d+)$/);
       if (guardianMatch && method === "PATCH") return await handleUpdateGuardian(request, env, Number(guardianMatch[1]));
       if (guardianMatch && method === "DELETE") return await handleDeleteGuardian(request, env, Number(guardianMatch[1]));
+
+      if (pathname === "/api/staff" && method === "GET") return await handleListStaff(request, env);
+
+      const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
+      if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
