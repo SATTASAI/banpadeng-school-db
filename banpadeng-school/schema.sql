@@ -77,3 +77,37 @@ CREATE TABLE IF NOT EXISTS staff_profiles (
   phone               TEXT,
   homeroom_classroom  TEXT
 );
+
+-- Schema: โมดูล 4 ฝ่ายงาน (โครงการ + งบประมาณ + หัวข้องาน)
+-- ฝ่าย: academic (วิชาการ), budget (งบประมาณ), personnel (บุคคล), general (บริหารทั่วไป)
+
+CREATE TABLE IF NOT EXISTS projects (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    department        TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general')),
+    name              TEXT NOT NULL,
+    budget_amount     REAL,
+    progress_percent  INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+    status            TEXT NOT NULL DEFAULT 'ongoing' CHECK (status IN ('ongoing','completed','cancelled')),
+    description       TEXT,
+    created_by        INTEGER NOT NULL REFERENCES users(id),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+CREATE TABLE IF NOT EXISTS project_owners (
+    project_id  INTEGER NOT NULL REFERENCES projects(id),
+    user_id     INTEGER NOT NULL REFERENCES users(id),
+    PRIMARY KEY (project_id, user_id)
+  );
+
+CREATE TABLE IF NOT EXISTS work_topics (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    department    TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general')),
+    title         TEXT NOT NULL,
+    description   TEXT,
+    created_by    INTEGER NOT NULL REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+CREATE INDEX IF NOT EXISTS idx_projects_department ON projects(department);
+CREATE INDEX IF NOT EXISTS idx_work_topics_department ON work_topics(department);
+CREATE INDEX IF NOT EXISTS idx_project_owners_user ON project_owners(user_id);
