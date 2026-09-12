@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<title>ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<script src="/js/api.js"></script>
+</head>
+<body>
+<script>
+  (async () => {
+    try {
+      const { user } = await apiRequest("/api/auth/me");
+      if (!user) {
+        window.location.replace("/login.html");
+      } else if (!user.role) {
+        window.location.replace("/pending.html");
+      } else {
+        window.location.replace("/dashboard.html");
+      }
+    } catch {
+      window.location.replace("/login.html");
+    }
+  })();
+</script>
+</body>
+</html>
