@@ -782,6 +782,240 @@ async function handleReportsSummary(request, env) {
   });
 }
 
+// ---------- 4 ฝ่ายงาน ----------
+const DEPARTMENTS = ["academic", "budget", "personnel", "general"];
+
+async function isProjectOwner(env, user, projectId) {
+  if (isAdmin(user)) return true;
+  const row = await env.DB.prepare("SELECT 1 FROM project_owners WHERE project_id = ? AND user_id = ?")
+    .bind(projectId, user.id)
+    .first();
+  return !!row;
+}
+
+// ---------- /api/departments/:dept/projects (GET) ----------
+async function handleListProjects(request, env, department) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
+
+  const { results: projects } = await env.DB.prepare(
+    "SELECT * FROM projects WHERE department = ? ORDER BY status ASC, created_at DESC"
+  )
+    .bind(department)
+    .all();
+
+  if (projects.length === 0) return jsonResponse({ projects: [] });
+
+  const ids = projects.map((p) => p.id);
+  const placeholders = ids.map(() => "?").join(",");
+  const { results: ownerRows } = await env.DB.prepare(
+    `SELECT po.project_id, u.id as user_id, u.full_name
+     FROM project_owners po JOIN users u ON u.id = po.user_id
+     WHERE po.project_id IN (${placeholders})`
+  )
+    .bind(...ids)
+    .all();
+
+  const ownersByProject = {};
+  for (const row of ownerRows) {
+    if (!ownersByProject[row.project_id]) ownersByProject[row.project_id] = [];
+    ownersByProject[row.project_id].push({ user_id: row.user_id, full_name: row.full_name });
+  }
+
+  const enriched = projects.map((p) => ({ ...p, owners: ownersByProject[p.id] || [] }));
+  return jsonResponse({ projects: enriched });
+}
+
+// ---------- /api/departments/:dept/projects (POST) ----------
+async function handleCreateProject(request, env, department) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่สร้างโครงการได้" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const name = (body.name || "").trim();
+  if (!name) return jsonResponse({ error: "กรุณากรอกชื่อโครงการ" }, 400);
+
+  const ownerIds = Array.isArray(body.owner_ids) ? body.owner_ids.map(Number) : [];
+
+  const result = await env.DB.prepare(
+    `INSERT INTO projects (department, name, budget_amount, description, created_by)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(department, name, body.budget_amount || null, body.description || null, user.id)
+    .run();
+
+  const projectId = result.meta.last_row_id;
+
+  if (ownerIds.length > 0) {
+    const inserts = ownerIds.map((uid) =>
+      env.DB.prepare("INSERT INTO project_owners (project_id, user_id) VALUES (?, ?)").bind(projectId, uid)
+    );
+    await env.DB.batch(inserts);
+  }
+
+  return jsonResponse({ id: projectId }, 201);
+}
+
+// ---------- /api/projects/:id (PATCH) ----------
+async function handleUpdateProject(request, env, projectId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!(await isProjectOwner(env, user, projectId))) {
+    return jsonResponse({ error: "เฉพาะผู้ดูแลโครงการเท่านั้นที่แก้ไขได้" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const updates = [];
+  const values = [];
+  if (body.name !== undefined) {
+    updates.push("name = ?");
+    values.push(String(body.name).trim());
+  }
+  if (body.budget_amount !== undefined) {
+    updates.push("budget_amount = ?");
+    values.push(body.budget_amount === "" ? null : body.budget_amount);
+  }
+  if (body.progress_percent !== undefined) {
+    const p = Number(body.progress_percent);
+    if (!(p >= 0 && p <= 100)) return jsonResponse({ error: "% ความคืบหน้าต้องอยู่ระหว่าง 0-100" }, 400);
+    updates.push("progress_percent = ?");
+    values.push(p);
+  }
+  if (body.status !== undefined && ["ongoing", "completed", "cancelled"].includes(body.status)) {
+    updates.push("status = ?");
+    values.push(body.status);
+  }
+  if (body.description !== undefined) {
+    updates.push("description = ?");
+    values.push(body.description || null);
+  }
+
+  if (updates.length > 0) {
+    values.push(projectId);
+    await env.DB.prepare(`UPDATE projects SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  }
+
+  if (isAdmin(user) && Array.isArray(body.owner_ids)) {
+    const ownerIds = body.owner_ids.map(Number);
+    await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
+    if (ownerIds.length > 0) {
+      const inserts = ownerIds.map((uid) =>
+        env.DB.prepare("INSERT INTO project_owners (project_id, user_id) VALUES (?, ?)").bind(projectId, uid)
+      );
+      await env.DB.batch(inserts);
+    }
+  }
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/projects/:id (DELETE) ----------
+async function handleDeleteProject(request, env, projectId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่ลบโครงการได้" }, 403);
+
+  await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
+  await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/departments/:dept/topics (GET) ----------
+async function handleListTopics(request, env, department) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
+
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM work_topics WHERE department = ? ORDER BY title"
+  )
+    .bind(department)
+    .all();
+
+  return jsonResponse({ topics: results });
+}
+
+// ---------- /api/departments/:dept/topics (POST) ----------
+async function handleCreateTopic(request, env, department) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่เพิ่มหัวข้องานได้" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const title = (body.title || "").trim();
+  if (!title) return jsonResponse({ error: "กรุณากรอกชื่อหัวข้องาน" }, 400);
+
+  const result = await env.DB.prepare(
+    "INSERT INTO work_topics (department, title, description, created_by) VALUES (?, ?, ?, ?)"
+  )
+    .bind(department, title, body.description || null, user.id)
+    .run();
+
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+
+// ---------- /api/topics/:id (PATCH) ----------
+async function handleUpdateTopic(request, env, topicId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่แก้ไขได้" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const updates = [];
+  const values = [];
+  if (body.title !== undefined) {
+    updates.push("title = ?");
+    values.push(String(body.title).trim());
+  }
+  if (body.description !== undefined) {
+    updates.push("description = ?");
+    values.push(body.description || null);
+  }
+  if (updates.length === 0) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+
+  values.push(topicId);
+  await env.DB.prepare(`UPDATE work_topics SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/topics/:id (DELETE) ----------
+async function handleDeleteTopic(request, env, topicId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่ลบได้" }, 403);
+
+  await env.DB.prepare("DELETE FROM work_topics WHERE id = ?").bind(topicId).run();
+  return jsonResponse({ ok: true });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -837,6 +1071,22 @@ export default {
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
 
       if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
+
+      const deptProjectsMatch = pathname.match(/^\/api\/departments\/([a-z]+)\/projects$/);
+      if (deptProjectsMatch && method === "GET") return await handleListProjects(request, env, deptProjectsMatch[1]);
+      if (deptProjectsMatch && method === "POST") return await handleCreateProject(request, env, deptProjectsMatch[1]);
+
+      const projectMatch = pathname.match(/^\/api\/projects\/(\d+)$/);
+      if (projectMatch && method === "PATCH") return await handleUpdateProject(request, env, Number(projectMatch[1]));
+      if (projectMatch && method === "DELETE") return await handleDeleteProject(request, env, Number(projectMatch[1]));
+
+      const deptTopicsMatch = pathname.match(/^\/api\/departments\/([a-z]+)\/topics$/);
+      if (deptTopicsMatch && method === "GET") return await handleListTopics(request, env, deptTopicsMatch[1]);
+      if (deptTopicsMatch && method === "POST") return await handleCreateTopic(request, env, deptTopicsMatch[1]);
+
+      const topicMatch = pathname.match(/^\/api\/topics\/(\d+)$/);
+      if (topicMatch && method === "PATCH") return await handleUpdateTopic(request, env, Number(topicMatch[1]));
+      if (topicMatch && method === "DELETE") return await handleDeleteTopic(request, env, Number(topicMatch[1]));
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
