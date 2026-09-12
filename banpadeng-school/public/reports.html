@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>รายงาน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:16px; margin-top:20px; }
+  .stat-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .stat-number { font-size:28px; font-weight:700; color:var(--color-forest-900); }
+  .stat-label { font-size:13px; color:var(--color-text-muted); margin-top:4px; }
+  .section-title { margin-top:32px; margin-bottom:12px; }
+  .export-row { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .export-row .btn { width:auto; padding:8px 16px; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="brand"><div class="brand-mark"></div>โรงเรียนบ้านป่าเด็ง</div>
+    <div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div>
+  </div>
+
+  <div class="app-main">
+    <h2 style="margin-bottom:2px;">รายงาน</h2>
+    <p style="color:var(--color-text-muted); margin:0;">สรุปงานคงค้างและข้อมูลนักเรียน</p>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <div class="stat-grid" id="statGrid"></div>
+
+    <h3 class="section-title">งานคงค้างรายบุคคล</h3>
+    <div class="panel" id="assigneePanel"></div>
+
+    <h3 class="section-title">นักเรียนแยกตามห้อง (กำลังศึกษาอยู่)</h3>
+    <div class="panel" id="classroomPanel"></div>
+
+    <h3 class="section-title">ส่งออกข้อมูล</h3>
+    <div class="export-row">
+      <button class="btn btn-primary" id="exportTasksBtn">ส่งออกงานทั้งหมด (CSV)</button>
+      <button class="btn btn-primary" id="exportStudentsBtn">ส่งออกข้อมูลนักเรียน (CSV)</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  function toCSV(rows, headers) {
+    const escape = (v) => {
+      const s = v === null || v === undefined ? "" : String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.map((h) => escape(h.label)).join(",")];
+    rows.forEach((row) => {
+      lines.push(headers.map((h) => escape(row[h.key])).join(","));
+    });
+    return "\uFEFF" + lines.join("\n");
+  }
+
+  function downloadCSV(filename, csvContent) {
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("exportTasksBtn").addEventListener("click", async () => {
+    try {
+      const { tasks } = await apiRequest("/api/tasks");
+      const rows = tasks.map((t) => ({
+        title: t.title,
+        priority: t.priority,
+        status: t.status,
+        due_date: t.due_date || "",
+        creator: t.creator_name,
+        assignees: t.assignees.map((a) => `${a.full_name}(${a.status})`).join("; "),
+      }));
+      const csv = toCSV(rows, [
+        { key: "title", label: "ชื่องาน" },
+        { key: "priority", label: "ความสำคัญ" },
+        { key: "status", label: "สถานะงาน" },
+        { key: "due_date", label: "กำหนดส่ง" },
+        { key: "creator", label: "ผู้มอบหมาย" },
+        { key: "assignees", label: "ผู้รับผิดชอบ" },
+      ]);
+      downloadCSV("tasks.csv", csv);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  document.getElementById("exportStudentsBtn").addEventListener("click", async () => {
+    try {
+      const { students } = await apiRequest("/api/students");
+      const rows = students.map((s) => ({
+        student_code: s.student_code,
+        full_name: s.full_name,
+        classroom: s.classroom || "",
+        grade_level: s.grade_level || "",
+        status: s.status,
+        health_conditions: s.health_conditions || "",
+        allergies: s.allergies || "",
+      }));
+      const csv = toCSV(rows, [
+        { key: "student_code", label: "เลขประจำตัว" },
+        { key: "full_name", label: "ชื่อ-นามสกุล" },
+        { key: "classroom", label: "ห้อง" },
+        { key: "grade_level", label: "ระดับชั้น" },
+        { key: "status", label: "สถานะ" },
+        { key: "health_conditions", label: "โรคประจำตัว" },
+        { key: "allergies", label: "การแพ้" },
+      ]);
+      downloadCSV("students.csv", csv);
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  const STATUS_LABEL = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
+
+  async function loadReport() {
+    const errorBox = document.getElementById("errorBox");
+    errorBox.classList.remove("visible");
+    try {
+      const data = await apiRequest("/api/reports/summary");
+
+      const enrolledCount = (data.students_by_status.find((s) => s.status === "enrolled") || {}).count || 0;
+
+      document.getElementById("statGrid").innerHTML = `
+        <div class="stat-card"><div class="stat-number">${data.open_tasks}</div><div class="stat-label">งานที่ยังเปิดอยู่</div></div>
+        <div class="stat-card"><div class="stat-number">${data.overdue_tasks}</div><div class="stat-label">งานเลยกำหนด</div></div>
+        <div class="stat-card"><div class="stat-number">${enrolledCount}</div><div class="stat-label">นักเรียนกำลังศึกษาอยู่</div></div>
+        <div class="stat-card"><div class="stat-number">${data.staff_count}</div><div class="stat-label">ครู/บุคลากรทั้งหมด</div></div>
+      `;
+
+      const assigneePanel = document.getElementById("assigneePanel");
+      if (data.tasks_by_assignee.length === 0) {
+        assigneePanel.innerHTML = `<div class="empty-state">ไม่มีงานคงค้างในขณะนี้</div>`;
+      } else {
+        assigneePanel.innerHTML = `<table>
+          <thead><tr><th>ชื่อ</th><th>งานคงค้าง</th><th>เลยกำหนด</th></tr></thead>
+          <tbody>${data.tasks_by_assignee
+            .map((r) => `<tr><td>${r.full_name}</td><td>${r.pending_count}</td><td>${r.overdue_count > 0 ? `<span class="status-disabled">${r.overdue_count}</span>` : "0"}</td></tr>`)
+            .join("")}</tbody>
+        </table>`;
+      }
+
+      const classroomPanel = document.getElementById("classroomPanel");
+      if (data.students_by_classroom.length === 0) {
+        classroomPanel.innerHTML = `<div class="empty-state">ยังไม่มีข้อมูลนักเรียน</div>`;
+      } else {
+        classroomPanel.innerHTML = `<table>
+          <thead><tr><th>ห้อง</th><th>จำนวนนักเรียน</th></tr></thead>
+          <tbody>${data.students_by_classroom
+            .map((r) => `<tr><td>${r.classroom}</td><td>${r.count}</td></tr>`)
+            .join("")}</tbody>
+        </table>`;
+      }
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    }
+  }
+
+  (async () => {
+    const { user } = await apiRequest("/api/auth/me");
+    if (!user) { window.location.href = "/login.html"; return; }
+    if (!user.role) { window.location.href = "/pending.html"; return; }
+    await loadReport();
+  })();
+</script>
+</body>
+</html>

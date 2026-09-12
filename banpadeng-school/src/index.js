@@ -731,6 +731,57 @@ async function handleUpdateStaff(request, env, targetId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- รายงาน ----------
+
+// ---------- /api/reports/summary (GET) ----------
+async function handleReportsSummary(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
+  const overdueTasks = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now')"
+  ).first();
+
+  const { results: tasksByAssignee } = await env.DB.prepare(
+    `SELECT u.full_name,
+            SUM(CASE WHEN ta.status != 'done' THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN ta.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < date('now') THEN 1 ELSE 0 END) as overdue_count
+     FROM task_assignees ta
+     JOIN users u ON u.id = ta.user_id
+     JOIN tasks t ON t.id = ta.task_id
+     WHERE t.status = 'open'
+     GROUP BY u.id
+     HAVING pending_count > 0
+     ORDER BY pending_count DESC`
+  ).all();
+
+  const { results: studentsByStatus } = await env.DB.prepare(
+    "SELECT status, COUNT(*) as count FROM students GROUP BY status"
+  ).all();
+
+  const { results: studentsByClassroom } = await env.DB.prepare(
+    `SELECT COALESCE(classroom, 'ไม่ระบุห้อง') as classroom, COUNT(*) as count
+     FROM students WHERE status = 'enrolled'
+     GROUP BY classroom ORDER BY classroom`
+  ).all();
+
+  const staffCount = await env.DB.prepare(
+    "SELECT COUNT(*) as count FROM users WHERE status = 'active' AND role IS NOT NULL"
+  ).first();
+
+  return jsonResponse({
+    open_tasks: openTasks.count,
+    overdue_tasks: overdueTasks.count,
+    tasks_by_assignee: tasksByAssignee,
+    students_by_status: studentsByStatus,
+    students_by_classroom: studentsByClassroom,
+    staff_count: staffCount.count,
+  });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -784,6 +835,8 @@ export default {
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
+
+      if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
