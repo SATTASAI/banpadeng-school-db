@@ -444,6 +444,230 @@ async function handleUpdateMyTaskStatus(request, env, taskId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- ข้อมูลนักเรียน ----------
+function canManageStudents(user) {
+  return isAdmin(user) || user.role === "staff";
+}
+
+// ---------- /api/students (GET) ----------
+async function handleListStudents(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  const { results } = await env.DB.prepare(
+    "SELECT * FROM students ORDER BY classroom, full_name"
+  ).all();
+
+  return jsonResponse({ students: results });
+}
+
+// ---------- /api/students/:id (GET) — รวมผู้ปกครอง ----------
+async function handleGetStudent(request, env, studentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+
+  const student = await env.DB.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
+  if (!student) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
+
+  const { results: guardians } = await env.DB.prepare(
+    "SELECT * FROM guardians WHERE student_id = ? ORDER BY is_emergency_contact DESC, id"
+  )
+    .bind(studentId)
+    .all();
+
+  return jsonResponse({ student: { ...student, guardians } });
+}
+
+// ---------- /api/students (POST) ----------
+async function handleCreateStudent(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!canManageStudents(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์เพิ่มข้อมูลนักเรียน" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const studentCode = (body.student_code || "").trim();
+  const fullName = (body.full_name || "").trim();
+  if (!studentCode) return jsonResponse({ error: "กรุณากรอกเลขประจำตัวนักเรียน" }, 400);
+  if (!fullName) return jsonResponse({ error: "กรุณากรอกชื่อ-นามสกุลนักเรียน" }, 400);
+
+  const existing = await env.DB.prepare("SELECT id FROM students WHERE student_code = ?")
+    .bind(studentCode)
+    .first();
+  if (existing) return jsonResponse({ error: "เลขประจำตัวนี้ถูกใช้แล้ว" }, 409);
+
+  const result = await env.DB.prepare(
+    `INSERT INTO students (student_code, full_name, classroom, grade_level, photo_url, health_conditions, allergies, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'enrolled')`
+  )
+    .bind(
+      studentCode,
+      fullName,
+      body.classroom || null,
+      body.grade_level || null,
+      body.photo_url || null,
+      body.health_conditions || null,
+      body.allergies || null
+    )
+    .run();
+
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+
+// ---------- /api/students/:id (PATCH) ----------
+async function handleUpdateStudent(request, env, studentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!canManageStudents(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขข้อมูลนักเรียน" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const fields = [
+    "full_name",
+    "classroom",
+    "grade_level",
+    "photo_url",
+    "health_conditions",
+    "allergies",
+    "status",
+  ];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (body[f] !== undefined) {
+      updates.push(`${f} = ?`);
+      values.push(body[f] || null);
+    }
+  }
+
+  if (updates.length === 0) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+
+  values.push(studentId);
+  await env.DB.prepare(`UPDATE students SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/students/:id (DELETE) ----------
+async function handleDeleteStudent(request, env, studentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!isAdmin(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์ลบข้อมูลนักเรียน" }, 403);
+  }
+
+  await env.DB.prepare("DELETE FROM guardians WHERE student_id = ?").bind(studentId).run();
+  await env.DB.prepare("DELETE FROM students WHERE id = ?").bind(studentId).run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/students/:id/guardians (POST) ----------
+async function handleAddGuardian(request, env, studentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!canManageStudents(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์เพิ่มผู้ปกครอง" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const fullName = (body.full_name || "").trim();
+  if (!fullName) return jsonResponse({ error: "กรุณากรอกชื่อผู้ปกครอง" }, 400);
+
+  const result = await env.DB.prepare(
+    `INSERT INTO guardians (student_id, full_name, relationship, phone, is_emergency_contact)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(studentId, fullName, body.relationship || null, body.phone || null, body.is_emergency_contact ? 1 : 0)
+    .run();
+
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+
+// ---------- /api/guardians/:id (PATCH) ----------
+async function handleUpdateGuardian(request, env, guardianId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!canManageStudents(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขผู้ปกครอง" }, 403);
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const fields = ["full_name", "relationship", "phone"];
+  const updates = [];
+  const values = [];
+  for (const f of fields) {
+    if (body[f] !== undefined) {
+      updates.push(`${f} = ?`);
+      values.push(body[f] || null);
+    }
+  }
+  if (body.is_emergency_contact !== undefined) {
+    updates.push("is_emergency_contact = ?");
+    values.push(body.is_emergency_contact ? 1 : 0);
+  }
+  if (updates.length === 0) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+
+  values.push(guardianId);
+  await env.DB.prepare(`UPDATE guardians SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+
+  return jsonResponse({ ok: true });
+}
+
+// ---------- /api/guardians/:id (DELETE) ----------
+async function handleDeleteGuardian(request, env, guardianId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) {
+    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  }
+  if (!canManageStudents(user)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์ลบผู้ปกครอง" }, 403);
+  }
+
+  await env.DB.prepare("DELETE FROM guardians WHERE id = ?").bind(guardianId).run();
+  return jsonResponse({ ok: true });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -475,6 +699,23 @@ export default {
       const taskMatch = pathname.match(/^\/api\/tasks\/(\d+)$/);
       if (taskMatch && method === "PATCH") return await handleUpdateTask(request, env, Number(taskMatch[1]));
       if (taskMatch && method === "DELETE") return await handleDeleteTask(request, env, Number(taskMatch[1]));
+
+      if (pathname === "/api/students" && method === "GET") return await handleListStudents(request, env);
+      if (pathname === "/api/students" && method === "POST") return await handleCreateStudent(request, env);
+
+      const studentGuardiansMatch = pathname.match(/^\/api\/students\/(\d+)\/guardians$/);
+      if (studentGuardiansMatch && method === "POST") {
+        return await handleAddGuardian(request, env, Number(studentGuardiansMatch[1]));
+      }
+
+      const studentMatch = pathname.match(/^\/api\/students\/(\d+)$/);
+      if (studentMatch && method === "GET") return await handleGetStudent(request, env, Number(studentMatch[1]));
+      if (studentMatch && method === "PATCH") return await handleUpdateStudent(request, env, Number(studentMatch[1]));
+      if (studentMatch && method === "DELETE") return await handleDeleteStudent(request, env, Number(studentMatch[1]));
+
+      const guardianMatch = pathname.match(/^\/api\/guardians\/(\d+)$/);
+      if (guardianMatch && method === "PATCH") return await handleUpdateGuardian(request, env, Number(guardianMatch[1]));
+      if (guardianMatch && method === "DELETE") return await handleDeleteGuardian(request, env, Number(guardianMatch[1]));
 
       if (pathname.startsWith("/api/")) {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
