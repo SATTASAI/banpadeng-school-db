@@ -246,7 +246,7 @@ export default {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
       }
     } catch (err) {
-      return jsonResponse({ error: "เกิดข้อผิดพลาดภายในระบบ" }, 500);
+      return jsonResponse({ error: "DEBUG: " + (err && err.stack ? err.stack : String(err)) }, 500);
     }
 
     // ทุก path อื่นๆ ให้เสิร์ฟไฟล์หน้าเว็บจากโฟลเดอร์ public/ ตามปกติ
