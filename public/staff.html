@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ข้อมูลครู/บุคลากร — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .staff-panel { margin-top:20px; }
+  .staff-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); }
+  .staff-row:last-child { border-bottom:none; }
+  .staff-name { font-weight:600; }
+  .staff-sub { font-size:13px; color:var(--color-text-muted); margin-top:2px; }
+  .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
+  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:440px; }
+  .modal-actions { display:flex; gap:10px; margin-top:20px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="brand"><div class="brand-mark"></div>โรงเรียนบ้านป่าเด็ง</div>
+    <div class="app-user"><a href="/dashboard.html" id="backHomeLink">← กลับหน้าหลัก</a></div>
+  </div>
+
+  <div class="app-main">
+    <h2 style="margin-bottom:2px;">ข้อมูลครู/บุคลากร</h2>
+    <p style="color:var(--color-text-muted); margin:0;">ทะเบียนครูและบุคลากร ตำแหน่ง วิชาที่สอน และครูประจำชั้น</p>
+
+    <div class="error-box" id="errorBox"></div>
+    <div class="panel staff-panel" id="staffPanel"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="staffModal" style="display:none;">
+  <div class="modal">
+    <h2 style="margin-bottom:16px;">แก้ไขข้อมูลบุคลากร</h2>
+    <div class="field">
+      <label>ตำแหน่ง</label>
+      <input type="text" id="fPosition" placeholder="เช่น ครูผู้สอน, ผู้อำนวยการ" />
+    </div>
+    <div class="field">
+      <label>วิชาที่สอน</label>
+      <input type="text" id="fSubjects" placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์" />
+    </div>
+    <div class="field">
+      <label>เบอร์ติดต่อ</label>
+      <input type="text" id="fPhone" />
+    </div>
+    <div class="field">
+      <label>ครูประจำชั้น/ที่ปรึกษาห้อง</label>
+      <input type="text" id="fHomeroom" placeholder="เช่น ป.4/1 (เว้นว่างถ้าไม่ได้เป็น)" />
+    </div>
+    <div class="field">
+      <label>วันหมดอายุใบประกอบวิชาชีพ</label>
+      <input type="date" id="fLicenseExpiry" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
+      <button class="btn btn-primary" id="saveStaffBtn">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  if (window.parent && window.parent !== window) {
+    const backLink = document.getElementById("backHomeLink");
+    if (backLink) {
+      backLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (window.parent.showOverview) window.parent.showOverview();
+      });
+    }
+  }
+</script>
+<script>
+  let currentUser = null;
+  let editingId = null;
+
+  function renderStaff(staff) {
+    const panel = document.getElementById("staffPanel");
+    panel.innerHTML = staff
+      .map((s) => {
+        const canEdit = currentUser.is_admin || currentUser.id === s.id;
+        const details = [
+          s.position,
+          s.subjects,
+          s.phone,
+          s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
+          s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return `
+          <div class="staff-row">
+            <div>
+              <div class="staff-name">${s.full_name} <span class="role-chip">${ROLE_LABELS[s.role] || s.role}</span></div>
+              <div class="staff-sub">${details || "ยังไม่มีข้อมูลเพิ่มเติม"}</div>
+            </div>
+            ${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
+          </div>`;
+      })
+      .join("");
+
+    panel.querySelectorAll("[data-edit]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const s = staff.find((x) => x.id == btn.getAttribute("data-edit"));
+        openModal(s);
+      });
+    });
+  }
+
+  async function loadStaff() {
+    const errorBox = document.getElementById("errorBox");
+    errorBox.classList.remove("visible");
+    try {
+      const { staff } = await apiRequest("/api/staff");
+      renderStaff(staff);
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    }
+  }
+
+  function openModal(staffMember) {
+    editingId = staffMember.id;
+    document.getElementById("fPosition").value = staffMember.position || "";
+    document.getElementById("fSubjects").value = staffMember.subjects || "";
+    document.getElementById("fPhone").value = staffMember.phone || "";
+    document.getElementById("fHomeroom").value = staffMember.homeroom_classroom || "";
+    document.getElementById("fLicenseExpiry").value = staffMember.license_expiry_date || "";
+    document.getElementById("staffModal").style.display = "flex";
+  }
+
+  document.getElementById("cancelModalBtn").addEventListener("click", () => {
+    document.getElementById("staffModal").style.display = "none";
+  });
+
+  document.getElementById("saveStaffBtn").addEventListener("click", async () => {
+    try {
+      await apiRequest(`/api/staff/${editingId}`, {
+        method: "PATCH",
+        body: {
+          position: document.getElementById("fPosition").value.trim(),
+          subjects: document.getElementById("fSubjects").value.trim(),
+          phone: document.getElementById("fPhone").value.trim(),
+          homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
+          license_expiry_date: document.getElementById("fLicenseExpiry").value || "",
+        },
+      });
+      document.getElementById("staffModal").style.display = "none";
+      await loadStaff();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  (async () => {
+    const { user } = await apiRequest("/api/auth/me");
+    if (!user) { window.location.href = "/login.html"; return; }
+    if (!user.role) { window.location.href = "/pending.html"; return; }
+    currentUser = user;
+    await loadStaff();
+  })();
+</script>
+</body>
+</html>

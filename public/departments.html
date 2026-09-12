@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>4 ฝ่ายงาน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .dept-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px; margin-top:20px; }
+  .dept-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:24px; text-decoration:none; display:block; transition:box-shadow .15s; }
+  .dept-card:hover { box-shadow:var(--shadow-card); }
+  .dept-card h3 { color:var(--color-forest-900); margin-bottom:6px; }
+  .dept-card p { color:var(--color-text-muted); font-size:13px; margin:0; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="brand"><div class="brand-mark"></div>โรงเรียนบ้านป่าเด็ง</div>
+    <div class="app-user"><a href="/dashboard.html" id="backHomeLink">← กลับหน้าหลัก</a></div>
+  </div>
+
+  <div class="app-main">
+    <h2 style="margin-bottom:2px;">4 ฝ่ายงาน</h2>
+    <p style="color:var(--color-text-muted); margin:0;">รวมงาน โครงการ และงบประมาณของแต่ละฝ่าย</p>
+
+    <div class="dept-grid">
+      <a class="dept-card" href="/department.html?dept=academic">
+        <h3>ฝ่ายบริหารงานวิชาการ</h3>
+        <p>โครงการและงานด้านวิชาการ</p>
+      </a>
+      <a class="dept-card" href="/department.html?dept=budget">
+        <h3>ฝ่ายบริหารงานงบประมาณ</h3>
+        <p>โครงการและงานด้านงบประมาณ</p>
+      </a>
+      <a class="dept-card" href="/department.html?dept=personnel">
+        <h3>ฝ่ายบริหารงานบุคคล</h3>
+        <p>โครงการและงานด้านบุคคล</p>
+      </a>
+      <a class="dept-card" href="/department.html?dept=general">
+        <h3>ฝ่ายบริหารงานทั่วไป</h3>
+        <p>โครงการและงานด้านบริหารทั่วไป</p>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  if (window.parent && window.parent !== window) {
+    const backLink = document.getElementById("backHomeLink");
+    if (backLink) {
+      backLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (window.parent.showOverview) window.parent.showOverview();
+      });
+    }
+  }
+</script>
+<script>
+  (async () => {
+    const { user } = await apiRequest("/api/auth/me");
+    if (!user) { window.location.href = "/login.html"; return; }
+    if (!user.role) { window.location.href = "/pending.html"; return; }
+  })();
+</script>
+</body>
+</html>

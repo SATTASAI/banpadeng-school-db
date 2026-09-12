@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ข้อมูลนักเรียน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:12px; flex-wrap:wrap; }
+  .search-input { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-family:var(--font-body); background:var(--color-surface); }
+  .panel { margin-top:20px; }
+  .student-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); cursor:pointer; }
+  .student-row:last-child { border-bottom:none; }
+  .student-row:hover { background:var(--color-bg); }
+  .student-name { font-weight:600; }
+  .student-sub { font-size:13px; color:var(--color-text-muted); }
+  .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; overflow-y:auto; }
+  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:560px; max-height:88vh; overflow-y:auto; }
+  .modal h2 { margin-bottom:16px; }
+  .field-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .modal-actions { display:flex; gap:10px; margin-top:20px; }
+  .section-label { font-weight:600; margin:20px 0 8px; font-size:14px; }
+  .guardian-item { border:1px solid var(--color-border); border-radius:var(--radius-md); padding:10px 12px; margin-bottom:8px; font-size:14px; display:flex; justify-content:space-between; align-items:center; }
+  .guardian-add-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; margin-top:6px; }
+  .guardian-add-row input { padding:8px 10px; border:1px solid var(--color-border); border-radius:8px; font-family:var(--font-body); font-size:13px; }
+  select.plain { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--color-border); font-family:var(--font-body); background:var(--color-bg); }
+  .status-chip { font-size:12px; font-weight:600; padding:2px 10px; border-radius:999px; }
+  .status-enrolled { background:rgba(63,122,85,0.12); color:var(--color-success); }
+  .status-other { background:var(--color-danger-bg); color:var(--color-danger); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="brand"><div class="brand-mark"></div>โรงเรียนบ้านป่าเด็ง</div>
+    <div class="app-user"><a href="/dashboard.html" id="backHomeLink">← กลับหน้าหลัก</a></div>
+  </div>
+
+  <div class="app-main">
+    <div class="toolbar">
+      <div>
+        <h2 style="margin-bottom:2px;">ข้อมูลนักเรียน</h2>
+        <p style="color:var(--color-text-muted); margin:0;">ทะเบียนนักเรียน ผู้ปกครอง และข้อมูลสุขภาพเบื้องต้น</p>
+      </div>
+      <button class="btn btn-primary" style="width:auto;" id="newStudentBtn">+ เพิ่มนักเรียน</button>
+    </div>
+
+    <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาชื่อ, เลขประจำตัว หรือห้อง..." />
+
+    <div class="error-box" id="errorBox"></div>
+    <div class="panel" id="studentPanel"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">ยังไม่มีข้อมูลนักเรียน</div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="studentModal" style="display:none;">
+  <div class="modal">
+    <h2 id="modalTitle">เพิ่มนักเรียน</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>เลขประจำตัวนักเรียน</label>
+        <input type="text" id="fCode" />
+      </div>
+      <div class="field">
+        <label>ชื่อ-นามสกุล</label>
+        <input type="text" id="fName" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>ห้อง</label>
+        <input type="text" id="fClassroom" placeholder="เช่น ป.4/1" />
+      </div>
+      <div class="field">
+        <label>ระดับชั้น</label>
+        <input type="text" id="fGrade" placeholder="เช่น ประถมศึกษาปีที่ 4" />
+      </div>
+    </div>
+    <div class="field">
+      <label>ลิงก์รูปนักเรียน (ถ้ามี)</label>
+      <input type="text" id="fPhoto" placeholder="วางลิงก์รูปภาพ" />
+    </div>
+    <div class="field">
+      <label>โรคประจำตัว</label>
+      <input type="text" id="fHealth" />
+    </div>
+    <div class="field">
+      <label>การแพ้ยา/อาหาร</label>
+      <input type="text" id="fAllergy" />
+    </div>
+    <div class="field" id="statusField" style="display:none;">
+      <label>สถานะ</label>
+      <select class="plain" id="fStatus">
+        <option value="enrolled">กำลังศึกษาอยู่</option>
+        <option value="transferred">ย้ายโรงเรียน</option>
+        <option value="graduated">จบการศึกษา</option>
+        <option value="withdrawn">ออกกลางคัน</option>
+      </select>
+    </div>
+
+    <div id="guardianSection" style="display:none;">
+      <div class="section-label">ผู้ปกครอง / ผู้ติดต่อฉุกเฉิน</div>
+      <div id="guardianList"></div>
+      <div class="guardian-add-row">
+        <input type="text" id="gName" placeholder="ชื่อ" />
+        <input type="text" id="gRelation" placeholder="ความเกี่ยวข้อง" />
+        <input type="text" id="gPhone" placeholder="เบอร์โทร" />
+        <button class="btn btn-ghost" style="width:auto; padding:8px 14px;" id="addGuardianBtn">+ เพิ่ม</button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
+      <button class="btn btn-primary" id="saveStudentBtn">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  if (window.parent && window.parent !== window) {
+    const backLink = document.getElementById("backHomeLink");
+    if (backLink) {
+      backLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (window.parent.showOverview) window.parent.showOverview();
+      });
+    }
+  }
+</script>
+<script>
+  let currentUser = null;
+  let allStudents = [];
+  let editingStudentId = null;
+
+  const STATUS_LABEL = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
+
+  function renderList(filterText) {
+    const q = (filterText || "").trim().toLowerCase();
+    const filtered = allStudents.filter((s) =>
+      !q ||
+      s.full_name.toLowerCase().includes(q) ||
+      s.student_code.toLowerCase().includes(q) ||
+      (s.classroom || "").toLowerCase().includes(q)
+    );
+
+    const panel = document.getElementById("studentPanel");
+    const emptyState = document.getElementById("emptyState");
+
+    if (filtered.length === 0) {
+      panel.innerHTML = "";
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    panel.innerHTML = `<div class="panel">${filtered
+      .map(
+        (s) => `
+        <div class="student-row" data-id="${s.id}">
+          <div>
+            <div class="student-name">${s.full_name}</div>
+            <div class="student-sub">เลขประจำตัว ${s.student_code} · ${s.classroom || "-"} · ${s.grade_level || "-"}</div>
+          </div>
+          <span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${STATUS_LABEL[s.status]}</span>
+        </div>`
+      )
+      .join("")}</div>`;
+
+    panel.querySelectorAll(".student-row").forEach((row) => {
+      row.addEventListener("click", () => openModal(Number(row.getAttribute("data-id"))));
+    });
+  }
+
+  async function loadStudents() {
+    const errorBox = document.getElementById("errorBox");
+    errorBox.classList.remove("visible");
+    try {
+      const { students } = await apiRequest("/api/students");
+      allStudents = students;
+      renderList(document.getElementById("searchInput").value);
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    }
+  }
+
+  document.getElementById("searchInput").addEventListener("input", (e) => renderList(e.target.value));
+
+  function renderGuardians(guardians) {
+    const list = document.getElementById("guardianList");
+    if (!guardians || guardians.length === 0) {
+      list.innerHTML = `<p style="color:var(--color-text-muted); font-size:13px;">ยังไม่มีข้อมูลผู้ปกครอง</p>`;
+      return;
+    }
+    list.innerHTML = guardians
+      .map(
+        (g) => `
+        <div class="guardian-item">
+          <span>${g.full_name}${g.relationship ? " (" + g.relationship + ")" : ""}${g.phone ? " · " + g.phone : ""}${g.is_emergency_contact ? " · ติดต่อฉุกเฉิน" : ""}</span>
+          <button class="icon-btn" data-remove-guardian="${g.id}" style="background:none; border:none; color:var(--color-danger); cursor:pointer; text-decoration:underline; font-size:13px;">ลบ</button>
+        </div>`
+      )
+      .join("");
+
+    list.querySelectorAll("[data-remove-guardian]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await apiRequest(`/api/guardians/${btn.getAttribute("data-remove-guardian")}`, { method: "DELETE" });
+          await refreshGuardians();
+        } catch (err) {
+          alert(err.message);
+        }
+      });
+    });
+  }
+
+  async function refreshGuardians() {
+    const { student } = await apiRequest(`/api/students/${editingStudentId}`);
+    renderGuardians(student.guardians);
+  }
+
+  document.getElementById("addGuardianBtn").addEventListener("click", async () => {
+    const full_name = document.getElementById("gName").value.trim();
+    const relationship = document.getElementById("gRelation").value.trim();
+    const phone = document.getElementById("gPhone").value.trim();
+    if (!full_name) return alert("กรุณากรอกชื่อผู้ปกครอง");
+    if (!editingStudentId) return alert("กรุณาบันทึกข้อมูลนักเรียนก่อน แล้วค่อยเพิ่มผู้ปกครอง");
+
+    try {
+      await apiRequest(`/api/students/${editingStudentId}/guardians`, {
+        method: "POST",
+        body: { full_name, relationship, phone },
+      });
+      document.getElementById("gName").value = "";
+      document.getElementById("gRelation").value = "";
+      document.getElementById("gPhone").value = "";
+      await refreshGuardians();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  async function openModal(studentId) {
+    editingStudentId = studentId || null;
+    document.getElementById("modalTitle").textContent = studentId ? "แก้ไขข้อมูลนักเรียน" : "เพิ่มนักเรียน";
+    document.getElementById("statusField").style.display = studentId ? "block" : "none";
+    document.getElementById("guardianSection").style.display = studentId ? "block" : "none";
+
+    if (studentId) {
+      const { student } = await apiRequest(`/api/students/${studentId}`);
+      document.getElementById("fCode").value = student.student_code;
+      document.getElementById("fCode").disabled = true;
+      document.getElementById("fName").value = student.full_name;
+      document.getElementById("fClassroom").value = student.classroom || "";
+      document.getElementById("fGrade").value = student.grade_level || "";
+      document.getElementById("fPhoto").value = student.photo_url || "";
+      document.getElementById("fHealth").value = student.health_conditions || "";
+      document.getElementById("fAllergy").value = student.allergies || "";
+      document.getElementById("fStatus").value = student.status;
+      renderGuardians(student.guardians);
+    } else {
+      document.getElementById("fCode").value = "";
+      document.getElementById("fCode").disabled = false;
+      document.getElementById("fName").value = "";
+      document.getElementById("fClassroom").value = "";
+      document.getElementById("fGrade").value = "";
+      document.getElementById("fPhoto").value = "";
+      document.getElementById("fHealth").value = "";
+      document.getElementById("fAllergy").value = "";
+    }
+
+    document.getElementById("studentModal").style.display = "flex";
+  }
+
+  document.getElementById("newStudentBtn").addEventListener("click", () => openModal(null));
+  document.getElementById("cancelModalBtn").addEventListener("click", () => {
+    document.getElementById("studentModal").style.display = "none";
+  });
+
+  document.getElementById("saveStudentBtn").addEventListener("click", async () => {
+    const full_name = document.getElementById("fName").value.trim();
+    const classroom = document.getElementById("fClassroom").value.trim();
+    const grade_level = document.getElementById("fGrade").value.trim();
+    const photo_url = document.getElementById("fPhoto").value.trim();
+    const health_conditions = document.getElementById("fHealth").value.trim();
+    const allergies = document.getElementById("fAllergy").value.trim();
+
+    if (!full_name) return alert("กรุณากรอกชื่อ-นามสกุล");
+
+    try {
+      if (editingStudentId) {
+        const status = document.getElementById("fStatus").value;
+        await apiRequest(`/api/students/${editingStudentId}`, {
+          method: "PATCH",
+          body: { full_name, classroom, grade_level, photo_url, health_conditions, allergies, status },
+        });
+      } else {
+        const student_code = document.getElementById("fCode").value.trim();
+        if (!student_code) return alert("กรุณากรอกเลขประจำตัวนักเรียน");
+        await apiRequest("/api/students", {
+          method: "POST",
+          body: { student_code, full_name, classroom, grade_level, photo_url, health_conditions, allergies },
+        });
+      }
+      document.getElementById("studentModal").style.display = "none";
+      await loadStudents();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+
+  (async () => {
+    const { user } = await apiRequest("/api/auth/me");
+    if (!user) { window.location.href = "/login.html"; return; }
+    if (!user.role) { window.location.href = "/pending.html"; return; }
+    currentUser = user;
+    await loadStudents();
+  })();
+</script>
+</body>
+</html>

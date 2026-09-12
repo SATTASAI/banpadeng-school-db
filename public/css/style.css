@@ -1,0 +1,257 @@
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
+
+:root {
+  /* สีหลัก: เขียวป่า (ป่าเด็ง) + เหลืองอมน้ำตาลอุ่น (ท้องนา/ไม้) */
+  --color-forest-900: #16332A;
+  --color-forest-700: #1F4B3F;
+  --color-forest-500: #2E6B57;
+  --color-ochre-500: #C98A3E;
+  --color-ochre-600: #AD7230;
+  --color-bg: #F6F5F0;
+  --color-surface: #FFFFFF;
+  --color-border: #E1DED3;
+  --color-text: #1C2620;
+  --color-text-muted: #5B6B62;
+  --color-danger: #B5533C;
+  --color-danger-bg: #FBEDE8;
+  --color-success: #3F7A55;
+
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --shadow-card: 0 1px 2px rgba(28, 38, 32, 0.06), 0 4px 16px rgba(28, 38, 32, 0.06);
+  --font-body: 'Sarabun', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+h1, h2, h3 { font-weight: 600; margin: 0 0 8px; color: var(--color-forest-900); }
+
+a { color: var(--color-forest-500); }
+
+/* ---------- หน้าจอศูนย์กลาง (login/register/pending) ---------- */
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: 36px 32px;
+}
+
+.auth-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--color-forest-700);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.auth-mark svg { width: 24px; height: 24px; }
+
+.auth-card h1 {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.auth-subtitle {
+  color: var(--color-text-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.field { margin-bottom: 16px; }
+
+.field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--color-forest-900);
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 15px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--color-forest-500);
+  box-shadow: 0 0 0 3px rgba(46, 107, 87, 0.15);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary { background: var(--color-forest-700); color: #fff; }
+.btn-primary:hover { background: var(--color-forest-900); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--color-forest-700);
+  border: 1px solid var(--color-border);
+}
+.btn-ghost:hover { background: var(--color-bg); }
+
+.auth-footer {
+  margin-top: 20px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.error-box {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+  display: none;
+}
+
+.error-box.visible { display: block; }
+
+/* ---------- แอปหลัก (dashboard) ---------- */
+.app-shell { min-height: 100vh; }
+
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.app-topbar .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: var(--color-forest-900);
+}
+
+.app-topbar .brand-mark {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: var(--color-forest-700);
+}
+
+.app-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.role-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(46, 107, 87, 0.12);
+  color: var(--color-forest-700);
+}
+
+.app-main {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.module-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.module-card h3 { font-size: 16px; margin-bottom: 6px; }
+.module-card p { font-size: 14px; color: var(--color-text-muted); margin: 0; }
+.module-card .soon {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-ochre-600);
+  font-weight: 600;
+}
+
+/* ---------- ตารางแอดมิน ---------- */
+.panel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--color-border); }
+th { color: var(--color-text-muted); font-weight: 500; font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+
+select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  font-family: var(--font-body);
+  background: var(--color-bg);
+}
+
+.status-active { color: var(--color-success); font-weight: 600; }
+.status-disabled { color: var(--color-danger); font-weight: 600; }
+.status-pending { color: var(--color-ochre-600); font-weight: 600; }
+
+.empty-state {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 60px 24px;
+}

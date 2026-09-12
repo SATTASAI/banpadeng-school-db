@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>สมัครสมาชิก — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-card">
+    <div class="auth-mark">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 3L3 8l9 5 9-5-9-5z" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+        <path d="M6 10.5V16c0 1.1 2.7 3 6 3s6-1.9 6-3v-5.5" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <h1>สมัครสมาชิก</h1>
+    <p class="auth-subtitle">สมัครแล้วเข้าใช้งานได้ทันที ผู้ดูแลระบบจะกำหนดสิทธิ์การใช้งานให้ภายหลัง</p>
+
+    <div class="error-box" id="errorBox"></div>
+
+    <form id="registerForm">
+      <div class="field">
+        <label for="fullName">ชื่อ-นามสกุล</label>
+        <input type="text" id="fullName" required autocomplete="name" />
+      </div>
+      <div class="field">
+        <label for="email">อีเมล</label>
+        <input type="email" id="email" required autocomplete="email" />
+      </div>
+      <div class="field">
+        <label for="password">รหัสผ่าน</label>
+        <input type="password" id="password" required minlength="8" autocomplete="new-password" />
+      </div>
+      <div class="field">
+        <label for="confirmPassword">ยืนยันรหัสผ่าน</label>
+        <input type="password" id="confirmPassword" required minlength="8" autocomplete="new-password" />
+      </div>
+      <button type="submit" class="btn btn-primary" id="submitBtn">สมัครสมาชิก</button>
+    </form>
+
+    <div class="auth-footer">
+      มีบัญชีอยู่แล้ว? <a href="/login.html">เข้าสู่ระบบ</a>
+    </div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  const form = document.getElementById("registerForm");
+  const errorBox = document.getElementById("errorBox");
+  const submitBtn = document.getElementById("submitBtn");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorBox.classList.remove("visible");
+
+    const password = document.getElementById("password").value;
+    const confirmPassword = document.getElementById("confirmPassword").value;
+    if (password !== confirmPassword) {
+      errorBox.textContent = "รหัสผ่านทั้งสองช่องไม่ตรงกัน";
+      errorBox.classList.add("visible");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "กำลังสมัครสมาชิก...";
+
+    try {
+      const { user } = await apiRequest("/api/auth/register", {
+        method: "POST",
+        body: {
+          full_name: document.getElementById("fullName").value,
+          email: document.getElementById("email").value,
+          password,
+        },
+      });
+      window.location.href = user.role ? "/dashboard.html" : "/pending.html";
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+      submitBtn.disabled = false;
+      submitBtn.textContent = "สมัครสมาชิก";
+    }
+  });
+</script>
+</body>
+</html>
