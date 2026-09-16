@@ -1264,12 +1264,12 @@ async function handleOverview(request, env) {
   ).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
-    `SELECT full_name, license_expiry_date
+    `SELECT full_name, license_expiry_date,
+            CAST(julianday(license_expiry_date) - julianday(date('now')) AS INTEGER) AS days_remaining
      FROM personnel_records
      WHERE status = 'active'
        AND license_expiry_date IS NOT NULL
-       AND license_expiry_date BETWEEN date('now') AND date('now', '+90 days')
-     ORDER BY license_expiry_date ASC`
+     ORDER BY days_remaining ASC, full_name ASC`
   ).all();
 
   const departmentMap = Object.fromEntries(departmentRows.map((row) => [row.department, row]));

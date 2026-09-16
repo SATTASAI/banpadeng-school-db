@@ -57,6 +57,19 @@
   .inline-link { display:inline-block; margin-top:10px; font-size:13px; font-weight:600; }
   .quick-actions { display:flex; flex-wrap:wrap; gap:8px; }
   .quick-actions .btn { width:auto; padding:8px 14px; font-size:13px; text-decoration:none; }
+  .license-legend { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 14px; }
+  .license-chip { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:5px 10px; font-size:12px; font-weight:600; }
+  .license-chip.green { color:#176b3a; background:#e6f6ec; }
+  .license-chip.orange { color:#9a4b08; background:#fff1dc; }
+  .license-chip.red { color:#a52828; background:#fde8e8; }
+  .license-dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .license-status { display:inline-block; border-radius:999px; padding:4px 9px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .license-status.green { color:#176b3a; background:#e6f6ec; }
+  .license-status.orange { color:#9a4b08; background:#fff1dc; }
+  .license-status.red { color:#a52828; background:#fde8e8; }
+  .license-row-green { box-shadow:inset 4px 0 #2f9e5b; }
+  .license-row-orange { box-shadow:inset 4px 0 #ef8f22; }
+  .license-row-red { box-shadow:inset 4px 0 #d64545; }
   @media (max-width: 720px) {
     .layout { display:block; height:100vh; }
     .sidebar { width:100%; height:240px; padding:14px 16px; display:block; overflow-y:auto; }
@@ -160,9 +173,15 @@
       </section>
 
       <div class="dashboard-section">
-        <h3 style="margin-bottom:12px;">ใบประกอบวิชาชีพใกล้หมดอายุ (ภายใน 90 วัน)</h3>
+        <h3 style="margin-bottom:2px;">สถานะวันหมดอายุใบประกอบวิชาชีพ</h3>
+        <p style="color:var(--color-text-muted); margin:0; font-size:13px;">ติดตามระยะเวลาคงเหลือของครูและบุคลากรทุกคน</p>
+        <div class="license-legend">
+          <span class="license-chip green"><span class="license-dot"></span>มากกว่า 180 วัน <strong id="licenseGreenCount">0</strong></span>
+          <span class="license-chip orange"><span class="license-dot"></span>90–180 วัน <strong id="licenseOrangeCount">0</strong></span>
+          <span class="license-chip red"><span class="license-dot"></span>น้อยกว่า 90 วัน/หมดอายุ <strong id="licenseRedCount">0</strong></span>
+        </div>
         <div class="panel" id="licensePanel"></div>
-        <div class="empty-state" id="licenseEmpty" style="display:none;">ไม่มีใบประกอบวิชาชีพที่ใกล้หมดอายุ</div>
+        <div class="empty-state" id="licenseEmpty" style="display:none;">ยังไม่มีข้อมูลวันหมดอายุใบประกอบวิชาชีพ</div>
       </div>
     </div>
 
@@ -261,6 +280,27 @@
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+  const formatThaiDate = (value) => {
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("th-TH", {
+      day: "numeric", month: "short", year: "numeric",
+    }).format(date);
+  };
+
+  const licenseStatus = (days) => {
+    const remaining = Number(days);
+    if (remaining > 180) return { color: "green", label: "ปกติ" };
+    if (remaining >= 90) return { color: "orange", label: "ควรเตรียมต่ออายุ" };
+    return { color: "red", label: remaining < 0 ? "หมดอายุแล้ว" : "เร่งดำเนินการ" };
+  };
+
+  const remainingLabel = (days) => {
+    const remaining = Number(days);
+    if (remaining < 0) return `หมดอายุแล้ว ${Math.abs(remaining)} วัน`;
+    if (remaining === 0) return "หมดอายุวันนี้";
+    return `เหลือ ${remaining} วัน`;
+  };
+
   async function loadOverview() {
     const errorBox = document.getElementById("errorBox");
     const refreshButton = document.getElementById("refreshOverviewBtn");
@@ -289,11 +329,19 @@
       `).join("");
 
       document.getElementById("projectBudgetTotal").textContent = formatMoney(data.total_project_budget);
+      const licenseCounts = data.licenses_expiring.reduce((counts, item) => {
+        counts[licenseStatus(item.days_remaining).color]++;
+        return counts;
+      }, { green: 0, orange: 0, red: 0 });
       document.getElementById("alertList").innerHTML = `
         <div class="alert-item"><span>งานเลยกำหนด</span><span class="alert-count">${data.overdue_tasks}</span></div>
         <div class="alert-item"><span>คำขอลารอดำเนินการ</span><span class="alert-count">${data.pending_leave_requests}</span></div>
-        <div class="alert-item"><span>ใบประกอบวิชาชีพใกล้หมดอายุ</span><span class="alert-count">${data.licenses_expiring.length}</span></div>
+        <div class="alert-item"><span>ใบประกอบที่ต้องติดตามภายใน 180 วัน</span><span class="alert-count">${licenseCounts.orange + licenseCounts.red}</span></div>
       `;
+
+      document.getElementById("licenseGreenCount").textContent = licenseCounts.green;
+      document.getElementById("licenseOrangeCount").textContent = licenseCounts.orange;
+      document.getElementById("licenseRedCount").textContent = licenseCounts.red;
 
       const licensePanel = document.getElementById("licensePanel");
       const licenseEmpty = document.getElementById("licenseEmpty");
@@ -303,9 +351,17 @@
       } else {
         licenseEmpty.style.display = "none";
         licensePanel.innerHTML = `<table>
-          <thead><tr><th>ชื่อ</th><th>วันหมดอายุ</th></tr></thead>
+          <thead><tr><th>ชื่อบุคลากร</th><th>วันหมดอายุ</th><th>ระยะเวลาคงเหลือ</th><th>สถานะ</th></tr></thead>
           <tbody>${data.licenses_expiring
-            .map((r) => `<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.license_expiry_date)}</td></tr>`)
+            .map((r) => {
+              const status = licenseStatus(r.days_remaining);
+              return `<tr class="license-row-${status.color}">
+                <td>${escapeHtml(r.full_name)}</td>
+                <td>${escapeHtml(formatThaiDate(r.license_expiry_date))}</td>
+                <td>${escapeHtml(remainingLabel(r.days_remaining))}</td>
+                <td><span class="license-status ${status.color}">${status.label}</span></td>
+              </tr>`;
+            })
             .join("")}</tbody>
         </table>`;
       }
