@@ -23,6 +23,7 @@
   .import-summary { margin-top:16px; font-size:14px; }
   .import-summary .skip-item { color:var(--color-danger); font-size:13px; }
   .toolbar { display:flex; justify-content:space-between; align-items:center; }
+  .summary-line { margin:16px 0 0; color:var(--color-text-muted); font-size:14px; }
 </style>
 </head>
 <body>
@@ -42,6 +43,7 @@
     </div>
 
     <div class="error-box" id="errorBox"></div>
+    <div class="summary-line" id="personnelSummary">กำลังโหลดทะเบียนบุคลากร...</div>
     <div class="panel staff-panel" id="staffPanel"></div>
   </div>
 </div>
@@ -64,6 +66,10 @@
     <div class="field">
       <label>ครูประจำชั้น/ที่ปรึกษาห้อง</label>
       <input type="text" id="fHomeroom" placeholder="เช่น ป.4/1 (เว้นว่างถ้าไม่ได้เป็น)" />
+    </div>
+    <div class="field">
+      <label>วันที่ออกใบประกอบวิชาชีพ</label>
+      <input type="date" id="fLicenseIssue" />
     </div>
     <div class="field">
       <label>วันหมดอายุใบประกอบวิชาชีพ</label>
@@ -128,12 +134,13 @@
     const panel = document.getElementById("staffPanel");
     panel.innerHTML = staff
       .map((s) => {
-        const canEdit = currentUser.is_admin || currentUser.id === s.id;
+        const canEdit = currentUser.is_admin || currentUser.id === s.user_id;
         const details = [
           s.position,
           s.subjects,
           s.phone,
           s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
+          s.license_issue_date ? `ออกใบประกอบ ${s.license_issue_date}` : null,
           s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
         ]
           .filter(Boolean)
@@ -141,7 +148,7 @@
         return `
           <div class="staff-row">
             <div>
-              <div class="staff-name">${s.full_name} <span class="role-chip">${ROLE_LABELS[s.role] || s.role}</span></div>
+              <div class="staff-name">${s.full_name} ${s.role ? `<span class="role-chip">${ROLE_LABELS[s.role] || s.role}</span>` : ""}</div>
               <div class="staff-sub">${details || "ยังไม่มีข้อมูลเพิ่มเติม"}</div>
             </div>
             ${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
@@ -163,6 +170,9 @@
     try {
       const { staff } = await apiRequest("/api/staff");
       renderStaff(staff);
+      const withLicense = staff.filter((person) => person.license_issue_date && person.license_expiry_date).length;
+      document.getElementById("personnelSummary").textContent =
+        `บุคลากร ${staff.length} คน · มีข้อมูลวันออกและวันหมดอายุใบประกอบครบ ${withLicense} คน`;
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
@@ -175,6 +185,7 @@
     document.getElementById("fSubjects").value = staffMember.subjects || "";
     document.getElementById("fPhone").value = staffMember.phone || "";
     document.getElementById("fHomeroom").value = staffMember.homeroom_classroom || "";
+    document.getElementById("fLicenseIssue").value = staffMember.license_issue_date || "";
     document.getElementById("fLicenseExpiry").value = staffMember.license_expiry_date || "";
     document.getElementById("staffModal").style.display = "flex";
   }
@@ -192,6 +203,7 @@
           subjects: document.getElementById("fSubjects").value.trim(),
           phone: document.getElementById("fPhone").value.trim(),
           homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
+          license_issue_date: document.getElementById("fLicenseIssue").value || "",
           license_expiry_date: document.getElementById("fLicenseExpiry").value || "",
         },
       });

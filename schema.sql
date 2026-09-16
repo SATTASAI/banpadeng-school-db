@@ -171,3 +171,40 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 
 CREATE INDEX IF NOT EXISTS idx_leave_requests_user ON leave_requests(user_id);
 CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+
+-- Schema: ทะเบียนบุคลากรและใบประกอบวิชาชีพ แยกจากบัญชีเข้าสู่ระบบ
+
+CREATE TABLE IF NOT EXISTS personnel_records (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id               INTEGER UNIQUE REFERENCES users(id),
+  prefix                TEXT,
+  first_name            TEXT,
+  last_name             TEXT,
+  full_name             TEXT NOT NULL,
+  normalized_name       TEXT NOT NULL UNIQUE,
+  email                 TEXT,
+  position              TEXT,
+  subjects              TEXT,
+  phone                 TEXT,
+  homeroom_classroom    TEXT,
+  license_issue_date    TEXT,
+  license_expiry_date   TEXT,
+  license_issue_raw     TEXT,
+  license_expiry_raw    TEXT,
+  status                TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  source_file           TEXT,
+  source_sheet          TEXT,
+  source_row            INTEGER,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS personnel_imports (
+  import_key    TEXT PRIMARY KEY,
+  source_file   TEXT NOT NULL,
+  record_count  INTEGER NOT NULL,
+  imported_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_personnel_status ON personnel_records(status);
+CREATE INDEX IF NOT EXISTS idx_personnel_license_expiry ON personnel_records(license_expiry_date);

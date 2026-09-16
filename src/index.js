@@ -7,6 +7,7 @@ import {
   buildClearCookie,
 } from "./lib/crypto.js";
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
+import { ensurePersonnelData } from "./lib/personnel-data.js";
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -773,13 +774,18 @@ async function handleListStaff(request, env) {
     return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   }
 
+  await ensurePersonnelData(env);
+
   const { results } = await env.DB.prepare(
-    `SELECT u.id, u.full_name, u.email, u.role,
-            p.position, p.subjects, p.phone, p.homeroom_classroom, p.license_expiry_date
-     FROM users u
-     LEFT JOIN staff_profiles p ON p.user_id = u.id
-     WHERE u.status = 'active' AND u.role IS NOT NULL
-     ORDER BY u.full_name`
+    `SELECT p.id, p.user_id, p.prefix, p.first_name, p.last_name, p.full_name,
+            COALESCE(p.email, u.email) AS email, u.role,
+            p.position, p.subjects, p.phone, p.homeroom_classroom,
+            p.license_issue_date, p.license_expiry_date,
+            p.source_file, p.source_sheet, p.source_row
+     FROM personnel_records p
+     LEFT JOIN users u ON u.id = p.user_id
+     WHERE p.status = 'active'
+     ORDER BY p.first_name, p.full_name`
   ).all();
 
   return jsonResponse({ staff: results });
@@ -791,14 +797,15 @@ async function handleUpdateStaff(request, env, targetId) {
   if (!user || !user.role) {
     return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   }
-  if (!isAdmin(user) && user.id !== targetId) {
-    return jsonResponse({ error: "แก้ไขได้เฉพาะข้อมูลของตัวเอง หรือต้องเป็นผู้ดูแลระบบ/ผู้บริหาร" }, 403);
-  }
+  await ensurePersonnelData(env);
 
-  const target = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND role IS NOT NULL")
+  const target = await env.DB.prepare("SELECT id, user_id FROM personnel_records WHERE id = ? AND status = 'active'")
     .bind(targetId)
     .first();
   if (!target) return jsonResponse({ error: "ไม่พบบุคลากรนี้" }, 404);
+  if (!isAdmin(user) && user.id !== target.user_id) {
+    return jsonResponse({ error: "แก้ไขได้เฉพาะข้อมูลของตัวเอง หรือต้องเป็นผู้ดูแลระบบ/ผู้บริหาร" }, 403);
+  }
 
   let body;
   try {
@@ -811,19 +818,16 @@ async function handleUpdateStaff(request, env, targetId) {
   const subjects = body.subjects || null;
   const phone = body.phone || null;
   const homeroom_classroom = body.homeroom_classroom || null;
+  const license_issue_date = body.license_issue_date || null;
   const license_expiry_date = body.license_expiry_date || null;
 
   await env.DB.prepare(
-    `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom, license_expiry_date)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       position = excluded.position,
-       subjects = excluded.subjects,
-       phone = excluded.phone,
-       homeroom_classroom = excluded.homeroom_classroom,
-       license_expiry_date = excluded.license_expiry_date`
+    `UPDATE personnel_records SET
+       position = ?, subjects = ?, phone = ?, homeroom_classroom = ?,
+       license_issue_date = ?, license_expiry_date = ?, updated_at = datetime('now')
+     WHERE id = ?`
   )
-    .bind(targetId, position, subjects, phone, homeroom_classroom, license_expiry_date)
+    .bind(position, subjects, phone, homeroom_classroom, license_issue_date, license_expiry_date, targetId)
     .run();
 
   return jsonResponse({ ok: true });
@@ -1232,11 +1236,13 @@ async function handleOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
 
+  await ensurePersonnelData(env);
+
   const studentsEnrolled = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM students WHERE status = 'enrolled'"
   ).first();
   const staffCount = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM users WHERE status = 'active' AND role IS NOT NULL"
+    "SELECT COUNT(*) as count FROM personnel_records WHERE status = 'active'"
   ).first();
   const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
   const overdueTasks = await env.DB.prepare(
@@ -1258,11 +1264,12 @@ async function handleOverview(request, env) {
   ).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
-    `SELECT u.full_name, sp.license_expiry_date
-     FROM staff_profiles sp JOIN users u ON u.id = sp.user_id
-     WHERE sp.license_expiry_date IS NOT NULL
-       AND sp.license_expiry_date <= date('now', '+90 days')
-     ORDER BY sp.license_expiry_date ASC`
+    `SELECT full_name, license_expiry_date
+     FROM personnel_records
+     WHERE status = 'active'
+       AND license_expiry_date IS NOT NULL
+       AND license_expiry_date BETWEEN date('now') AND date('now', '+90 days')
+     ORDER BY license_expiry_date ASC`
   ).all();
 
   const departmentMap = Object.fromEntries(departmentRows.map((row) => [row.department, row]));
