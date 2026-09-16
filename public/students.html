@@ -120,6 +120,7 @@
     </div>
 
     <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteStudentBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger);">ลบนักเรียน</button>
       <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
       <button class="btn btn-primary" id="saveStudentBtn">บันทึก</button>
     </div>
@@ -288,6 +289,7 @@
     document.getElementById("modalTitle").textContent = studentId ? "แก้ไขข้อมูลนักเรียน" : "เพิ่มนักเรียน";
     document.getElementById("statusField").style.display = studentId ? "block" : "none";
     document.getElementById("guardianSection").style.display = studentId ? "block" : "none";
+    document.getElementById("deleteStudentBtn").style.display = studentId && currentUser.is_admin ? "inline-flex" : "none";
 
     if (studentId) {
       const { student } = await apiRequest(`/api/students/${studentId}`);
@@ -316,6 +318,17 @@
   }
 
   document.getElementById("newStudentBtn").addEventListener("click", () => openModal(null));
+  document.getElementById("deleteStudentBtn").addEventListener("click", async () => {
+    if (!editingStudentId) return;
+    if (!confirm("ยืนยันลบข้อมูลนักเรียนคนนี้? การลบไม่สามารถย้อนกลับได้")) return;
+    try {
+      await apiRequest(`/api/students/${editingStudentId}`, { method: "DELETE" });
+      document.getElementById("studentModal").style.display = "none";
+      await loadStudents();
+    } catch (err) {
+      alert(err.message);
+    }
+  });
   document.getElementById("cancelModalBtn").addEventListener("click", () => {
     document.getElementById("studentModal").style.display = "none";
   });

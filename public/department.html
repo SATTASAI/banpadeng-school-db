@@ -64,6 +64,7 @@
       <input type="text" id="tDescription" />
     </div>
     <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteTopicBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger);">ลบหัวข้องาน</button>
       <button class="btn btn-ghost" id="cancelTopicBtn">ยกเลิก</button>
       <button class="btn btn-primary" id="saveTopicBtn">บันทึก</button>
     </div>
@@ -102,6 +103,7 @@
       <div class="assignee-checks" id="ownerChecks"></div>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-ghost" id="deleteProjectBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger);">ลบโครงการ</button>
       <button class="btn btn-ghost" id="cancelProjectBtn">ยกเลิก</button>
       <button class="btn btn-primary" id="saveProjectBtn">บันทึก</button>
     </div>
@@ -158,10 +160,22 @@
     document.getElementById("topicModalTitle").textContent = topic ? "แก้ไขหัวข้องาน" : "เพิ่มหัวข้องาน";
     document.getElementById("tTitle").value = topic ? topic.title : "";
     document.getElementById("tDescription").value = topic ? topic.description || "" : "";
+    document.getElementById("deleteTopicBtn").style.display = topic && currentUser.is_admin ? "inline-flex" : "none";
     document.getElementById("topicModal").style.display = "flex";
   }
   document.getElementById("cancelTopicBtn").addEventListener("click", () => {
     document.getElementById("topicModal").style.display = "none";
+  });
+  document.getElementById("deleteTopicBtn").addEventListener("click", async () => {
+    if (!editingTopicId) return;
+    if (!confirm("ยืนยันลบหัวข้องานนี้?")) return;
+    try {
+      await apiRequest(`/api/topics/${editingTopicId}`, { method: "DELETE" });
+      document.getElementById("topicModal").style.display = "none";
+      await loadTopics();
+    } catch (err) {
+      alert(err.message);
+    }
   });
   document.getElementById("newTopicBtn").addEventListener("click", () => openTopicModal(null));
   document.getElementById("saveTopicBtn").addEventListener("click", async () => {
@@ -244,10 +258,22 @@
     if (currentUser.is_admin) {
       renderOwnerChecks(project ? project.owners.map((o) => o.user_id) : []);
     }
+    document.getElementById("deleteProjectBtn").style.display = project && currentUser.is_admin ? "inline-flex" : "none";
     document.getElementById("projectModal").style.display = "flex";
   }
   document.getElementById("cancelProjectBtn").addEventListener("click", () => {
     document.getElementById("projectModal").style.display = "none";
+  });
+  document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
+    if (!editingProjectId) return;
+    if (!confirm("ยืนยันลบโครงการนี้? การลบไม่สามารถย้อนกลับได้")) return;
+    try {
+      await apiRequest(`/api/projects/${editingProjectId}`, { method: "DELETE" });
+      document.getElementById("projectModal").style.display = "none";
+      await loadProjects();
+    } catch (err) {
+      alert(err.message);
+    }
   });
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal(null));
   document.getElementById("saveProjectBtn").addEventListener("click", async () => {
