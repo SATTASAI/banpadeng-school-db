@@ -12,6 +12,54 @@ import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-dat
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 
 let extendedSchemaReady = false;
+async function ensureProjectExpenseSchema(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS project_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      expense_date TEXT NOT NULL, document_no TEXT, category TEXT NOT NULL DEFAULT 'other',
+      description TEXT NOT NULL, payee TEXT, amount REAL NOT NULL CHECK (amount > 0),
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('draft','pending','approved','paid','rejected','cancelled')),
+      attachment_url TEXT, notes TEXT, created_by INTEGER NOT NULL REFERENCES users(id),
+      approved_by INTEGER REFERENCES users(id), approved_at TEXT, paid_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_project_expenses_project ON project_expenses(project_id, expense_date DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_project_expenses_status ON project_expenses(status, expense_date DESC)"),
+    env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_project_expenses_opening ON project_expenses(project_id) WHERE category = 'opening_balance'"),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_insert AFTER INSERT ON project_expenses BEGIN
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)
+      WHERE id = NEW.project_id; END`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_update AFTER UPDATE ON project_expenses BEGIN
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)
+      WHERE id = OLD.project_id;
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)
+      WHERE id = NEW.project_id; END`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_delete AFTER DELETE ON project_expenses BEGIN
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)
+      WHERE id = OLD.project_id; END`),
+  ]);
+
+  // รักษายอดใช้จริงเดิม: แปลงเป็นรายการยกมาเพียงครั้งเดียวก่อนให้ trigger เป็นผู้คำนวณต่อ
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO project_expenses
+       (project_id, expense_date, document_no, category, description, amount, status, notes, created_by, approved_by, approved_at, paid_at)
+     SELECT p.id, date('now'), 'OPENING-' || p.id, 'opening_balance',
+            'ยอดใช้จริงยกมาก่อนเปิดทะเบียนเบิกจ่าย', p.spent_amount, 'paid',
+            'ระบบสร้างอัตโนมัติเพื่อรักษายอดเดิม', p.created_by, p.created_by, datetime('now'), datetime('now')
+     FROM projects p
+     WHERE COALESCE(p.spent_amount, 0) > 0
+       AND NOT EXISTS (SELECT 1 FROM project_expenses e WHERE e.project_id = p.id)`
+  ).run();
+
+  await env.DB.prepare(
+    `UPDATE projects
+     SET spent_amount = COALESCE((
+       SELECT SUM(e.amount) FROM project_expenses e
+       WHERE e.project_id = projects.id AND e.status = 'paid'
+     ), 0)`
+  ).run();
+}
+
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
   await env.DB.batch([
@@ -32,6 +80,7 @@ async function ensureExtendedSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, backup_type TEXT NOT NULL DEFAULT 'export', file_name TEXT NOT NULL,
       table_count INTEGER, row_count INTEGER, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
+  await ensureProjectExpenseSchema(env);
   extendedSchemaReady = true;
 }
 
@@ -986,16 +1035,15 @@ async function handleCreateProject(request, env, department) {
 
   const ownerIds = Array.isArray(body.owner_ids) ? body.owner_ids.map(Number) : [];
   const budgetAmount = body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
-  const spentAmount = body.spent_amount === "" || body.spent_amount == null ? 0 : Number(body.spent_amount);
-  if (!Number.isFinite(budgetAmount) || budgetAmount < 0 || !Number.isFinite(spentAmount) || spentAmount < 0) {
-    return jsonResponse({ error: "ยอดงบประมาณและยอดใช้จริงต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
+  if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
+    return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
   }
 
   const result = await env.DB.prepare(
     `INSERT INTO projects (department, name, budget_amount, spent_amount, description, created_by)
-     VALUES (?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, 0, ?, ?)`
   )
-    .bind(department, name, budgetAmount, spentAmount, body.description || null, user.id)
+    .bind(department, name, budgetAmount, body.description || null, user.id)
     .run();
 
   const projectId = result.meta.last_row_id;
@@ -1035,12 +1083,6 @@ async function handleUpdateProject(request, env, projectId) {
     const amount = body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
     if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
     updates.push("budget_amount = ?");
-    values.push(amount);
-  }
-  if (body.spent_amount !== undefined) {
-    const amount = body.spent_amount === "" || body.spent_amount == null ? 0 : Number(body.spent_amount);
-    if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดใช้จริงต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
-    updates.push("spent_amount = ?");
     values.push(amount);
   }
   if (body.progress_percent !== undefined) {
@@ -1083,8 +1125,213 @@ async function handleDeleteProject(request, env, projectId) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่ลบโครงการได้" }, 403);
 
+  await env.DB.prepare("DELETE FROM project_expenses WHERE project_id = ?").bind(projectId).run();
   await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
   await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
+  return jsonResponse({ ok: true });
+}
+
+// ---------- ทะเบียนเบิกจ่ายรายโครงการ ----------
+const PROJECT_EXPENSE_STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
+const PROJECT_EXPENSE_CATEGORIES = [
+  "materials", "equipment", "services", "compensation", "utilities", "travel", "food", "opening_balance", "other",
+];
+
+function isIsoDate(value) {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const [year, month, day] = text.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function normalizeHttpUrl(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  try {
+    const url = new URL(text);
+    return ["http:", "https:"].includes(url.protocol) ? url.href : false;
+  } catch {
+    return false;
+  }
+}
+
+async function getProjectExpense(env, expenseId) {
+  return env.DB.prepare(
+    `SELECT e.*, p.department, p.name AS project_name
+     FROM project_expenses e JOIN projects p ON p.id = e.project_id
+     WHERE e.id = ?`
+  ).bind(expenseId).first();
+}
+
+async function writeAuditLog(env, user, action, resource, resourceId, details, request) {
+  await env.DB.prepare(
+    `INSERT INTO audit_logs (user_id, action, resource, resource_id, details, ip_address)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).bind(
+    user.id,
+    action,
+    resource,
+    resourceId || null,
+    details ? JSON.stringify(details) : null,
+    request.headers.get("CF-Connecting-IP") || null
+  ).run();
+}
+
+async function handleListProjectExpenses(request, env, projectId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const project = await env.DB.prepare(
+    `SELECT id, department, name, budget_amount, spent_amount, progress_percent, status,
+            COALESCE(budget_amount, 0) - COALESCE(spent_amount, 0) AS remaining_amount
+     FROM projects WHERE id = ?`
+  ).bind(projectId).first();
+  if (!project) return jsonResponse({ error: "ไม่พบโครงการ" }, 404);
+
+  const { results: expenses } = await env.DB.prepare(
+    `SELECT e.*, creator.full_name AS creator_name, approver.full_name AS approver_name
+     FROM project_expenses e
+     LEFT JOIN users creator ON creator.id = e.created_by
+     LEFT JOIN users approver ON approver.id = e.approved_by
+     WHERE e.project_id = ?
+     ORDER BY e.expense_date DESC, e.created_at DESC, e.id DESC`
+  ).bind(projectId).all();
+  const { results: statusRows } = await env.DB.prepare(
+    `SELECT status, COUNT(*) AS item_count, COALESCE(SUM(amount), 0) AS total_amount
+     FROM project_expenses WHERE project_id = ? GROUP BY status`
+  ).bind(projectId).all();
+
+  const statusTotals = Object.fromEntries(PROJECT_EXPENSE_STATUSES.map((status) => [status, { item_count: 0, total_amount: 0 }]));
+  for (const row of statusRows) {
+    statusTotals[row.status] = { item_count: Number(row.item_count || 0), total_amount: Number(row.total_amount || 0) };
+  }
+  const canManage = await isProjectOwner(env, user, projectId);
+  return jsonResponse({
+    project: {
+      ...project,
+      budget_amount: Number(project.budget_amount || 0),
+      spent_amount: Number(project.spent_amount || 0),
+      remaining_amount: Number(project.remaining_amount || 0),
+    },
+    expenses: expenses.map((expense) => ({ ...expense, amount: Number(expense.amount || 0) })),
+    status_totals: statusTotals,
+    permissions: { can_manage: canManage, can_approve: isAdmin(user) },
+  });
+}
+
+async function handleCreateProjectExpense(request, env, projectId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!(await isProjectOwner(env, user, projectId))) return jsonResponse({ error: "ไม่มีสิทธิ์บันทึกรายการของโครงการนี้" }, 403);
+  const project = await env.DB.prepare("SELECT id FROM projects WHERE id = ?").bind(projectId).first();
+  if (!project) return jsonResponse({ error: "ไม่พบโครงการ" }, 404);
+
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const description = String(body.description || "").trim();
+  const amount = Number(body.amount);
+  if (!isIsoDate(body.expense_date)) return jsonResponse({ error: "กรุณาระบุวันที่รายการให้ถูกต้อง" }, 400);
+  if (!description) return jsonResponse({ error: "กรุณาระบุรายละเอียดรายการ" }, 400);
+  if (!Number.isFinite(amount) || amount <= 0) return jsonResponse({ error: "จำนวนเงินต้องมากกว่า 0 บาท" }, 400);
+  const status = isAdmin(user) && PROJECT_EXPENSE_STATUSES.includes(body.status) ? body.status : "pending";
+  const category = PROJECT_EXPENSE_CATEGORIES.includes(body.category) ? body.category : "other";
+  const attachmentUrl = normalizeHttpUrl(body.attachment_url);
+  if (attachmentUrl === false) return jsonResponse({ error: "ลิงก์หลักฐานต้องขึ้นต้นด้วย http:// หรือ https://" }, 400);
+  const approved = ["approved", "paid"].includes(status);
+
+  const result = await env.DB.prepare(
+    `INSERT INTO project_expenses
+       (project_id, expense_date, document_no, category, description, payee, amount, status,
+        attachment_url, notes, created_by, approved_by, approved_at, paid_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    projectId, body.expense_date, String(body.document_no || "").trim() || null, category, description,
+    String(body.payee || "").trim() || null, amount, status, attachmentUrl,
+    String(body.notes || "").trim() || null, user.id, approved ? user.id : null,
+    approved ? new Date().toISOString() : null, status === "paid" ? new Date().toISOString() : null
+  ).run();
+  const expenseId = result.meta.last_row_id;
+  await writeAuditLog(env, user, "create", "project_expense", expenseId, { project_id: projectId, amount, status }, request);
+  return jsonResponse({ id: expenseId }, 201);
+}
+
+async function handleUpdateProjectExpense(request, env, expenseId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const expense = await getProjectExpense(env, expenseId);
+  if (!expense) return jsonResponse({ error: "ไม่พบรายการเบิกจ่าย" }, 404);
+  const canManage = await isProjectOwner(env, user, expense.project_id);
+  if (!canManage) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขรายการนี้" }, 403);
+  if (!isAdmin(user) && !["draft", "pending"].includes(expense.status)) {
+    return jsonResponse({ error: "รายการที่ผ่านการพิจารณาแล้วแก้ไขได้เฉพาะผู้บริหาร" }, 403);
+  }
+
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const updates = [];
+  const values = [];
+  if (body.expense_date !== undefined) {
+    if (!isIsoDate(body.expense_date)) return jsonResponse({ error: "วันที่รายการไม่ถูกต้อง" }, 400);
+    updates.push("expense_date = ?"); values.push(body.expense_date);
+  }
+  if (body.document_no !== undefined) { updates.push("document_no = ?"); values.push(String(body.document_no || "").trim() || null); }
+  if (body.category !== undefined) {
+    if (!PROJECT_EXPENSE_CATEGORIES.includes(body.category)) return jsonResponse({ error: "หมวดรายจ่ายไม่ถูกต้อง" }, 400);
+    updates.push("category = ?"); values.push(body.category);
+  }
+  if (body.description !== undefined) {
+    const description = String(body.description || "").trim();
+    if (!description) return jsonResponse({ error: "กรุณาระบุรายละเอียดรายการ" }, 400);
+    updates.push("description = ?"); values.push(description);
+  }
+  if (body.payee !== undefined) { updates.push("payee = ?"); values.push(String(body.payee || "").trim() || null); }
+  if (body.amount !== undefined) {
+    const amount = Number(body.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return jsonResponse({ error: "จำนวนเงินต้องมากกว่า 0 บาท" }, 400);
+    updates.push("amount = ?"); values.push(amount);
+  }
+  if (body.attachment_url !== undefined) {
+    const attachmentUrl = normalizeHttpUrl(body.attachment_url);
+    if (attachmentUrl === false) return jsonResponse({ error: "ลิงก์หลักฐานต้องขึ้นต้นด้วย http:// หรือ https://" }, 400);
+    updates.push("attachment_url = ?"); values.push(attachmentUrl);
+  }
+  if (body.notes !== undefined) { updates.push("notes = ?"); values.push(String(body.notes || "").trim() || null); }
+  if (body.status !== undefined) {
+    if (!PROJECT_EXPENSE_STATUSES.includes(body.status)) return jsonResponse({ error: "สถานะรายการไม่ถูกต้อง" }, 400);
+    if (!isAdmin(user) && !["draft", "pending"].includes(body.status)) {
+      return jsonResponse({ error: "เฉพาะผู้บริหารเท่านั้นที่อนุมัติหรือยืนยันการจ่ายได้" }, 403);
+    }
+    updates.push("status = ?"); values.push(body.status);
+    if (["approved", "paid"].includes(body.status)) {
+      updates.push("approved_by = ?", "approved_at = COALESCE(approved_at, datetime('now'))"); values.push(user.id);
+    } else if (["draft", "pending"].includes(body.status)) {
+      updates.push("approved_by = NULL", "approved_at = NULL");
+    }
+    updates.push(body.status === "paid" ? "paid_at = COALESCE(paid_at, datetime('now'))" : "paid_at = NULL");
+  }
+  if (!updates.length) return jsonResponse({ error: "ไม่มีข้อมูลที่ต้องอัปเดต" }, 400);
+  updates.push("updated_at = datetime('now')");
+  values.push(expenseId);
+  await env.DB.prepare(`UPDATE project_expenses SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  await writeAuditLog(env, user, "update", "project_expense", expenseId, { project_id: expense.project_id, fields: Object.keys(body) }, request);
+  return jsonResponse({ ok: true });
+}
+
+async function handleDeleteProjectExpense(request, env, expenseId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const expense = await getProjectExpense(env, expenseId);
+  if (!expense) return jsonResponse({ error: "ไม่พบรายการเบิกจ่าย" }, 404);
+  const canManage = await isProjectOwner(env, user, expense.project_id);
+  if (!canManage) return jsonResponse({ error: "ไม่มีสิทธิ์ลบรายการนี้" }, 403);
+  if (!isAdmin(user) && !["draft", "pending"].includes(expense.status)) {
+    return jsonResponse({ error: "ลบได้เฉพาะรายการร่างหรือรอตรวจสอบ" }, 403);
+  }
+  if (expense.status === "paid") {
+    return jsonResponse({ error: "รายการที่จ่ายแล้วห้ามลบ กรุณาเปลี่ยนสถานะเป็นยกเลิกเพื่อเก็บประวัติ" }, 409);
+  }
+  await env.DB.prepare("DELETE FROM project_expenses WHERE id = ?").bind(expenseId).run();
+  await writeAuditLog(env, user, "delete", "project_expense", expenseId, { project_id: expense.project_id, amount: expense.amount }, request);
   return jsonResponse({ ok: true });
 }
 
@@ -1356,7 +1603,7 @@ async function handleSecurityOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงข้อมูลความปลอดภัย" }, 403);
   await ensureExtendedSchema(env);
-  const tables = ["users", "students", "personnel_records", "projects", "student_support_cases", "documents", "audit_logs"];
+  const tables = ["users", "students", "personnel_records", "projects", "project_expenses", "student_support_cases", "documents", "audit_logs"];
   const counts = {};
   for (const table of tables) counts[table] = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first()).count;
   const { results: logs } = await env.DB.prepare(`SELECT a.*, u.full_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 50`).all();
@@ -1386,6 +1633,10 @@ async function handleOverview(request, env) {
   ).first();
   const pendingLeave = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'"
+  ).first();
+  const pendingProjectExpenses = await env.DB.prepare(
+    `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total_amount
+     FROM project_expenses WHERE status IN ('pending','approved')`
   ).first();
   const { results: departmentRows } = await env.DB.prepare(
     `SELECT department,
@@ -1457,6 +1708,8 @@ async function handleOverview(request, env) {
     overdue_tasks: overdueTasks.count,
     ongoing_projects: ongoingProjects.count,
     pending_leave_requests: pendingLeave.count,
+    pending_project_expenses: Number(pendingProjectExpenses?.count || 0),
+    pending_project_expense_amount: Number(pendingProjectExpenses?.total_amount || 0),
     total_project_budget: totalProjectBudget,
     total_project_spent: totalProjectSpent,
     total_project_remaining: totalProjectBudget - totalProjectSpent,
@@ -1692,6 +1945,14 @@ export default {
       const deptProjectsMatch = pathname.match(/^\/api\/departments\/([a-z]+)\/projects$/);
       if (deptProjectsMatch && method === "GET") return await handleListProjects(request, env, deptProjectsMatch[1]);
       if (deptProjectsMatch && method === "POST") return await handleCreateProject(request, env, deptProjectsMatch[1]);
+
+      const projectExpensesMatch = pathname.match(/^\/api\/projects\/(\d+)\/expenses$/);
+      if (projectExpensesMatch && method === "GET") return await handleListProjectExpenses(request, env, Number(projectExpensesMatch[1]));
+      if (projectExpensesMatch && method === "POST") return await handleCreateProjectExpense(request, env, Number(projectExpensesMatch[1]));
+
+      const expenseMatch = pathname.match(/^\/api\/project-expenses\/(\d+)$/);
+      if (expenseMatch && method === "PATCH") return await handleUpdateProjectExpense(request, env, Number(expenseMatch[1]));
+      if (expenseMatch && method === "DELETE") return await handleDeleteProjectExpense(request, env, Number(expenseMatch[1]));
 
       const projectMatch = pathname.match(/^\/api\/projects\/(\d+)$/);
       if (projectMatch && method === "PATCH") return await handleUpdateProject(request, env, Number(projectMatch[1]));

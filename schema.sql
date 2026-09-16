@@ -140,6 +140,29 @@ CREATE TABLE IF NOT EXISTS project_owners (
   PRIMARY KEY (project_id, user_id)
 );
 
+-- ทะเบียนขอเบิก/เบิกจ่ายรายโครงการ
+-- ยอดใช้จริงบน projects จะรวมเฉพาะรายการสถานะ paid ผ่าน trigger ด้านล่าง
+CREATE TABLE IF NOT EXISTS project_expenses (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id    INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  expense_date  TEXT NOT NULL,
+  document_no   TEXT,
+  category      TEXT NOT NULL DEFAULT 'other',
+  description   TEXT NOT NULL,
+  payee         TEXT,
+  amount        REAL NOT NULL CHECK (amount > 0),
+  status        TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('draft','pending','approved','paid','rejected','cancelled')),
+  attachment_url TEXT,
+  notes         TEXT,
+  created_by    INTEGER NOT NULL REFERENCES users(id),
+  approved_by   INTEGER REFERENCES users(id),
+  approved_at   TEXT,
+  paid_at       TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS work_topics (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   department    TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general')),
@@ -152,6 +175,49 @@ CREATE TABLE IF NOT EXISTS work_topics (
 CREATE INDEX IF NOT EXISTS idx_projects_department ON projects(department);
 CREATE INDEX IF NOT EXISTS idx_work_topics_department ON work_topics(department);
 CREATE INDEX IF NOT EXISTS idx_project_owners_user ON project_owners(user_id);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_project ON project_expenses(project_id, expense_date DESC);
+CREATE INDEX IF NOT EXISTS idx_project_expenses_status ON project_expenses(status, expense_date DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_project_expenses_opening
+  ON project_expenses(project_id) WHERE category = 'opening_balance';
+
+CREATE TRIGGER IF NOT EXISTS trg_project_expenses_insert
+AFTER INSERT ON project_expenses
+BEGIN
+  UPDATE projects
+  SET spent_amount = COALESCE((
+    SELECT SUM(amount) FROM project_expenses
+    WHERE project_id = NEW.project_id AND status = 'paid'
+  ), 0)
+  WHERE id = NEW.project_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_expenses_update
+AFTER UPDATE ON project_expenses
+BEGIN
+  UPDATE projects
+  SET spent_amount = COALESCE((
+    SELECT SUM(amount) FROM project_expenses
+    WHERE project_id = OLD.project_id AND status = 'paid'
+  ), 0)
+  WHERE id = OLD.project_id;
+  UPDATE projects
+  SET spent_amount = COALESCE((
+    SELECT SUM(amount) FROM project_expenses
+    WHERE project_id = NEW.project_id AND status = 'paid'
+  ), 0)
+  WHERE id = NEW.project_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_expenses_delete
+AFTER DELETE ON project_expenses
+BEGIN
+  UPDATE projects
+  SET spent_amount = COALESCE((
+    SELECT SUM(amount) FROM project_expenses
+    WHERE project_id = OLD.project_id AND status = 'paid'
+  ), 0)
+  WHERE id = OLD.project_id;
+END;
 
 -- Schema: โมดูลวันลา (ขอลา/อนุมัติ) + วันหมดอายุใบประกอบวิชาชีพ
 

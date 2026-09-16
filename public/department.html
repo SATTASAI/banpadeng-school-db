@@ -13,6 +13,8 @@
   .topic-btn:hover { background:var(--color-forest-900); }
   .project-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:12px; }
   .project-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .project-actions { display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+  .project-actions .btn { width:auto; padding:6px 10px; font-size:12px; }
   .project-name { font-weight:600; font-size:16px; }
   .project-budget { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--color-text-muted); font-weight:600; font-size:13px; margin-top:7px; }
   .project-budget strong { color:var(--color-forest-900); }
@@ -27,6 +29,43 @@
   .modal-actions { display:flex; gap:10px; margin-top:20px; }
   .assignee-checks { display:flex; flex-direction:column; gap:6px; max-height:140px; overflow-y:auto; border:1px solid var(--color-border); border-radius:var(--radius-md); padding:10px; }
   .assignee-checks label { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:400; }
+  .expense-modal-panel { max-width:980px; padding:0; overflow:hidden; }
+  .expense-modal-head { display:flex; justify-content:space-between; gap:18px; align-items:flex-start; padding:22px 24px 16px; border-bottom:1px solid var(--color-border); }
+  .expense-modal-head p { margin:2px 0 0; color:var(--color-text-muted); font-size:13px; }
+  .expense-modal-head .btn { width:auto; padding:7px 11px; }
+  .expense-modal-body { max-height:calc(88vh - 82px); overflow:auto; padding:18px 24px 24px; }
+  .expense-summary { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:16px; }
+  .expense-summary-card { min-width:0; padding:12px 14px; background:rgba(238,245,251,.72); border:1px solid var(--color-border); border-radius:13px; }
+  .expense-summary-card span { display:block; color:var(--color-text-muted); font-size:11px; }
+  .expense-summary-card strong { display:block; overflow:hidden; text-overflow:ellipsis; color:var(--color-forest-900); font-size:17px; white-space:nowrap; }
+  .expense-summary-card.paid strong { color:var(--color-ocean-700); }
+  .expense-summary-card.remaining strong { color:var(--color-success); }
+  .expense-summary-card.over strong { color:var(--color-danger); }
+  .expense-form-card { padding:16px; margin-bottom:16px; background:rgba(255,255,255,.72); border:1px solid var(--color-border); border-radius:15px; }
+  .expense-form-card h3 { margin-bottom:12px; font-size:15px; }
+  .expense-form-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+  .expense-form-grid .field { margin:0; }
+  .expense-form-grid .span-2 { grid-column:span 2; }
+  .expense-form-grid .span-3 { grid-column:1/-1; }
+  .expense-form-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+  .expense-form-actions .btn { width:auto; padding:8px 13px; font-size:13px; }
+  .expense-table-wrap { overflow:auto; border:1px solid var(--color-border); border-radius:14px; background:rgba(255,255,255,.72); }
+  .expense-table-wrap table { min-width:820px; }
+  .expense-status { display:inline-flex; padding:3px 8px; border-radius:999px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .expense-status.draft { background:#EEF1F4; color:#657485; }
+  .expense-status.pending { background:#FFF2D9; color:#9B5D0A; }
+  .expense-status.approved { background:#E7F0FD; color:#2866A3; }
+  .expense-status.paid { background:#E3F5EB; color:#23754A; }
+  .expense-status.rejected,.expense-status.cancelled { background:#F9E6E8; color:#A6404C; }
+  .expense-row-actions { display:flex; gap:5px; }
+  .expense-row-actions button { border:0; border-radius:8px; padding:5px 8px; background:#EAF2F8; color:var(--color-forest-700); cursor:pointer; font:600 11px var(--font-body); }
+  @media (max-width:720px) {
+    .expense-summary,.expense-form-grid { grid-template-columns:1fr 1fr; }
+    .expense-form-grid .span-2,.expense-form-grid .span-3 { grid-column:1/-1; }
+    .expense-modal-head,.expense-modal-body { padding-left:16px; padding-right:16px; }
+    .project-head { flex-direction:column; }
+    .project-actions { justify-content:flex-start; }
+  }
 </style>
 </head>
 <body>
@@ -53,6 +92,38 @@
       <button class="btn btn-primary" id="newProjectBtn" style="display:none;">+ เพิ่มโครงการ</button>
     </div>
     <div id="projectList"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="expenseModal" style="display:none;">
+  <div class="modal expense-modal-panel">
+    <div class="expense-modal-head">
+      <div><h2 id="expenseModalTitle" style="margin:0;">ทะเบียนเบิกจ่าย</h2><p id="expenseModalSubtitle"></p></div>
+      <button class="btn btn-ghost" id="closeExpenseModalBtn">ปิด</button>
+    </div>
+    <div class="expense-modal-body">
+      <div class="expense-summary" id="expenseSummary"></div>
+      <section class="expense-form-card" id="expenseFormCard">
+        <h3 id="expenseFormTitle">เพิ่มรายการเบิกจ่าย</h3>
+        <div class="expense-form-grid">
+          <div class="field"><label>วันที่รายการ</label><input type="date" id="eDate" /></div>
+          <div class="field"><label>เลขที่เอกสาร</label><input type="text" id="eDocumentNo" placeholder="เช่น บด.001/2569" /></div>
+          <div class="field"><label>หมวดรายจ่าย</label><select id="eCategory" style="width:100%;padding:10px 12px;"><option value="materials">วัสดุ</option><option value="equipment">ครุภัณฑ์</option><option value="services">ค่าใช้สอย/จ้างบริการ</option><option value="compensation">ค่าตอบแทน</option><option value="utilities">สาธารณูปโภค</option><option value="travel">ค่าเดินทาง</option><option value="food">ค่าอาหาร/อาหารว่าง</option><option value="other">อื่น ๆ</option></select></div>
+          <div class="field span-2"><label>รายละเอียดรายการ</label><input type="text" id="eDescription" placeholder="ระบุสิ่งที่ขอเบิกหรือจ่าย" /></div>
+          <div class="field"><label>จำนวนเงิน (บาท)</label><input type="number" id="eAmount" min="0.01" step="0.01" /></div>
+          <div class="field"><label>ผู้รับเงิน/ร้านค้า</label><input type="text" id="ePayee" /></div>
+          <div class="field" id="expenseStatusField"><label>สถานะ</label><select id="eStatus" style="width:100%;padding:10px 12px;"><option value="draft">ร่าง</option><option value="pending">รอตรวจสอบ</option><option value="approved">อนุมัติแล้ว</option><option value="paid">จ่ายแล้ว</option><option value="rejected">ไม่อนุมัติ</option><option value="cancelled">ยกเลิก</option></select></div>
+          <div class="field"><label>ลิงก์หลักฐาน/ไฟล์แนบ</label><input type="url" id="eAttachment" placeholder="https://..." /></div>
+          <div class="field span-3"><label>หมายเหตุ</label><input type="text" id="eNotes" /></div>
+        </div>
+        <div class="expense-form-actions">
+          <button class="btn btn-ghost" id="deleteExpenseBtn" style="display:none;color:var(--color-danger);">ลบรายการ</button>
+          <button class="btn btn-ghost" id="resetExpenseBtn">ล้างแบบฟอร์ม</button>
+          <button class="btn btn-primary" id="saveExpenseBtn">บันทึกรายการ</button>
+        </div>
+      </section>
+      <div class="expense-table-wrap" id="expenseList"></div>
+    </div>
   </div>
 </div>
 
@@ -85,10 +156,6 @@
     <div class="field">
       <label>ยอดงบประมาณ (บาท)</label>
       <input type="number" id="pBudget" min="0" step="0.01" />
-    </div>
-    <div class="field">
-      <label>ยอดใช้จริงสะสม (บาท)</label>
-      <input type="number" id="pSpent" min="0" step="0.01" />
     </div>
     <div class="field" id="progressField" style="display:none;">
       <label>% ความคืบหน้า</label>
@@ -127,12 +194,18 @@
     general: "ฝ่ายบริหารงานทั่วไป",
   };
   const STATUS_LABEL = { ongoing: "กำลังดำเนินการ", completed: "เสร็จสิ้น", cancelled: "ยกเลิก" };
+  const EXPENSE_STATUS_LABEL = { draft: "ร่าง", pending: "รอตรวจสอบ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
+  const EXPENSE_CATEGORY_LABEL = { materials: "วัสดุ", equipment: "ครุภัณฑ์", services: "ค่าใช้สอย/จ้างบริการ", compensation: "ค่าตอบแทน", utilities: "สาธารณูปโภค", travel: "ค่าเดินทาง", food: "ค่าอาหาร/อาหารว่าง", opening_balance: "ยอดยกมา", other: "อื่น ๆ" };
 
   const dept = new URLSearchParams(window.location.search).get("dept");
   let currentUser = null;
   let allUsers = [];
   let editingTopicId = null;
   let editingProjectId = null;
+  let currentProjects = [];
+  let currentExpenseProjectId = null;
+  let currentExpenseData = null;
+  let editingExpenseId = null;
 
   if (!dept || !DEPT_LABELS[dept]) {
     document.body.innerHTML = "<p style='padding:40px;'>ไม่พบฝ่ายงานนี้ <a href='/departments.html'>กลับ</a></p>";
@@ -142,6 +215,19 @@
 
   function money(n) {
     return Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 }) + " บาท";
+  }
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+  function thaiDate(value) {
+    if (!value) return "-";
+    const date = new Date(`${value}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("th-TH", { day: "numeric", month: "short", year: "numeric" }).format(date);
   }
 
   async function loadTopics() {
@@ -213,6 +299,7 @@
 
   async function loadProjects() {
     const { projects } = await apiRequest(`/api/departments/${dept}/projects`);
+    currentProjects = projects;
     const list = document.getElementById("projectList");
     if (projects.length === 0) {
       list.innerHTML = `<div class="empty-state">ยังไม่มีโครงการในฝ่ายนี้</div>`;
@@ -226,21 +313,24 @@
         <div class="project-card">
           <div class="project-head">
             <div>
-              <div class="project-name">${p.name}</div>
-              ${p.description ? `<div style="font-size:13px; color:var(--color-text-muted); margin-top:2px;">${p.description}</div>` : ""}
+              <div class="project-name">${escapeHtml(p.name)}</div>
+              ${p.description ? `<div style="font-size:13px; color:var(--color-text-muted); margin-top:2px;">${escapeHtml(p.description)}</div>` : ""}
               <div class="project-budget">
                 <span>งบทั้งหมด <strong>${money(p.budget_amount)}</strong></span>
                 <span class="spent">ใช้แล้ว <strong>${money(p.spent_amount)}</strong></span>
                 <span class="${remaining < 0 ? "over" : "remaining"}">${remaining < 0 ? "เกินงบ" : "คงเหลือ"} <strong>${money(Math.abs(remaining))}</strong></span>
               </div>
             </div>
-            ${canManage ? `<button class="icon-btn" data-edit="${p.id}" style="background:none;border:none;color:var(--color-forest-700);cursor:pointer;text-decoration:underline;font-size:13px;">แก้ไข</button>` : ""}
+            <div class="project-actions">
+              <button class="btn btn-ghost" data-expenses="${p.id}">รายการเบิกจ่าย</button>
+              ${canManage ? `<button class="btn btn-ghost" data-edit="${p.id}">แก้ไขโครงการ</button>` : ""}
+            </div>
           </div>
           <div class="progress-track"><div class="progress-fill" style="width:${p.progress_percent}%;"></div></div>
           <div class="project-meta">
             <span>${p.progress_percent}%</span>
             <span class="badge ${p.status === "ongoing" ? "badge-normal" : p.status === "completed" ? "badge-low" : "badge-high"}" style="padding:2px 10px; border-radius:999px;">${STATUS_LABEL[p.status]}</span>
-            <span>ผู้ดูแล: ${p.owners.map((o) => o.full_name).join(", ") || "-"}</span>
+            <span>ผู้ดูแล: ${p.owners.map((o) => escapeHtml(o.full_name)).join(", ") || "-"}</span>
           </div>
         </div>`;
       })
@@ -252,6 +342,12 @@
         openProjectModal(p);
       });
     });
+    list.querySelectorAll("[data-expenses]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const project = projects.find((item) => item.id == btn.getAttribute("data-expenses"));
+        openExpenseModal(project);
+      });
+    });
   }
 
   function openProjectModal(project) {
@@ -259,7 +355,6 @@
     document.getElementById("projectModalTitle").textContent = project ? "แก้ไขโครงการ" : "เพิ่มโครงการ";
     document.getElementById("pName").value = project ? project.name : "";
     document.getElementById("pBudget").value = project ? project.budget_amount || "" : "";
-    document.getElementById("pSpent").value = project ? project.spent_amount || "" : "";
     document.getElementById("pDescription").value = project ? project.description || "" : "";
     document.getElementById("progressField").style.display = project ? "block" : "none";
     document.getElementById("statusField").style.display = project ? "block" : "none";
@@ -292,12 +387,11 @@
   document.getElementById("saveProjectBtn").addEventListener("click", async () => {
     const name = document.getElementById("pName").value.trim();
     const budget_amount = Number(document.getElementById("pBudget").value || 0);
-    const spent_amount = Number(document.getElementById("pSpent").value || 0);
     const description = document.getElementById("pDescription").value.trim();
     if (!name) return alert("กรุณากรอกชื่อโครงการ");
-    if (budget_amount < 0 || spent_amount < 0) return alert("ยอดงบประมาณและยอดใช้จริงต้องไม่น้อยกว่า 0");
+    if (budget_amount < 0) return alert("ยอดงบประมาณต้องไม่น้อยกว่า 0");
 
-    const body = { name, budget_amount, spent_amount, description };
+    const body = { name, budget_amount, description };
     if (editingProjectId) {
       body.progress_percent = Number(document.getElementById("pProgress").value || 0);
       body.status = document.getElementById("pStatus").value;
@@ -318,6 +412,171 @@
       await loadProjects();
     } catch (err) {
       alert(err.message);
+    }
+  });
+
+  function localIsoDate() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function safeAttachmentUrl(value) {
+    try {
+      const url = new URL(value);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function resetExpenseForm() {
+    editingExpenseId = null;
+    document.getElementById("expenseFormTitle").textContent = "เพิ่มรายการเบิกจ่าย";
+    document.getElementById("eDate").value = localIsoDate();
+    document.getElementById("eDocumentNo").value = "";
+    document.getElementById("eCategory").value = "materials";
+    document.getElementById("eDescription").value = "";
+    document.getElementById("eAmount").value = "";
+    document.getElementById("ePayee").value = "";
+    document.getElementById("eStatus").value = currentExpenseData?.permissions?.can_approve ? "pending" : "pending";
+    document.getElementById("eAttachment").value = "";
+    document.getElementById("eNotes").value = "";
+    document.getElementById("deleteExpenseBtn").style.display = "none";
+  }
+
+  function editExpense(expense) {
+    editingExpenseId = expense.id;
+    document.getElementById("expenseFormTitle").textContent = "แก้ไขรายการเบิกจ่าย";
+    document.getElementById("eDate").value = expense.expense_date || localIsoDate();
+    document.getElementById("eDocumentNo").value = expense.document_no || "";
+    document.getElementById("eCategory").value = expense.category || "other";
+    document.getElementById("eDescription").value = expense.description || "";
+    document.getElementById("eAmount").value = expense.amount || "";
+    document.getElementById("ePayee").value = expense.payee || "";
+    document.getElementById("eStatus").value = expense.status || "pending";
+    document.getElementById("eAttachment").value = expense.attachment_url || "";
+    document.getElementById("eNotes").value = expense.notes || "";
+    const canDelete = expense.status !== "paid"
+      && (currentExpenseData.permissions.can_approve || ["draft", "pending"].includes(expense.status));
+    document.getElementById("deleteExpenseBtn").style.display = canDelete ? "inline-flex" : "none";
+    document.getElementById("eDescription").focus();
+  }
+
+  function renderExpenseLedger(data) {
+    currentExpenseData = data;
+    const project = data.project;
+    const pendingTotal = data.status_totals.pending.total_amount + data.status_totals.approved.total_amount;
+    const remaining = project.remaining_amount;
+    document.getElementById("expenseSummary").innerHTML = `
+      <div class="expense-summary-card"><span>งบโครงการ</span><strong>${money(project.budget_amount)}</strong></div>
+      <div class="expense-summary-card paid"><span>จ่ายแล้ว</span><strong>${money(project.spent_amount)}</strong></div>
+      <div class="expense-summary-card ${remaining < 0 ? "over" : "remaining"}"><span>${remaining < 0 ? "เกินงบ" : "คงเหลือ"}</span><strong>${money(Math.abs(remaining))}</strong></div>
+      <div class="expense-summary-card"><span>รอตรวจสอบ/อนุมัติ</span><strong>${money(pendingTotal)}</strong></div>`;
+
+    document.getElementById("expenseFormCard").style.display = data.permissions.can_manage ? "block" : "none";
+    document.getElementById("expenseStatusField").style.display = data.permissions.can_approve ? "block" : "none";
+    const list = document.getElementById("expenseList");
+    if (!data.expenses.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:34px 20px;">ยังไม่มีรายการเบิกจ่ายในโครงการนี้</div>`;
+      return;
+    }
+    list.innerHTML = `<table>
+      <thead><tr><th>วันที่/เลขที่</th><th>รายละเอียด</th><th>ผู้รับเงิน</th><th>จำนวนเงิน</th><th>สถานะ</th><th>หลักฐาน</th><th></th></tr></thead>
+      <tbody>${data.expenses.map((expense) => {
+        const attachment = safeAttachmentUrl(expense.attachment_url);
+        const editable = data.permissions.can_manage && (data.permissions.can_approve || ["draft", "pending"].includes(expense.status));
+        return `<tr>
+          <td>${escapeHtml(thaiDate(expense.expense_date))}<br><small>${escapeHtml(expense.document_no || "ไม่ระบุเลขที่")}</small></td>
+          <td><strong>${escapeHtml(expense.description)}</strong><br><small>${escapeHtml(EXPENSE_CATEGORY_LABEL[expense.category] || expense.category)}${expense.notes ? ` · ${escapeHtml(expense.notes)}` : ""}</small></td>
+          <td>${escapeHtml(expense.payee || "-")}<br><small>โดย ${escapeHtml(expense.creator_name || "-")}</small></td>
+          <td><strong>${money(expense.amount)}</strong></td>
+          <td><span class="expense-status ${escapeHtml(expense.status)}">${escapeHtml(EXPENSE_STATUS_LABEL[expense.status] || expense.status)}</span></td>
+          <td>${attachment ? `<a href="${escapeHtml(attachment)}" target="_blank" rel="noopener">เปิดหลักฐาน</a>` : "-"}</td>
+          <td>${editable ? `<div class="expense-row-actions"><button data-edit-expense="${expense.id}">แก้ไข</button></div>` : ""}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table>`;
+    list.querySelectorAll("[data-edit-expense]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const expense = data.expenses.find((item) => item.id == button.getAttribute("data-edit-expense"));
+        if (expense) editExpense(expense);
+      });
+    });
+  }
+
+  async function loadExpenseLedger() {
+    if (!currentExpenseProjectId) return;
+    const data = await apiRequest(`/api/projects/${currentExpenseProjectId}/expenses`);
+    renderExpenseLedger(data);
+  }
+
+  async function openExpenseModal(project) {
+    if (!project) return;
+    currentExpenseProjectId = project.id;
+    currentExpenseData = null;
+    editingExpenseId = null;
+    document.getElementById("expenseModalTitle").textContent = "ทะเบียนเบิกจ่ายโครงการ";
+    document.getElementById("expenseModalSubtitle").textContent = project.name;
+    document.getElementById("expenseSummary").innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:18px;">กำลังโหลดข้อมูล...</div>`;
+    document.getElementById("expenseList").innerHTML = `<div class="empty-state" style="padding:34px;">กำลังโหลดรายการ...</div>`;
+    document.getElementById("expenseFormCard").style.display = "none";
+    document.getElementById("expenseModal").style.display = "flex";
+    try {
+      await loadExpenseLedger();
+      resetExpenseForm();
+    } catch (error) {
+      document.getElementById("expenseList").innerHTML = `<div class="empty-state" style="color:var(--color-danger);">${escapeHtml(error.message)}</div>`;
+    }
+  }
+
+  document.getElementById("closeExpenseModalBtn").addEventListener("click", () => {
+    document.getElementById("expenseModal").style.display = "none";
+  });
+  document.getElementById("resetExpenseBtn").addEventListener("click", resetExpenseForm);
+  document.getElementById("saveExpenseBtn").addEventListener("click", async () => {
+    if (!currentExpenseProjectId || !currentExpenseData?.permissions?.can_manage) return;
+    const body = {
+      expense_date: document.getElementById("eDate").value,
+      document_no: document.getElementById("eDocumentNo").value.trim(),
+      category: document.getElementById("eCategory").value,
+      description: document.getElementById("eDescription").value.trim(),
+      amount: Number(document.getElementById("eAmount").value),
+      payee: document.getElementById("ePayee").value.trim(),
+      attachment_url: document.getElementById("eAttachment").value.trim(),
+      notes: document.getElementById("eNotes").value.trim(),
+    };
+    if (currentExpenseData.permissions.can_approve) body.status = document.getElementById("eStatus").value;
+    if (!body.expense_date || !body.description || !(body.amount > 0)) return alert("กรุณากรอกวันที่ รายละเอียด และจำนวนเงินให้ครบถ้วน");
+    if (body.attachment_url && !safeAttachmentUrl(body.attachment_url)) return alert("ลิงก์หลักฐานต้องขึ้นต้นด้วย http:// หรือ https://");
+    const button = document.getElementById("saveExpenseBtn");
+    button.disabled = true;
+    try {
+      if (editingExpenseId) {
+        await apiRequest(`/api/project-expenses/${editingExpenseId}`, { method: "PATCH", body });
+      } else {
+        await apiRequest(`/api/projects/${currentExpenseProjectId}/expenses`, { method: "POST", body });
+      }
+      await loadExpenseLedger();
+      resetExpenseForm();
+      await loadProjects();
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
+  document.getElementById("deleteExpenseBtn").addEventListener("click", async () => {
+    if (!editingExpenseId || !confirm("ยืนยันลบรายการเบิกจ่ายนี้?")) return;
+    try {
+      await apiRequest(`/api/project-expenses/${editingExpenseId}`, { method: "DELETE" });
+      await loadExpenseLedger();
+      resetExpenseForm();
+      await loadProjects();
+    } catch (error) {
+      alert(error.message);
     }
   });
 
