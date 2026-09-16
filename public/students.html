@@ -8,13 +8,29 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .toolbar { display:flex; justify-content:space-between; align-items:center; margin-top:12px; gap:12px; flex-wrap:wrap; }
-  .search-input { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-family:var(--font-body); background:var(--color-surface); }
-  .panel { margin-top:20px; }
-  .student-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); cursor:pointer; }
+  .student-tools { margin-top:20px; padding:16px; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); }
+  .student-search-row { display:flex; gap:10px; align-items:center; }
+  .search-input { flex:1; min-width:200px; padding:11px 14px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-family:var(--font-body); background:var(--color-bg); }
+  .search-input:focus, .filter-select:focus { outline:2px solid rgba(63,122,85,0.18); border-color:var(--color-primary); }
+  .student-filter-grid { display:grid; grid-template-columns:repeat(4, minmax(130px, 1fr)) auto; gap:10px; margin-top:12px; align-items:end; }
+  .filter-field label { display:block; font-size:12px; color:var(--color-text-muted); margin:0 0 5px 2px; }
+  .filter-select { width:100%; min-height:42px; padding:9px 10px; border:1px solid var(--color-border); border-radius:var(--radius-md); font-family:var(--font-body); background:var(--color-bg); color:var(--color-text); }
+  .student-result-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 2px 8px; color:var(--color-text-muted); font-size:14px; }
+  .student-result-count strong { color:var(--color-text); }
+  #studentPanel { overflow:hidden; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-surface); }
+  .student-list-head, .student-row { display:grid; grid-template-columns:120px minmax(210px, 1.5fr) minmax(130px, .8fr) 90px 130px; gap:14px; align-items:center; }
+  .student-list-head { padding:11px 18px; background:var(--color-bg); color:var(--color-text-muted); font-size:12px; font-weight:600; border-bottom:1px solid var(--color-border); }
+  .student-row { min-height:62px; padding:11px 18px; border-bottom:1px solid var(--color-border); cursor:pointer; transition:background .15s ease; }
   .student-row:last-child { border-bottom:none; }
-  .student-row:hover { background:var(--color-bg); }
-  .student-name { font-weight:600; }
-  .student-sub { font-size:13px; color:var(--color-text-muted); }
+  .student-row:hover, .student-row:focus-visible { background:rgba(63,122,85,0.06); outline:none; }
+  .student-code { color:var(--color-text-muted); font-variant-numeric:tabular-nums; }
+  .student-name { font-weight:600; line-height:1.35; }
+  .student-mobile-label { display:none; }
+  .student-cell-muted { color:var(--color-text-muted); }
+  .pagination { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:14px; }
+  .pagination .btn { width:auto; min-width:92px; }
+  .page-indicator { min-width:110px; text-align:center; color:var(--color-text-muted); font-size:14px; }
+  .filter-clear { width:auto; white-space:nowrap; min-height:42px; }
   .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; overflow-y:auto; }
   .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:560px; max-height:88vh; overflow-y:auto; }
   .modal h2 { margin-bottom:16px; }
@@ -34,6 +50,26 @@
   .preview-table-wrap { max-height:200px; overflow:auto; border:1px solid var(--color-border); border-radius:var(--radius-md); margin-top:12px; }
   .import-summary { margin-top:16px; font-size:14px; }
   .import-summary .skip-item { color:var(--color-danger); font-size:13px; }
+  @media (max-width:900px) {
+    .student-filter-grid { grid-template-columns:repeat(2, minmax(130px, 1fr)); }
+    .filter-clear { width:100%; }
+    .student-list-head { display:none; }
+    .student-row { grid-template-columns:1fr auto; gap:7px 12px; padding:15px 16px; }
+    .student-row > * { min-width:0; }
+    .student-code { grid-column:1; grid-row:2; font-size:13px; }
+    .student-name { grid-column:1; grid-row:1; }
+    .student-grade, .student-classroom { grid-column:1; font-size:13px; color:var(--color-text-muted); }
+    .student-status { grid-column:2; grid-row:1 / span 2; justify-self:end; align-self:start; }
+    .student-mobile-label { display:inline; }
+  }
+  @media (max-width:560px) {
+    .toolbar > div:last-child { width:100%; }
+    .toolbar > div:last-child .btn { flex:1; }
+    .student-search-row { align-items:stretch; }
+    .student-filter-grid { grid-template-columns:1fr 1fr; }
+    .student-filter-grid .filter-field:nth-child(4) { grid-column:1 / -1; }
+    .student-result-bar { align-items:flex-start; }
+  }
 </style>
 </head>
 <body>
@@ -55,11 +91,61 @@
       </div>
     </div>
 
-    <input type="text" class="search-input" id="searchInput" placeholder="ค้นหาชื่อ, เลขประจำตัว หรือห้อง..." />
+    <section class="student-tools" aria-label="ค้นหาและกรองข้อมูลนักเรียน">
+      <div class="student-search-row">
+        <input type="search" class="search-input" id="searchInput" placeholder="ค้นหาชื่อ เลขประจำตัว ชั้น หรือห้อง" autocomplete="off" />
+      </div>
+      <div class="student-filter-grid">
+        <div class="filter-field">
+          <label for="gradeFilter">ระดับชั้น</label>
+          <select class="filter-select" id="gradeFilter"><option value="">ทุกระดับชั้น</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="classroomFilter">ห้องเรียน</label>
+          <select class="filter-select" id="classroomFilter"><option value="">ทุกห้องเรียน</option></select>
+        </div>
+        <div class="filter-field">
+          <label for="statusFilter">สถานะ</label>
+          <select class="filter-select" id="statusFilter">
+            <option value="">ทุกสถานะ</option>
+            <option value="enrolled">กำลังศึกษาอยู่</option>
+            <option value="transferred">ย้ายโรงเรียน</option>
+            <option value="graduated">จบการศึกษา</option>
+            <option value="withdrawn">ออกกลางคัน</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label for="sortSelect">เรียงลำดับ</label>
+          <select class="filter-select" id="sortSelect">
+            <option value="grade">ชั้น ห้อง และชื่อ</option>
+            <option value="name">ชื่อนักเรียน ก–ฮ</option>
+            <option value="code">เลขประจำตัว น้อย–มาก</option>
+            <option value="status">สถานะและชื่อ</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-ghost filter-clear" id="clearFiltersBtn">ล้างตัวกรอง</button>
+      </div>
+    </section>
 
     <div class="error-box" id="errorBox"></div>
-    <div class="panel" id="studentPanel"></div>
+    <div class="student-result-bar">
+      <div class="student-result-count" id="studentResultCount" aria-live="polite"></div>
+      <div class="filter-field" style="min-width:115px;">
+        <label for="pageSizeSelect">แสดงต่อหน้า</label>
+        <select class="filter-select" id="pageSizeSelect">
+          <option value="25">25 คน</option>
+          <option value="50">50 คน</option>
+          <option value="100">100 คน</option>
+        </select>
+      </div>
+    </div>
+    <div id="studentPanel"></div>
     <div class="empty-state" id="emptyState" style="display:none;">ยังไม่มีข้อมูลนักเรียน</div>
+    <nav class="pagination" id="studentPagination" aria-label="เปลี่ยนหน้ารายชื่อนักเรียน" style="display:none;">
+      <button type="button" class="btn btn-ghost" id="previousPageBtn">← ก่อนหน้า</button>
+      <span class="page-indicator" id="pageIndicator"></span>
+      <button type="button" class="btn btn-ghost" id="nextPageBtn">ถัดไป →</button>
+    </nav>
   </div>
 </div>
 
@@ -205,44 +291,125 @@
   let currentUser = null;
   let allStudents = [];
   let editingStudentId = null;
+  let currentStudentPage = 1;
 
   const STATUS_LABEL = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
 
-  function renderList(filterText) {
-    const q = (filterText || "").trim().toLowerCase();
-    const filtered = allStudents.filter((s) =>
-      !q ||
-      s.full_name.toLowerCase().includes(q) ||
-      s.student_code.toLowerCase().includes(q) ||
-      (s.classroom || "").toLowerCase().includes(q)
-    );
+  function escapeStudentText(value) {
+    return String(value == null ? "" : value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
 
+  function naturalCompare(a, b) {
+    return String(a || "").localeCompare(String(b || ""), "th", { numeric: true, sensitivity: "base" });
+  }
+
+  function populateStudentFilters() {
+    const fill = (selectId, values, firstLabel) => {
+      const select = document.getElementById(selectId);
+      const selected = select.value;
+      select.replaceChildren(new Option(firstLabel, ""));
+      [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))]
+        .sort(naturalCompare)
+        .forEach((value) => select.add(new Option(value, value)));
+      if ([...select.options].some((option) => option.value === selected)) select.value = selected;
+    };
+    fill("gradeFilter", allStudents.map((student) => student.grade_level), "ทุกระดับชั้น");
+    fill("classroomFilter", allStudents.map((student) => student.classroom), "ทุกห้องเรียน");
+  }
+
+  function getFilteredStudents() {
+    const q = document.getElementById("searchInput").value.trim().toLocaleLowerCase("th");
+    const grade = document.getElementById("gradeFilter").value;
+    const classroom = document.getElementById("classroomFilter").value;
+    const status = document.getElementById("statusFilter").value;
+    const sortBy = document.getElementById("sortSelect").value;
+    const statusOrder = { enrolled: 0, transferred: 1, graduated: 2, withdrawn: 3 };
+
+    return allStudents.filter((student) => {
+      const searchable = [student.full_name, student.student_code, student.grade_level, student.classroom]
+        .map((value) => String(value || "").toLocaleLowerCase("th")).join(" ");
+      return (!q || searchable.includes(q)) &&
+        (!grade || String(student.grade_level || "").trim() === grade) &&
+        (!classroom || String(student.classroom || "").trim() === classroom) &&
+        (!status || student.status === status);
+    }).sort((a, b) => {
+      if (sortBy === "name") return naturalCompare(a.full_name, b.full_name) || naturalCompare(a.student_code, b.student_code);
+      if (sortBy === "code") return naturalCompare(a.student_code, b.student_code) || naturalCompare(a.full_name, b.full_name);
+      if (sortBy === "status") return (statusOrder[a.status] ?? 99) - (statusOrder[b.status] ?? 99) || naturalCompare(a.full_name, b.full_name);
+      return naturalCompare(a.grade_level, b.grade_level) || naturalCompare(a.classroom, b.classroom) || naturalCompare(a.full_name, b.full_name);
+    });
+  }
+
+  function renderList(options = {}) {
+    if (options.resetPage) currentStudentPage = 1;
+    const filtered = getFilteredStudents();
     const panel = document.getElementById("studentPanel");
     const emptyState = document.getElementById("emptyState");
+    const pagination = document.getElementById("studentPagination");
+    const pageSize = Number(document.getElementById("pageSizeSelect").value) || 25;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    currentStudentPage = Math.min(Math.max(1, currentStudentPage), totalPages);
+    const start = (currentStudentPage - 1) * pageSize;
+    const pageStudents = filtered.slice(start, start + pageSize);
+    const hasActiveFilter = document.getElementById("searchInput").value.trim() ||
+      document.getElementById("gradeFilter").value || document.getElementById("classroomFilter").value ||
+      document.getElementById("statusFilter").value;
+    const count = document.getElementById("studentResultCount");
 
     if (filtered.length === 0) {
       panel.innerHTML = "";
+      panel.style.display = "none";
       emptyState.style.display = "block";
+      emptyState.textContent = allStudents.length === 0
+        ? "ยังไม่มีข้อมูลนักเรียน"
+        : "ไม่พบข้อมูลที่ตรงกับคำค้นหาหรือตัวกรอง";
+      count.innerHTML = hasActiveFilter
+        ? `พบ <strong>0</strong> จากทั้งหมด ${allStudents.length} คน`
+        : `นักเรียนทั้งหมด <strong>0</strong> คน`;
+      pagination.style.display = "none";
       return;
     }
+    panel.style.display = "block";
     emptyState.style.display = "none";
+    const shownEnd = Math.min(start + pageSize, filtered.length);
+    count.innerHTML = hasActiveFilter
+      ? `พบ <strong>${filtered.length}</strong> จากทั้งหมด ${allStudents.length} คน · แสดง ${start + 1}–${shownEnd}`
+      : `นักเรียนทั้งหมด <strong>${allStudents.length}</strong> คน · แสดง ${start + 1}–${shownEnd}`;
 
-    panel.innerHTML = `<div class="panel">${filtered
+    panel.innerHTML = `<div class="student-list-head" aria-hidden="true">
+      <span>เลขประจำตัว</span><span>ชื่อ–นามสกุล</span><span>ระดับชั้น</span><span>ห้อง</span><span>สถานะ</span>
+    </div>${pageStudents
       .map(
         (s) => `
-        <div class="student-row" data-id="${s.id}">
-          <div>
-            <div class="student-name">${s.full_name}</div>
-            <div class="student-sub">เลขประจำตัว ${s.student_code} · ${s.classroom || "-"} · ${s.grade_level || "-"}</div>
-          </div>
-          <span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${STATUS_LABEL[s.status]}</span>
+        <div class="student-row" data-id="${Number(s.id)}" role="button" tabindex="0" aria-label="เปิดข้อมูล ${escapeStudentText(s.full_name)}">
+          <div class="student-code"><span class="student-mobile-label">เลขประจำตัว </span>${escapeStudentText(s.student_code)}</div>
+          <div class="student-name">${escapeStudentText(s.full_name)}</div>
+          <div class="student-grade student-cell-muted"><span class="student-mobile-label">ระดับชั้น: </span>${escapeStudentText(s.grade_level || "-")}</div>
+          <div class="student-classroom student-cell-muted"><span class="student-mobile-label">ห้อง: </span>${escapeStudentText(s.classroom || "-")}</div>
+          <div class="student-status"><span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${escapeStudentText(STATUS_LABEL[s.status] || s.status || "ไม่ระบุ")}</span></div>
         </div>`
       )
-      .join("")}</div>`;
+      .join("")}`;
 
     panel.querySelectorAll(".student-row").forEach((row) => {
       row.addEventListener("click", () => openModal(Number(row.getAttribute("data-id"))));
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openModal(Number(row.getAttribute("data-id")));
+        }
+      });
     });
+
+    pagination.style.display = totalPages > 1 ? "flex" : "none";
+    document.getElementById("pageIndicator").textContent = `หน้า ${currentStudentPage} จาก ${totalPages}`;
+    document.getElementById("previousPageBtn").disabled = currentStudentPage === 1;
+    document.getElementById("nextPageBtn").disabled = currentStudentPage === totalPages;
   }
 
   async function loadStudents() {
@@ -251,14 +418,32 @@
     try {
       const { students } = await apiRequest("/api/students");
       allStudents = students;
-      renderList(document.getElementById("searchInput").value);
+      populateStudentFilters();
+      renderList({ resetPage: true });
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
     }
   }
 
-  document.getElementById("searchInput").addEventListener("input", (e) => renderList(e.target.value));
+  ["searchInput", "gradeFilter", "classroomFilter", "statusFilter", "sortSelect", "pageSizeSelect"].forEach((id) => {
+    const eventName = id === "searchInput" ? "input" : "change";
+    document.getElementById(id).addEventListener(eventName, () => renderList({ resetPage: true }));
+  });
+  document.getElementById("clearFiltersBtn").addEventListener("click", () => {
+    ["searchInput", "gradeFilter", "classroomFilter", "statusFilter"].forEach((id) => { document.getElementById(id).value = ""; });
+    document.getElementById("sortSelect").value = "grade";
+    renderList({ resetPage: true });
+    document.getElementById("searchInput").focus();
+  });
+  document.getElementById("previousPageBtn").addEventListener("click", () => {
+    if (currentStudentPage > 1) { currentStudentPage--; renderList(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  });
+  document.getElementById("nextPageBtn").addEventListener("click", () => {
+    currentStudentPage++;
+    renderList();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
 
   function renderGuardians(guardians) {
     const list = document.getElementById("guardianList");
