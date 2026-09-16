@@ -483,6 +483,12 @@ async function handleGetStudent(request, env, studentId) {
 }
 
 // ---------- /api/students (POST) ----------
+function composeFullName(prefix, first, last, fallback) {
+  const parts = [prefix, first, last].map((v) => (v || "").toString().trim()).filter(Boolean);
+  if (parts.length > 0) return parts.join(" ");
+  return (fallback || "").toString().trim();
+}
+
 async function handleCreateStudent(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) {
@@ -500,7 +506,11 @@ async function handleCreateStudent(request, env) {
   }
 
   const studentCode = (body.student_code || "").trim();
-  const fullName = (body.full_name || "").trim();
+  const namePrefix = (body.name_prefix || "").trim();
+  const firstName = (body.first_name || "").trim();
+  const lastName = (body.last_name || "").trim();
+  const fullName = composeFullName(namePrefix, firstName, lastName, body.full_name);
+
   if (!studentCode) return jsonResponse({ error: "กรุณากรอกเลขประจำตัวนักเรียน" }, 400);
   if (!fullName) return jsonResponse({ error: "กรุณากรอกชื่อ-นามสกุลนักเรียน" }, 400);
 
@@ -510,12 +520,19 @@ async function handleCreateStudent(request, env) {
   if (existing) return jsonResponse({ error: "เลขประจำตัวนี้ถูกใช้แล้ว" }, 409);
 
   const result = await env.DB.prepare(
-    `INSERT INTO students (student_code, full_name, classroom, grade_level, photo_url, health_conditions, allergies, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'enrolled')`
+    `INSERT INTO students
+       (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
+        classroom, grade_level, photo_url, health_conditions, allergies, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')`
   )
     .bind(
       studentCode,
       fullName,
+      body.national_id || null,
+      namePrefix || null,
+      firstName || null,
+      lastName || null,
+      body.birth_date || null,
       body.classroom || null,
       body.grade_level || null,
       body.photo_url || null,
@@ -544,8 +561,18 @@ async function handleUpdateStudent(request, env, studentId) {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
 
+  // ถ้ามีการส่งชื่อแบบแยกส่วนมา ให้คำนวณ full_name ใหม่จากส่วนนั้นเสมอ
+  if (body.name_prefix !== undefined || body.first_name !== undefined || body.last_name !== undefined) {
+    body.full_name = composeFullName(body.name_prefix, body.first_name, body.last_name, body.full_name);
+  }
+
   const fields = [
     "full_name",
+    "national_id",
+    "name_prefix",
+    "first_name",
+    "last_name",
+    "birth_date",
     "classroom",
     "grade_level",
     "photo_url",
@@ -1193,7 +1220,10 @@ async function handleImportStudents(request, env) {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
     const student_code = (row.student_code || "").toString().trim();
-    const full_name = (row.full_name || "").toString().trim();
+    const namePrefix = (row.name_prefix || "").toString().trim();
+    const firstName = (row.first_name || "").toString().trim();
+    const lastName = (row.last_name || "").toString().trim();
+    const full_name = composeFullName(namePrefix, firstName, lastName, row.full_name);
 
     if (!student_code || !full_name) {
       skipped.push({ row: i + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
@@ -1204,6 +1234,8 @@ async function handleImportStudents(request, env) {
       .bind(student_code)
       .first();
 
+    const national_id = row.national_id ? String(row.national_id).trim() : null;
+    const birth_date = row.birth_date ? String(row.birth_date).trim() : null;
     const classroom = row.classroom ? String(row.classroom).trim() : null;
     const grade_level = row.grade_level ? String(row.grade_level).trim() : null;
     const health_conditions = row.health_conditions ? String(row.health_conditions).trim() : null;
@@ -1212,18 +1244,47 @@ async function handleImportStudents(request, env) {
 
     if (existing) {
       await env.DB.prepare(
-        `UPDATE students SET full_name = ?, classroom = ?, grade_level = ?, health_conditions = ?, allergies = ?, photo_url = ?
+        `UPDATE students SET full_name = ?, national_id = ?, name_prefix = ?, first_name = ?, last_name = ?,
+           birth_date = ?, classroom = ?, grade_level = ?, health_conditions = ?, allergies = ?, photo_url = ?
          WHERE id = ?`
       )
-        .bind(full_name, classroom, grade_level, health_conditions, allergies, photo_url, existing.id)
+        .bind(
+          full_name,
+          national_id,
+          namePrefix || null,
+          firstName || null,
+          lastName || null,
+          birth_date,
+          classroom,
+          grade_level,
+          health_conditions,
+          allergies,
+          photo_url,
+          existing.id
+        )
         .run();
       updated++;
     } else {
       await env.DB.prepare(
-        `INSERT INTO students (student_code, full_name, classroom, grade_level, health_conditions, allergies, photo_url, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'enrolled')`
+        `INSERT INTO students
+           (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
+            classroom, grade_level, health_conditions, allergies, photo_url, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')`
       )
-        .bind(student_code, full_name, classroom, grade_level, health_conditions, allergies, photo_url)
+        .bind(
+          student_code,
+          full_name,
+          national_id,
+          namePrefix || null,
+          firstName || null,
+          lastName || null,
+          birth_date,
+          classroom,
+          grade_level,
+          health_conditions,
+          allergies,
+          photo_url
+        )
         .run();
       created++;
     }

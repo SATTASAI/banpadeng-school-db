@@ -68,6 +68,14 @@ CREATE TABLE IF NOT EXISTS guardians (
 CREATE INDEX IF NOT EXISTS idx_guardians_student ON guardians(student_id);
 CREATE INDEX IF NOT EXISTS idx_students_classroom ON students(classroom);
 
+-- Schema: รื้อระบบข้อมูลนักเรียน — เพิ่มเลขบัตรประชาชน, แยกชื่อเป็นคำนำหน้า/ชื่อ/นามสกุล, วันเกิด
+
+ALTER TABLE students ADD COLUMN national_id TEXT;
+ALTER TABLE students ADD COLUMN name_prefix TEXT;
+ALTER TABLE students ADD COLUMN first_name TEXT;
+ALTER TABLE students ADD COLUMN last_name TEXT;
+ALTER TABLE students ADD COLUMN birth_date TEXT;
+
 -- Schema: โมดูลข้อมูลครู/บุคลากร (ต่อยอดจากบัญชีผู้ใช้ที่มีอยู่แล้ว)
 
 CREATE TABLE IF NOT EXISTS staff_profiles (

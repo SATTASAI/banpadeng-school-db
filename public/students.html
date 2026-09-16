@@ -72,18 +72,42 @@
         <input type="text" id="fCode" />
       </div>
       <div class="field">
-        <label>ชื่อ-นามสกุล</label>
-        <input type="text" id="fName" />
+        <label>เลขประจำตัวประชาชน (13 หลัก)</label>
+        <input type="text" id="fNationalId" maxlength="13" placeholder="เช่น 1760800075805" />
+      </div>
+    </div>
+    <div class="field-row" style="grid-template-columns:110px 1fr 1fr;">
+      <div class="field">
+        <label>คำนำหน้าชื่อ</label>
+        <input type="text" id="fPrefix" placeholder="เด็กชาย" />
+      </div>
+      <div class="field">
+        <label>ชื่อ</label>
+        <input type="text" id="fFirstName" />
+      </div>
+      <div class="field">
+        <label>นามสกุล</label>
+        <input type="text" id="fLastName" />
       </div>
     </div>
     <div class="field-row">
       <div class="field">
-        <label>ห้อง</label>
-        <input type="text" id="fClassroom" placeholder="เช่น ป.4/1" />
+        <label>ระดับชั้น</label>
+        <input type="text" id="fGrade" placeholder="เช่น อ.1 หรือ ประถมศึกษาปีที่ 4" />
       </div>
       <div class="field">
-        <label>ระดับชั้น</label>
-        <input type="text" id="fGrade" placeholder="เช่น ประถมศึกษาปีที่ 4" />
+        <label>ห้อง</label>
+        <input type="text" id="fClassroom" placeholder="เช่น 1" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>วันเกิด</label>
+        <input type="date" id="fBirthDate" />
+      </div>
+      <div class="field">
+        <label>อายุ</label>
+        <input type="text" id="fAgeDisplay" disabled placeholder="คำนวณจากวันเกิดให้อัตโนมัติ" />
       </div>
     </div>
     <div class="field">
@@ -284,6 +308,21 @@
     }
   });
 
+  function calcAge(birthDateStr) {
+    if (!birthDateStr) return "";
+    const birth = new Date(birthDateStr);
+    if (isNaN(birth.getTime())) return "";
+    const today = new Date();
+    let age = today.getFullYear() - birth.getFullYear();
+    const monthDiff = today.getMonth() - birth.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? `${age} ปี` : "";
+  }
+
+  document.getElementById("fBirthDate").addEventListener("change", (e) => {
+    document.getElementById("fAgeDisplay").value = calcAge(e.target.value);
+  });
+
   async function openModal(studentId) {
     editingStudentId = studentId || null;
     document.getElementById("modalTitle").textContent = studentId ? "แก้ไขข้อมูลนักเรียน" : "เพิ่มนักเรียน";
@@ -295,7 +334,12 @@
       const { student } = await apiRequest(`/api/students/${studentId}`);
       document.getElementById("fCode").value = student.student_code;
       document.getElementById("fCode").disabled = true;
-      document.getElementById("fName").value = student.full_name;
+      document.getElementById("fNationalId").value = student.national_id || "";
+      document.getElementById("fPrefix").value = student.name_prefix || "";
+      document.getElementById("fFirstName").value = student.first_name || "";
+      document.getElementById("fLastName").value = student.last_name || "";
+      document.getElementById("fBirthDate").value = student.birth_date || "";
+      document.getElementById("fAgeDisplay").value = calcAge(student.birth_date);
       document.getElementById("fClassroom").value = student.classroom || "";
       document.getElementById("fGrade").value = student.grade_level || "";
       document.getElementById("fPhoto").value = student.photo_url || "";
@@ -306,7 +350,12 @@
     } else {
       document.getElementById("fCode").value = "";
       document.getElementById("fCode").disabled = false;
-      document.getElementById("fName").value = "";
+      document.getElementById("fNationalId").value = "";
+      document.getElementById("fPrefix").value = "";
+      document.getElementById("fFirstName").value = "";
+      document.getElementById("fLastName").value = "";
+      document.getElementById("fBirthDate").value = "";
+      document.getElementById("fAgeDisplay").value = "";
       document.getElementById("fClassroom").value = "";
       document.getElementById("fGrade").value = "";
       document.getElementById("fPhoto").value = "";
@@ -334,29 +383,31 @@
   });
 
   document.getElementById("saveStudentBtn").addEventListener("click", async () => {
-    const full_name = document.getElementById("fName").value.trim();
+    const national_id = document.getElementById("fNationalId").value.trim();
+    const name_prefix = document.getElementById("fPrefix").value.trim();
+    const first_name = document.getElementById("fFirstName").value.trim();
+    const last_name = document.getElementById("fLastName").value.trim();
+    const birth_date = document.getElementById("fBirthDate").value || "";
     const classroom = document.getElementById("fClassroom").value.trim();
     const grade_level = document.getElementById("fGrade").value.trim();
     const photo_url = document.getElementById("fPhoto").value.trim();
     const health_conditions = document.getElementById("fHealth").value.trim();
     const allergies = document.getElementById("fAllergy").value.trim();
 
-    if (!full_name) return alert("กรุณากรอกชื่อ-นามสกุล");
+    if (!first_name && !last_name) return alert("กรุณากรอกชื่อและนามสกุลอย่างน้อยอย่างใดอย่างหนึ่ง");
+    if (national_id && national_id.length !== 13) return alert("เลขประจำตัวประชาชนต้องมี 13 หลัก");
+
+    const body = { national_id, name_prefix, first_name, last_name, birth_date, classroom, grade_level, photo_url, health_conditions, allergies };
 
     try {
       if (editingStudentId) {
-        const status = document.getElementById("fStatus").value;
-        await apiRequest(`/api/students/${editingStudentId}`, {
-          method: "PATCH",
-          body: { full_name, classroom, grade_level, photo_url, health_conditions, allergies, status },
-        });
+        body.status = document.getElementById("fStatus").value;
+        await apiRequest(`/api/students/${editingStudentId}`, { method: "PATCH", body });
       } else {
         const student_code = document.getElementById("fCode").value.trim();
         if (!student_code) return alert("กรุณากรอกเลขประจำตัวนักเรียน");
-        await apiRequest("/api/students", {
-          method: "POST",
-          body: { student_code, full_name, classroom, grade_level, photo_url, health_conditions, allergies },
-        });
+        body.student_code = student_code;
+        await apiRequest("/api/students", { method: "POST", body });
       }
       document.getElementById("studentModal").style.display = "none";
       await loadStudents();
@@ -375,13 +426,15 @@
 
   // ---------- นำเข้าจาก Excel/CSV ----------
   const STUDENT_IMPORT_FIELDS = [
-    { key: "student_code", label: "เลขประจำตัว (รหัสในโรงเรียน)", synonyms: ["รหัสนักเรียน", "เลขประจำตัวนักเรียน", "เลขประจำตัว", "รหัส", "studentid", "studentcode", "id", "code"] },
+    { key: "student_code", label: "เลขประจำตัวนักเรียน (รหัสในโรงเรียน)", synonyms: ["รหัสนักเรียน", "เลขประจำตัวนักเรียน", "เลขประจำตัว", "รหัส", "studentid", "studentcode", "id", "code"] },
+    { key: "national_id", label: "เลขประจำตัวประชาชน (13 หลัก)", synonyms: ["เลขประจำตัวประชาชน", "เลขบัตรประชาชน", "เลขบัตร", "citizenid", "nationalid"] },
+    { key: "grade_level", label: "ชั้น", synonyms: ["ชั้น", "ระดับชั้น", "ชั้นเรียน", "grade", "gradelevel"] },
+    { key: "classroom", label: "ห้อง", synonyms: ["ห้อง", "ห้องเรียน", "class", "classroom"] },
     { key: "full_name", label: "ชื่อ-นามสกุล (ถ้ารวมอยู่คอลัมน์เดียว)", synonyms: ["ชื่อ-นามสกุล", "ชื่อนักเรียน", "ชื่อสกุล", "ชื่อ สกุล", "fullname", "full name"] },
     { key: "name_prefix", label: "คำนำหน้าชื่อ (ถ้าแยกคอลัมน์)", synonyms: ["คำนำหน้าชื่อ", "คำนำหน้า"] },
-    { key: "name_first", label: "ชื่อ (ถ้าแยกจากนามสกุล)", synonyms: ["ชื่อ"] },
-    { key: "name_last", label: "นามสกุล (ถ้าแยกจากชื่อ)", synonyms: ["นามสกุล"] },
-    { key: "classroom", label: "ห้อง", synonyms: ["ห้อง", "ห้องเรียน", "class", "classroom"] },
-    { key: "grade_level", label: "ระดับชั้น", synonyms: ["ระดับชั้น", "ชั้นเรียน", "ชั้น", "grade", "gradelevel"] },
+    { key: "first_name", label: "ชื่อ (ถ้าแยกจากนามสกุล)", synonyms: ["ชื่อ"] },
+    { key: "last_name", label: "นามสกุล (ถ้าแยกจากชื่อ)", synonyms: ["นามสกุล"] },
+    { key: "birth_date", label: "วันเกิด", synonyms: ["วันเกิด", "วันเดือนปีเกิด", "birthdate", "dateofbirth", "dob"] },
     { key: "health_conditions", label: "โรคประจำตัว", synonyms: ["โรคประจำตัว", "โรค", "สุขภาพ", "health"] },
     { key: "allergies", label: "การแพ้", synonyms: ["การแพ้", "แพ้ยา", "แพ้อาหาร", "แพ้", "allergy", "allergies"] },
   ];
@@ -496,13 +549,13 @@
       alert("กรุณาจับคู่คอลัมน์เลขประจำตัวอย่างน้อย");
       return;
     }
-    if (importMapping.full_name === null && importMapping.name_first === null) {
+    if (importMapping.full_name === null && importMapping.first_name === null) {
       alert("กรุณาจับคู่ 'ชื่อ-นามสกุล' หรือ 'ชื่อ' (แบบแยกคอลัมน์) อย่างน้อยหนึ่งแบบ");
       return;
     }
     const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS).map((row) => {
       if (!row.full_name) {
-        row.full_name = [row.name_prefix, row.name_first, row.name_last]
+        row.full_name = [row.name_prefix, row.first_name, row.last_name]
           .map((v) => (v || "").toString().trim())
           .filter(Boolean)
           .join(" ");
