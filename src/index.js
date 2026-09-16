@@ -1211,86 +1211,75 @@ async function handleImportStudents(request, env) {
   } catch {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
-
-  const rows = Array.isArray(body.rows) ? body.rows : [];
-  let created = 0;
-  let updated = 0;
-  const skipped = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const student_code = (row.student_code || "").toString().trim();
-    const namePrefix = (row.name_prefix || "").toString().trim();
-    const firstName = (row.first_name || "").toString().trim();
-    const lastName = (row.last_name || "").toString().trim();
-    const full_name = composeFullName(namePrefix, firstName, lastName, row.full_name);
-
-    if (!student_code || !full_name) {
-      skipped.push({ row: i + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
-      continue;
-    }
-
-    const existing = await env.DB.prepare("SELECT id FROM students WHERE student_code = ?")
-      .bind(student_code)
-      .first();
-
-    const national_id = row.national_id ? String(row.national_id).trim() : null;
-    const birth_date = row.birth_date ? String(row.birth_date).trim() : null;
-    const classroom = row.classroom ? String(row.classroom).trim() : null;
-    const grade_level = row.grade_level ? String(row.grade_level).trim() : null;
-    const health_conditions = row.health_conditions ? String(row.health_conditions).trim() : null;
-    const allergies = row.allergies ? String(row.allergies).trim() : null;
-    const photo_url = row.photo_url ? String(row.photo_url).trim() : null;
-
-    if (existing) {
-      await env.DB.prepare(
-        `UPDATE students SET full_name = ?, national_id = ?, name_prefix = ?, first_name = ?, last_name = ?,
-           birth_date = ?, classroom = ?, grade_level = ?, health_conditions = ?, allergies = ?, photo_url = ?
-         WHERE id = ?`
-      )
-        .bind(
-          full_name,
-          national_id,
-          namePrefix || null,
-          firstName || null,
-          lastName || null,
-          birth_date,
-          classroom,
-          grade_level,
-          health_conditions,
-          allergies,
-          photo_url,
-          existing.id
-        )
-        .run();
-      updated++;
-    } else {
-      await env.DB.prepare(
-        `INSERT INTO students
-           (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
-            classroom, grade_level, health_conditions, allergies, photo_url, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')`
-      )
-        .bind(
-          student_code,
-          full_name,
-          national_id,
-          namePrefix || null,
-          firstName || null,
-          lastName || null,
-          birth_date,
-          classroom,
-          grade_level,
-          health_conditions,
-          allergies,
-          photo_url
-        )
-        .run();
-      created++;
-    }
+  if (!body || !Array.isArray(body.rows) || body.rows.length === 0) {
+    return jsonResponse({ error: "ไม่พบรายการนักเรียนสำหรับนำเข้า" }, 400);
+  }
+  if (body.rows.length > 20) {
+    return jsonResponse({ error: "รับข้อมูลได้ครั้งละไม่เกิน 20 รายการ กรุณารีเฟรชหน้าเว็บเพื่อใช้ระบบแบ่งชุดอัตโนมัติ" }, 400);
   }
 
-  return jsonResponse({ created, updated, skipped });
+  const skipped = [];
+  const validRows = [];
+  const asText = (value) => value == null ? "" : String(value).trim();
+  body.rows.forEach((row, index) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      skipped.push({ row: index + 1, reason: "รูปแบบข้อมูลไม่ถูกต้อง" });
+      return;
+    }
+    const studentCode = asText(row.student_code);
+    const prefix = asText(row.name_prefix);
+    const first = asText(row.first_name);
+    const last = asText(row.last_name);
+    const fullName = composeFullName(prefix, first, last, row.full_name);
+    if (!studentCode || !fullName) {
+      skipped.push({ row: index + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
+      return;
+    }
+    validRows.push([
+      studentCode, fullName, asText(row.national_id) || null,
+      prefix || null, first || null, last || null, asText(row.birth_date) || null,
+      asText(row.classroom) || null, asText(row.grade_level) || null,
+      asText(row.health_conditions) || null, asText(row.allergies) || null,
+      asText(row.photo_url) || null,
+    ]);
+  });
+  if (!validRows.length) return jsonResponse({ created: 0, updated: 0, skipped });
+
+  try {
+    // One lookup plus <=20 writes, with one additional query for authentication.
+    const codes = [...new Set(validRows.map((row) => row[0]))];
+    const { results } = await env.DB.prepare(
+      `SELECT student_code FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
+    ).bind(...codes).all();
+    const knownCodes = new Set(results.map((row) => row.student_code));
+    let created = 0;
+    let updated = 0;
+    const statements = validRows.map((values) => {
+      if (knownCodes.has(values[0])) updated++;
+      else { created++; knownCodes.add(values[0]); }
+      // Retrying a committed batch updates the same student codes, without duplicates.
+      return env.DB.prepare(`INSERT INTO students
+        (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
+         classroom, grade_level, health_conditions, allergies, photo_url, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')
+        ON CONFLICT(student_code) DO UPDATE SET
+          full_name = excluded.full_name, national_id = excluded.national_id,
+          name_prefix = excluded.name_prefix, first_name = excluded.first_name,
+          last_name = excluded.last_name, birth_date = excluded.birth_date,
+          classroom = excluded.classroom, grade_level = excluded.grade_level,
+          health_conditions = excluded.health_conditions, allergies = excluded.allergies,
+          photo_url = excluded.photo_url`).bind(...values);
+    });
+    // D1 batch is transactional: an error rolls back every write in this batch.
+    await env.DB.batch(statements);
+    return jsonResponse({ created, updated, skipped });
+  } catch (err) {
+    const message = String(err && err.message || "");
+    if (/no such column|has no column named/i.test(message)) {
+      return jsonResponse({ error: "ฐานข้อมูลนักเรียนยังขาดคอลัมน์ที่ระบบต้องใช้ กรุณาให้ผู้ดูแลตรวจและเพิ่มคอลัมน์ตามคู่มือก่อนนำเข้าต่อ" }, 500);
+    }
+    return jsonResponse({ error: "บันทึกชุดนี้ไม่สำเร็จ กรุณาลองนำเข้าต่อจากชุดที่ค้าง หากยังไม่สำเร็จให้ผู้ดูแลตรวจฐานข้อมูลและข้อจำกัดการใช้งาน" }, 500);
+  }
 }
 
 // ---------- /api/staff/import (POST) — นำเข้าโปรไฟล์บุคลากรจาก Excel/CSV โดยจับคู่ด้วยอีเมล ----------

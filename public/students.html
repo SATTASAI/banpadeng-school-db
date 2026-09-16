@@ -173,7 +173,12 @@
       <div class="preview-table-wrap"><table id="previewTable"></table></div>
     </div>
 
-    <div id="importSummary" class="import-summary" style="display:none;"></div>
+    <div id="importProgress" style="display:none; margin-top:16px;" aria-live="polite">
+      <p id="importProgressText"></p>
+      <progress id="importProgressBar" value="0" max="1" style="width:100%; height:22px;" aria-label="ความคืบหน้าการนำเข้านักเรียน"></progress>
+      <p style="font-size:13px; color:var(--color-text-muted);">ระบบนำเข้าครั้งละ 20 คน กรุณาเปิดหน้านี้ไว้จนเสร็จ หากหยุดกลางทางให้กดนำเข้าต่อจากชุดที่ค้าง</p>
+    </div>
+    <div id="importSummary" class="import-summary" style="display:none;" aria-live="polite"></div>
 
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancelImportBtn">ปิด</button>
@@ -184,6 +189,7 @@
 
 <script src="/js/api.js"></script>
 <script src="/js/import.js"></script>
+<script src="/js/student-import-batches.js"></script>
 <script>
   if (window.parent && window.parent !== window) {
     const backLink = document.getElementById("backHomeLink");
@@ -443,8 +449,14 @@
   let importHeaderRowIndex = 0;
   let importParsed = null;
   let importMapping = null;
+  let importSession = null;
 
   function openImportModal() {
+    if (importSession && importSession.running) return;
+    importSession = null;
+    document.getElementById("importProgress").style.display = "none";
+    document.getElementById("confirmImportBtn").textContent = "ยืนยันนำเข้า";
+    setImportControlsLocked(false);
     importRaw = null;
     importHeaderRowIndex = 0;
     importParsed = null;
@@ -461,6 +473,10 @@
 
   document.getElementById("importBtn").addEventListener("click", openImportModal);
   document.getElementById("cancelImportBtn").addEventListener("click", () => {
+    if (importSession && importSession.running) return;
+    if (importSession && importSession.offset < importSession.rows.length &&
+        !confirm("ยังนำเข้าไม่ครบ หากปิดจะต้องเลือกไฟล์ใหม่ ข้อมูลชุดที่บันทึกแล้วจะยังอยู่ ต้องการปิดหรือไม่?")) return;
+    importSession = null;
     document.getElementById("importModal").style.display = "none";
   });
 
@@ -528,6 +544,10 @@
   document.getElementById("importFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    importParsed = null;
+    importMapping = null;
+    document.getElementById("importStep2").style.display = "none";
+    document.getElementById("confirmImportBtn").style.display = "none";
     const errorBox = document.getElementById("importErrorBox");
     errorBox.classList.remove("visible");
     try {
@@ -543,47 +563,94 @@
     }
   });
 
-  document.getElementById("confirmImportBtn").addEventListener("click", async () => {
-    if (!importParsed) return;
-    if (importMapping.student_code === null) {
-      alert("กรุณาจับคู่คอลัมน์เลขประจำตัวอย่างน้อย");
-      return;
-    }
-    if (importMapping.full_name === null && importMapping.first_name === null) {
-      alert("กรุณาจับคู่ 'ชื่อ-นามสกุล' หรือ 'ชื่อ' (แบบแยกคอลัมน์) อย่างน้อยหนึ่งแบบ");
-      return;
-    }
-    const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS).map((row) => {
-      if (!row.full_name) {
-        row.full_name = [row.name_prefix, row.first_name, row.last_name]
-          .map((v) => (v || "").toString().trim())
-          .filter(Boolean)
-          .join(" ");
-      }
-      return row;
+  function setImportControlsLocked(locked) {
+    document.getElementById("importFileInput").disabled = locked;
+    document.getElementById("headerRowSelect").disabled = locked;
+    document.querySelectorAll("#mappingContainer select").forEach((el) => { el.disabled = locked; });
+  }
+
+  function renderImportProgress(session) {
+    const total = session.rows.length;
+    const batches = Math.ceil(total / STUDENT_IMPORT_BATCH_SIZE);
+    const batch = Math.min(Math.floor(session.offset / STUDENT_IMPORT_BATCH_SIZE) + 1, batches);
+    document.getElementById("importProgress").style.display = "block";
+    const progress = document.getElementById("importProgressBar");
+    progress.max = total;
+    progress.value = session.offset;
+    document.getElementById("importProgressText").textContent = session.offset === total
+      ? `ดำเนินการครบ ${total} รายการ (${batches} ชุด)`
+      : `ดำเนินการแล้ว ${session.offset}/${total} รายการ — กำลังนำเข้าชุดที่ ${batch}/${batches}`;
+    const summary = document.getElementById("importSummary");
+    summary.style.display = "block";
+    summary.replaceChildren();
+    const counts = document.createElement("p");
+    counts.textContent = `ผลที่ระบบยืนยันแล้ว: เพิ่มใหม่ ${session.created} รายการ, อัปเดต ${session.updated} รายการ, ข้าม ${session.skipped.length} รายการ`;
+    summary.appendChild(counts);
+    session.skipped.forEach((item) => {
+      const detail = document.createElement("div");
+      detail.className = "skip-item";
+      detail.textContent = `รายการข้อมูลที่ ${item.row}: ${item.reason}`;
+      summary.appendChild(detail);
     });
+  }
+
+  window.addEventListener("beforeunload", (event) => {
+    if (importSession && importSession.offset < importSession.rows.length) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
+
+  document.getElementById("confirmImportBtn").addEventListener("click", async () => {
+    if (!importParsed || (importSession && importSession.running)) return;
+    if (!importSession) {
+      if (importMapping.student_code == null) {
+        alert("กรุณาจับคู่คอลัมน์เลขประจำตัวอย่างน้อย");
+        return;
+      }
+      if (importMapping.full_name == null && importMapping.first_name == null) {
+        alert("กรุณาจับคู่ 'ชื่อ-นามสกุล' หรือ 'ชื่อ' (แบบแยกคอลัมน์) อย่างน้อยหนึ่งแบบ");
+        return;
+      }
+      const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS).map((row) => {
+        if (!row.full_name) {
+          row.full_name = [row.name_prefix, row.first_name, row.last_name]
+            .map((v) => (v || "").toString().trim()).filter(Boolean).join(" ");
+        }
+        return row;
+      });
+      if (!rows.length) return alert("ไม่พบข้อมูลสำหรับนำเข้า");
+      importSession = createStudentImportSession(rows);
+    }
+    const session = importSession;
     const btn = document.getElementById("confirmImportBtn");
+    const closeBtn = document.getElementById("cancelImportBtn");
+    const errorBox = document.getElementById("importErrorBox");
+    errorBox.classList.remove("visible");
+    setImportControlsLocked(true);
     btn.disabled = true;
+    closeBtn.disabled = true;
     btn.textContent = "กำลังนำเข้า...";
     try {
-      const result = await apiRequest("/api/students/import", { method: "POST", body: { rows } });
-      const summary = document.getElementById("importSummary");
-      summary.style.display = "block";
-      summary.innerHTML = `
-        <p>นำเข้าสำเร็จ: เพิ่มใหม่ ${result.created} คน, อัปเดต ${result.updated} คน${result.skipped.length ? `, ข้าม ${result.skipped.length} แถว` : ""}</p>
-        ${result.skipped.map((s) => `<div class="skip-item">แถวที่ ${s.row}: ${s.reason}</div>`).join("")}
-      `;
+      await runStudentImportBatches(session,
+        (rows) => apiRequest("/api/students/import", { method: "POST", body: { rows } }),
+        renderImportProgress);
       document.getElementById("importStep1").style.display = "none";
       document.getElementById("importStep2").style.display = "none";
       btn.style.display = "none";
-      await loadStudents();
     } catch (err) {
-      alert(err.message);
+      const batch = Math.floor(session.offset / STUDENT_IMPORT_BATCH_SIZE) + 1;
+      document.getElementById("importProgressText").textContent = `หยุดที่ชุด ${batch} — ดำเนินการแล้ว ${session.offset}/${session.rows.length} รายการ`;
+      errorBox.textContent = `${err.message} กด “นำเข้าต่อจากชุดที่ค้าง” เพื่อลองชุดนี้อีกครั้ง โดยไม่เริ่มชุดที่ยืนยันแล้วใหม่`;
+      errorBox.classList.add("visible");
     } finally {
       btn.disabled = false;
-      btn.textContent = "ยืนยันนำเข้า";
+      closeBtn.disabled = false;
+      btn.textContent = "นำเข้าต่อจากชุดที่ค้าง";
     }
+    if (session.offset === session.rows.length) await loadStudents();
   });
+
 </script>
 </body>
 </html>
