@@ -11,6 +11,30 @@ import { ensurePersonnelData } from "./lib/personnel-data.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 
+let extendedSchemaReady = false;
+async function ensureExtendedSchema(env) {
+  if (extendedSchemaReady) return;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS student_support_cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+      case_type TEXT NOT NULL, risk_level TEXT NOT NULL DEFAULT 'normal', summary TEXT NOT NULL, action_taken TEXT,
+      follow_up_date TEXT, status TEXT NOT NULL DEFAULT 'open', referred_to TEXT, created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, department TEXT NOT NULL, academic_year_id INTEGER,
+      project_id INTEGER, document_type TEXT, keywords TEXT, file_name TEXT, file_url TEXT, mime_type TEXT, file_size INTEGER,
+      version INTEGER NOT NULL DEFAULT 1, access_level TEXT NOT NULL DEFAULT 'staff', uploaded_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), action TEXT NOT NULL, resource TEXT NOT NULL,
+      resource_id INTEGER, details TEXT, ip_address TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS backup_registry (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, backup_type TEXT NOT NULL DEFAULT 'export', file_name TEXT NOT NULL,
+      table_count INTEGER, row_count INTEGER, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+  ]);
+  extendedSchemaReady = true;
+}
+
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -1245,6 +1269,87 @@ async function handleDeleteLeaveRequest(request, env, leaveId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- ระบบดูแลช่วยเหลือนักเรียน ----------
+const SUPPORT_TYPES = ["screening", "home_visit", "scholarship", "risk", "behavior", "assistance", "referral"];
+const SUPPORT_LEVELS = ["normal", "watch", "high", "urgent"];
+const SUPPORT_STATUS = ["open", "monitoring", "closed"];
+async function handleListSupportCases(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensureExtendedSchema(env);
+  const url = new URL(request.url);
+  const studentId = Number(url.searchParams.get("student_id"));
+  const query = `SELECT c.*, s.student_code, s.full_name AS student_name, u.full_name AS creator_name
+    FROM student_support_cases c JOIN students s ON s.id=c.student_id LEFT JOIN users u ON u.id=c.created_by
+    ${studentId > 0 ? "WHERE c.student_id = ?" : ""} ORDER BY c.risk_level DESC, c.updated_at DESC`;
+  const result = studentId > 0 ? await env.DB.prepare(query).bind(studentId).all() : await env.DB.prepare(query).all();
+  return jsonResponse({ cases: result.results });
+}
+async function handleCreateSupportCase(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!(isAdmin(user) || user.role === "staff" || user.role === "teacher")) return jsonResponse({ error: "ไม่มีสิทธิ์บันทึกข้อมูล" }, 403);
+  await ensureExtendedSchema(env);
+  const body = await request.json().catch(() => null);
+  if (!body || !body.student_id || !SUPPORT_TYPES.includes(body.case_type) || !body.summary) return jsonResponse({ error: "กรุณากรอกข้อมูลกรณีช่วยเหลือให้ครบถ้วน" }, 400);
+  const level = SUPPORT_LEVELS.includes(body.risk_level) ? body.risk_level : "normal";
+  const result = await env.DB.prepare(`INSERT INTO student_support_cases
+    (student_id, case_type, risk_level, summary, action_taken, follow_up_date, status, referred_to, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(body.student_id, body.case_type, level, body.summary.trim(), body.action_taken || null,
+      body.follow_up_date || null, SUPPORT_STATUS.includes(body.status) ? body.status : "open", body.referred_to || null, user.id).run();
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+async function handleUpdateSupportCase(request, env, caseId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user) && user.role !== "staff" && user.role !== "teacher") return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขข้อมูล" }, 403);
+  await ensureExtendedSchema(env);
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const allowed = ["risk_level", "summary", "action_taken", "follow_up_date", "status", "referred_to"];
+  const updates = [], values = [];
+  for (const field of allowed) if (body[field] !== undefined) { updates.push(`${field} = ?`); values.push(body[field] || null); }
+  if (!updates.length) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+  updates.push("updated_at = datetime('now')"); values.push(caseId);
+  await env.DB.prepare(`UPDATE student_support_cases SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  return jsonResponse({ ok: true });
+}
+
+// ---------- เอกสารและการสำรองข้อมูล (ทะเบียนเมทาดาทา/ส่งออกข้อมูล) ----------
+async function handleListDocuments(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensureExtendedSchema(env);
+  const q = new URL(request.url).searchParams.get("q") || "";
+  const { results } = await env.DB.prepare(`SELECT d.*, u.full_name AS uploader_name FROM documents d
+    LEFT JOIN users u ON u.id=d.uploaded_by WHERE (? = '' OR d.title LIKE '%'||?||'%' OR d.keywords LIKE '%'||?||'%')
+    ORDER BY d.updated_at DESC`).bind(q, q, q).all();
+  return jsonResponse({ documents: results });
+}
+async function handleCreateDocument(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensureExtendedSchema(env);
+  const body = await request.json().catch(() => null);
+  if (!body || !body.title || !body.department) return jsonResponse({ error: "กรุณาระบุชื่อเอกสารและฝ่ายงาน" }, 400);
+  const result = await env.DB.prepare(`INSERT INTO documents
+    (title, department, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(body.title.trim(), body.department, body.academic_year_id || null, body.project_id || null,
+      body.document_type || null, body.keywords || null, body.file_name || null, body.file_url || null, body.mime_type || null, body.file_size || null,
+      body.access_level || "staff", user.id).run();
+  return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+async function handleSecurityOverview(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงข้อมูลความปลอดภัย" }, 403);
+  await ensureExtendedSchema(env);
+  const tables = ["users", "students", "personnel_records", "projects", "student_support_cases", "documents", "audit_logs"];
+  const counts = {};
+  for (const table of tables) counts[table] = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first()).count;
+  const { results: logs } = await env.DB.prepare(`SELECT a.*, u.full_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 50`).all();
+  return jsonResponse({ counts, logs });
+}
+
 // ---------- /api/overview (GET) — ภาพรวมสำหรับหน้าแดชบอร์ด ----------
 async function handleOverview(request, env) {
   const user = await getCurrentUser(request, env);
@@ -1482,7 +1587,10 @@ export default {
       if (pathname === "/api/auth/me" && method === "GET") return await handleMe(request, env);
 
       // ติดตั้ง/อัปเกรดโครงสร้างปีการศึกษาก่อนใช้ API ภายในระบบ
-      if (pathname.startsWith("/api/")) await ensureAcademicData(env);
+      if (pathname.startsWith("/api/")) {
+        await ensureAcademicData(env);
+        await ensureExtendedSchema(env);
+      }
 
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
@@ -1554,6 +1662,15 @@ export default {
       const leaveMatch = pathname.match(/^\/api\/leave-requests\/(\d+)$/);
       if (leaveMatch && method === "PATCH") return await handleUpdateLeaveRequest(request, env, Number(leaveMatch[1]));
       if (leaveMatch && method === "DELETE") return await handleDeleteLeaveRequest(request, env, Number(leaveMatch[1]));
+
+      if (pathname === "/api/student-support" && method === "GET") return await handleListSupportCases(request, env);
+      if (pathname === "/api/student-support" && method === "POST") return await handleCreateSupportCase(request, env);
+      const supportMatch = pathname.match(/^\/api\/student-support\/(\d+)$/);
+      if (supportMatch && method === "PATCH") return await handleUpdateSupportCase(request, env, Number(supportMatch[1]));
+
+      if (pathname === "/api/documents" && method === "GET") return await handleListDocuments(request, env);
+      if (pathname === "/api/documents" && method === "POST") return await handleCreateDocument(request, env);
+      if (pathname === "/api/security/overview" && method === "GET") return await handleSecurityOverview(request, env);
 
       if (pathname === "/api/overview" && method === "GET") return await handleOverview(request, env);
 

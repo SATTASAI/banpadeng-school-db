@@ -1,24 +1,28 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
 
 :root {
-  /* สีหลัก: น้ำเงินกรมท่า + ทอง (ตามตราโรงเรียน) */
-  --color-forest-900: #0F1044;
-  --color-forest-700: #23297E;
-  --color-forest-500: #3B4BAE;
-  --color-ochre-500: #C9A227;
-  --color-ochre-600: #A9841D;
-  --color-bg: #FAF7EE;
-  --color-surface: #FFFFFF;
-  --color-border: #E6DFC7;
-  --color-text: #14163A;
-  --color-text-muted: #6B6E8C;
-  --color-danger: #B5533C;
-  --color-danger-bg: #FBEDE8;
-  --color-success: #3F7A55;
+  /* macOS-inspired light design system */
+  --color-forest-900: #183153;
+  --color-forest-700: #315C86;
+  --color-forest-500: #2D7FD3;
+  --color-ocean-700: #1669C9;
+  --color-ocean-500: #2B86E5;
+  --color-teal-500: #19A9A6;
+  --color-teal-100: #E4F7F5;
+  --color-ochre-500: #C58C3A;
+  --color-ochre-600: #996821;
+  --color-bg: #EDF4FA;
+  --color-surface: rgba(255, 255, 255, 0.88);
+  --color-border: rgba(128, 155, 184, 0.24);
+  --color-text: #183153;
+  --color-text-muted: #6C8199;
+  --color-danger: #B84D55;
+  --color-danger-bg: #FDEDEF;
+  --color-success: #187E6B;
 
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --shadow-card: 0 1px 2px rgba(28, 38, 32, 0.06), 0 4px 16px rgba(28, 38, 32, 0.06);
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --shadow-card: 0 1px 2px rgba(31, 69, 110, 0.04), 0 18px 46px rgba(64, 101, 141, 0.09);
   --font-body: 'Sarabun', system-ui, sans-serif;
 }
 
@@ -27,7 +31,10 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--color-bg);
+  background:
+    radial-gradient(circle at 12% 10%, rgba(116, 192, 255, 0.20), transparent 28%),
+    radial-gradient(circle at 88% 8%, rgba(167, 218, 235, 0.18), transparent 24%),
+    linear-gradient(145deg, #EAF2FA 0%, #F5F8FC 50%, #EAF1F8 100%);
   color: var(--color-text);
   font-family: var(--font-body);
   font-size: 16px;
@@ -54,6 +61,7 @@ a { color: var(--color-forest-500); }
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
+  backdrop-filter: blur(24px) saturate(145%);
   padding: 36px 32px;
 }
 
@@ -102,14 +110,14 @@ a { color: var(--color-forest-500); }
   border-radius: var(--radius-md);
   font-family: var(--font-body);
   font-size: 15px;
-  background: var(--color-bg);
+  background: #FAFCFE;
   color: var(--color-text);
 }
 
 .field input:focus {
   outline: none;
   border-color: var(--color-forest-500);
-  box-shadow: 0 0 0 3px rgba(46, 107, 87, 0.15);
+  box-shadow: 0 0 0 3px rgba(35, 134, 182, 0.14);
 }
 
 .btn {
@@ -126,16 +134,16 @@ a { color: var(--color-forest-500); }
   cursor: pointer;
 }
 
-.btn-primary { background: var(--color-forest-700); color: #fff; }
-.btn-primary:hover { background: var(--color-forest-900); }
+.btn-primary { background:linear-gradient(180deg,#3695ED,#1671D7); color:#fff; border:1px solid rgba(13,91,170,.32); box-shadow:0 5px 14px rgba(22,105,201,.18), inset 0 1px rgba(255,255,255,.22); }
+.btn-primary:hover { background:linear-gradient(180deg,#2C8BE4,#1065C4); transform:translateY(-1px); box-shadow:0 7px 18px rgba(22,105,201,.24); }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-ghost {
-  background: transparent;
+  background: rgba(255,255,255,.72);
   color: var(--color-forest-700);
   border: 1px solid var(--color-border);
 }
-.btn-ghost:hover { background: var(--color-bg); }
+.btn-ghost:hover { background:#fff; border-color:rgba(69,126,181,.35); box-shadow:0 5px 14px rgba(44,84,126,.08); }
 
 .auth-footer {
   margin-top: 20px;
@@ -164,8 +172,9 @@ a { color: var(--color-forest-500); }
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: var(--color-surface);
+  background: rgba(255,255,255,.72);
   border-bottom: 1px solid var(--color-border);
+  backdrop-filter: blur(22px) saturate(150%);
 }
 
 .app-topbar .brand {
@@ -202,7 +211,7 @@ a { color: var(--color-forest-500); }
   font-weight: 600;
   padding: 3px 10px;
   border-radius: 999px;
-  background: rgba(46, 107, 87, 0.12);
+  background: rgba(22, 166, 178, 0.12);
   color: var(--color-forest-700);
 }
 
@@ -224,6 +233,8 @@ a { color: var(--color-forest-500); }
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 20px;
+  box-shadow: 0 8px 24px rgba(62, 97, 134, .05);
+  backdrop-filter: blur(16px);
 }
 
 .module-card h3 { font-size: 16px; margin-bottom: 6px; }
@@ -242,11 +253,15 @@ a { color: var(--color-forest-500); }
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow:0 12px 34px rgba(57,91,128,.07);
+  backdrop-filter:blur(18px) saturate(135%);
 }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--color-border); }
-th { color: var(--color-text-muted); font-weight: 500; font-size: 13px; }
+th { color:var(--color-forest-900); background:rgba(237,243,249,.82); font-weight:600; font-size:13px; letter-spacing:.01em; }
+tbody tr { transition:background .15s ease; }
+tbody tr:hover { background:rgba(227,241,252,.58); }
 tr:last-child td { border-bottom: none; }
 
 select {
@@ -254,8 +269,33 @@ select {
   border-radius: 8px;
   border: 1px solid var(--color-border);
   font-family: var(--font-body);
-  background: var(--color-bg);
+  background: rgba(255,255,255,.68);
+  color:var(--color-text);
 }
+
+input, textarea {
+  border:1px solid var(--color-border);
+  border-radius:10px;
+  background:rgba(255,255,255,.68);
+  color:var(--color-text);
+  font:inherit;
+  padding:9px 11px;
+  transition:border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline:none;
+  border-color:#7EB6D3;
+  background:#fff;
+  box-shadow:0 0 0 3px rgba(35,134,182,.12);
+}
+
+button, a { -webkit-tap-highlight-color:transparent; }
+.btn { transition:background .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+
+html.embedded, html.embedded body { background:transparent; }
+html.embedded .app-topbar { display:none; }
+html.embedded .app-main { max-width:none; padding:20px; }
 
 .status-active { color: var(--color-success); font-weight: 600; }
 .status-disabled { color: var(--color-danger); font-weight: 600; }

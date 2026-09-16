@@ -1,3 +1,8 @@
+// ทำให้หน้าที่เปิดอยู่ภายในพื้นที่ทำงานซ้อนใช้ layout แบบกะทัดรัด
+if (window.parent !== window) {
+  document.documentElement.classList.add("embedded");
+}
+
 async function apiRequest(path, options = {}) {
   const res = await fetch(path, {
     method: options.method || "GET",

@@ -272,5 +272,67 @@ CREATE INDEX IF NOT EXISTS idx_student_enrollments_period
   ON student_enrollments(academic_year_id, academic_term_id, classroom);
 CREATE INDEX IF NOT EXISTS idx_academic_audit_created ON academic_period_audit(created_at DESC);
 
+-- ระบบดูแลช่วยเหลือนักเรียน
+CREATE TABLE IF NOT EXISTS student_support_cases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  case_type TEXT NOT NULL CHECK (case_type IN ('screening','home_visit','scholarship','risk','behavior','assistance','referral')),
+  risk_level TEXT NOT NULL DEFAULT 'normal' CHECK (risk_level IN ('normal','watch','high','urgent')),
+  summary TEXT NOT NULL,
+  action_taken TEXT,
+  follow_up_date TEXT,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','monitoring','closed')),
+  referred_to TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_support_student ON student_support_cases(student_id);
+CREATE INDEX IF NOT EXISTS idx_support_status ON student_support_cases(status, risk_level);
+
+-- ทะเบียนเอกสาร (ไฟล์จริงสามารถผูกกับ R2/Storage ภายหลัง)
+CREATE TABLE IF NOT EXISTS documents (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  department TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general','student-support','admin')),
+  academic_year_id INTEGER REFERENCES academic_years(id),
+  project_id INTEGER REFERENCES projects(id),
+  document_type TEXT,
+  keywords TEXT,
+  file_name TEXT,
+  file_url TEXT,
+  mime_type TEXT,
+  file_size INTEGER,
+  version INTEGER NOT NULL DEFAULT 1,
+  access_level TEXT NOT NULL DEFAULT 'staff' CHECK (access_level IN ('private','staff','admin')),
+  uploaded_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department, academic_year_id);
+CREATE INDEX IF NOT EXISTS idx_documents_search ON documents(title, keywords);
+
+-- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id),
+  action TEXT NOT NULL,
+  resource TEXT NOT NULL,
+  resource_id INTEGER,
+  details TEXT,
+  ip_address TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+CREATE TABLE IF NOT EXISTS backup_registry (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  backup_type TEXT NOT NULL DEFAULT 'export',
+  file_name TEXT NOT NULL,
+  table_count INTEGER,
+  row_count INTEGER,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ฐานข้อมูลเดิมจะเพิ่ม 2 คอลัมน์นี้ด้วย runtime migration ใน src/lib/academic-data.js
 -- เพื่อให้รันซ้ำได้อย่างปลอดภัย: tasks, projects, work_topics และ leave_requests
