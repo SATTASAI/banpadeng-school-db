@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
 
 :root {
-  /* สีหลัก: โทนน้ำเงิน (coolors.co/palette/03045e-...-caf0f8) */
-  --color-forest-900: #03045E;
-  --color-forest-700: #023E8A;
-  --color-forest-500: #0077B6;
-  --color-ochre-500: #0096C7;
-  --color-ochre-600: #023E8A;
-  --color-bg: #CAF0F8;
+  /* สีหลัก: น้ำเงินกรมท่า + ทอง (ตามตราโรงเรียน) */
+  --color-forest-900: #0F1044;
+  --color-forest-700: #23297E;
+  --color-forest-500: #3B4BAE;
+  --color-ochre-500: #C9A227;
+  --color-ochre-600: #A9841D;
+  --color-bg: #FAF7EE;
   --color-surface: #FFFFFF;
-  --color-border: #ADE8F4;
-  --color-text: #072B4F;
-  --color-text-muted: #4C7A94;
+  --color-border: #E6DFC7;
+  --color-text: #14163A;
+  --color-text-muted: #6B6E8C;
   --color-danger: #B5533C;
   --color-danger-bg: #FBEDE8;
   --color-success: #3F7A55;
@@ -58,16 +58,20 @@ a { color: var(--color-forest-500); }
 }
 
 .auth-mark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: var(--color-forest-700);
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid var(--color-border);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 20px;
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(15, 16, 68, 0.15);
 }
 
+.auth-mark img { width: 100%; height: 100%; object-fit: contain; padding: 3px; }
 .auth-mark svg { width: 24px; height: 24px; }
 
 .auth-card h1 {
@@ -175,8 +179,15 @@ a { color: var(--color-forest-500); }
 .app-topbar .brand-mark {
   width: 32px; height: 32px;
   border-radius: 8px;
-  background: var(--color-forest-700);
+  background: #fff;
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
+.app-topbar .brand-mark img { width: 100%; height: 100%; object-fit: contain; padding: 2px; }
 
 .app-user {
   display: flex;
