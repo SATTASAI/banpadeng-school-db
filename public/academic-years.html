@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ปีการศึกษาและภาคเรียน — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  body { min-height:100vh; }
+  .page { max-width:1160px; margin:0 auto; padding:28px 24px 56px; }
+  .page-head { display:flex; justify-content:space-between; align-items:flex-start; gap:18px; margin-bottom:20px; }
+  .page-head p { color:var(--color-text-muted); margin:2px 0 0; }
+  .head-actions { display:flex; gap:8px; flex-wrap:wrap; }
+  .head-actions .btn, .actions .btn { width:auto; padding:8px 13px; font-size:13px; }
+  .current-banner { display:grid; grid-template-columns:1.5fr repeat(3, minmax(120px, .7fr)); gap:16px; padding:22px; border-radius:18px; background:linear-gradient(135deg, var(--color-forest-900), var(--color-forest-700)); color:#fff; box-shadow:var(--shadow-card); }
+  .current-banner h2 { color:#fff; font-size:24px; margin:0; }
+  .current-label { color:rgba(255,255,255,.72); font-size:12px; }
+  .current-value { font-weight:700; font-size:18px; margin-top:3px; }
+  .notice { display:none; margin:16px 0; padding:11px 14px; border-radius:10px; font-size:14px; }
+  .notice.show { display:block; }
+  .notice.success { color:#176b3a; background:#e6f6ec; }
+  .notice.error { color:var(--color-danger); background:var(--color-danger-bg); }
+  .section-head { display:flex; align-items:end; justify-content:space-between; gap:16px; margin:30px 0 12px; }
+  .section-head p { margin:0; color:var(--color-text-muted); font-size:13px; }
+  .year-list { display:grid; gap:16px; }
+  .year-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); overflow:hidden; }
+  .year-card.active { border:2px solid var(--color-forest-500); }
+  .year-head { display:flex; justify-content:space-between; gap:16px; padding:18px 20px; border-bottom:1px solid var(--color-border); }
+  .year-title { display:flex; align-items:center; flex-wrap:wrap; gap:9px; }
+  .year-title h3 { margin:0; font-size:19px; }
+  .meta { color:var(--color-text-muted); font-size:13px; margin-top:4px; }
+  .badge { display:inline-flex; align-items:center; padding:3px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .badge.active { color:#176b3a; background:#e6f6ec; }
+  .badge.draft, .badge.planned { color:#725600; background:#fff4cf; }
+  .badge.closed { color:#6b6e8c; background:#ededf2; }
+  .actions { display:flex; align-items:center; justify-content:flex-end; gap:7px; flex-wrap:wrap; }
+  .btn-danger { background:#fff; color:var(--color-danger); border:1px solid #e7b8ad; }
+  .stats { display:flex; gap:18px; flex-wrap:wrap; padding:12px 20px; background:var(--color-bg); color:var(--color-text-muted); font-size:13px; }
+  .stats strong { color:var(--color-forest-900); }
+  .term-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; padding:16px 20px 20px; }
+  .term-card { border:1px solid var(--color-border); border-radius:12px; padding:14px; }
+  .term-card.active { box-shadow:inset 4px 0 var(--color-success); }
+  .term-top { display:flex; justify-content:space-between; gap:8px; }
+  .term-card h4 { margin:0; color:var(--color-forest-900); }
+  .term-dates { color:var(--color-text-muted); font-size:13px; margin:7px 0; }
+  .term-stats { font-size:12px; color:var(--color-text-muted); padding-top:8px; border-top:1px dashed var(--color-border); }
+  .term-card .actions { margin-top:11px; justify-content:flex-start; }
+  .empty-state { padding:30px; text-align:center; color:var(--color-text-muted); background:var(--color-surface); border:1px dashed var(--color-border); border-radius:var(--radius-lg); }
+  .audit-panel { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); overflow:auto; }
+  .audit-panel table { min-width:720px; }
+  dialog { border:0; border-radius:16px; padding:0; width:min(560px, calc(100% - 32px)); box-shadow:0 18px 60px rgba(15,16,68,.28); }
+  dialog::backdrop { background:rgba(15,16,68,.5); }
+  .dialog-body { padding:22px; }
+  .dialog-head { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:18px; }
+  .dialog-head h3 { margin:0; }
+  .icon-button { border:0; background:transparent; font-size:22px; cursor:pointer; color:var(--color-text-muted); }
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  .form-grid .wide { grid-column:1 / -1; }
+  .field { margin:0; }
+  .field input, .field textarea, .field select { width:100%; padding:9px 11px; border:1px solid var(--color-border); border-radius:9px; background:var(--color-bg); font:inherit; }
+  .field textarea { min-height:82px; resize:vertical; }
+  .check-row { display:flex; gap:8px; align-items:flex-start; font-size:14px; }
+  .check-row input { margin-top:5px; }
+  .dialog-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:20px; }
+  .dialog-actions .btn { width:auto; }
+  .help-box { background:var(--color-bg); border-radius:10px; padding:11px 12px; color:var(--color-text-muted); font-size:13px; margin-top:12px; }
+  @media (max-width:760px) {
+    .page { padding:20px 14px 40px; }
+    .page-head, .year-head { flex-direction:column; }
+    .current-banner { grid-template-columns:1fr 1fr; }
+    .current-banner > :first-child { grid-column:1 / -1; }
+    .form-grid { grid-template-columns:1fr; }
+    .form-grid .wide { grid-column:auto; }
+    .actions { justify-content:flex-start; }
+  }
+</style>
+</head>
+<body>
+<header class="app-topbar">
+  <a class="brand" href="/dashboard.html" style="text-decoration:none;">
+    <span class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน" /></span>
+    โรงเรียนบ้านป่าเด็ง
+  </a>
+  <div class="app-user"><span id="roleChip" class="role-chip">—</span><span id="userName">—</span></div>
+</header>
+
+<main class="page">
+  <div class="page-head">
+    <div>
+      <h1>ปีการศึกษาและภาคเรียน</h1>
+      <p>ศูนย์กลางช่วงเวลาสำหรับนักเรียน โครงการ งาน และข้อมูลการลา</p>
+    </div>
+    <div class="head-actions">
+      <a class="btn btn-ghost" href="/dashboard.html">กลับแดชบอร์ด</a>
+      <button class="btn btn-primary admin-control" id="newYearButton" hidden>เพิ่มปีการศึกษา</button>
+    </div>
+  </div>
+
+  <div id="notice" class="notice"></div>
+  <section id="currentBanner" class="current-banner">
+    <div><div class="current-label">ช่วงเวลาที่ระบบกำลังใช้งาน</div><h2 id="currentTitle">กำลังโหลด...</h2></div>
+    <div><div class="current-label">ภาคเรียน</div><div class="current-value" id="currentTerm">—</div></div>
+    <div><div class="current-label">เริ่มภาคเรียน</div><div class="current-value" id="currentStart">—</div></div>
+    <div><div class="current-label">สิ้นสุดภาคเรียน</div><div class="current-value" id="currentEnd">—</div></div>
+  </section>
+
+  <div class="section-head">
+    <div><h2 style="margin:0; font-size:20px;">รายการปีการศึกษา</h2><p>มีปีและภาคเรียนที่ใช้งานอยู่ได้อย่างละหนึ่งรายการเท่านั้น</p></div>
+  </div>
+  <div id="yearList" class="year-list"><div class="empty-state">กำลังโหลดข้อมูล...</div></div>
+
+  <div class="section-head">
+    <div><h2 style="margin:0; font-size:20px;">ประวัติการดำเนินการ</h2><p>ตรวจสอบผู้ดำเนินการและเวลาที่เปลี่ยนช่วงการศึกษา</p></div>
+  </div>
+  <div class="audit-panel"><table><thead><tr><th>วันเวลา</th><th>รายการ</th><th>ปี/ภาคเรียน</th><th>ผู้ดำเนินการ</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+</main>
+
+<dialog id="yearDialog">
+  <form class="dialog-body" id="yearForm">
+    <div class="dialog-head"><h3 id="yearDialogTitle">เพิ่มปีการศึกษา</h3><button type="button" class="icon-button" data-close="yearDialog">×</button></div>
+    <input type="hidden" id="yearId" />
+    <div class="form-grid">
+      <div class="field"><label for="yearBe">ปีการศึกษา (พ.ศ.)</label><input id="yearBe" type="number" min="2500" max="2700" required /></div>
+      <div class="field"><label for="yearLabel">ชื่อที่แสดง</label><input id="yearLabel" maxlength="100" placeholder="ปีการศึกษา 2569" /></div>
+      <div class="field"><label for="yearStart">วันเริ่มปีการศึกษา</label><input id="yearStart" type="date" required /></div>
+      <div class="field"><label for="yearEnd">วันสิ้นสุดปีการศึกษา</label><input id="yearEnd" type="date" required /></div>
+      <div class="field wide"><label for="yearNotes">หมายเหตุ</label><textarea id="yearNotes" maxlength="1000"></textarea></div>
+      <label class="check-row wide" id="createTermsRow"><input id="createTerms" type="checkbox" checked /> สร้างภาคเรียนที่ 1 และ 2 พร้อมช่วงวันที่มาตรฐานให้อัตโนมัติ</label>
+    </div>
+    <div class="dialog-actions"><button type="button" class="btn btn-ghost" data-close="yearDialog">ยกเลิก</button><button class="btn btn-primary" type="submit">บันทึก</button></div>
+  </form>
+</dialog>
+
+<dialog id="termDialog">
+  <form class="dialog-body" id="termForm">
+    <div class="dialog-head"><h3 id="termDialogTitle">เพิ่มภาคเรียน</h3><button type="button" class="icon-button" data-close="termDialog">×</button></div>
+    <input type="hidden" id="termId" /><input type="hidden" id="termYearId" />
+    <div class="form-grid">
+      <div class="field"><label for="termNumber">ลำดับภาคเรียน</label><select id="termNumber"><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></div>
+      <div class="field"><label for="termName">ชื่อภาคเรียน</label><input id="termName" maxlength="100" required /></div>
+      <div class="field"><label for="termStart">วันเริ่ม</label><input id="termStart" type="date" required /></div>
+      <div class="field"><label for="termEnd">วันสิ้นสุด</label><input id="termEnd" type="date" required /></div>
+    </div>
+    <div class="dialog-actions"><button type="button" class="btn btn-ghost" data-close="termDialog">ยกเลิก</button><button class="btn btn-primary" type="submit">บันทึก</button></div>
+  </form>
+</dialog>
+
+<dialog id="rolloverDialog">
+  <form class="dialog-body" id="rolloverForm">
+    <div class="dialog-head"><h3>สร้างปีการศึกษาถัดไป</h3><button type="button" class="icon-button" data-close="rolloverDialog">×</button></div>
+    <input type="hidden" id="rolloverSourceId" />
+    <p style="margin-top:0;">ระบบจะสร้างปี <strong id="rolloverTargetYear">—</strong> พร้อมภาคเรียนที่ 1–2 ในสถานะ “เตรียมการ”</p>
+    <label class="check-row"><input id="copyStudents" type="checkbox" /> คัดลอกทะเบียนนักเรียนไปยังภาคเรียนที่ 1 ของปีใหม่</label>
+    <div class="field" id="promotionField" style="margin-top:12px; display:none;">
+      <label for="promotionMode">การจัดระดับชั้น</label>
+      <select id="promotionMode"><option value="promote">เลื่อนชั้นอัตโนมัติ (ป.6 จะไม่ถูกคัดลอก)</option><option value="same_class">คงระดับชั้นและห้องเดิมทุกคน</option></select>
+    </div>
+    <div class="help-box">การสร้างปีใหม่ยังไม่เปลี่ยนช่วงเวลาปัจจุบัน จนกว่าจะกด “เปิดใช้งานปีนี้” จึงปลอดภัยต่อข้อมูลที่กำลังใช้งาน</div>
+    <div class="dialog-actions"><button type="button" class="btn btn-ghost" data-close="rolloverDialog">ยกเลิก</button><button class="btn btn-primary" type="submit">สร้างปีถัดไป</button></div>
+  </form>
+</dialog>
+
+<script src="/js/api.js"></script>
+<script>
+  const state = { years: [], canManage: false, current: null };
+  const STATUS_LABELS = { active: "กำลังใช้งาน", draft: "เตรียมการ", planned: "เตรียมการ", closed: "ปิดแล้ว" };
+  const ACTION_LABELS = {
+    initial_seed: "สร้างปีเริ่มต้นอัตโนมัติ", create_year: "เพิ่มปีการศึกษา", update_year: "แก้ไขปีการศึกษา",
+    create_term: "เพิ่มภาคเรียน", update_term: "แก้ไขภาคเรียน", activate_year: "เปิดใช้งานปีการศึกษา",
+    reopen_year: "เปิดปีการศึกษาเก่าอีกครั้ง", close_year: "ปิดปีการศึกษา", activate_term: "เปิดใช้งานภาคเรียน",
+    reopen_term: "เปิดภาคเรียนเก่าอีกครั้ง", close_term: "ปิดภาคเรียน", advance_term: "ปิดและเลื่อนไปภาคเรียนถัดไป",
+    rollover_year: "สร้างปีการศึกษาถัดไป",
+  };
+
+  const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+  const formatDate = (value) => value ? new Intl.DateTimeFormat("th-TH", { day:"numeric", month:"short", year:"numeric" }).format(new Date(`${value}T00:00:00`)) : "—";
+  const formatDateTime = (value) => value ? new Intl.DateTimeFormat("th-TH", { dateStyle:"medium", timeStyle:"short" }).format(new Date(value.replace(" ", "T") + "Z")) : "—";
+  const currentBe = () => { const now = new Date(); return now.getFullYear() + (now.getMonth() >= 4 ? 543 : 542); };
+
+  function showNotice(message, type = "success") {
+    const box = document.getElementById("notice");
+    box.textContent = message; box.className = `notice show ${type}`;
+    window.scrollTo({ top:0, behavior:"smooth" });
+  }
+
+  function defaultDates(yearBe) {
+    const year = Number(yearBe) - 543;
+    return { start:`${year}-05-01`, end:`${year + 1}-03-31` };
+  }
+
+  function renderCurrent() {
+    const current = state.current;
+    document.getElementById("currentTitle").textContent = current?.academic_year_label || "ยังไม่มีปีการศึกษาที่เปิดใช้งาน";
+    document.getElementById("currentTerm").textContent = current?.academic_term_name || "—";
+    document.getElementById("currentStart").textContent = formatDate(current?.academic_term_start_date);
+    document.getElementById("currentEnd").textContent = formatDate(current?.academic_term_end_date);
+  }
+
+  function termHtml(term, year) {
+    const canEdit = state.canManage && year.status !== "closed";
+    const activateLabel = term.status === "closed" ? "เปิดใหม่" : "เปิดใช้งาน";
+    return `<article class="term-card ${term.status}">
+      <div class="term-top"><h4>${escapeHtml(term.name)}</h4><span class="badge ${term.status}">${STATUS_LABELS[term.status]}</span></div>
+      <div class="term-dates">${formatDate(term.start_date)} – ${formatDate(term.end_date)}</div>
+      <div class="term-stats">นักเรียน <strong>${term.student_count}</strong> · โครงการ <strong>${term.project_count}</strong> · งาน <strong>${term.task_count}</strong> · การลา <strong>${term.leave_count}</strong></div>
+      ${state.canManage ? `<div class="actions">
+        ${canEdit ? `<button class="btn btn-ghost" data-action="edit-term" data-id="${term.id}">แก้ไข</button>` : ""}
+        ${term.status !== "active" ? `<button class="btn btn-primary" data-action="activate-term" data-id="${term.id}" data-reopen="${term.status === "closed"}">${activateLabel}</button>` : `<button class="btn btn-ghost" data-action="close-term" data-id="${term.id}">ปิด/ไปภาคถัดไป</button>`}
+      </div>` : ""}
+    </article>`;
+  }
+
+  function renderYears() {
+    const list = document.getElementById("yearList");
+    if (!state.years.length) { list.innerHTML = '<div class="empty-state">ยังไม่มีปีการศึกษา</div>'; return; }
+    list.innerHTML = state.years.map((year) => `<article class="year-card ${year.status}">
+      <div class="year-head">
+        <div><div class="year-title"><h3>${escapeHtml(year.label)}</h3><span class="badge ${year.status}">${STATUS_LABELS[year.status]}</span></div><div class="meta">${formatDate(year.start_date)} – ${formatDate(year.end_date)}${year.notes ? ` · ${escapeHtml(year.notes)}` : ""}</div></div>
+        ${state.canManage ? `<div class="actions">
+          ${year.status !== "closed" ? `<button class="btn btn-ghost" data-action="edit-year" data-id="${year.id}">แก้ไข</button><button class="btn btn-ghost" data-action="add-term" data-id="${year.id}">เพิ่มภาคเรียน</button>` : ""}
+          ${year.status !== "active" ? `<button class="btn btn-primary" data-action="activate-year" data-id="${year.id}" data-reopen="${year.status === "closed"}">${year.status === "closed" ? "เปิดปีนี้ใหม่" : "เปิดใช้งานปีนี้"}</button>` : ""}
+          ${year.status === "draft" && Number(year.student_count || 0) === 0 ? `<button class="btn btn-ghost" data-action="copy-students" data-id="${year.id}">เตรียมทะเบียน</button>` : ""}
+          <button class="btn btn-ghost" data-action="rollover" data-id="${year.id}">สร้างปีถัดไป</button>
+          ${year.status === "draft" ? `<button class="btn btn-danger" data-action="close-year" data-id="${year.id}">ปิดปี</button>` : ""}
+        </div>` : ""}
+      </div>
+      <div class="stats"><span>นักเรียน <strong>${year.student_count}</strong></span><span>ภาคเรียน <strong>${year.term_count}</strong></span><span>โครงการ <strong>${year.project_count}</strong></span><span>งาน <strong>${year.task_count}</strong></span></div>
+      <div class="term-grid">${year.terms.length ? year.terms.map((term) => termHtml(term, year)).join("") : '<div class="empty-state">ยังไม่มีภาคเรียน</div>'}</div>
+    </article>`).join("");
+  }
+
+  function renderAudit(rows) {
+    document.getElementById("auditBody").innerHTML = rows.length ? rows.map((row) => `<tr><td>${formatDateTime(row.created_at)}</td><td>${escapeHtml(ACTION_LABELS[row.action] || row.action)}</td><td>${row.year_be ? `ปี ${row.year_be}` : "—"}${row.term_name ? ` / ${escapeHtml(row.term_name)}` : ""}</td><td>${escapeHtml(row.actor_name || "ระบบ")}</td></tr>`).join("") : '<tr><td colspan="4">ยังไม่มีประวัติ</td></tr>';
+  }
+
+  async function loadData(message) {
+    try {
+      const data = await apiRequest("/api/academic-periods");
+      state.years = data.years; state.current = data.current; state.canManage = data.can_manage;
+      document.querySelectorAll(".admin-control").forEach((element) => { element.hidden = !state.canManage; });
+      renderCurrent(); renderYears(); renderAudit(data.audit_log);
+      if (message) showNotice(message);
+    } catch (error) { showNotice(error.message, "error"); }
+  }
+
+  function findYear(id) { return state.years.find((year) => year.id === Number(id)); }
+  function findTerm(id) { return state.years.flatMap((year) => year.terms).find((term) => term.id === Number(id)); }
+
+  function openYearDialog(year = null) {
+    const yearBe = year?.year_be || currentBe(); const dates = defaultDates(yearBe);
+    document.getElementById("yearDialogTitle").textContent = year ? "แก้ไขปีการศึกษา" : "เพิ่มปีการศึกษา";
+    document.getElementById("yearId").value = year?.id || "";
+    document.getElementById("yearBe").value = yearBe; document.getElementById("yearBe").disabled = !!year;
+    document.getElementById("yearLabel").value = year?.label || `ปีการศึกษา ${yearBe}`;
+    document.getElementById("yearStart").value = year?.start_date || dates.start;
+    document.getElementById("yearEnd").value = year?.end_date || dates.end;
+    document.getElementById("yearNotes").value = year?.notes || "";
+    document.getElementById("createTermsRow").style.display = year ? "none" : "flex";
+    document.getElementById("yearDialog").showModal();
+  }
+
+  function openTermDialog(year, term = null) {
+    document.getElementById("termDialogTitle").textContent = term ? "แก้ไขภาคเรียน" : "เพิ่มภาคเรียน";
+    document.getElementById("termId").value = term?.id || ""; document.getElementById("termYearId").value = year.id;
+    document.getElementById("termNumber").value = term?.term_number || Math.min(year.terms.length + 1, 3);
+    document.getElementById("termNumber").disabled = !!term;
+    document.getElementById("termName").value = term?.name || `ภาคเรียนที่ ${Math.min(year.terms.length + 1, 3)}`;
+    document.getElementById("termStart").value = term?.start_date || year.start_date;
+    document.getElementById("termEnd").value = term?.end_date || year.end_date;
+    document.getElementById("termDialog").showModal();
+  }
+
+  async function postAction(url, body, message) {
+    try { await apiRequest(url, { method:"POST", body:JSON.stringify(body || {}) }); await loadData(message); }
+    catch (error) { showNotice(error.message, "error"); }
+  }
+
+  document.getElementById("newYearButton").addEventListener("click", () => openYearDialog());
+  document.getElementById("yearBe").addEventListener("change", (event) => {
+    if (document.getElementById("yearId").value) return;
+    const dates = defaultDates(event.target.value); document.getElementById("yearLabel").value = `ปีการศึกษา ${event.target.value}`;
+    document.getElementById("yearStart").value = dates.start; document.getElementById("yearEnd").value = dates.end;
+  });
+  document.getElementById("copyStudents").addEventListener("change", (event) => { document.getElementById("promotionField").style.display = event.target.checked ? "block" : "none"; });
+  document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => document.getElementById(button.dataset.close).close()));
+
+  document.getElementById("yearForm").addEventListener("submit", async (event) => {
+    event.preventDefault(); const id = document.getElementById("yearId").value;
+    const body = { year_be:Number(document.getElementById("yearBe").value), label:document.getElementById("yearLabel").value, start_date:document.getElementById("yearStart").value, end_date:document.getElementById("yearEnd").value, notes:document.getElementById("yearNotes").value, create_terms:document.getElementById("createTerms").checked };
+    try { await apiRequest(id ? `/api/academic-years/${id}` : "/api/academic-years", { method:id ? "PATCH" : "POST", body:JSON.stringify(body) }); document.getElementById("yearDialog").close(); await loadData("บันทึกปีการศึกษาแล้ว"); }
+    catch (error) { showNotice(error.message, "error"); }
+  });
+
+  document.getElementById("termForm").addEventListener("submit", async (event) => {
+    event.preventDefault(); const id = document.getElementById("termId").value; const yearId = document.getElementById("termYearId").value;
+    const body = { term_number:Number(document.getElementById("termNumber").value), name:document.getElementById("termName").value, start_date:document.getElementById("termStart").value, end_date:document.getElementById("termEnd").value };
+    try { await apiRequest(id ? `/api/academic-terms/${id}` : `/api/academic-years/${yearId}/terms`, { method:id ? "PATCH" : "POST", body:JSON.stringify(body) }); document.getElementById("termDialog").close(); await loadData("บันทึกภาคเรียนแล้ว"); }
+    catch (error) { showNotice(error.message, "error"); }
+  });
+
+  document.getElementById("rolloverForm").addEventListener("submit", async (event) => {
+    event.preventDefault(); const sourceId = document.getElementById("rolloverSourceId").value;
+    const copy = document.getElementById("copyStudents").checked;
+    try { const result = await apiRequest(`/api/academic-years/${sourceId}/rollover`, { method:"POST", body:JSON.stringify({ copy_students:copy, promotion_mode:document.getElementById("promotionMode").value }) }); document.getElementById("rolloverDialog").close(); await loadData(`สร้างปีการศึกษา ${result.year_be} แล้ว${copy ? ` · คัดลอกนักเรียน ${result.copied_students} คน · ข้าม ${result.skipped_students} คน` : ""}`); }
+    catch (error) { showNotice(error.message, "error"); }
+  });
+
+  document.getElementById("yearList").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-action]"); if (!button) return;
+    const id = Number(button.dataset.id); const action = button.dataset.action;
+    if (action === "edit-year") return openYearDialog(findYear(id));
+    if (action === "add-term") return openTermDialog(findYear(id));
+    if (action === "edit-term") { const term = findTerm(id); return openTermDialog(findYear(term.academic_year_id), term); }
+    if (action === "rollover") { const year = findYear(id); document.getElementById("rolloverSourceId").value = id; document.getElementById("rolloverTargetYear").textContent = Number(year.year_be) + 1; document.getElementById("copyStudents").checked = false; document.getElementById("promotionField").style.display = "none"; return document.getElementById("rolloverDialog").showModal(); }
+    if (action === "activate-year") { if (!confirm("ยืนยันเปิดใช้งานปีนี้? ปีและภาคเรียนปัจจุบันจะถูกปิดและข้อมูลใหม่จะผูกกับปีที่เลือก")) return; return postAction(`/api/academic-years/${id}/activate`, { reopen:button.dataset.reopen === "true" }, "เปลี่ยนปีการศึกษาปัจจุบันแล้ว"); }
+    if (action === "copy-students") { if (!confirm("เตรียมทะเบียนนักเรียนจากปีที่ผ่านมาและเลื่อนชั้นให้อัตโนมัติหรือไม่? นักเรียน ป.6 จะถูกบันทึกเป็นจบการศึกษา")) return; return postAction(`/api/academic-years/${id}/copy-students`, { promotion_mode:"promote" }, "เตรียมทะเบียนนักเรียนสำหรับปีใหม่แล้ว"); }
+    if (action === "activate-term") { if (!confirm("ยืนยันเปิดใช้งานภาคเรียนนี้? ภาคเรียนปัจจุบันจะถูกปิด")) return; return postAction(`/api/academic-terms/${id}/activate`, { reopen:button.dataset.reopen === "true" }, "เปลี่ยนภาคเรียนปัจจุบันแล้ว"); }
+    if (action === "close-term") { if (!confirm("ยืนยันปิดภาคเรียนนี้และเปิดภาคเรียนถัดไป?")) return; return postAction(`/api/academic-terms/${id}/close`, {}, "ปิดภาคเรียนและเลื่อนไปภาคเรียนถัดไปแล้ว"); }
+    if (action === "close-year") { if (!confirm("ยืนยันปิดปีการศึกษาที่เตรียมไว้นี้?")) return; return postAction(`/api/academic-years/${id}/close`, {}, "ปิดปีการศึกษาแล้ว"); }
+  });
+
+  (async () => {
+    try {
+      const { user } = await apiRequest("/api/auth/me");
+      if (!user) return window.location.href = "/login.html";
+      if (!user.role) return window.location.href = "/pending.html";
+      document.getElementById("roleChip").textContent = ROLE_LABELS[user.role] || user.role;
+      document.getElementById("userName").textContent = user.full_name;
+      await loadData();
+    } catch (error) { showNotice(error.message, "error"); }
+  })();
+</script>
+</body>
+</html>

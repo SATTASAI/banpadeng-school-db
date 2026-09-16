@@ -37,6 +37,9 @@
   .overview-number.warn { color:var(--color-danger); }
   .dashboard-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
   .dashboard-head .btn { width:auto; padding:8px 14px; font-size:13px; }
+  .academic-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:14px; padding:11px 14px; background:#eef0ff; border:1px solid #d9dcff; border-radius:12px; font-size:13px; }
+  .academic-context strong { color:var(--color-forest-900); }
+  .academic-context .btn { width:auto; padding:5px 10px; margin-left:auto; font-size:12px; text-decoration:none; }
   .updated-at { color:var(--color-text-muted); font-size:12px; margin-top:5px; text-align:right; }
   .dashboard-section { margin-top:32px; }
   .section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
@@ -97,6 +100,7 @@
       <div class="nav-label">ข้อมูลหลัก</div>
       <a href="/modules.html?module=students" data-page="students"><span class="nav-number">02</span>ข้อมูลนักเรียน</a>
       <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
+      <a href="/academic-years.html" data-page="academic-periods"><span class="nav-number">ปี</span>ปีการศึกษา/ภาคเรียน</a>
       <div class="nav-label">4 ฝ่ายงาน</div>
       <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
       <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
@@ -134,6 +138,13 @@
       </div>
 
       <div class="error-box" id="errorBox"></div>
+
+      <div class="academic-context">
+        <span>ช่วงเวลาปัจจุบัน:</span>
+        <strong id="academicContextLabel">กำลังโหลด...</strong>
+        <span id="academicContextDates"></span>
+        <a class="btn btn-ghost" href="#academic-periods" data-dashboard-page="academic-periods">จัดการปีการศึกษา</a>
+      </div>
 
       <div class="overview-grid" id="overviewGrid"></div>
 
@@ -195,6 +206,7 @@
     tasks: "/tasks.html",
     students: "/modules.html?module=students",
     staff: "/modules.html?module=staff",
+    "academic-periods": "/academic-years.html",
     leave: "/leave.html",
     academic: "/modules.html?module=academic",
     budget: "/modules.html?module=budget",
@@ -318,6 +330,14 @@
         <div class="overview-card"><div class="overview-number">${data.ongoing_projects}</div><div class="overview-label">โครงการที่กำลังดำเนินการ</div></div>
         <div class="overview-card"><div class="overview-number ${data.pending_leave_requests > 0 ? "warn" : ""}">${data.pending_leave_requests}</div><div class="overview-label">คำขอลารอดำเนินการ</div></div>
       `;
+
+      const period = data.current_academic_period;
+      document.getElementById("academicContextLabel").textContent = period
+        ? `${period.academic_year_label} · ${period.academic_term_name || "ยังไม่เปิดภาคเรียน"}`
+        : "ยังไม่มีปีการศึกษาที่เปิดใช้งาน";
+      document.getElementById("academicContextDates").textContent = period?.academic_term_start_date
+        ? `${formatThaiDate(period.academic_term_start_date)} – ${formatThaiDate(period.academic_term_end_date)}`
+        : "";
 
       document.getElementById("departmentGrid").innerHTML = data.department_summary.map((department) => `
         <article class="department-card">

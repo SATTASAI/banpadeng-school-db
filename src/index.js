@@ -8,6 +8,8 @@ import {
 } from "./lib/crypto.js";
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
 import { ensurePersonnelData } from "./lib/personnel-data.js";
+import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
+import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -516,11 +518,23 @@ async function handleListStudents(request, env) {
     return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   }
 
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM students ORDER BY classroom, full_name"
-  ).all();
+  const url = new URL(request.url);
+  const termId = Number(url.searchParams.get("academic_term_id"));
+  let results;
+  if (Number.isInteger(termId) && termId > 0) {
+    ({ results } = await env.DB.prepare(
+      `SELECT s.*, e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
+              e.academic_year_id, e.academic_term_id
+       FROM student_enrollments e JOIN students s ON s.id = e.student_id
+       WHERE e.academic_term_id = ? ORDER BY e.classroom, s.full_name`
+    ).bind(termId).all());
+  } else {
+    ({ results } = await env.DB.prepare(
+      "SELECT * FROM students ORDER BY classroom, full_name"
+    ).all());
+  }
 
-  return jsonResponse({ students: results });
+  return jsonResponse({ students: results, current_academic_period: await getCurrentAcademicPeriod(env) });
 }
 
 // ---------- /api/students/:id (GET) — รวมผู้ปกครอง ----------
@@ -1236,7 +1250,8 @@ async function handleOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
 
-  await ensurePersonnelData(env);
+  await Promise.all([ensurePersonnelData(env), ensureAcademicData(env)]);
+  const currentAcademicPeriod = await getCurrentAcademicPeriod(env);
 
   const studentsEnrolled = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM students WHERE status = 'enrolled'"
@@ -1293,6 +1308,7 @@ async function handleOverview(request, env) {
     total_project_budget: departmentSummary.reduce((sum, row) => sum + row.total_budget, 0),
     department_summary: departmentSummary,
     licenses_expiring: licensesExpiring,
+    current_academic_period: currentAcademicPeriod,
   });
 }
 
@@ -1464,6 +1480,12 @@ export default {
       if (pathname === "/api/auth/login" && method === "POST") return await handleLogin(request, env);
       if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout();
       if (pathname === "/api/auth/me" && method === "GET") return await handleMe(request, env);
+
+      // ติดตั้ง/อัปเกรดโครงสร้างปีการศึกษาก่อนใช้ API ภายในระบบ
+      if (pathname.startsWith("/api/")) await ensureAcademicData(env);
+
+      const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
+      if (academicPeriodResponse) return academicPeriodResponse;
       if (pathname === "/api/admin/users" && method === "GET") return await handleAdminListUsers(request, env);
 
       const adminUserMatch = pathname.match(/^\/api\/admin\/users\/(\d+)$/);

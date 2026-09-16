@@ -208,3 +208,69 @@ CREATE TABLE IF NOT EXISTS personnel_imports (
 
 CREATE INDEX IF NOT EXISTS idx_personnel_status ON personnel_records(status);
 CREATE INDEX IF NOT EXISTS idx_personnel_license_expiry ON personnel_records(license_expiry_date);
+
+-- Schema: ระบบปีการศึกษา/ภาคเรียนกลาง
+
+CREATE TABLE IF NOT EXISTS academic_years (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  year_be     INTEGER NOT NULL UNIQUE CHECK (year_be BETWEEN 2500 AND 2700),
+  label       TEXT NOT NULL,
+  start_date  TEXT NOT NULL,
+  end_date    TEXT NOT NULL,
+  status      TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','active','closed')),
+  notes       TEXT,
+  created_by  INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK (start_date <= end_date)
+);
+
+CREATE TABLE IF NOT EXISTS academic_terms (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  academic_year_id  INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+  term_number       INTEGER NOT NULL CHECK (term_number BETWEEN 1 AND 3),
+  name              TEXT NOT NULL,
+  start_date        TEXT NOT NULL,
+  end_date          TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','active','closed')),
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (academic_year_id, term_number),
+  CHECK (start_date <= end_date)
+);
+
+CREATE TABLE IF NOT EXISTS student_enrollments (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id        INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year_id  INTEGER NOT NULL REFERENCES academic_years(id) ON DELETE CASCADE,
+  academic_term_id  INTEGER NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  grade_level       TEXT,
+  classroom         TEXT,
+  status            TEXT NOT NULL DEFAULT 'enrolled' CHECK (status IN ('enrolled','transferred','graduated','withdrawn')),
+  promoted_from_id  INTEGER REFERENCES student_enrollments(id),
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (student_id, academic_term_id)
+);
+
+CREATE TABLE IF NOT EXISTS academic_period_audit (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  action            TEXT NOT NULL,
+  academic_year_id  INTEGER REFERENCES academic_years(id),
+  academic_term_id  INTEGER REFERENCES academic_terms(id),
+  actor_user_id     INTEGER REFERENCES users(id),
+  details           TEXT,
+  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_year_single_active
+  ON academic_years(status) WHERE status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_academic_term_single_active
+  ON academic_terms(status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_academic_terms_year ON academic_terms(academic_year_id, term_number);
+CREATE INDEX IF NOT EXISTS idx_student_enrollments_period
+  ON student_enrollments(academic_year_id, academic_term_id, classroom);
+CREATE INDEX IF NOT EXISTS idx_academic_audit_created ON academic_period_audit(created_at DESC);
+
+-- ฐานข้อมูลเดิมจะเพิ่ม 2 คอลัมน์นี้ด้วย runtime migration ใน src/lib/academic-data.js
+-- เพื่อให้รันซ้ำได้อย่างปลอดภัย: tasks, projects, work_topics และ leave_requests
