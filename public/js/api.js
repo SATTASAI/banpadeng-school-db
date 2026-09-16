@@ -4,10 +4,17 @@ if (window.parent !== window) {
 }
 
 async function apiRequest(path, options = {}) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  const headers = isFormData ? {} : { "Content-Type": "application/json" };
+  const requestBody = options.body == null
+    ? undefined
+    : isFormData || typeof options.body === "string"
+      ? options.body
+      : JSON.stringify(options.body);
   const res = await fetch(path, {
     method: options.method || "GET",
-    headers: { "Content-Type": "application/json" },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    headers,
+    body: requestBody,
     credentials: "same-origin",
   });
 

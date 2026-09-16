@@ -379,6 +379,111 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department, academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_documents_search ON documents(title, keywords);
 
+-- ระบบพัสดุและครุภัณฑ์
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  item_type TEXT NOT NULL CHECK (item_type IN ('material','equipment')),
+  category TEXT,
+  unit TEXT NOT NULL DEFAULT 'ชิ้น',
+  department TEXT NOT NULL DEFAULT 'budget'
+    CHECK (department IN ('academic','budget','personnel','general')),
+  location TEXT,
+  custodian TEXT,
+  current_quantity REAL NOT NULL DEFAULT 0 CHECK (current_quantity >= 0),
+  minimum_quantity REAL NOT NULL DEFAULT 0 CHECK (minimum_quantity >= 0),
+  unit_price REAL NOT NULL DEFAULT 0 CHECK (unit_price >= 0),
+  brand_model TEXT,
+  serial_number TEXT,
+  purchase_date TEXT,
+  fiscal_year TEXT,
+  budget_source TEXT,
+  vendor TEXT,
+  warranty_expiry TEXT,
+  item_condition TEXT NOT NULL DEFAULT 'good'
+    CHECK (item_condition IN ('good','fair','damaged','lost')),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','repair','disposed','lost')),
+  notes TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS inventory_transactions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  transaction_type TEXT NOT NULL
+    CHECK (transaction_type IN ('opening','receive','issue','borrow','return','transfer','adjust_in','adjust_out','repair','dispose')),
+  transaction_date TEXT NOT NULL,
+  document_no TEXT,
+  quantity REAL NOT NULL CHECK (quantity > 0),
+  quantity_change REAL NOT NULL,
+  related_transaction_id INTEGER REFERENCES inventory_transactions(id),
+  unit_price REAL,
+  from_location TEXT,
+  to_location TEXT,
+  recipient TEXT,
+  due_date TEXT,
+  notes TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS inventory_inspections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  inspection_date TEXT NOT NULL,
+  quantity_found REAL NOT NULL CHECK (quantity_found >= 0),
+  item_condition TEXT NOT NULL CHECK (item_condition IN ('good','fair','damaged','lost')),
+  result TEXT NOT NULL CHECK (result IN ('matched','shortage','surplus','damaged')),
+  location TEXT,
+  inspector TEXT,
+  notes TEXT,
+  next_inspection_date TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ไฟล์แนบเก็บจริงใน R2; ตารางนี้เก็บเมทาดาทาและสิทธิ์อ้างอิง
+CREATE TABLE IF NOT EXISTS file_attachments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('document','inventory_transaction','inventory_inspection')),
+  entity_id INTEGER NOT NULL,
+  object_key TEXT NOT NULL UNIQUE,
+  file_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size INTEGER NOT NULL,
+  uploaded_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(entity_type, entity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_inventory_items_type ON inventory_items(item_type, status);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_department ON inventory_items(department, location);
+CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item ON inventory_transactions(item_id, transaction_date DESC);
+CREATE INDEX IF NOT EXISTS idx_inventory_inspections_item ON inventory_inspections(item_id, inspection_date DESC);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_entity ON file_attachments(entity_type, entity_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_inventory_transaction_before_insert
+BEFORE INSERT ON inventory_transactions
+WHEN NEW.quantity_change < 0
+ AND COALESCE((SELECT current_quantity FROM inventory_items WHERE id = NEW.item_id), 0) + NEW.quantity_change < 0
+BEGIN
+  SELECT RAISE(ABORT, 'INSUFFICIENT_INVENTORY');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_inventory_transaction_after_insert
+AFTER INSERT ON inventory_transactions
+BEGIN
+  UPDATE inventory_items
+  SET current_quantity = current_quantity + NEW.quantity_change,
+      unit_price = CASE WHEN NEW.unit_price IS NOT NULL AND NEW.unit_price >= 0 THEN NEW.unit_price ELSE unit_price END,
+      updated_at = datetime('now')
+  WHERE id = NEW.item_id;
+END;
+
 -- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
 CREATE TABLE IF NOT EXISTS audit_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,

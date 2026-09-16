@@ -157,8 +157,11 @@
       number: 5,
       title: "ฝ่ายบริหารงานงบประมาณ",
       description: "วางแผนงบประมาณ รับ–จ่าย อนุมัติเบิกจ่าย พัสดุ ครุภัณฑ์ และรายงานการเงิน",
-      actions: [{ label: "เปิดงานและโครงการงบประมาณ", href: "/department.html?dept=budget" }],
-      ready: [0],
+      actions: [
+        { label: "เปิดงานและโครงการงบประมาณ", href: "/department.html?dept=budget" },
+        { label: "เปิดระบบพัสดุและครุภัณฑ์", href: "/inventory.html", secondary: true }
+      ],
+      ready: [0, 5, 6, 8, 9],
       items: [
         "โครงการและแผนการใช้จ่าย",
         "งบประมาณประจำปี",

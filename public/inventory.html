@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ระบบพัสดุและครุภัณฑ์</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .inventory-page{max-width:1280px}.page-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-end;margin:12px 0 18px}.page-head p{margin:4px 0 0;color:var(--color-text-muted)}
+    .actions{display:flex;gap:8px;flex-wrap:wrap}.actions .btn{width:auto}.summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px}.summary-card{background:rgba(255,255,255,.82);border:1px solid var(--color-border);border-radius:15px;padding:14px;box-shadow:0 8px 22px rgba(57,91,128,.05)}.summary-card span{display:block;font-size:11px;color:var(--color-text-muted)}.summary-card strong{display:block;font-size:20px;color:var(--color-forest-900);margin-top:3px}.summary-card.warn strong{color:#A5630B}.summary-card.danger strong{color:var(--color-danger)}
+    .toolbar{display:grid;grid-template-columns:minmax(220px,1fr) repeat(3,170px);gap:10px;margin-bottom:14px}.toolbar input,.toolbar select,.form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:rgba(255,255,255,.86);font:inherit;color:var(--color-text)}
+    .table-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:15px;background:rgba(255,255,255,.8)}table{min-width:940px}.item-link{border:0;background:none;color:var(--color-ocean-700);font:600 13px var(--font-body);cursor:pointer;text-align:left}.status{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600}.status.active,.status.good,.status.matched{background:#E3F5EB;color:#23754A}.status.repair,.status.fair,.status.surplus{background:#FFF2D9;color:#9B5D0A}.status.disposed,.status.lost,.status.damaged,.status.shortage{background:#F9E6E8;color:#A6404C}.low-stock{color:var(--color-danger);font-weight:700}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(17,37,60,.38);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}.modal-panel{width:min(920px,100%);max-height:90vh;overflow:auto;background:rgba(249,252,255,.98);border:1px solid rgba(255,255,255,.8);border-radius:20px;box-shadow:0 28px 80px rgba(18,43,70,.24);padding:22px}.modal-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:16px}.modal-head .btn{width:auto;padding:7px 11px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field{margin:0}.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}.span-2{grid-column:span 2}.span-3{grid-column:1/-1}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.form-actions .btn{width:auto}
+    .detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}.detail-cell{padding:11px 12px;border:1px solid var(--color-border);border-radius:12px;background:white}.detail-cell span{display:block;font-size:10px;color:var(--color-text-muted)}.detail-cell strong{display:block;margin-top:2px;font-size:13px}.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:18px 0 8px}.section-head h3{margin:0;font-size:15px}.section-head .btn{width:auto;padding:6px 10px;font-size:12px}
+    .file-help{padding:12px 14px;border:1px solid #B9D5EA;border-radius:12px;background:#EDF7FD;color:#315C86;font-size:12px;line-height:1.55}.file-help strong{color:#183153}.file-help ul{margin:6px 0 0;padding-left:20px}.file-meta{margin-top:5px;font-size:11px;color:var(--color-text-muted)}
+    .empty{padding:34px;text-align:center;color:var(--color-text-muted)}
+    html.embedded .page-back{display:none}html.embedded body{background:transparent}html.embedded .app-main{padding-top:18px}
+    @media(max-width:980px){.summary-grid{grid-template-columns:repeat(3,1fr)}.toolbar{grid-template-columns:1fr 1fr}.form-grid{grid-template-columns:1fr 1fr}.span-3{grid-column:1/-1}.detail-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:620px){.page-head{align-items:flex-start;flex-direction:column}.summary-grid,.toolbar,.form-grid{grid-template-columns:1fr}.span-2,.span-3{grid-column:auto}.detail-grid{grid-template-columns:1fr 1fr}.modal-backdrop{padding:8px}.modal-panel{padding:16px;border-radius:16px}}
+  </style>
+</head>
+<body>
+<main class="app-main inventory-page">
+  <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
+  <div class="page-head">
+    <div><h2>ระบบพัสดุและครุภัณฑ์</h2><p>ทะเบียน รับ–จ่าย ยืม–คืน โอน ซ่อม จำหน่าย และตรวจนับทรัพย์สิน</p></div>
+    <div class="actions"><button class="btn btn-ghost" id="exportBtn">ส่งออก CSV</button><button class="btn btn-primary" id="newItemBtn" style="display:none">+ เพิ่มทะเบียน</button></div>
+  </div>
+  <div class="summary-grid" id="summaryGrid"></div>
+  <section class="panel">
+    <div class="toolbar">
+      <input type="search" id="searchInput" placeholder="ค้นหารหัส ชื่อ หมวด หรือ Serial Number" />
+      <select id="typeFilter"><option value="">ทุกประเภท</option><option value="material">วัสดุ</option><option value="equipment">ครุภัณฑ์</option></select>
+      <select id="departmentFilter"><option value="">ทุกฝ่าย</option><option value="academic">วิชาการ</option><option value="budget">งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select>
+      <select id="statusFilter"><option value="">ทุกสถานะ</option><option value="active">ใช้งาน</option><option value="repair">อยู่ระหว่างซ่อม</option><option value="disposed">จำหน่ายแล้ว</option><option value="lost">สูญหาย</option></select>
+    </div>
+    <div class="table-wrap" id="itemList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="itemModal"><div class="modal-panel">
+  <div class="modal-head"><div><h2 id="itemModalTitle">เพิ่มทะเบียนพัสดุ</h2><p style="color:var(--color-text-muted);margin:2px 0 0">กำหนดข้อมูลหลักและยอดยกมาเริ่มต้น</p></div><button class="btn btn-ghost" data-close="itemModal">ปิด</button></div>
+  <div class="form-grid">
+    <div class="field"><label>รหัสพัสดุ/ครุภัณฑ์ *</label><input id="iCode" /></div>
+    <div class="field span-2"><label>ชื่อรายการ *</label><input id="iName" /></div>
+    <div class="field"><label>ประเภท *</label><select id="iType"><option value="material">วัสดุ</option><option value="equipment">ครุภัณฑ์</option></select></div>
+    <div class="field"><label>หมวด</label><input id="iCategory" placeholder="เช่น วัสดุสำนักงาน" /></div>
+    <div class="field"><label>หน่วยนับ</label><input id="iUnit" value="ชิ้น" /></div>
+    <div class="field"><label>ฝ่ายงาน</label><select id="iDepartment"><option value="academic">วิชาการ</option><option value="budget" selected>งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select></div>
+    <div class="field"><label>สถานที่จัดเก็บ/ใช้งาน</label><input id="iLocation" /></div>
+    <div class="field"><label>ผู้รับผิดชอบ</label><input id="iCustodian" /></div>
+    <div class="field"><label>ยอดยกมา</label><input type="number" min="0" step="0.01" id="iOpening" value="0" /></div>
+    <div class="field"><label>จุดสั่งซื้อขั้นต่ำ</label><input type="number" min="0" step="0.01" id="iMinimum" value="0" /></div>
+    <div class="field"><label>ราคาต่อหน่วย</label><input type="number" min="0" step="0.01" id="iPrice" value="0" /></div>
+    <div class="field"><label>ยี่ห้อ/รุ่น</label><input id="iBrand" /></div>
+    <div class="field"><label>Serial Number</label><input id="iSerial" /></div>
+    <div class="field"><label>วันที่จัดซื้อ</label><input type="date" id="iPurchaseDate" /></div>
+    <div class="field"><label>ปีงบประมาณ</label><input id="iFiscalYear" placeholder="เช่น 2570" /></div>
+    <div class="field"><label>แหล่งงบประมาณ</label><input id="iBudgetSource" /></div>
+    <div class="field"><label>ผู้ขาย/ร้านค้า</label><input id="iVendor" /></div>
+    <div class="field"><label>หมดประกัน</label><input type="date" id="iWarranty" /></div>
+    <div class="field"><label>สภาพ</label><select id="iCondition"><option value="good">ดี</option><option value="fair">พอใช้</option><option value="damaged">ชำรุด</option><option value="lost">สูญหาย</option></select></div>
+    <div class="field"><label>สถานะ</label><select id="iStatus"><option value="active">ใช้งาน</option><option value="repair">อยู่ระหว่างซ่อม</option><option value="disposed">จำหน่ายแล้ว</option><option value="lost">สูญหาย</option></select></div>
+    <div class="field span-3"><label>หมายเหตุ</label><textarea id="iNotes" rows="2"></textarea></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" id="saveItemBtn">บันทึกทะเบียน</button></div>
+</div></div>
+
+<div class="modal-backdrop" id="detailModal"><div class="modal-panel">
+  <div class="modal-head"><div><h2 id="detailTitle">รายละเอียดพัสดุ</h2><p id="detailSubtitle" style="color:var(--color-text-muted);margin:2px 0 0"></p></div><button class="btn btn-ghost" data-close="detailModal">ปิด</button></div>
+  <div id="detailBody"></div>
+</div></div>
+
+<div class="modal-backdrop" id="transactionModal"><div class="modal-panel" style="max-width:760px">
+  <div class="modal-head"><div><h2>บันทึกการเคลื่อนไหว</h2><p id="transactionItemLabel" style="color:var(--color-text-muted);margin:2px 0 0"></p></div><button class="btn btn-ghost" data-close="transactionModal">ปิด</button></div>
+  <div class="form-grid">
+    <div class="field"><label>ประเภทรายการ *</label><select id="tType"><option value="receive">รับเข้า</option><option value="issue">เบิกจ่าย</option><option value="borrow">ยืม</option><option value="return">คืน</option><option value="transfer">โอนย้าย</option><option value="adjust_in">ปรับเพิ่ม</option><option value="adjust_out">ปรับลด</option><option value="repair">ส่งซ่อม</option><option value="dispose">จำหน่าย</option></select></div>
+    <div class="field"><label>วันที่ *</label><input type="date" id="tDate" /></div>
+    <div class="field"><label>เลขที่เอกสาร</label><input id="tDocumentNo" /></div>
+    <div class="field"><label>จำนวน *</label><input type="number" min="0.01" step="0.01" id="tQuantity" /></div>
+    <div class="field"><label>ราคาต่อหน่วย</label><input type="number" min="0" step="0.01" id="tPrice" /></div>
+    <div class="field"><label>ผู้รับ/ผู้ยืม</label><input id="tRecipient" /></div>
+    <div class="field"><label>จากสถานที่</label><input id="tFrom" /></div>
+    <div class="field"><label>ไปสถานที่</label><input id="tTo" /></div>
+    <div class="field"><label>กำหนดคืน</label><input type="date" id="tDueDate" /></div>
+    <div class="field span-3" id="returnReferenceField" style="display:none"><label>อ้างอิงรายการยืม *</label><select id="tRelatedBorrow"></select></div>
+    <div class="field span-3"><label>หมายเหตุ</label><textarea id="tNotes" rows="2"></textarea></div>
+    <div class="field span-3"><label>หลักฐาน (ไม่บังคับ)</label><input type="file" id="tFile" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="tFileMeta">PDF ≤ 1 MB · รูปภาพ ≤ 2 MB</div></div>
+    <div class="file-help span-3"><strong>วิธีทำให้ไฟล์เล็กลง</strong><ul><li>สแกนเอกสารที่ประมาณ 150 DPI และเลือกขาวดำหรือ Grayscale</li><li>ตัดขอบ/หน้าว่างออก และเลือก “Compressed PDF” หรือ “ลดขนาดไฟล์”</li><li>รูปภาพใช้ JPG คุณภาพ 70–80% หรือย่อด้านยาวประมาณ 1,600 พิกเซล</li><li>ตรวจว่าตัวหนังสือยังอ่านชัดก่อนอัปโหลด</li></ul></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" id="saveTransactionBtn">บันทึกรายการ</button></div>
+</div></div>
+
+<div class="modal-backdrop" id="inspectionModal"><div class="modal-panel" style="max-width:760px">
+  <div class="modal-head"><div><h2>บันทึกการตรวจนับทรัพย์สิน</h2><p id="inspectionItemLabel" style="color:var(--color-text-muted);margin:2px 0 0"></p></div><button class="btn btn-ghost" data-close="inspectionModal">ปิด</button></div>
+  <div class="form-grid">
+    <div class="field"><label>วันที่ตรวจ *</label><input type="date" id="sDate" /></div>
+    <div class="field"><label>จำนวนที่พบ *</label><input type="number" min="0" step="0.01" id="sQuantity" /></div>
+    <div class="field"><label>สภาพ *</label><select id="sCondition"><option value="good">ดี</option><option value="fair">พอใช้</option><option value="damaged">ชำรุด</option><option value="lost">สูญหาย</option></select></div>
+    <div class="field"><label>สถานที่พบ</label><input id="sLocation" /></div>
+    <div class="field"><label>ผู้ตรวจ</label><input id="sInspector" /></div>
+    <div class="field"><label>กำหนดตรวจครั้งถัดไป</label><input type="date" id="sNextDate" /></div>
+    <div class="field span-3"><label>หมายเหตุ</label><textarea id="sNotes" rows="2"></textarea></div>
+    <div class="field span-3"><label>ภาพ/เอกสารผลการตรวจ (ไม่บังคับ)</label><input type="file" id="sFile" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="sFileMeta">PDF ≤ 1 MB · รูปภาพ ≤ 2 MB</div></div>
+    <div class="file-help span-3"><strong>แนะนำก่อนแนบไฟล์</strong> สแกน 150 DPI, ใช้ขาวดำ/Grayscale, ตัดหน้าว่าง และเลือก PDF แบบบีบอัด ส่วนภาพควรย่อขนาดและบันทึก JPG คุณภาพ 70–80%</div>
+  </div>
+  <div class="form-actions"><button class="btn btn-primary" id="saveInspectionBtn">บันทึกผลตรวจ</button></div>
+</div></div>
+
+<script src="/js/api.js"></script>
+<script>
+const TYPE_LABEL={material:"วัสดุ",equipment:"ครุภัณฑ์"};
+const DEPT_LABEL={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป"};
+const STATUS_LABEL={active:"ใช้งาน",repair:"อยู่ระหว่างซ่อม",disposed:"จำหน่ายแล้ว",lost:"สูญหาย"};
+const CONDITION_LABEL={good:"ดี",fair:"พอใช้",damaged:"ชำรุด",lost:"สูญหาย"};
+const TX_LABEL={opening:"ยอดยกมา",receive:"รับเข้า",issue:"เบิกจ่าย",borrow:"ยืม",return:"คืน",transfer:"โอนย้าย",adjust_in:"ปรับเพิ่ม",adjust_out:"ปรับลด",repair:"ส่งซ่อม",dispose:"จำหน่าย"};
+const RESULT_LABEL={matched:"ตรงทะเบียน",shortage:"ขาด",surplus:"เกิน",damaged:"ชำรุด/สูญหาย"};
+let items=[],currentDetail=null,canManage=false,searchTimer=null;
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const money=n=>Number(n||0).toLocaleString("th-TH",{minimumFractionDigits:0,maximumFractionDigits:2})+" บาท";
+const dateText=value=>value?new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",year:"numeric"}).format(new Date(value+"T00:00:00")):"-";
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
+function fileSize(bytes){return bytes<1024*1024?`${(bytes/1024).toFixed(0)} KB`:`${(bytes/1024/1024).toFixed(2)} MB`}
+function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);if(!pdf&&!image)return "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF";const limit=pdf?1024*1024:2*1024*1024;if(file.size>limit)return `${pdf?"PDF ต้องไม่เกิน 1 MB":"รูปภาพต้องไม่เกิน 2 MB"} (ไฟล์นี้ ${fileSize(file.size)})`;return null}
+function bindFileCheck(inputId,metaId){$(inputId).addEventListener("change",()=>{const f=$(inputId).files[0];const error=validateFile(f);$(metaId).textContent=f?(error||`${f.name} · ${fileSize(f.size)} · พร้อมอัปโหลด`):"PDF ≤ 1 MB · รูปภาพ ≤ 2 MB";$(metaId).style.color=error?"var(--color-danger)":"var(--color-text-muted)"})}
+async function uploadAttachment(entityType,id,file){if(!file)return null;const error=validateFile(file);if(error)throw new Error(error);const form=new FormData();form.append("file",file);return apiRequest(`/api/attachments/${entityType}/${id}`,{method:"POST",body:form})}
+function openModal(id){$(id).style.display="flex"}function closeModal(id){$(id).style.display="none"}
+document.querySelectorAll("[data-close]").forEach(btn=>btn.onclick=()=>closeModal(btn.dataset.close));
+document.querySelectorAll(".modal-backdrop").forEach(modal=>modal.addEventListener("click",event=>{if(event.target===modal)closeModal(modal.id)}));
+
+async function loadSummary(){const d=await apiRequest("/api/inventory/summary");canManage=d.can_manage;$("newItemBtn").style.display=canManage?"inline-flex":"none";$("summaryGrid").innerHTML=`
+  <div class="summary-card"><span>ทะเบียนทั้งหมด</span><strong>${d.item_count}</strong></div><div class="summary-card"><span>วัสดุ</span><strong>${d.material_count}</strong></div>
+  <div class="summary-card"><span>ครุภัณฑ์</span><strong>${d.equipment_count}</strong></div><div class="summary-card"><span>มูลค่าคงเหลือ</span><strong>${money(d.total_value)}</strong></div>
+  <div class="summary-card warn"><span>คงเหลือต่ำ/ต้องติดตาม</span><strong>${d.low_stock_count+d.attention_count}</strong></div><div class="summary-card danger"><span>ยืมเลยกำหนด</span><strong>${d.overdue_borrow_count}</strong></div>`}
+async function loadItems(){const p=new URLSearchParams({q:$("searchInput").value,type:$("typeFilter").value,department:$("departmentFilter").value,status:$("statusFilter").value});const d=await apiRequest("/api/inventory/items?"+p);items=d.items;canManage=d.can_manage;renderItems()}
+function renderItems(){const box=$("itemList");if(!items.length){box.innerHTML='<div class="empty">ยังไม่มีรายการที่ตรงกับตัวกรอง</div>';return}box.innerHTML=`<table><thead><tr><th>รหัส/รายการ</th><th>ประเภท/หมวด</th><th>ฝ่าย/สถานที่</th><th>คงเหลือ</th><th>ราคาต่อหน่วย</th><th>มูลค่า</th><th>สภาพ/สถานะ</th><th>ตรวจล่าสุด</th></tr></thead><tbody>${items.map(i=>{const low=i.minimum_quantity>0&&i.current_quantity<=i.minimum_quantity;return `<tr><td><button class="item-link" data-item="${i.id}">${esc(i.item_code)} · ${esc(i.name)}</button><br><small>${esc(i.brand_model||i.serial_number||"")}</small></td><td>${esc(TYPE_LABEL[i.item_type])}<br><small>${esc(i.category||"-")}</small></td><td>${esc(DEPT_LABEL[i.department])}<br><small>${esc(i.location||"-")}</small></td><td class="${low?"low-stock":""}">${i.current_quantity.toLocaleString("th-TH")} ${esc(i.unit)}${low?" · ต่ำกว่าจุดสั่งซื้อ":""}</td><td>${money(i.unit_price)}</td><td>${money(i.total_value)}</td><td><span class="status ${esc(i.item_condition)}">${esc(CONDITION_LABEL[i.item_condition])}</span> <span class="status ${esc(i.status)}">${esc(STATUS_LABEL[i.status])}</span></td><td>${dateText(i.last_inspection_date)}<br><small>${i.next_inspection_date?"ครั้งถัดไป "+dateText(i.next_inspection_date):"-"}</small></td></tr>`}).join("")}</tbody></table>`;box.querySelectorAll("[data-item]").forEach(b=>b.onclick=()=>openDetail(Number(b.dataset.item)))}
+
+function itemPayload(){return {item_code:$("iCode").value.trim(),name:$("iName").value.trim(),item_type:$("iType").value,category:$("iCategory").value.trim(),unit:$("iUnit").value.trim(),department:$("iDepartment").value,location:$("iLocation").value.trim(),custodian:$("iCustodian").value.trim(),opening_quantity:Number($("iOpening").value||0),minimum_quantity:Number($("iMinimum").value||0),unit_price:Number($("iPrice").value||0),brand_model:$("iBrand").value.trim(),serial_number:$("iSerial").value.trim(),purchase_date:$("iPurchaseDate").value,fiscal_year:$("iFiscalYear").value.trim(),budget_source:$("iBudgetSource").value.trim(),vendor:$("iVendor").value.trim(),warranty_expiry:$("iWarranty").value,item_condition:$("iCondition").value,status:$("iStatus").value,notes:$("iNotes").value.trim()}}
+$("newItemBtn").onclick=()=>{document.querySelectorAll("#itemModal input,#itemModal textarea").forEach(x=>x.value="");$("iUnit").value="ชิ้น";$("iOpening").value=$("iMinimum").value=$("iPrice").value="0";$("iType").value="material";$("iDepartment").value="budget";$("iCondition").value="good";$("iStatus").value="active";openModal("itemModal")};
+$("saveItemBtn").onclick=async()=>{const body=itemPayload();if(!body.item_code||!body.name)return alert("กรุณากรอกรหัสและชื่อรายการ");const btn=$("saveItemBtn");btn.disabled=true;try{const d=await apiRequest("/api/inventory/items",{method:"POST",body});closeModal("itemModal");await Promise.all([loadSummary(),loadItems()]);await openDetail(d.id)}catch(e){alert(e.message)}finally{btn.disabled=false}};
+
+async function openDetail(id){currentDetail=await apiRequest(`/api/inventory/items/${id}`);renderDetail();openModal("detailModal")}
+function renderDetail(){const i=currentDetail.item;$("detailTitle").textContent=i.name;$("detailSubtitle").textContent=`${i.item_code} · ${TYPE_LABEL[i.item_type]} · ${DEPT_LABEL[i.department]}`;const tx=currentDetail.transactions,ins=currentDetail.inspections;$("detailBody").innerHTML=`
+  <div class="detail-grid"><div class="detail-cell"><span>คงเหลือพร้อมใช้</span><strong>${i.current_quantity.toLocaleString("th-TH")} ${esc(i.unit)}</strong></div><div class="detail-cell"><span>มูลค่าคงเหลือ</span><strong>${money(i.total_value)}</strong></div><div class="detail-cell"><span>สถานที่/ผู้รับผิดชอบ</span><strong>${esc(i.location||"-")} · ${esc(i.custodian||"-")}</strong></div><div class="detail-cell"><span>สภาพ/สถานะ</span><strong>${esc(CONDITION_LABEL[i.item_condition])} · ${esc(STATUS_LABEL[i.status])}</strong></div><div class="detail-cell"><span>ยี่ห้อ/รุ่น</span><strong>${esc(i.brand_model||"-")}</strong></div><div class="detail-cell"><span>Serial Number</span><strong>${esc(i.serial_number||"-")}</strong></div><div class="detail-cell"><span>วันที่จัดซื้อ/ประกัน</span><strong>${dateText(i.purchase_date)} · ${dateText(i.warranty_expiry)}</strong></div><div class="detail-cell"><span>แหล่งงบประมาณ</span><strong>${esc(i.budget_source||"-")}</strong></div></div>
+  <div class="section-head"><h3>ประวัติการเคลื่อนไหว</h3>${currentDetail.can_manage?'<button class="btn btn-primary" id="addTxBtn">+ บันทึกรายการ</button>':""}</div>
+  <div class="table-wrap">${tx.length?`<table><thead><tr><th>วันที่/ประเภท</th><th>เอกสาร</th><th>จำนวน</th><th>ผู้รับ/สถานที่</th><th>ผู้บันทึก</th><th>หลักฐาน</th></tr></thead><tbody>${tx.map(t=>`<tr><td>${dateText(t.transaction_date)}<br><span class="status ${t.quantity_change<0?"damaged":"good"}">${esc(TX_LABEL[t.transaction_type])}</span></td><td>${esc(t.document_no||"-")}<br><small>${esc(t.notes||"")}</small></td><td class="${t.quantity_change<0?"low-stock":""}">${t.quantity_change>0?"+":t.quantity_change<0?"−":""}${t.quantity.toLocaleString("th-TH")} ${esc(i.unit)}${t.transaction_type==="borrow"?`<br><small>คืนแล้ว ${t.returned_quantity}/${t.quantity}</small>`:""}</td><td>${esc(t.recipient||t.to_location||t.from_location||"-")}<br><small>${t.due_date?"กำหนดคืน "+dateText(t.due_date):""}</small></td><td>${esc(t.creator_name||"-")}</td><td>${t.attachment_id?`<a href="/api/attachments/${t.attachment_id}" target="_blank">${esc(t.attachment_name||"เปิดไฟล์")}</a>`:"-"}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">ยังไม่มีรายการเคลื่อนไหว</div>'}</div>
+  <div class="section-head"><h3>ประวัติการตรวจนับ</h3>${currentDetail.can_manage?'<button class="btn btn-ghost" id="addInspectionBtn">+ บันทึกผลตรวจ</button>':""}</div>
+  <div class="table-wrap">${ins.length?`<table><thead><tr><th>วันที่ตรวจ</th><th>จำนวนที่พบ</th><th>ผล</th><th>สภาพ/สถานที่</th><th>ผู้ตรวจ</th><th>หลักฐาน</th></tr></thead><tbody>${ins.map(s=>`<tr><td>${dateText(s.inspection_date)}<br><small>${s.next_inspection_date?"ครั้งถัดไป "+dateText(s.next_inspection_date):""}</small></td><td>${s.quantity_found.toLocaleString("th-TH")} ${esc(i.unit)}</td><td><span class="status ${esc(s.result)}">${esc(RESULT_LABEL[s.result])}</span></td><td>${esc(CONDITION_LABEL[s.item_condition])}<br><small>${esc(s.location||"-")}</small></td><td>${esc(s.inspector||s.creator_name||"-")}</td><td>${s.attachment_id?`<a href="/api/attachments/${s.attachment_id}" target="_blank">${esc(s.attachment_name||"เปิดไฟล์")}</a>`:"-"}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">ยังไม่มีประวัติการตรวจนับ</div>'}</div>`;
+  const txBtn=$("addTxBtn"),inspectionBtn=$("addInspectionBtn");if(txBtn)txBtn.onclick=openTransaction;if(inspectionBtn)inspectionBtn.onclick=openInspection}
+function openTransaction(){const i=currentDetail.item;$("transactionItemLabel").textContent=`${i.item_code} · ${i.name} · คงเหลือ ${i.current_quantity} ${i.unit}`;["tDocumentNo","tQuantity","tPrice","tRecipient","tTo","tDueDate","tNotes"].forEach(id=>$(id).value="");$("tDate").value=today();$("tType").value="receive";$("tFrom").value=i.location||"";$("tFile").value="";$("tFileMeta").textContent="PDF ≤ 1 MB · รูปภาพ ≤ 2 MB";updateTransactionFields();openModal("transactionModal")}
+function updateTransactionFields(){const isReturn=$("tType").value==="return";$("returnReferenceField").style.display=isReturn?"block":"none";if(isReturn){const borrows=currentDetail.transactions.filter(t=>t.transaction_type==="borrow"&&t.returned_quantity<t.quantity);$("tRelatedBorrow").innerHTML=borrows.length?borrows.map(t=>`<option value="${t.id}">${dateText(t.transaction_date)} · ${esc(t.recipient||"ไม่ระบุผู้ยืม")} · ค้าง ${t.quantity-t.returned_quantity}</option>`).join(""):'<option value="">ไม่มีรายการยืมค้างคืน</option>'}}
+$("tType").onchange=updateTransactionFields;
+$("saveTransactionBtn").onclick=async()=>{const file=$("tFile").files[0];const fileError=validateFile(file);if(fileError)return alert(fileError);const body={transaction_type:$("tType").value,transaction_date:$("tDate").value,document_no:$("tDocumentNo").value.trim(),quantity:Number($("tQuantity").value),unit_price:$("tPrice").value===""?null:Number($("tPrice").value),recipient:$("tRecipient").value.trim(),from_location:$("tFrom").value.trim(),to_location:$("tTo").value.trim(),due_date:$("tDueDate").value,related_transaction_id:$("tRelatedBorrow").value||null,notes:$("tNotes").value.trim()};if(!body.transaction_date||!(body.quantity>0))return alert("กรุณากรอกวันที่และจำนวนให้ถูกต้อง");const btn=$("saveTransactionBtn");btn.disabled=true;try{const d=await apiRequest(`/api/inventory/items/${currentDetail.item.id}/transactions`,{method:"POST",body});let uploadWarning="";if(file){try{await uploadAttachment("inventory_transaction",d.id,file)}catch(e){uploadWarning="\nบันทึกรายการแล้ว แต่แนบไฟล์ไม่สำเร็จ: "+e.message}}closeModal("transactionModal");await Promise.all([loadSummary(),loadItems()]);await openDetail(currentDetail.item.id);if(uploadWarning)alert(uploadWarning.trim())}catch(e){alert(e.message)}finally{btn.disabled=false}};
+function openInspection(){const i=currentDetail.item;$("inspectionItemLabel").textContent=`${i.item_code} · ${i.name} · ตามทะเบียน ${i.current_quantity} ${i.unit}`;$("sDate").value=today();$("sQuantity").value=i.current_quantity;$("sCondition").value=i.item_condition;$("sLocation").value=i.location||"";$("sInspector").value="";$("sNextDate").value="";$("sNotes").value="";$("sFile").value="";$("sFileMeta").textContent="PDF ≤ 1 MB · รูปภาพ ≤ 2 MB";openModal("inspectionModal")}
+$("saveInspectionBtn").onclick=async()=>{const file=$("sFile").files[0];const fileError=validateFile(file);if(fileError)return alert(fileError);const body={inspection_date:$("sDate").value,quantity_found:Number($("sQuantity").value),item_condition:$("sCondition").value,location:$("sLocation").value.trim(),inspector:$("sInspector").value.trim(),next_inspection_date:$("sNextDate").value,notes:$("sNotes").value.trim()};if(!body.inspection_date||body.quantity_found<0)return alert("กรุณากรอกวันที่และจำนวนที่พบ");const btn=$("saveInspectionBtn");btn.disabled=true;try{const d=await apiRequest(`/api/inventory/items/${currentDetail.item.id}/inspections`,{method:"POST",body});let warning="";if(file){try{await uploadAttachment("inventory_inspection",d.id,file)}catch(e){warning="\nบันทึกผลตรวจแล้ว แต่แนบไฟล์ไม่สำเร็จ: "+e.message}}closeModal("inspectionModal");await Promise.all([loadSummary(),loadItems()]);await openDetail(currentDetail.item.id);if(warning)alert(warning.trim())}catch(e){alert(e.message)}finally{btn.disabled=false}};
+
+$("exportBtn").onclick=()=>{const headers=["รหัส","ชื่อ","ประเภท","หมวด","ฝ่าย","สถานที่","คงเหลือ","หน่วย","ราคาต่อหน่วย","มูลค่า","สภาพ","สถานะ"];const rows=items.map(i=>[i.item_code,i.name,TYPE_LABEL[i.item_type],i.category||"",DEPT_LABEL[i.department],i.location||"",i.current_quantity,i.unit,i.unit_price,i.total_value,CONDITION_LABEL[i.item_condition],STATUS_LABEL[i.status]]);const csv="\ufeff"+[headers,...rows].map(r=>r.map(v=>'"'+String(v??"").replaceAll('"','""')+'"').join(",")).join("\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=`inventory-${today()}.csv`;a.click();URL.revokeObjectURL(a.href)};
+["typeFilter","departmentFilter","statusFilter"].forEach(id=>$(id).onchange=loadItems);$("searchInput").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadItems,250)};bindFileCheck("tFile","tFileMeta");bindFileCheck("sFile","sFileMeta");
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await Promise.all([loadSummary(),loadItems()])})().catch(e=>alert(e.message));
+</script>
+</body>
+</html>

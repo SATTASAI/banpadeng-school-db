@@ -60,6 +60,50 @@ async function ensureProjectExpenseSchema(env) {
   ).run();
 }
 
+async function ensureInventorySchema(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS inventory_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, item_code TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+      item_type TEXT NOT NULL CHECK (item_type IN ('material','equipment')), category TEXT, unit TEXT NOT NULL DEFAULT 'ชิ้น',
+      department TEXT NOT NULL DEFAULT 'budget', location TEXT, custodian TEXT,
+      current_quantity REAL NOT NULL DEFAULT 0 CHECK (current_quantity >= 0),
+      minimum_quantity REAL NOT NULL DEFAULT 0 CHECK (minimum_quantity >= 0), unit_price REAL NOT NULL DEFAULT 0 CHECK (unit_price >= 0),
+      brand_model TEXT, serial_number TEXT, purchase_date TEXT, fiscal_year TEXT, budget_source TEXT, vendor TEXT, warranty_expiry TEXT,
+      item_condition TEXT NOT NULL DEFAULT 'good', status TEXT NOT NULL DEFAULT 'active', notes TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS inventory_transactions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+      transaction_type TEXT NOT NULL, transaction_date TEXT NOT NULL, document_no TEXT, quantity REAL NOT NULL CHECK (quantity > 0),
+      quantity_change REAL NOT NULL, related_transaction_id INTEGER REFERENCES inventory_transactions(id), unit_price REAL,
+      from_location TEXT, to_location TEXT, recipient TEXT, due_date TEXT, notes TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS inventory_inspections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+      inspection_date TEXT NOT NULL, quantity_found REAL NOT NULL CHECK (quantity_found >= 0), item_condition TEXT NOT NULL,
+      result TEXT NOT NULL, location TEXT, inspector TEXT, notes TEXT, next_inspection_date TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS file_attachments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, entity_type TEXT NOT NULL, entity_id INTEGER NOT NULL, object_key TEXT NOT NULL UNIQUE,
+      file_name TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER NOT NULL, uploaded_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(entity_type, entity_id))`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_inventory_items_type ON inventory_items(item_type, status)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_inventory_items_department ON inventory_items(department, location)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item ON inventory_transactions(item_id, transaction_date DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_inventory_inspections_item ON inventory_inspections(item_id, inspection_date DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_file_attachments_entity ON file_attachments(entity_type, entity_id)"),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_inventory_transaction_before_insert
+      BEFORE INSERT ON inventory_transactions WHEN NEW.quantity_change < 0
+      AND COALESCE((SELECT current_quantity FROM inventory_items WHERE id = NEW.item_id), 0) + NEW.quantity_change < 0
+      BEGIN SELECT RAISE(ABORT, 'INSUFFICIENT_INVENTORY'); END`),
+    env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_inventory_transaction_after_insert
+      AFTER INSERT ON inventory_transactions BEGIN
+      UPDATE inventory_items SET current_quantity = current_quantity + NEW.quantity_change,
+      unit_price = CASE WHEN NEW.unit_price IS NOT NULL AND NEW.unit_price >= 0 THEN NEW.unit_price ELSE unit_price END,
+      updated_at = datetime('now') WHERE id = NEW.item_id; END`),
+  ]);
+}
+
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
   await env.DB.batch([
@@ -81,6 +125,7 @@ async function ensureExtendedSchema(env) {
       table_count INTEGER, row_count INTEGER, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
   await ensureProjectExpenseSchema(env);
+  await ensureInventorySchema(env);
   extendedSchemaReady = true;
 }
 
@@ -1575,6 +1620,347 @@ async function handleUpdateSupportCase(request, env, caseId) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- ระบบพัสดุและครุภัณฑ์ ----------
+const INVENTORY_TYPES = ["material", "equipment"];
+const INVENTORY_CONDITIONS = ["good", "fair", "damaged", "lost"];
+const INVENTORY_STATUSES = ["active", "repair", "disposed", "lost"];
+const INVENTORY_TRANSACTION_EFFECT = {
+  opening: 1, receive: 1, return: 1, adjust_in: 1,
+  issue: -1, borrow: -1, adjust_out: -1, dispose: -1,
+  transfer: 0, repair: 0,
+};
+
+function canManageInventory(user) {
+  return isAdmin(user) || user?.role === "staff";
+}
+
+function cleanText(value, maxLength = 500) {
+  const text = String(value || "").trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+async function handleInventorySummary(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const totals = await env.DB.prepare(`SELECT COUNT(*) AS item_count,
+      SUM(CASE WHEN item_type='material' THEN 1 ELSE 0 END) AS material_count,
+      SUM(CASE WHEN item_type='equipment' THEN 1 ELSE 0 END) AS equipment_count,
+      COALESCE(SUM(current_quantity * unit_price), 0) AS total_value,
+      SUM(CASE WHEN status='active' AND minimum_quantity > 0 AND current_quantity <= minimum_quantity THEN 1 ELSE 0 END) AS low_stock_count,
+      SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
+    FROM inventory_items`).first();
+  const overdue = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
+    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now')
+      AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
+        WHERE r.transaction_type='return' AND r.related_transaction_id=b.id), 0)`).first();
+  const inspectionsDue = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_inspections i
+    WHERE i.next_inspection_date IS NOT NULL AND i.next_inspection_date <= date('now', '+30 day')
+      AND i.id = (SELECT i2.id FROM inventory_inspections i2 WHERE i2.item_id=i.item_id ORDER BY i2.inspection_date DESC, i2.id DESC LIMIT 1)`).first();
+  return jsonResponse({
+    item_count: Number(totals?.item_count || 0),
+    material_count: Number(totals?.material_count || 0),
+    equipment_count: Number(totals?.equipment_count || 0),
+    total_value: Number(totals?.total_value || 0),
+    low_stock_count: Number(totals?.low_stock_count || 0),
+    attention_count: Number(totals?.attention_count || 0),
+    overdue_borrow_count: Number(overdue?.count || 0),
+    inspections_due_count: Number(inspectionsDue?.count || 0),
+    can_manage: canManageInventory(user),
+  });
+}
+
+async function handleListInventoryItems(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const params = new URL(request.url).searchParams;
+  const q = cleanText(params.get("q"), 100) || "";
+  const itemType = INVENTORY_TYPES.includes(params.get("type")) ? params.get("type") : "";
+  const status = INVENTORY_STATUSES.includes(params.get("status")) ? params.get("status") : "";
+  const department = DEPARTMENTS.includes(params.get("department")) ? params.get("department") : "";
+  const lowStock = params.get("low_stock") === "1" ? 1 : 0;
+  const { results } = await env.DB.prepare(`SELECT i.*,
+      (i.current_quantity * i.unit_price) AS total_value,
+      (SELECT MAX(inspection_date) FROM inventory_inspections x WHERE x.item_id=i.id) AS last_inspection_date,
+      (SELECT next_inspection_date FROM inventory_inspections x WHERE x.item_id=i.id ORDER BY inspection_date DESC, id DESC LIMIT 1) AS next_inspection_date
+    FROM inventory_items i
+    WHERE (?='' OR i.item_code LIKE '%'||?||'%' OR i.name LIKE '%'||?||'%' OR i.category LIKE '%'||?||'%' OR i.serial_number LIKE '%'||?||'%')
+      AND (?='' OR i.item_type=?) AND (?='' OR i.status=?) AND (?='' OR i.department=?)
+      AND (?=0 OR (i.minimum_quantity > 0 AND i.current_quantity <= i.minimum_quantity))
+    ORDER BY CASE i.status WHEN 'active' THEN 1 WHEN 'repair' THEN 2 ELSE 3 END, i.name, i.item_code`)
+    .bind(q, q, q, q, q, itemType, itemType, status, status, department, department, lowStock).all();
+  return jsonResponse({ items: results.map((row) => ({
+    ...row,
+    current_quantity: Number(row.current_quantity || 0), minimum_quantity: Number(row.minimum_quantity || 0),
+    unit_price: Number(row.unit_price || 0), total_value: Number(row.total_value || 0),
+  })), can_manage: canManageInventory(user) });
+}
+
+async function handleCreateInventoryItem(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageInventory(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่เพิ่มทะเบียนพัสดุได้" }, 403);
+  const body = await request.json().catch(() => null);
+  const itemCode = cleanText(body?.item_code, 80);
+  const name = cleanText(body?.name, 200);
+  if (!body || !itemCode || !name || !INVENTORY_TYPES.includes(body.item_type)) {
+    return jsonResponse({ error: "กรุณาระบุรหัส ชื่อ และประเภทพัสดุให้ครบถ้วน" }, 400);
+  }
+  const department = DEPARTMENTS.includes(body.department) ? body.department : "budget";
+  const openingQuantity = Number(body.opening_quantity || 0);
+  const minimumQuantity = Number(body.minimum_quantity || 0);
+  const unitPrice = Number(body.unit_price || 0);
+  if (![openingQuantity, minimumQuantity, unitPrice].every(Number.isFinite) || openingQuantity < 0 || minimumQuantity < 0 || unitPrice < 0) {
+    return jsonResponse({ error: "จำนวนและมูลค่าต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
+  }
+  for (const field of ["purchase_date", "warranty_expiry"]) {
+    if (body[field] && !isIsoDate(body[field])) return jsonResponse({ error: `วันที่ ${field} ไม่ถูกต้อง` }, 400);
+  }
+  try {
+    const result = await env.DB.prepare(`INSERT INTO inventory_items
+      (item_code,name,item_type,category,unit,department,location,custodian,minimum_quantity,unit_price,brand_model,serial_number,
+       purchase_date,fiscal_year,budget_source,vendor,warranty_expiry,item_condition,status,notes,created_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        itemCode, name, body.item_type, cleanText(body.category, 120), cleanText(body.unit, 40) || "ชิ้น", department,
+        cleanText(body.location, 160), cleanText(body.custodian, 160), minimumQuantity, unitPrice,
+        cleanText(body.brand_model, 160), cleanText(body.serial_number, 120), body.purchase_date || null,
+        cleanText(body.fiscal_year, 20), cleanText(body.budget_source, 160), cleanText(body.vendor, 160), body.warranty_expiry || null,
+        INVENTORY_CONDITIONS.includes(body.item_condition) ? body.item_condition : "good",
+        INVENTORY_STATUSES.includes(body.status) ? body.status : "active", cleanText(body.notes, 1000), user.id
+      ).run();
+    const itemId = result.meta.last_row_id;
+    if (openingQuantity > 0) {
+      await env.DB.prepare(`INSERT INTO inventory_transactions
+        (item_id,transaction_type,transaction_date,document_no,quantity,quantity_change,unit_price,to_location,notes,created_by)
+        VALUES (?, 'opening', date('now'), ?, ?, ?, ?, ?, ?, ?)`)
+        .bind(itemId, `OPENING-${itemCode}`, openingQuantity, openingQuantity, unitPrice, cleanText(body.location, 160), "ยอดยกมาเมื่อสร้างทะเบียน", user.id).run();
+    }
+    await writeAuditLog(env, user, "create", "inventory_item", itemId, { item_code: itemCode, opening_quantity: openingQuantity }, request);
+    return jsonResponse({ id: itemId }, 201);
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) return jsonResponse({ error: "รหัสพัสดุนี้มีอยู่ในระบบแล้ว" }, 409);
+    throw error;
+  }
+}
+
+async function handleGetInventoryItem(request, env, itemId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const item = await env.DB.prepare("SELECT *, current_quantity * unit_price AS total_value FROM inventory_items WHERE id=?").bind(itemId).first();
+  if (!item) return jsonResponse({ error: "ไม่พบรายการพัสดุ" }, 404);
+  const { results: transactions } = await env.DB.prepare(`SELECT t.*, u.full_name AS creator_name, a.id AS attachment_id, a.file_name AS attachment_name,
+      COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r WHERE r.transaction_type='return' AND r.related_transaction_id=t.id),0) AS returned_quantity
+    FROM inventory_transactions t LEFT JOIN users u ON u.id=t.created_by
+    LEFT JOIN file_attachments a ON a.entity_type='inventory_transaction' AND a.entity_id=t.id
+    WHERE t.item_id=? ORDER BY t.transaction_date DESC,t.id DESC`).bind(itemId).all();
+  const { results: inspections } = await env.DB.prepare(`SELECT i.*,u.full_name AS creator_name,a.id AS attachment_id,a.file_name AS attachment_name
+    FROM inventory_inspections i LEFT JOIN users u ON u.id=i.created_by
+    LEFT JOIN file_attachments a ON a.entity_type='inventory_inspection' AND a.entity_id=i.id
+    WHERE i.item_id=? ORDER BY i.inspection_date DESC,i.id DESC`).bind(itemId).all();
+  return jsonResponse({
+    item: { ...item, current_quantity: Number(item.current_quantity || 0), minimum_quantity: Number(item.minimum_quantity || 0), unit_price: Number(item.unit_price || 0), total_value: Number(item.total_value || 0) },
+    transactions: transactions.map((row) => ({ ...row, quantity: Number(row.quantity || 0), quantity_change: Number(row.quantity_change || 0), returned_quantity: Number(row.returned_quantity || 0) })),
+    inspections: inspections.map((row) => ({ ...row, quantity_found: Number(row.quantity_found || 0) })),
+    can_manage: canManageInventory(user),
+  });
+}
+
+async function handleUpdateInventoryItem(request, env, itemId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageInventory(user)) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขทะเบียนพัสดุ" }, 403);
+  const exists = await env.DB.prepare("SELECT id FROM inventory_items WHERE id=?").bind(itemId).first();
+  if (!exists) return jsonResponse({ error: "ไม่พบรายการพัสดุ" }, 404);
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const textFields = ["name","category","unit","location","custodian","brand_model","serial_number","fiscal_year","budget_source","vendor","notes"];
+  const updates = [], values = [];
+  for (const field of textFields) if (body[field] !== undefined) { updates.push(`${field}=?`); values.push(cleanText(body[field], field === "notes" ? 1000 : 200)); }
+  for (const field of ["minimum_quantity","unit_price"]) if (body[field] !== undefined) {
+    const value = Number(body[field]);
+    if (!Number.isFinite(value) || value < 0) return jsonResponse({ error: "จำนวนและมูลค่าต้องไม่น้อยกว่า 0" }, 400);
+    updates.push(`${field}=?`); values.push(value);
+  }
+  if (body.department !== undefined) { if (!DEPARTMENTS.includes(body.department)) return jsonResponse({ error: "ฝ่ายงานไม่ถูกต้อง" }, 400); updates.push("department=?"); values.push(body.department); }
+  if (body.item_condition !== undefined) { if (!INVENTORY_CONDITIONS.includes(body.item_condition)) return jsonResponse({ error: "สภาพพัสดุไม่ถูกต้อง" }, 400); updates.push("item_condition=?"); values.push(body.item_condition); }
+  if (body.status !== undefined) { if (!INVENTORY_STATUSES.includes(body.status)) return jsonResponse({ error: "สถานะพัสดุไม่ถูกต้อง" }, 400); updates.push("status=?"); values.push(body.status); }
+  for (const field of ["purchase_date","warranty_expiry"]) if (body[field] !== undefined) {
+    if (body[field] && !isIsoDate(body[field])) return jsonResponse({ error: "วันที่ไม่ถูกต้อง" }, 400);
+    updates.push(`${field}=?`); values.push(body[field] || null);
+  }
+  if (!updates.length) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+  updates.push("updated_at=datetime('now')"); values.push(itemId);
+  await env.DB.prepare(`UPDATE inventory_items SET ${updates.join(",")} WHERE id=?`).bind(...values).run();
+  await writeAuditLog(env, user, "update", "inventory_item", itemId, { fields: Object.keys(body) }, request);
+  return jsonResponse({ ok: true });
+}
+
+async function handleCreateInventoryTransaction(request, env, itemId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageInventory(user)) return jsonResponse({ error: "ไม่มีสิทธิ์บันทึกการเคลื่อนไหวพัสดุ" }, 403);
+  const item = await env.DB.prepare("SELECT * FROM inventory_items WHERE id=?").bind(itemId).first();
+  if (!item) return jsonResponse({ error: "ไม่พบรายการพัสดุ" }, 404);
+  const body = await request.json().catch(() => null);
+  const type = body?.transaction_type;
+  const quantity = Number(body?.quantity);
+  if (!body || !(type in INVENTORY_TRANSACTION_EFFECT) || type === "opening" || !isIsoDate(body.transaction_date) || !Number.isFinite(quantity) || quantity <= 0) {
+    return jsonResponse({ error: "กรุณาระบุประเภทรายการ วันที่ และจำนวนให้ถูกต้อง" }, 400);
+  }
+  const effect = INVENTORY_TRANSACTION_EFFECT[type];
+  const quantityChange = effect * quantity;
+  let relatedTransactionId = null;
+  if (type === "return") {
+    relatedTransactionId = Number(body.related_transaction_id);
+    const borrow = await env.DB.prepare(`SELECT b.id,b.quantity,
+      COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0) AS returned
+      FROM inventory_transactions b WHERE b.id=? AND b.item_id=? AND b.transaction_type='borrow'`).bind(relatedTransactionId, itemId).first();
+    if (!borrow || Number(borrow.returned || 0) + quantity > Number(borrow.quantity)) return jsonResponse({ error: "รายการยืมหรือจำนวนที่คืนไม่ถูกต้อง" }, 400);
+  }
+  if (quantityChange < 0 && Number(item.current_quantity) < quantity) return jsonResponse({ error: `ยอดคงเหลือไม่พอ ปัจจุบันมี ${item.current_quantity} ${item.unit}` }, 409);
+  const unitPrice = body.unit_price === "" || body.unit_price == null ? null : Number(body.unit_price);
+  if (unitPrice !== null && (!Number.isFinite(unitPrice) || unitPrice < 0)) return jsonResponse({ error: "ราคาต่อหน่วยไม่ถูกต้อง" }, 400);
+  try {
+    const result = await env.DB.prepare(`INSERT INTO inventory_transactions
+      (item_id,transaction_type,transaction_date,document_no,quantity,quantity_change,related_transaction_id,unit_price,
+       from_location,to_location,recipient,due_date,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+      itemId,type,body.transaction_date,cleanText(body.document_no,100),quantity,quantityChange,relatedTransactionId,unitPrice,
+      cleanText(body.from_location,160),cleanText(body.to_location,160),cleanText(body.recipient,160),body.due_date || null,cleanText(body.notes,1000),user.id
+    ).run();
+    if (type === "transfer" && cleanText(body.to_location,160)) await env.DB.prepare("UPDATE inventory_items SET location=?,updated_at=datetime('now') WHERE id=?").bind(cleanText(body.to_location,160),itemId).run();
+    if (type === "repair") await env.DB.prepare("UPDATE inventory_items SET status='repair',updated_at=datetime('now') WHERE id=?").bind(itemId).run();
+    if (type === "dispose" && Number(item.current_quantity) === quantity) await env.DB.prepare("UPDATE inventory_items SET status='disposed',updated_at=datetime('now') WHERE id=?").bind(itemId).run();
+    await writeAuditLog(env,user,"create","inventory_transaction",result.meta.last_row_id,{item_id:itemId,type,quantity,quantity_change:quantityChange},request);
+    return jsonResponse({ id: result.meta.last_row_id },201);
+  } catch (error) {
+    if (String(error).includes("INSUFFICIENT_INVENTORY")) return jsonResponse({ error: "ยอดพัสดุคงเหลือไม่เพียงพอ" },409);
+    throw error;
+  }
+}
+
+async function handleCreateInventoryInspection(request, env, itemId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  if (!canManageInventory(user)) return jsonResponse({ error: "ไม่มีสิทธิ์บันทึกการตรวจนับ" },403);
+  const item = await env.DB.prepare("SELECT * FROM inventory_items WHERE id=?").bind(itemId).first();
+  if (!item) return jsonResponse({ error: "ไม่พบรายการพัสดุ" },404);
+  const body = await request.json().catch(()=>null);
+  const quantityFound = Number(body?.quantity_found);
+  if (!body || !isIsoDate(body.inspection_date) || !Number.isFinite(quantityFound) || quantityFound < 0 || !INVENTORY_CONDITIONS.includes(body.item_condition)) {
+    return jsonResponse({ error: "กรุณาระบุวันที่ จำนวนที่พบ และสภาพพัสดุให้ถูกต้อง" },400);
+  }
+  if (body.next_inspection_date && !isIsoDate(body.next_inspection_date)) return jsonResponse({ error: "วันตรวจครั้งถัดไปไม่ถูกต้อง" },400);
+  let result = "matched";
+  if (["damaged","lost"].includes(body.item_condition)) result = "damaged";
+  else if (quantityFound < Number(item.current_quantity)) result = "shortage";
+  else if (quantityFound > Number(item.current_quantity)) result = "surplus";
+  const inserted = await env.DB.prepare(`INSERT INTO inventory_inspections
+    (item_id,inspection_date,quantity_found,item_condition,result,location,inspector,notes,next_inspection_date,created_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(itemId,body.inspection_date,quantityFound,body.item_condition,result,
+      cleanText(body.location,160) || item.location,cleanText(body.inspector,160) || user.full_name,cleanText(body.notes,1000),body.next_inspection_date || null,user.id).run();
+  await env.DB.prepare("UPDATE inventory_items SET item_condition=?,location=COALESCE(?,location),updated_at=datetime('now') WHERE id=?")
+    .bind(body.item_condition,cleanText(body.location,160),itemId).run();
+  await writeAuditLog(env,user,"create","inventory_inspection",inserted.meta.last_row_id,{item_id:itemId,result,quantity_found:quantityFound},request);
+  return jsonResponse({ id: inserted.meta.last_row_id, result },201);
+}
+
+// PDF ไม่เกิน 1 MiB, รูปภาพไม่เกิน 2 MiB; ตรวจทั้ง MIME และลายเซ็นไฟล์จริง
+const MANAGED_FILE_LIMITS = {
+  "application/pdf": 1024 * 1024,
+  "image/jpeg": 2 * 1024 * 1024,
+  "image/png": 2 * 1024 * 1024,
+  "image/webp": 2 * 1024 * 1024,
+  "image/gif": 2 * 1024 * 1024,
+};
+
+async function validateManagedFile(file) {
+  if (!file || typeof file.arrayBuffer !== "function") return { error: "กรุณาเลือกไฟล์" };
+  const mimeType = String(file.type || "").toLowerCase();
+  const limit = MANAGED_FILE_LIMITS[mimeType];
+  if (!limit) return { error: "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF" };
+  if (file.size <= 0) return { error: "ไฟล์ว่างหรือไม่สมบูรณ์" };
+  if (file.size > limit) {
+    const label = mimeType === "application/pdf" ? "PDF ต้องไม่เกิน 1 MB" : "รูปภาพต้องไม่เกิน 2 MB";
+    return { error: `${label} กรุณาสแกนที่ 150 DPI ใช้ขาวดำ/Grayscale หรือบีบอัดไฟล์ก่อนอัปโหลด` };
+  }
+  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const ascii = String.fromCharCode(...bytes);
+  const valid = mimeType === "application/pdf" ? ascii.startsWith("%PDF-")
+    : mimeType === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+    : mimeType === "image/png" ? bytes.slice(0,8).every((value,index)=>value===[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a][index])
+    : mimeType === "image/webp" ? ascii.startsWith("RIFF") && ascii.slice(8,12) === "WEBP"
+    : ascii.startsWith("GIF87a") || ascii.startsWith("GIF89a");
+  if (!valid) return { error: "ชนิดไฟล์ไม่ตรงกับเนื้อหาไฟล์ กรุณาเลือกไฟล์ต้นฉบับที่ถูกต้อง" };
+  return { mimeType, limit };
+}
+
+const ATTACHMENT_ENTITY_TABLES = {
+  document: { table: "documents", owner: "uploaded_by" },
+  inventory_transaction: { table: "inventory_transactions", owner: "created_by" },
+  inventory_inspection: { table: "inventory_inspections", owner: "created_by" },
+};
+
+async function handleUploadAttachment(request, env, entityType, entityId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const config = ATTACHMENT_ENTITY_TABLES[entityType];
+  if (!config) return jsonResponse({ error: "ประเภทไฟล์แนบไม่ถูกต้อง" },400);
+  const entity = await env.DB.prepare(`SELECT id,${config.owner} AS owner_id FROM ${config.table} WHERE id=?`).bind(entityId).first();
+  if (!entity) return jsonResponse({ error: "ไม่พบรายการที่ต้องการแนบไฟล์" },404);
+  const inventoryEntity = entityType.startsWith("inventory_");
+  if (inventoryEntity ? !canManageInventory(user) : (entity.owner_id !== user.id && !isAdmin(user) && user.role !== "staff")) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์แนบไฟล์ในรายการนี้" },403);
+  }
+  if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage กรุณาสร้าง R2 bucket และผูก binding ชื่อ FILES" },503);
+  const form = await request.formData().catch(()=>null);
+  const file = form?.get("file");
+  const validation = await validateManagedFile(file);
+  if (validation.error) return jsonResponse({ error: validation.error },400);
+  const safeName = String(file.name || "attachment").replace(/[^\p{L}\p{N}._ -]/gu,"_").slice(0,180);
+  const objectKey = `${entityType}/${entityId}/${crypto.randomUUID()}-${safeName}`;
+  await env.FILES.put(objectKey,file.stream(),{httpMetadata:{contentType:validation.mimeType},customMetadata:{uploadedBy:String(user.id),originalName:safeName}});
+  const existing = await env.DB.prepare("SELECT id,object_key FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
+  let attachmentId;
+  if (existing) {
+    await env.DB.prepare(`UPDATE file_attachments SET object_key=?,file_name=?,mime_type=?,file_size=?,uploaded_by=?,created_at=datetime('now') WHERE id=?`)
+      .bind(objectKey,safeName,validation.mimeType,file.size,user.id,existing.id).run();
+    attachmentId = existing.id;
+    if (existing.object_key !== objectKey) await env.FILES.delete(existing.object_key).catch(()=>{});
+  } else {
+    const inserted = await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by)
+      VALUES (?,?,?,?,?,?,?)`).bind(entityType,entityId,objectKey,safeName,validation.mimeType,file.size,user.id).run();
+    attachmentId = inserted.meta.last_row_id;
+  }
+  if (entityType === "document") await env.DB.prepare("UPDATE documents SET file_name=?,mime_type=?,file_size=?,file_url=?,updated_at=datetime('now') WHERE id=?")
+    .bind(safeName,validation.mimeType,file.size,`/api/attachments/${attachmentId}`,entityId).run();
+  await writeAuditLog(env,user,"upload","file_attachment",attachmentId,{entity_type:entityType,entity_id:entityId,file_name:safeName,file_size:file.size},request);
+  return jsonResponse({ id:attachmentId,file_name:safeName,file_size:file.size,url:`/api/attachments/${attachmentId}` },201);
+}
+
+async function handleDownloadAttachment(request, env, attachmentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const attachment = await env.DB.prepare("SELECT * FROM file_attachments WHERE id=?").bind(attachmentId).first();
+  if (!attachment) return jsonResponse({ error: "ไม่พบไฟล์แนบ" },404);
+  if (attachment.entity_type === "document") {
+    const document = await env.DB.prepare("SELECT uploaded_by,access_level FROM documents WHERE id=?").bind(attachment.entity_id).first();
+    if (!document) return jsonResponse({ error: "ไม่พบทะเบียนเอกสาร" },404);
+    const deniedPrivate = document.access_level === "private" && document.uploaded_by !== user.id && !isAdmin(user);
+    const deniedAdmin = document.access_level === "admin" && !isAdmin(user);
+    if (deniedPrivate || deniedAdmin) return jsonResponse({ error: "ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
+  }
+  if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage" },503);
+  const object = await env.FILES.get(attachment.object_key);
+  if (!object) return jsonResponse({ error: "ไม่พบไฟล์ในพื้นที่จัดเก็บ" },404);
+  const asciiName = attachment.file_name.replace(/[^A-Za-z0-9._-]/g,"_");
+  return new Response(object.body,{headers:{
+    "Content-Type":attachment.mime_type,
+    "Content-Length":String(attachment.file_size),
+    "Content-Disposition":`inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(attachment.file_name)}`,
+    "Cache-Control":"private, max-age=300",
+    "X-Content-Type-Options":"nosniff",
+  }});
+}
+
 // ---------- เอกสารและการสำรองข้อมูล (ทะเบียนเมทาดาทา/ส่งออกข้อมูล) ----------
 async function handleListDocuments(request, env) {
   const user = await getCurrentUser(request, env);
@@ -1582,8 +1968,10 @@ async function handleListDocuments(request, env) {
   await ensureExtendedSchema(env);
   const q = new URL(request.url).searchParams.get("q") || "";
   const { results } = await env.DB.prepare(`SELECT d.*, u.full_name AS uploader_name FROM documents d
-    LEFT JOIN users u ON u.id=d.uploaded_by WHERE (? = '' OR d.title LIKE '%'||?||'%' OR d.keywords LIKE '%'||?||'%')
-    ORDER BY d.updated_at DESC`).bind(q, q, q).all();
+    LEFT JOIN users u ON u.id=d.uploaded_by
+    WHERE (? = '' OR d.title LIKE '%'||?||'%' OR d.keywords LIKE '%'||?||'%')
+      AND (d.access_level='staff' OR d.uploaded_by=? OR (?=1 AND d.access_level IN ('private','admin')))
+    ORDER BY d.updated_at DESC`).bind(q, q, q, user.id, isAdmin(user) ? 1 : 0).all();
   return jsonResponse({ documents: results });
 }
 async function handleCreateDocument(request, env) {
@@ -1591,19 +1979,20 @@ async function handleCreateDocument(request, env) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureExtendedSchema(env);
   const body = await request.json().catch(() => null);
-  if (!body || !body.title || !body.department) return jsonResponse({ error: "กรุณาระบุชื่อเอกสารและฝ่ายงาน" }, 400);
+  const documentDepartments = [...DEPARTMENTS, "student-support", "admin"];
+  if (!body || !cleanText(body.title, 200) || !documentDepartments.includes(body.department)) return jsonResponse({ error: "กรุณาระบุชื่อเอกสารและฝ่ายงานให้ถูกต้อง" }, 400);
+  const accessLevel = ["private", "staff", "admin"].includes(body.access_level) ? body.access_level : "staff";
   const result = await env.DB.prepare(`INSERT INTO documents
     (title, department, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(body.title.trim(), body.department, body.academic_year_id || null, body.project_id || null,
-      body.document_type || null, body.keywords || null, body.file_name || null, body.file_url || null, body.mime_type || null, body.file_size || null,
-      body.access_level || "staff", user.id).run();
+    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`).bind(cleanText(body.title, 200), body.department, body.academic_year_id || null, body.project_id || null,
+      cleanText(body.document_type, 120), cleanText(body.keywords, 500), accessLevel, user.id).run();
   return jsonResponse({ id: result.meta.last_row_id }, 201);
 }
 async function handleSecurityOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงข้อมูลความปลอดภัย" }, 403);
   await ensureExtendedSchema(env);
-  const tables = ["users", "students", "personnel_records", "projects", "project_expenses", "student_support_cases", "documents", "audit_logs"];
+  const tables = ["users", "students", "personnel_records", "projects", "project_expenses", "inventory_items", "inventory_transactions", "student_support_cases", "documents", "file_attachments", "audit_logs"];
   const counts = {};
   for (const table of tables) counts[table] = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first()).count;
   const { results: logs } = await env.DB.prepare(`SELECT a.*, u.full_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 50`).all();
@@ -1638,6 +2027,14 @@ async function handleOverview(request, env) {
     `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total_amount
      FROM project_expenses WHERE status IN ('pending','approved')`
   ).first();
+  const inventoryAlerts = await env.DB.prepare(`SELECT
+    SUM(CASE WHEN status='active' AND minimum_quantity > 0 AND current_quantity <= minimum_quantity THEN 1 ELSE 0 END) AS low_stock_count,
+    SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
+    FROM inventory_items`).first();
+  const overdueInventoryBorrows = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
+    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now')
+      AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
+        WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`).first();
   const { results: departmentRows } = await env.DB.prepare(
     `SELECT department,
             COUNT(*) AS project_count,
@@ -1710,6 +2107,9 @@ async function handleOverview(request, env) {
     pending_leave_requests: pendingLeave.count,
     pending_project_expenses: Number(pendingProjectExpenses?.count || 0),
     pending_project_expense_amount: Number(pendingProjectExpenses?.total_amount || 0),
+    inventory_low_stock_count: Number(inventoryAlerts?.low_stock_count || 0),
+    inventory_attention_count: Number(inventoryAlerts?.attention_count || 0),
+    inventory_overdue_borrow_count: Number(overdueInventoryBorrows?.count || 0),
     total_project_budget: totalProjectBudget,
     total_project_spent: totalProjectSpent,
     total_project_remaining: totalProjectBudget - totalProjectSpent,
@@ -1977,6 +2377,22 @@ export default {
       if (pathname === "/api/student-support" && method === "POST") return await handleCreateSupportCase(request, env);
       const supportMatch = pathname.match(/^\/api\/student-support\/(\d+)$/);
       if (supportMatch && method === "PATCH") return await handleUpdateSupportCase(request, env, Number(supportMatch[1]));
+
+      if (pathname === "/api/inventory/summary" && method === "GET") return await handleInventorySummary(request, env);
+      if (pathname === "/api/inventory/items" && method === "GET") return await handleListInventoryItems(request, env);
+      if (pathname === "/api/inventory/items" && method === "POST") return await handleCreateInventoryItem(request, env);
+      const inventoryTransactionsMatch = pathname.match(/^\/api\/inventory\/items\/(\d+)\/transactions$/);
+      if (inventoryTransactionsMatch && method === "POST") return await handleCreateInventoryTransaction(request, env, Number(inventoryTransactionsMatch[1]));
+      const inventoryInspectionsMatch = pathname.match(/^\/api\/inventory\/items\/(\d+)\/inspections$/);
+      if (inventoryInspectionsMatch && method === "POST") return await handleCreateInventoryInspection(request, env, Number(inventoryInspectionsMatch[1]));
+      const inventoryItemMatch = pathname.match(/^\/api\/inventory\/items\/(\d+)$/);
+      if (inventoryItemMatch && method === "GET") return await handleGetInventoryItem(request, env, Number(inventoryItemMatch[1]));
+      if (inventoryItemMatch && method === "PATCH") return await handleUpdateInventoryItem(request, env, Number(inventoryItemMatch[1]));
+
+      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection)\/(\d+)$/);
+      if (uploadAttachmentMatch && method === "POST") return await handleUploadAttachment(request, env, uploadAttachmentMatch[1], Number(uploadAttachmentMatch[2]));
+      const downloadAttachmentMatch = pathname.match(/^\/api\/attachments\/(\d+)$/);
+      if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));
 
       if (pathname === "/api/documents" && method === "GET") return await handleListDocuments(request, env);
       if (pathname === "/api/documents" && method === "POST") return await handleCreateDocument(request, env);

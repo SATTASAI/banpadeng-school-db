@@ -502,6 +502,8 @@
         <div class="alert-item"><span>งานเลยกำหนด</span><span class="alert-count">${data.overdue_tasks}</span></div>
         <div class="alert-item"><span>คำขอลารอดำเนินการ</span><span class="alert-count">${data.pending_leave_requests}</span></div>
         <div class="alert-item"><span>รายการเบิกจ่ายรอตรวจสอบ/จ่าย</span><span class="alert-count">${data.pending_project_expenses} · ${formatMoney(data.pending_project_expense_amount)}</span></div>
+        <div class="alert-item"><span>พัสดุคงเหลือต่ำ/ต้องติดตาม</span><span class="alert-count">${data.inventory_low_stock_count + data.inventory_attention_count}</span></div>
+        <div class="alert-item"><span>รายการยืมพัสดุเลยกำหนด</span><span class="alert-count">${data.inventory_overdue_borrow_count}</span></div>
         <div class="alert-item"><span>ใบประกอบที่ต้องติดตามภายใน 180 วัน</span><span class="alert-count">${licenseCounts.orange + licenseCounts.red}</span></div>
       `;
 
