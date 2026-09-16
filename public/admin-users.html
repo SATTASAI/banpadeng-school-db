@@ -14,7 +14,7 @@
       โรงเรียนบ้านป่าเด็ง
     </div>
     <div class="app-user">
-      <a href="/dashboard.html" id="backHomeLink">← กลับหน้าหลัก</a>
+      <a href="/dashboard.html">← กลับหน้าหลัก</a>
     </div>
   </div>
 
@@ -41,17 +41,6 @@
 </div>
 
 <script src="/js/api.js"></script>
-<script>
-  if (window.parent && window.parent !== window) {
-    const backLink = document.getElementById("backHomeLink");
-    if (backLink) {
-      backLink.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (window.parent.showOverview) window.parent.showOverview();
-      });
-    }
-  }
-</script>
 <script>
   const ROLE_OPTIONS = [
     { value: "", label: "— ยังไม่กำหนด —" },
