@@ -1,17 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&display=swap');
 
 :root {
-  /* สีหลัก: เขียวป่า (ป่าเด็ง) + เหลืองอมน้ำตาลอุ่น (ท้องนา/ไม้) */
-  --color-forest-900: #16332A;
-  --color-forest-700: #1F4B3F;
-  --color-forest-500: #2E6B57;
-  --color-ochre-500: #C98A3E;
-  --color-ochre-600: #AD7230;
-  --color-bg: #F6F5F0;
+  /* สีหลัก: โทนน้ำเงิน (coolors.co/palette/03045e-...-caf0f8) */
+  --color-forest-900: #03045E;
+  --color-forest-700: #023E8A;
+  --color-forest-500: #0077B6;
+  --color-ochre-500: #0096C7;
+  --color-ochre-600: #023E8A;
+  --color-bg: #CAF0F8;
   --color-surface: #FFFFFF;
-  --color-border: #E1DED3;
-  --color-text: #1C2620;
-  --color-text-muted: #5B6B62;
+  --color-border: #ADE8F4;
+  --color-text: #072B4F;
+  --color-text-muted: #4C7A94;
   --color-danger: #B5533C;
   --color-danger-bg: #FBEDE8;
   --color-success: #3F7A55;

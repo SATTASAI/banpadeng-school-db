@@ -1172,6 +1172,127 @@ async function handleOverview(request, env) {
   });
 }
 
+// ---------- /api/students/import (POST) — นำเข้าจาก Excel/CSV แบบ upsert ตามเลขประจำตัว ----------
+async function handleImportStudents(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageStudents(user)) return jsonResponse({ error: "ไม่มีสิทธิ์นำเข้าข้อมูลนักเรียน" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  let created = 0;
+  let updated = 0;
+  const skipped = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const student_code = (row.student_code || "").toString().trim();
+    const full_name = (row.full_name || "").toString().trim();
+
+    if (!student_code || !full_name) {
+      skipped.push({ row: i + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
+      continue;
+    }
+
+    const existing = await env.DB.prepare("SELECT id FROM students WHERE student_code = ?")
+      .bind(student_code)
+      .first();
+
+    const classroom = row.classroom ? String(row.classroom).trim() : null;
+    const grade_level = row.grade_level ? String(row.grade_level).trim() : null;
+    const health_conditions = row.health_conditions ? String(row.health_conditions).trim() : null;
+    const allergies = row.allergies ? String(row.allergies).trim() : null;
+    const photo_url = row.photo_url ? String(row.photo_url).trim() : null;
+
+    if (existing) {
+      await env.DB.prepare(
+        `UPDATE students SET full_name = ?, classroom = ?, grade_level = ?, health_conditions = ?, allergies = ?, photo_url = ?
+         WHERE id = ?`
+      )
+        .bind(full_name, classroom, grade_level, health_conditions, allergies, photo_url, existing.id)
+        .run();
+      updated++;
+    } else {
+      await env.DB.prepare(
+        `INSERT INTO students (student_code, full_name, classroom, grade_level, health_conditions, allergies, photo_url, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'enrolled')`
+      )
+        .bind(student_code, full_name, classroom, grade_level, health_conditions, allergies, photo_url)
+        .run();
+      created++;
+    }
+  }
+
+  return jsonResponse({ created, updated, skipped });
+}
+
+// ---------- /api/staff/import (POST) — นำเข้าโปรไฟล์บุคลากรจาก Excel/CSV โดยจับคู่ด้วยอีเมล ----------
+async function handleImportStaff(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่นำเข้าข้อมูลบุคลากรได้" }, 403);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  }
+
+  const rows = Array.isArray(body.rows) ? body.rows : [];
+  let updated = 0;
+  const skipped = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const email = (row.email || "").toString().trim().toLowerCase();
+
+    if (!email) {
+      skipped.push({ row: i + 1, reason: "ไม่มีอีเมล" });
+      continue;
+    }
+
+    const target = await env.DB.prepare(
+      "SELECT id FROM users WHERE email = ? AND status = 'active' AND role IS NOT NULL"
+    )
+      .bind(email)
+      .first();
+
+    if (!target) {
+      skipped.push({ row: i + 1, reason: `ไม่พบผู้ใช้งานอีเมล ${email} ในระบบ` });
+      continue;
+    }
+
+    const position = row.position ? String(row.position).trim() : null;
+    const subjects = row.subjects ? String(row.subjects).trim() : null;
+    const phone = row.phone ? String(row.phone).trim() : null;
+    const homeroom_classroom = row.homeroom_classroom ? String(row.homeroom_classroom).trim() : null;
+    const license_expiry_date = row.license_expiry_date ? String(row.license_expiry_date).trim() : null;
+
+    await env.DB.prepare(
+      `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom, license_expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         position = excluded.position,
+         subjects = excluded.subjects,
+         phone = excluded.phone,
+         homeroom_classroom = excluded.homeroom_classroom,
+         license_expiry_date = excluded.license_expiry_date`
+    )
+      .bind(target.id, position, subjects, phone, homeroom_classroom, license_expiry_date)
+      .run();
+    updated++;
+  }
+
+  return jsonResponse({ updated, skipped });
+}
+
 // ---------- Router ----------
 export default {
   async fetch(request, env) {
@@ -1206,6 +1327,7 @@ export default {
 
       if (pathname === "/api/students" && method === "GET") return await handleListStudents(request, env);
       if (pathname === "/api/students" && method === "POST") return await handleCreateStudent(request, env);
+      if (pathname === "/api/students/import" && method === "POST") return await handleImportStudents(request, env);
 
       const studentGuardiansMatch = pathname.match(/^\/api\/students\/(\d+)\/guardians$/);
       if (studentGuardiansMatch && method === "POST") {
@@ -1222,6 +1344,7 @@ export default {
       if (guardianMatch && method === "DELETE") return await handleDeleteGuardian(request, env, Number(guardianMatch[1]));
 
       if (pathname === "/api/staff" && method === "GET") return await handleListStaff(request, env);
+      if (pathname === "/api/staff/import" && method === "POST") return await handleImportStaff(request, env);
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
