@@ -63,6 +63,11 @@ async function addPeriodColumns(db) {
     }
     await db.prepare(`CREATE INDEX IF NOT EXISTS idx_${table}_academic_period ON ${table}(academic_year_id, academic_term_id)`).run();
   }
+
+  // โครงการเดิมต้องรองรับยอดใช้จริงเพื่อคำนวณงบคงเหลือบนแดชบอร์ด
+  if (!(await hasColumn(db, "projects", "spent_amount"))) {
+    await db.prepare("ALTER TABLE projects ADD COLUMN spent_amount REAL NOT NULL DEFAULT 0").run();
+  }
 }
 
 async function createCoreTables(db) {

@@ -14,7 +14,11 @@
   .project-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:12px; }
   .project-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .project-name { font-weight:600; font-size:16px; }
-  .project-budget { color:var(--color-ochre-600); font-weight:600; font-size:14px; margin-top:4px; }
+  .project-budget { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--color-text-muted); font-weight:600; font-size:13px; margin-top:7px; }
+  .project-budget strong { color:var(--color-forest-900); }
+  .project-budget .spent strong { color:var(--color-ocean-700); }
+  .project-budget .remaining strong { color:var(--color-success); }
+  .project-budget .over strong { color:var(--color-danger); }
   .progress-track { background:var(--color-bg); border-radius:999px; height:10px; margin-top:10px; overflow:hidden; }
   .progress-fill { background:var(--color-forest-500); height:100%; border-radius:999px; }
   .project-meta { display:flex; gap:10px; margin-top:8px; font-size:12px; color:var(--color-text-muted); flex-wrap:wrap; align-items:center; }
@@ -80,7 +84,11 @@
     </div>
     <div class="field">
       <label>ยอดงบประมาณ (บาท)</label>
-      <input type="number" id="pBudget" />
+      <input type="number" id="pBudget" min="0" step="0.01" />
+    </div>
+    <div class="field">
+      <label>ยอดใช้จริงสะสม (บาท)</label>
+      <input type="number" id="pSpent" min="0" step="0.01" />
     </div>
     <div class="field" id="progressField" style="display:none;">
       <label>% ความคืบหน้า</label>
@@ -133,8 +141,7 @@
   document.getElementById("deptTitle").textContent = DEPT_LABELS[dept];
 
   function money(n) {
-    if (n === null || n === undefined) return "-";
-    return Number(n).toLocaleString("th-TH") + " บาท";
+    return Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 }) + " บาท";
   }
 
   async function loadTopics() {
@@ -214,13 +221,18 @@
     list.innerHTML = projects
       .map((p) => {
         const canManage = currentUser.is_admin || p.owners.some((o) => o.user_id === currentUser.id);
+        const remaining = Number(p.budget_amount || 0) - Number(p.spent_amount || 0);
         return `
         <div class="project-card">
           <div class="project-head">
             <div>
               <div class="project-name">${p.name}</div>
               ${p.description ? `<div style="font-size:13px; color:var(--color-text-muted); margin-top:2px;">${p.description}</div>` : ""}
-              <div class="project-budget">${money(p.budget_amount)}</div>
+              <div class="project-budget">
+                <span>งบทั้งหมด <strong>${money(p.budget_amount)}</strong></span>
+                <span class="spent">ใช้แล้ว <strong>${money(p.spent_amount)}</strong></span>
+                <span class="${remaining < 0 ? "over" : "remaining"}">${remaining < 0 ? "เกินงบ" : "คงเหลือ"} <strong>${money(Math.abs(remaining))}</strong></span>
+              </div>
             </div>
             ${canManage ? `<button class="icon-btn" data-edit="${p.id}" style="background:none;border:none;color:var(--color-forest-700);cursor:pointer;text-decoration:underline;font-size:13px;">แก้ไข</button>` : ""}
           </div>
@@ -247,6 +259,7 @@
     document.getElementById("projectModalTitle").textContent = project ? "แก้ไขโครงการ" : "เพิ่มโครงการ";
     document.getElementById("pName").value = project ? project.name : "";
     document.getElementById("pBudget").value = project ? project.budget_amount || "" : "";
+    document.getElementById("pSpent").value = project ? project.spent_amount || "" : "";
     document.getElementById("pDescription").value = project ? project.description || "" : "";
     document.getElementById("progressField").style.display = project ? "block" : "none";
     document.getElementById("statusField").style.display = project ? "block" : "none";
@@ -278,11 +291,13 @@
   document.getElementById("newProjectBtn").addEventListener("click", () => openProjectModal(null));
   document.getElementById("saveProjectBtn").addEventListener("click", async () => {
     const name = document.getElementById("pName").value.trim();
-    const budget_amount = document.getElementById("pBudget").value || null;
+    const budget_amount = Number(document.getElementById("pBudget").value || 0);
+    const spent_amount = Number(document.getElementById("pSpent").value || 0);
     const description = document.getElementById("pDescription").value.trim();
     if (!name) return alert("กรุณากรอกชื่อโครงการ");
+    if (budget_amount < 0 || spent_amount < 0) return alert("ยอดงบประมาณและยอดใช้จริงต้องไม่น้อยกว่า 0");
 
-    const body = { name, budget_amount, description };
+    const body = { name, budget_amount, spent_amount, description };
     if (editingProjectId) {
       body.progress_percent = Number(document.getElementById("pProgress").value || 0);
       body.status = document.getElementById("pStatus").value;

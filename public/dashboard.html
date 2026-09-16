@@ -70,6 +70,41 @@
   .department-card h4 { margin:0 0 8px; color:var(--color-forest-900); font-size:14px; }
   .department-metric { font-size:24px; font-weight:700; color:var(--color-forest-900); }
   .department-meta { color:var(--color-text-muted); font-size:12px; }
+  .department-budget-line { display:grid; grid-template-columns:1fr auto; gap:6px 12px; margin-top:10px; padding-top:10px; border-top:1px solid var(--color-border); font-size:12px; color:var(--color-text-muted); }
+  .department-budget-line strong { color:var(--color-forest-900); }
+  .budget-summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:14px; }
+  .budget-summary-card { background:rgba(255,255,255,.82); border:1px solid var(--color-border); border-radius:15px; padding:15px 17px; box-shadow:0 8px 22px rgba(57,91,128,.05); }
+  .budget-summary-card span { display:block; color:var(--color-text-muted); font-size:12px; }
+  .budget-summary-card strong { display:block; margin-top:3px; color:var(--color-forest-900); font-size:22px; }
+  .budget-summary-card.spent strong { color:var(--color-ocean-700); }
+  .budget-summary-card.remaining strong { color:var(--color-success); }
+  .budget-summary-card.over strong { color:var(--color-danger); }
+  .budget-department-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+  .budget-department { min-width:0; background:rgba(255,255,255,.82); border:1px solid var(--color-border); border-radius:17px; overflow:hidden; box-shadow:0 12px 30px rgba(57,91,128,.06); }
+  .budget-department-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:16px 17px 13px; border-bottom:1px solid var(--color-border); background:rgba(239,246,251,.68); }
+  .budget-department-head h4 { margin:0; color:var(--color-forest-900); font-size:15px; }
+  .budget-department-head p { margin:3px 0 0; color:var(--color-text-muted); font-size:12px; }
+  .budget-department-head .btn { width:auto; padding:5px 10px; font-size:11px; }
+  .budget-department-totals { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding:12px 16px 9px; }
+  .budget-department-total { min-width:0; }
+  .budget-department-total span { display:block; color:var(--color-text-muted); font-size:10px; }
+  .budget-department-total strong { display:block; overflow:hidden; text-overflow:ellipsis; color:var(--color-forest-900); font-size:13px; white-space:nowrap; }
+  .budget-usage-track { height:7px; margin:0 16px 12px; overflow:hidden; border-radius:999px; background:#E5EDF4; }
+  .budget-usage-fill { height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--color-ocean-500),var(--color-teal-500)); }
+  .budget-usage-fill.over { background:linear-gradient(90deg,#E27057,#C3444F); }
+  .project-budget-list { border-top:1px solid var(--color-border); }
+  .project-budget-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:7px 12px; padding:11px 16px; border-bottom:1px solid var(--color-border); }
+  .project-budget-row:last-child { border-bottom:0; }
+  .project-budget-name { min-width:0; font-size:13px; font-weight:600; color:var(--color-text); }
+  .project-budget-sub { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-text-muted); font-size:11px; font-weight:400; }
+  .project-budget-values { text-align:right; font-size:11px; color:var(--color-text-muted); white-space:nowrap; }
+  .project-budget-values strong { display:block; color:var(--color-forest-900); font-size:13px; }
+  .project-budget-values strong.over { color:var(--color-danger); }
+  .project-status-chip { display:inline-flex; margin-left:5px; padding:1px 7px; border-radius:999px; background:#EAF2F8; color:#55728D; font-size:10px; font-weight:600; }
+  .project-status-chip.ongoing { background:#E5F3FD; color:#1766A8; }
+  .project-status-chip.completed { background:#E4F5EC; color:#23734B; }
+  .project-status-chip.cancelled { background:#F3EDEF; color:#96505B; }
+  .budget-empty { padding:24px 16px; color:var(--color-text-muted); text-align:center; font-size:12px; }
   .snapshot-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
   .snapshot-card { background:rgba(255,255,255,.80); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; box-shadow:0 10px 28px rgba(57,91,128,.06); backdrop-filter:blur(16px); }
   .snapshot-card h3 { font-size:16px; margin-bottom:8px; }
@@ -108,7 +143,7 @@
     .global-search { display:none; }
     .period-pill span,.user-pill span { display:none; }
     .main-content { padding:24px 20px; }
-    .department-grid, .snapshot-grid { grid-template-columns:1fr; }
+    .department-grid, .snapshot-grid, .budget-summary-grid, .budget-department-grid { grid-template-columns:1fr; }
     .dashboard-head { flex-direction:column; }
     .updated-at { text-align:left; }
   }
@@ -194,6 +229,18 @@
         <div class="department-grid" id="departmentGrid"></div>
       </section>
 
+      <section class="dashboard-section">
+        <div class="section-head">
+          <div><h3 style="margin:0;">งบประมาณโครงการทุกฝ่าย</h3><p>แสดงงบทั้งหมด ยอดใช้จริง และงบคงเหลือของทุกโครงการ แยกตามฝ่ายงาน</p></div>
+        </div>
+        <div class="budget-summary-grid">
+          <div class="budget-summary-card"><span>งบโครงการทั้งหมด</span><strong id="projectBudgetTotal">0 บาท</strong></div>
+          <div class="budget-summary-card spent"><span>ใช้จริงสะสม</span><strong id="projectBudgetSpent">0 บาท</strong></div>
+          <div class="budget-summary-card remaining" id="projectBudgetRemainingCard"><span>งบคงเหลือ</span><strong id="projectBudgetRemaining">0 บาท</strong></div>
+        </div>
+        <div class="budget-department-grid" id="departmentBudgetGrid"></div>
+      </section>
+
       <section class="dashboard-section snapshot-grid">
         <div class="snapshot-card">
           <h3>การมาเรียนวันนี้</h3>
@@ -201,9 +248,9 @@
           <span class="inline-link">รอเชื่อมข้อมูลสรุปจาก Q-info</span>
         </div>
         <div class="snapshot-card">
-          <h3>งบประมาณภาพรวม</h3>
-          <div class="snapshot-value" id="projectBudgetTotal">0 บาท</div>
-          <p>กรอบงบประมาณรวมของโครงการที่บันทึกในระบบ ส่วนรายรับ–รายจ่ายและงบคงเหลือจะแสดงเมื่อเชื่อมโมดูลงบประมาณ</p>
+          <h3>สถานะงบประมาณ</h3>
+          <div class="snapshot-value" id="projectBudgetUsage">0%</div>
+          <p>สัดส่วนยอดใช้จริงเทียบกับกรอบงบประมาณของทุกโครงการในระบบ</p>
         </div>
       </section>
 
@@ -318,6 +365,11 @@
     personnel: "บุคคล",
     general: "บริหารทั่วไป",
   };
+  const PROJECT_STATUS_LABELS = {
+    ongoing: "กำลังดำเนินการ",
+    completed: "เสร็จสิ้น",
+    cancelled: "ยกเลิก",
+  };
 
   const formatMoney = (value) => new Intl.NumberFormat("th-TH", {
     style: "currency",
@@ -385,11 +437,63 @@
           <h4>ฝ่าย${DEPARTMENT_LABELS[department.department] || department.department}</h4>
           <div class="department-metric">${department.project_count}</div>
           <div class="department-meta">โครงการ · คืบหน้าเฉลี่ย ${department.average_progress}%</div>
-          <div class="department-meta">กรอบงบ ${formatMoney(department.total_budget)}</div>
+          <div class="department-budget-line">
+            <span>งบทั้งหมด</span><strong>${formatMoney(department.total_budget)}</strong>
+            <span>ใช้แล้ว</span><strong>${formatMoney(department.spent_budget)}</strong>
+            <span>คงเหลือ</span><strong style="color:${department.remaining_budget < 0 ? "var(--color-danger)" : "var(--color-success)"}">${formatMoney(department.remaining_budget)}</strong>
+          </div>
         </article>
       `).join("");
 
       document.getElementById("projectBudgetTotal").textContent = formatMoney(data.total_project_budget);
+      document.getElementById("projectBudgetSpent").textContent = formatMoney(data.total_project_spent);
+      document.getElementById("projectBudgetRemaining").textContent = formatMoney(data.total_project_remaining);
+      const remainingCard = document.getElementById("projectBudgetRemainingCard");
+      remainingCard.classList.toggle("over", data.total_project_remaining < 0);
+      remainingCard.classList.toggle("remaining", data.total_project_remaining >= 0);
+      document.getElementById("projectBudgetUsage").textContent = data.total_project_budget > 0
+        ? `${Math.round((data.total_project_spent / data.total_project_budget) * 100)}%`
+        : "0%";
+
+      document.getElementById("departmentBudgetGrid").innerHTML = data.department_summary.map((department) => {
+        const usagePercent = department.total_budget > 0
+          ? Math.round((department.spent_budget / department.total_budget) * 100)
+          : 0;
+        const projects = department.projects || [];
+        return `<article class="budget-department">
+          <div class="budget-department-head">
+            <div>
+              <h4>ฝ่าย${escapeHtml(DEPARTMENT_LABELS[department.department] || department.department)}</h4>
+              <p>${projects.length} โครงการ · ใช้งบ ${usagePercent}%</p>
+            </div>
+            <button class="btn btn-ghost" data-open-department="${escapeHtml(department.department)}">เปิดฝ่ายงาน</button>
+          </div>
+          <div class="budget-department-totals">
+            <div class="budget-department-total"><span>งบทั้งหมด</span><strong title="${formatMoney(department.total_budget)}">${formatMoney(department.total_budget)}</strong></div>
+            <div class="budget-department-total"><span>ใช้แล้ว</span><strong title="${formatMoney(department.spent_budget)}">${formatMoney(department.spent_budget)}</strong></div>
+            <div class="budget-department-total"><span>${department.remaining_budget < 0 ? "เกินงบ" : "คงเหลือ"}</span><strong style="color:${department.remaining_budget < 0 ? "var(--color-danger)" : "var(--color-success)"}" title="${formatMoney(department.remaining_budget)}">${formatMoney(department.remaining_budget)}</strong></div>
+          </div>
+          <div class="budget-usage-track" title="ใช้ไป ${usagePercent}%"><div class="budget-usage-fill ${usagePercent > 100 ? "over" : ""}" style="width:${Math.min(usagePercent, 100)}%"></div></div>
+          ${projects.length ? `<div class="project-budget-list">${projects.map((project) => {
+            const isOver = project.remaining_amount < 0;
+            return `<div class="project-budget-row">
+              <div class="project-budget-name">
+                ${escapeHtml(project.name)}
+                <span class="project-status-chip ${escapeHtml(project.status)}">${escapeHtml(PROJECT_STATUS_LABELS[project.status] || project.status)}</span>
+                <div class="project-budget-sub">${escapeHtml(project.owner_names || "ยังไม่ระบุผู้รับผิดชอบ")}${project.academic_year_label ? ` · ${escapeHtml(project.academic_year_label)}` : ""} · คืบหน้า ${project.progress_percent}%</div>
+              </div>
+              <div class="project-budget-values">
+                งบ ${formatMoney(project.budget_amount)} · ใช้ ${formatMoney(project.spent_amount)}
+                <strong class="${isOver ? "over" : ""}">${isOver ? "เกินงบ" : "เหลือ"} ${formatMoney(Math.abs(project.remaining_amount))}</strong>
+              </div>
+            </div>`;
+          }).join("")}</div>` : `<div class="budget-empty">ยังไม่มีโครงการในฝ่ายนี้</div>`}
+        </article>`;
+      }).join("");
+
+      document.querySelectorAll("[data-open-department]").forEach((button) => {
+        button.addEventListener("click", () => showPage(button.getAttribute("data-open-department")));
+      });
       const licenseCounts = data.licenses_expiring.reduce((counts, item) => {
         counts[licenseStatus(item.days_remaining).color]++;
         return counts;

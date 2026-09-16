@@ -985,12 +985,17 @@ async function handleCreateProject(request, env, department) {
   if (!name) return jsonResponse({ error: "กรุณากรอกชื่อโครงการ" }, 400);
 
   const ownerIds = Array.isArray(body.owner_ids) ? body.owner_ids.map(Number) : [];
+  const budgetAmount = body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
+  const spentAmount = body.spent_amount === "" || body.spent_amount == null ? 0 : Number(body.spent_amount);
+  if (!Number.isFinite(budgetAmount) || budgetAmount < 0 || !Number.isFinite(spentAmount) || spentAmount < 0) {
+    return jsonResponse({ error: "ยอดงบประมาณและยอดใช้จริงต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
+  }
 
   const result = await env.DB.prepare(
-    `INSERT INTO projects (department, name, budget_amount, description, created_by)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO projects (department, name, budget_amount, spent_amount, description, created_by)
+     VALUES (?, ?, ?, ?, ?, ?)`
   )
-    .bind(department, name, body.budget_amount || null, body.description || null, user.id)
+    .bind(department, name, budgetAmount, spentAmount, body.description || null, user.id)
     .run();
 
   const projectId = result.meta.last_row_id;
@@ -1027,8 +1032,16 @@ async function handleUpdateProject(request, env, projectId) {
     values.push(String(body.name).trim());
   }
   if (body.budget_amount !== undefined) {
+    const amount = body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
+    if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
     updates.push("budget_amount = ?");
-    values.push(body.budget_amount === "" ? null : body.budget_amount);
+    values.push(amount);
+  }
+  if (body.spent_amount !== undefined) {
+    const amount = body.spent_amount === "" || body.spent_amount == null ? 0 : Number(body.spent_amount);
+    if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดใช้จริงต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
+    updates.push("spent_amount = ?");
+    values.push(amount);
   }
   if (body.progress_percent !== undefined) {
     const p = Number(body.progress_percent);
@@ -1378,9 +1391,29 @@ async function handleOverview(request, env) {
     `SELECT department,
             COUNT(*) AS project_count,
             ROUND(AVG(progress_percent), 0) AS average_progress,
-            COALESCE(SUM(budget_amount), 0) AS total_budget
+            COALESCE(SUM(budget_amount), 0) AS total_budget,
+            COALESCE(SUM(spent_amount), 0) AS spent_budget
      FROM projects
      GROUP BY department`
+  ).all();
+
+  const { results: projectBudgetRows } = await env.DB.prepare(
+    `SELECT p.id, p.department, p.name, p.status, p.progress_percent,
+            COALESCE(p.budget_amount, 0) AS budget_amount,
+            COALESCE(p.spent_amount, 0) AS spent_amount,
+            COALESCE(p.budget_amount, 0) - COALESCE(p.spent_amount, 0) AS remaining_amount,
+            y.label AS academic_year_label,
+            GROUP_CONCAT(u.full_name, ', ') AS owner_names
+     FROM projects p
+     LEFT JOIN academic_years y ON y.id = p.academic_year_id
+     LEFT JOIN project_owners po ON po.project_id = p.id
+     LEFT JOIN users u ON u.id = po.user_id
+     GROUP BY p.id
+     ORDER BY CASE p.department
+                WHEN 'academic' THEN 1 WHEN 'budget' THEN 2
+                WHEN 'personnel' THEN 3 WHEN 'general' THEN 4 ELSE 5 END,
+              CASE p.status WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
+              p.name`
   ).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
@@ -1400,8 +1433,22 @@ async function handleOverview(request, env) {
       project_count: Number(row?.project_count || 0),
       average_progress: Number(row?.average_progress || 0),
       total_budget: Number(row?.total_budget || 0),
+      spent_budget: Number(row?.spent_budget || 0),
+      remaining_budget: Number(row?.total_budget || 0) - Number(row?.spent_budget || 0),
+      projects: projectBudgetRows
+        .filter((project) => project.department === department)
+        .map((project) => ({
+          ...project,
+          budget_amount: Number(project.budget_amount || 0),
+          spent_amount: Number(project.spent_amount || 0),
+          remaining_amount: Number(project.remaining_amount || 0),
+          progress_percent: Number(project.progress_percent || 0),
+        })),
     };
   });
+
+  const totalProjectBudget = departmentSummary.reduce((sum, row) => sum + row.total_budget, 0);
+  const totalProjectSpent = departmentSummary.reduce((sum, row) => sum + row.spent_budget, 0);
 
   return jsonResponse({
     students_enrolled: studentsEnrolled.count,
@@ -1410,7 +1457,9 @@ async function handleOverview(request, env) {
     overdue_tasks: overdueTasks.count,
     ongoing_projects: ongoingProjects.count,
     pending_leave_requests: pendingLeave.count,
-    total_project_budget: departmentSummary.reduce((sum, row) => sum + row.total_budget, 0),
+    total_project_budget: totalProjectBudget,
+    total_project_spent: totalProjectSpent,
+    total_project_remaining: totalProjectBudget - totalProjectSpent,
     department_summary: departmentSummary,
     licenses_expiring: licensesExpiring,
     current_academic_period: currentAcademicPeriod,
