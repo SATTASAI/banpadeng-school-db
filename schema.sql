@@ -68,6 +68,38 @@ CREATE TABLE IF NOT EXISTS guardians (
 CREATE INDEX IF NOT EXISTS idx_guardians_student ON guardians(student_id);
 CREATE INDEX IF NOT EXISTS idx_students_classroom ON students(classroom);
 
+-- ข้อมูลนักเรียนเพิ่มเติมจาก DMC แยกตารางเพื่ออัปเดตระบบเดิมได้โดยไม่กระทบทะเบียนหลัก
+CREATE TABLE IF NOT EXISTS student_details (
+  student_id             INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+  weight_kg              REAL,
+  height_cm              REAL,
+  blood_type             TEXT,
+  religion               TEXT,
+  ethnicity              TEXT,
+  nationality            TEXT,
+  house_number           TEXT,
+  village_no             TEXT,
+  road_soi               TEXT,
+  subdistrict            TEXT,
+  district               TEXT,
+  province               TEXT,
+  guardian_prefix        TEXT,
+  guardian_first_name    TEXT,
+  guardian_last_name     TEXT,
+  guardian_occupation    TEXT,
+  guardian_relationship  TEXT,
+  father_prefix          TEXT,
+  father_first_name      TEXT,
+  father_last_name       TEXT,
+  father_occupation      TEXT,
+  mother_prefix          TEXT,
+  mother_first_name      TEXT,
+  mother_last_name       TEXT,
+  mother_occupation      TEXT,
+  disadvantage           TEXT,
+  updated_at             TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Schema: รื้อระบบข้อมูลนักเรียน — เพิ่มเลขบัตรประชาชน, แยกชื่อเป็นคำนำหน้า/ชื่อ/นามสกุล, วันเกิด
 
 ALTER TABLE students ADD COLUMN national_id TEXT;

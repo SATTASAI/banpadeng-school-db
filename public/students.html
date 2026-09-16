@@ -18,7 +18,7 @@
   .student-result-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 2px 8px; color:var(--color-text-muted); font-size:14px; }
   .student-result-count strong { color:var(--color-text); }
   #studentPanel { overflow:hidden; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:var(--color-surface); }
-  .student-list-head, .student-row { display:grid; grid-template-columns:120px minmax(210px, 1.5fr) minmax(130px, .8fr) 90px 130px; gap:14px; align-items:center; }
+  .student-list-head, .student-row { display:grid; grid-template-columns:110px minmax(190px, 1.5fr) minmax(110px, .75fr) 70px 120px 150px; gap:12px; align-items:center; }
   .student-list-head { padding:11px 18px; background:var(--color-bg); color:var(--color-text-muted); font-size:12px; font-weight:600; border-bottom:1px solid var(--color-border); }
   .student-row { min-height:62px; padding:11px 18px; border-bottom:1px solid var(--color-border); cursor:pointer; transition:background .15s ease; }
   .student-row:last-child { border-bottom:none; }
@@ -27,6 +27,7 @@
   .student-name { font-weight:600; line-height:1.35; }
   .student-mobile-label { display:none; }
   .student-cell-muted { color:var(--color-text-muted); }
+  .student-detail-btn { width:auto; white-space:nowrap; padding:8px 12px; font-size:13px; }
   .pagination { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:14px; }
   .pagination .btn { width:auto; min-width:92px; }
   .page-indicator { min-width:110px; text-align:center; color:var(--color-text-muted); font-size:14px; }
@@ -50,6 +51,22 @@
   .preview-table-wrap { max-height:200px; overflow:auto; border:1px solid var(--color-border); border-radius:var(--radius-md); margin-top:12px; }
   .import-summary { margin-top:16px; font-size:14px; }
   .import-summary .skip-item { color:var(--color-danger); font-size:13px; }
+  .student-detail-modal { max-width:920px; }
+  .student-detail-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:18px; }
+  .student-detail-heading h2 { margin:0 0 4px; }
+  .student-detail-subtitle { margin:0; color:var(--color-text-muted); font-size:14px; }
+  .detail-sections { display:grid; gap:16px; }
+  .detail-section { padding:16px; border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-bg); }
+  .detail-section h3 { margin:0 0 12px; font-size:16px; color:var(--color-primary); }
+  .detail-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+  .detail-item { min-width:0; }
+  .detail-item.detail-wide { grid-column:1 / -1; }
+  .detail-label { display:block; margin-bottom:4px; color:var(--color-text-muted); font-size:12px; }
+  .detail-value { min-height:24px; overflow-wrap:anywhere; font-weight:500; }
+  .detail-input { width:100%; padding:9px 10px; border:1px solid var(--color-border); border-radius:8px; background:var(--color-surface); color:var(--color-text); font-family:var(--font-body); }
+  textarea.detail-input { min-height:76px; resize:vertical; }
+  .detail-loading { padding:28px 0; text-align:center; color:var(--color-text-muted); }
+  .mapping-group { margin:18px 0 9px; padding-bottom:6px; border-bottom:1px solid var(--color-border); color:var(--color-primary); font-size:14px; font-weight:700; }
   @media (max-width:900px) {
     .student-filter-grid { grid-template-columns:repeat(2, minmax(130px, 1fr)); }
     .filter-clear { width:100%; }
@@ -60,7 +77,9 @@
     .student-name { grid-column:1; grid-row:1; }
     .student-grade, .student-classroom { grid-column:1; font-size:13px; color:var(--color-text-muted); }
     .student-status { grid-column:2; grid-row:1 / span 2; justify-self:end; align-self:start; }
+    .student-actions { grid-column:2; grid-row:3 / span 2; justify-self:end; align-self:end; }
     .student-mobile-label { display:inline; }
+    .detail-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width:560px) {
     .toolbar > div:last-child { width:100%; }
@@ -69,6 +88,10 @@
     .student-filter-grid { grid-template-columns:1fr 1fr; }
     .student-filter-grid .filter-field:nth-child(4) { grid-column:1 / -1; }
     .student-result-bar { align-items:flex-start; }
+    .modal { padding:20px; }
+    .detail-grid { grid-template-columns:1fr; }
+    .detail-item.detail-wide { grid-column:auto; }
+    .student-detail-heading { display:block; }
   }
 </style>
 </head>
@@ -237,6 +260,25 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="studentDetailsModal" style="display:none;">
+  <div class="modal student-detail-modal" role="dialog" aria-modal="true" aria-labelledby="studentDetailsTitle">
+    <div class="student-detail-heading">
+      <div>
+        <h2 id="studentDetailsTitle">ข้อมูลเพิ่มเติมของนักเรียน</h2>
+        <p class="student-detail-subtitle" id="studentDetailsSubtitle"></p>
+      </div>
+      <button type="button" class="btn btn-ghost" id="closeStudentDetailsTopBtn" style="width:auto;">ปิด</button>
+    </div>
+    <div class="error-box" id="studentDetailsError"></div>
+    <div id="studentDetailsContent" class="detail-loading">กำลังโหลดข้อมูล...</div>
+    <div class="modal-actions" id="studentDetailsActions">
+      <button type="button" class="btn btn-ghost" id="cancelStudentDetailsEditBtn" style="display:none;">ยกเลิกแก้ไข</button>
+      <button type="button" class="btn btn-ghost" id="editStudentDetailsBtn" style="width:auto;">แก้ไขข้อมูล</button>
+      <button type="button" class="btn btn-primary" id="saveStudentDetailsBtn" style="display:none; width:auto;">บันทึกข้อมูลเพิ่มเติม</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="importModal" style="display:none;">
   <div class="modal import-modal">
     <h2 id="importModalTitle">นำเข้าข้อมูลนักเรียนจาก Excel/CSV</h2>
@@ -292,8 +334,50 @@
   let allStudents = [];
   let editingStudentId = null;
   let currentStudentPage = 1;
+  let detailStudent = null;
+  let detailEditMode = false;
 
   const STATUS_LABEL = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
+  const STUDENT_DETAIL_SECTIONS = [
+    { title: "ข้อมูลร่างกายและข้อมูลทั่วไป", fields: [
+      { key: "weight_kg", label: "น้ำหนัก", type: "number", suffix: "กก." },
+      { key: "height_cm", label: "ส่วนสูง", type: "number", suffix: "ซม." },
+      { key: "blood_type", label: "กลุ่มเลือด" },
+      { key: "religion", label: "ศาสนา" },
+      { key: "ethnicity", label: "เชื้อชาติ" },
+      { key: "nationality", label: "สัญชาติ" },
+    ] },
+    { title: "ที่อยู่", fields: [
+      { key: "house_number", label: "บ้านเลขที่" },
+      { key: "village_no", label: "หมู่" },
+      { key: "road_soi", label: "ถนน/ซอย" },
+      { key: "subdistrict", label: "ตำบล" },
+      { key: "district", label: "อำเภอ" },
+      { key: "province", label: "จังหวัด" },
+    ] },
+    { title: "ผู้ปกครอง", fields: [
+      { key: "guardian_prefix", label: "คำนำหน้าชื่อผู้ปกครอง" },
+      { key: "guardian_first_name", label: "ชื่อผู้ปกครอง" },
+      { key: "guardian_last_name", label: "นามสกุลผู้ปกครอง" },
+      { key: "guardian_occupation", label: "อาชีพของผู้ปกครอง" },
+      { key: "guardian_relationship", label: "ความเกี่ยวข้องกับนักเรียน", wide: true },
+    ] },
+    { title: "บิดา", fields: [
+      { key: "father_prefix", label: "คำนำหน้าชื่อบิดา" },
+      { key: "father_first_name", label: "ชื่อบิดา" },
+      { key: "father_last_name", label: "นามสกุลบิดา" },
+      { key: "father_occupation", label: "อาชีพของบิดา" },
+    ] },
+    { title: "มารดา", fields: [
+      { key: "mother_prefix", label: "คำนำหน้าชื่อมารดา" },
+      { key: "mother_first_name", label: "ชื่อมารดา" },
+      { key: "mother_last_name", label: "นามสกุลมารดา" },
+      { key: "mother_occupation", label: "อาชีพของมารดา" },
+    ] },
+    { title: "ข้อมูลความด้อยโอกาส", fields: [
+      { key: "disadvantage", label: "ความด้อยโอกาส", multiline: true, wide: true },
+    ] },
+  ];
 
   function escapeStudentText(value) {
     return String(value == null ? "" : value)
@@ -382,7 +466,7 @@
       : `นักเรียนทั้งหมด <strong>${allStudents.length}</strong> คน · แสดง ${start + 1}–${shownEnd}`;
 
     panel.innerHTML = `<div class="student-list-head" aria-hidden="true">
-      <span>เลขประจำตัว</span><span>ชื่อ–นามสกุล</span><span>ระดับชั้น</span><span>ห้อง</span><span>สถานะ</span>
+      <span>เลขประจำตัว</span><span>ชื่อ–นามสกุล</span><span>ระดับชั้น</span><span>ห้อง</span><span>สถานะ</span><span>ข้อมูลเพิ่มเติม</span>
     </div>${pageStudents
       .map(
         (s) => `
@@ -392,17 +476,28 @@
           <div class="student-grade student-cell-muted"><span class="student-mobile-label">ระดับชั้น: </span>${escapeStudentText(s.grade_level || "-")}</div>
           <div class="student-classroom student-cell-muted"><span class="student-mobile-label">ห้อง: </span>${escapeStudentText(s.classroom || "-")}</div>
           <div class="student-status"><span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${escapeStudentText(STATUS_LABEL[s.status] || s.status || "ไม่ระบุ")}</span></div>
+          <div class="student-actions"><button type="button" class="btn btn-ghost student-detail-btn" data-details-id="${Number(s.id)}">ดูข้อมูลเพิ่มเติม</button></div>
         </div>`
       )
       .join("")}`;
 
     panel.querySelectorAll(".student-row").forEach((row) => {
-      row.addEventListener("click", () => openModal(Number(row.getAttribute("data-id"))));
+      row.addEventListener("click", (event) => {
+        if (event.target.closest("[data-details-id]")) return;
+        openModal(Number(row.getAttribute("data-id")));
+      });
       row.addEventListener("keydown", (event) => {
+        if (event.target.closest("[data-details-id]")) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           openModal(Number(row.getAttribute("data-id")));
         }
+      });
+    });
+    panel.querySelectorAll("[data-details-id]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openStudentDetails(Number(button.getAttribute("data-details-id")));
       });
     });
 
@@ -443,6 +538,124 @@
     currentStudentPage++;
     renderList();
     window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+
+  function canEditStudentDetails() {
+    return Boolean(currentUser && (currentUser.is_admin || currentUser.role === "staff"));
+  }
+
+  function displayDetailValue(field, value) {
+    if (value === null || value === undefined || String(value).trim() === "") return "ยังไม่มีข้อมูล";
+    return field.suffix ? `${value} ${field.suffix}` : String(value);
+  }
+
+  function renderStudentDetails(student) {
+    const content = document.getElementById("studentDetailsContent");
+    content.className = "detail-sections";
+    content.innerHTML = STUDENT_DETAIL_SECTIONS.map((section) => `
+      <section class="detail-section">
+        <h3>${escapeStudentText(section.title)}</h3>
+        <div class="detail-grid">
+          ${section.fields.map((field) => `
+            <div class="detail-item${field.wide ? " detail-wide" : ""}">
+              <label class="detail-label" for="detail-${field.key}">${escapeStudentText(field.label)}</label>
+              <div class="detail-value" data-detail-value="${field.key}"></div>
+              ${field.multiline
+                ? `<textarea class="detail-input" id="detail-${field.key}" data-detail-input="${field.key}" style="display:none;"></textarea>`
+                : `<input class="detail-input" id="detail-${field.key}" data-detail-input="${field.key}" type="${field.type === "number" ? "number" : "text"}" ${field.type === "number" ? 'min="0" step="0.1" inputmode="decimal"' : ""} style="display:none;" />`}
+            </div>`).join("")}
+        </div>
+      </section>`).join("");
+
+    STUDENT_DETAIL_SECTIONS.flatMap((section) => section.fields).forEach((field) => {
+      const value = student[field.key];
+      const display = content.querySelector(`[data-detail-value="${field.key}"]`);
+      const input = content.querySelector(`[data-detail-input="${field.key}"]`);
+      display.textContent = displayDetailValue(field, value);
+      display.classList.toggle("student-cell-muted", value === null || value === undefined || String(value).trim() === "");
+      input.value = value == null ? "" : value;
+    });
+    setStudentDetailsEditMode(false);
+  }
+
+  function setStudentDetailsEditMode(editing) {
+    detailEditMode = editing;
+    document.querySelectorAll("[data-detail-value]").forEach((element) => { element.style.display = editing ? "none" : "block"; });
+    document.querySelectorAll("[data-detail-input]").forEach((element) => { element.style.display = editing ? "block" : "none"; });
+    document.getElementById("editStudentDetailsBtn").style.display = !editing && canEditStudentDetails() && detailStudent ? "inline-flex" : "none";
+    document.getElementById("cancelStudentDetailsEditBtn").style.display = editing ? "inline-flex" : "none";
+    document.getElementById("saveStudentDetailsBtn").style.display = editing ? "inline-flex" : "none";
+  }
+
+  async function openStudentDetails(studentId) {
+    const modal = document.getElementById("studentDetailsModal");
+    const content = document.getElementById("studentDetailsContent");
+    const errorBox = document.getElementById("studentDetailsError");
+    detailStudent = null;
+    detailEditMode = false;
+    document.getElementById("studentDetailsSubtitle").textContent = "";
+    document.getElementById("editStudentDetailsBtn").style.display = "none";
+    document.getElementById("cancelStudentDetailsEditBtn").style.display = "none";
+    document.getElementById("saveStudentDetailsBtn").style.display = "none";
+    errorBox.classList.remove("visible");
+    content.className = "detail-loading";
+    content.textContent = "กำลังโหลดข้อมูล...";
+    modal.style.display = "flex";
+    try {
+      const { student } = await apiRequest(`/api/students/${studentId}`);
+      detailStudent = student;
+      document.getElementById("studentDetailsTitle").textContent = student.full_name || "ข้อมูลเพิ่มเติมของนักเรียน";
+      document.getElementById("studentDetailsSubtitle").textContent = [
+        student.student_code ? `เลขประจำตัว ${student.student_code}` : "",
+        student.grade_level || "",
+        student.classroom ? `ห้อง ${student.classroom}` : "",
+      ].filter(Boolean).join(" · ");
+      renderStudentDetails(student);
+    } catch (err) {
+      content.textContent = "ไม่สามารถโหลดข้อมูลเพิ่มเติมได้";
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    }
+  }
+
+  function closeStudentDetails() {
+    if (detailEditMode && !confirm("ยังไม่ได้บันทึกข้อมูลที่แก้ไข ต้องการปิดหรือไม่?")) return;
+    document.getElementById("studentDetailsModal").style.display = "none";
+    detailStudent = null;
+    detailEditMode = false;
+  }
+
+  document.getElementById("closeStudentDetailsTopBtn").addEventListener("click", closeStudentDetails);
+  document.getElementById("editStudentDetailsBtn").addEventListener("click", () => setStudentDetailsEditMode(true));
+  document.getElementById("cancelStudentDetailsEditBtn").addEventListener("click", () => {
+    if (detailStudent) renderStudentDetails(detailStudent);
+  });
+  document.getElementById("saveStudentDetailsBtn").addEventListener("click", async () => {
+    if (!detailStudent) return;
+    const body = {};
+    document.querySelectorAll("[data-detail-input]").forEach((input) => {
+      body[input.getAttribute("data-detail-input")] = input.value.trim();
+    });
+    if (["weight_kg", "height_cm"].some((key) => body[key] !== "" && (!Number.isFinite(Number(body[key])) || Number(body[key]) < 0))) {
+      alert("น้ำหนักและส่วนสูงต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
+      return;
+    }
+    const saveButton = document.getElementById("saveStudentDetailsBtn");
+    const errorBox = document.getElementById("studentDetailsError");
+    saveButton.disabled = true;
+    saveButton.textContent = "กำลังบันทึก...";
+    errorBox.classList.remove("visible");
+    try {
+      await apiRequest(`/api/students/${detailStudent.id}`, { method: "PATCH", body });
+      Object.assign(detailStudent, body);
+      renderStudentDetails(detailStudent);
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    } finally {
+      saveButton.disabled = false;
+      saveButton.textContent = "บันทึกข้อมูลเพิ่มเติม";
+    }
   });
 
   function renderGuardians(guardians) {
@@ -617,17 +830,43 @@
 
   // ---------- นำเข้าจาก Excel/CSV ----------
   const STUDENT_IMPORT_FIELDS = [
-    { key: "student_code", label: "เลขประจำตัวนักเรียน (รหัสในโรงเรียน)", synonyms: ["รหัสนักเรียน", "เลขประจำตัวนักเรียน", "เลขประจำตัว", "รหัส", "studentid", "studentcode", "id", "code"] },
-    { key: "national_id", label: "เลขประจำตัวประชาชน (13 หลัก)", synonyms: ["เลขประจำตัวประชาชน", "เลขบัตรประชาชน", "เลขบัตร", "citizenid", "nationalid"] },
-    { key: "grade_level", label: "ชั้น", synonyms: ["ชั้น", "ระดับชั้น", "ชั้นเรียน", "grade", "gradelevel"] },
-    { key: "classroom", label: "ห้อง", synonyms: ["ห้อง", "ห้องเรียน", "class", "classroom"] },
-    { key: "full_name", label: "ชื่อ-นามสกุล (ถ้ารวมอยู่คอลัมน์เดียว)", synonyms: ["ชื่อ-นามสกุล", "ชื่อนักเรียน", "ชื่อสกุล", "ชื่อ สกุล", "fullname", "full name"] },
-    { key: "name_prefix", label: "คำนำหน้าชื่อ (ถ้าแยกคอลัมน์)", synonyms: ["คำนำหน้าชื่อ", "คำนำหน้า"] },
-    { key: "first_name", label: "ชื่อ (ถ้าแยกจากนามสกุล)", synonyms: ["ชื่อ"] },
-    { key: "last_name", label: "นามสกุล (ถ้าแยกจากชื่อ)", synonyms: ["นามสกุล"] },
-    { key: "birth_date", label: "วันเกิด", synonyms: ["วันเกิด", "วันเดือนปีเกิด", "birthdate", "dateofbirth", "dob"] },
-    { key: "health_conditions", label: "โรคประจำตัว", synonyms: ["โรคประจำตัว", "โรค", "สุขภาพ", "health"] },
-    { key: "allergies", label: "การแพ้", synonyms: ["การแพ้", "แพ้ยา", "แพ้อาหาร", "แพ้", "allergy", "allergies"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "student_code", label: "เลขประจำตัวนักเรียน (รหัสในโรงเรียน)", synonyms: ["รหัสนักเรียน", "เลขประจำตัวนักเรียน", "เลขประจำตัว", "รหัส", "studentid", "studentcode", "id", "code"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "national_id", label: "เลขประจำตัวประชาชน (13 หลัก)", synonyms: ["เลขประจำตัวประชาชน", "เลขบัตรประชาชน", "เลขบัตร", "citizenid", "nationalid"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "grade_level", label: "ชั้น", synonyms: ["ชั้น", "ระดับชั้น", "ชั้นเรียน", "grade", "gradelevel"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "classroom", label: "ห้อง", synonyms: ["ห้อง", "ห้องเรียน", "class", "classroom"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "full_name", label: "ชื่อ-นามสกุล (ถ้ารวมอยู่คอลัมน์เดียว)", synonyms: ["ชื่อ-นามสกุล", "ชื่อ-สกุล", "ชื่อสกุล", "ชื่อ สกุล", "fullname", "full name"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "name_prefix", label: "คำนำหน้าชื่อ (ถ้าแยกคอลัมน์)", synonyms: ["คำนำหน้าชื่อนักเรียน", "คำนำหน้าชื่อ", "คำนำหน้า"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "first_name", label: "ชื่อ (ถ้าแยกจากนามสกุล)", synonyms: ["ชื่อนักเรียน", "ชื่อ"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "last_name", label: "นามสกุล (ถ้าแยกจากชื่อ)", synonyms: ["นามสกุลนักเรียน", "นามสกุล"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "birth_date", label: "วันเกิด", synonyms: ["วันเกิด", "วันเดือนปีเกิด", "birthdate", "dateofbirth", "dob"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "health_conditions", label: "โรคประจำตัว", synonyms: ["โรคประจำตัว", "โรค", "สุขภาพ", "health"] },
+    { group: "ข้อมูลทะเบียนหลัก", key: "allergies", label: "การแพ้", synonyms: ["การแพ้", "แพ้ยา", "แพ้อาหาร", "แพ้", "allergy", "allergies"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "weight_kg", label: "น้ำหนัก", synonyms: ["น้ำหนัก", "น้ำหนัก(กก.)", "น้ำหนักกก", "weight", "weightkg"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "height_cm", label: "ส่วนสูง", synonyms: ["ส่วนสูง", "ส่วนสูง(ซม.)", "ส่วนสูงซม", "ความสูง", "height", "heightcm"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "blood_type", label: "กลุ่มเลือด", synonyms: ["กลุ่มเลือด", "หมู่เลือด", "กรุ๊ปเลือด", "bloodtype", "bloodgroup"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "religion", label: "ศาสนา", synonyms: ["ศาสนา", "religion"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "ethnicity", label: "เชื้อชาติ", synonyms: ["เชื้อชาติ", "race", "ethnicity"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "nationality", label: "สัญชาติ", synonyms: ["สัญชาติ", "nationality"] },
+    { group: "ที่อยู่", key: "house_number", label: "บ้านเลขที่", synonyms: ["บ้านเลขที่", "เลขที่บ้าน", "housenumber", "addressno"] },
+    { group: "ที่อยู่", key: "village_no", label: "หมู่", synonyms: ["หมู่", "หมู่ที่", "หมู่บ้าน", "villageno", "moo"] },
+    { group: "ที่อยู่", key: "road_soi", label: "ถนน/ซอย", synonyms: ["ถนน/ซอย", "ถนนซอย", "ถนน", "ซอย", "road", "soi"] },
+    { group: "ที่อยู่", key: "subdistrict", label: "ตำบล", synonyms: ["ตำบล", "แขวง", "subdistrict", "tambon"] },
+    { group: "ที่อยู่", key: "district", label: "อำเภอ", synonyms: ["อำเภอ", "เขต", "district", "amphoe"] },
+    { group: "ที่อยู่", key: "province", label: "จังหวัด", synonyms: ["จังหวัด", "province"] },
+    { group: "ผู้ปกครอง", key: "guardian_prefix", label: "คำนำหน้าชื่อผู้ปกครอง", synonyms: ["คำนำหน้าชื่อผู้ปกครอง", "คำนำหน้าผู้ปกครอง", "guardianprefix"] },
+    { group: "ผู้ปกครอง", key: "guardian_first_name", label: "ชื่อผู้ปกครอง", synonyms: ["ชื่อผู้ปกครอง", "guardianfirstname", "guardianname"] },
+    { group: "ผู้ปกครอง", key: "guardian_last_name", label: "นามสกุลผู้ปกครอง", synonyms: ["นามสกุลผู้ปกครอง", "guardianlastname", "guardiansurname"] },
+    { group: "ผู้ปกครอง", key: "guardian_occupation", label: "อาชีพของผู้ปกครอง", synonyms: ["อาชีพของผู้ปกครอง", "อาชีพผู้ปกครอง", "guardianoccupation"] },
+    { group: "ผู้ปกครอง", key: "guardian_relationship", label: "ความเกี่ยวข้องของผู้ปกครองกับนักเรียน", synonyms: ["ความเกี่ยวข้องของผู้ปกครองกับนักเรียน", "ความเกี่ยวข้องผู้ปกครอง", "ความสัมพันธ์ผู้ปกครอง", "guardianrelationship"] },
+    { group: "บิดา", key: "father_prefix", label: "คำนำหน้าชื่อบิดา", synonyms: ["คำนำหน้าชื่อบิดา", "คำนำหน้าบิดา", "fatherprefix"] },
+    { group: "บิดา", key: "father_first_name", label: "ชื่อบิดา", synonyms: ["ชื่อบิดา", "fatherfirstname", "fathername"] },
+    { group: "บิดา", key: "father_last_name", label: "นามสกุลบิดา", synonyms: ["นามสกุลบิดา", "fatherlastname", "fathersurname"] },
+    { group: "บิดา", key: "father_occupation", label: "อาชีพของบิดา", synonyms: ["อาชีพของบิดา", "อาชีพบิดา", "fatheroccupation"] },
+    { group: "มารดา", key: "mother_prefix", label: "คำนำหน้าชื่อมารดา", synonyms: ["คำนำหน้าชื่อมารดา", "คำนำหน้ามารดา", "motherprefix"] },
+    { group: "มารดา", key: "mother_first_name", label: "ชื่อมารดา", synonyms: ["ชื่อมารดา", "motherfirstname", "mothername"] },
+    { group: "มารดา", key: "mother_last_name", label: "นามสกุลมารดา", synonyms: ["นามสกุลมารดา", "motherlastname", "mothersurname"] },
+    { group: "มารดา", key: "mother_occupation", label: "อาชีพของมารดา", synonyms: ["อาชีพของมารดา", "อาชีพมารดา", "motheroccupation"] },
+    { group: "ข้อมูลความด้อยโอกาส", key: "disadvantage", label: "ความด้อยโอกาส", synonyms: ["ความด้อยโอกาส", "ด้อยโอกาส", "ประเภทความด้อยโอกาส", "disadvantage"] },
   ];
 
   let importRaw = null;
@@ -667,12 +906,17 @@
 
   function renderMapping() {
     const container = document.getElementById("mappingContainer");
+    let previousGroup = "";
     container.innerHTML = STUDENT_IMPORT_FIELDS.map((field) => {
       const options = importParsed.headers
-        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${columnOptionLabel(h, i, importParsed.rows)}</option>`)
+        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${escapeStudentText(columnOptionLabel(h, i, importParsed.rows))}</option>`)
         .join("");
-      return `<div class="mapping-row">
-        <label>${field.label}${field.key === "student_code" ? " *" : ""}</label>
+      const groupHeading = field.group !== previousGroup
+        ? `<div class="mapping-group">${escapeStudentText(field.group)}</div>`
+        : "";
+      previousGroup = field.group;
+      return `${groupHeading}<div class="mapping-row">
+        <label>${escapeStudentText(field.label)}${field.key === "student_code" ? " *" : ""}</label>
         <select class="plain" data-field="${field.key}">
           <option value="">— ไม่นำเข้า —</option>
           ${options}
@@ -693,9 +937,9 @@
   function renderPreview() {
     const table = document.getElementById("previewTable");
     const sampleRows = buildImportRows(importParsed.rows.slice(0, 3), importMapping, STUDENT_IMPORT_FIELDS);
-    const headRow = `<tr>${STUDENT_IMPORT_FIELDS.map((f) => `<th>${f.label}</th>`).join("")}</tr>`;
+    const headRow = `<tr>${STUDENT_IMPORT_FIELDS.map((f) => `<th>${escapeStudentText(f.label)}</th>`).join("")}</tr>`;
     const bodyRows = sampleRows
-      .map((r) => `<tr>${STUDENT_IMPORT_FIELDS.map((f) => `<td>${r[f.key] || ""}</td>`).join("")}</tr>`)
+      .map((r) => `<tr>${STUDENT_IMPORT_FIELDS.map((f) => `<td>${escapeStudentText(r[f.key] || "")}</td>`).join("")}</tr>`)
       .join("");
     table.innerHTML = `<thead>${headRow}</thead><tbody>${bodyRows}</tbody>`;
   }
@@ -706,7 +950,7 @@
     const opts = [];
     for (let i = 0; i < scanCount; i++) {
       const preview = (importRaw[i] || []).filter((c) => String(c || "").trim() !== "").slice(0, 3).join(", ");
-      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${preview || "(ว่าง)"}</option>`);
+      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${escapeStudentText(preview || "(ว่าง)")}</option>`);
     }
     select.innerHTML = opts.join("");
     document.getElementById("headerRowField").style.display = "block";
@@ -798,6 +1042,9 @@
         return;
       }
       const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS).map((row) => {
+        STUDENT_IMPORT_FIELDS.forEach((field) => {
+          if (importMapping[field.key] == null) delete row[field.key];
+        });
         if (!row.full_name) {
           row.full_name = [row.name_prefix, row.first_name, row.last_name]
             .map((v) => (v || "").toString().trim()).filter(Boolean).join(" ");

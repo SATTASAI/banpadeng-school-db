@@ -449,6 +449,65 @@ function canManageStudents(user) {
   return isAdmin(user) || user.role === "staff";
 }
 
+const STUDENT_DETAIL_FIELDS = [
+  "weight_kg", "height_cm", "blood_type", "religion", "ethnicity", "nationality",
+  "house_number", "village_no", "road_soi", "subdistrict", "district", "province",
+  "guardian_prefix", "guardian_first_name", "guardian_last_name", "guardian_occupation",
+  "guardian_relationship", "father_prefix", "father_first_name", "father_last_name",
+  "father_occupation", "mother_prefix", "mother_first_name", "mother_last_name",
+  "mother_occupation", "disadvantage",
+];
+const STUDENT_DETAIL_NUMBERS = new Set(["weight_kg", "height_cm"]);
+let studentDetailsSchemaReady = false;
+
+async function ensureStudentDetailsSchema(env) {
+  if (studentDetailsSchemaReady) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS student_details (
+    student_id INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
+    weight_kg REAL, height_cm REAL, blood_type TEXT, religion TEXT, ethnicity TEXT, nationality TEXT,
+    house_number TEXT, village_no TEXT, road_soi TEXT, subdistrict TEXT, district TEXT, province TEXT,
+    guardian_prefix TEXT, guardian_first_name TEXT, guardian_last_name TEXT, guardian_occupation TEXT,
+    guardian_relationship TEXT, father_prefix TEXT, father_first_name TEXT, father_last_name TEXT,
+    father_occupation TEXT, mother_prefix TEXT, mother_first_name TEXT, mother_last_name TEXT,
+    mother_occupation TEXT, disadvantage TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`).run();
+  studentDetailsSchemaReady = true;
+}
+
+function normalizeStudentDetail(field, value) {
+  const text = value == null ? "" : String(value).trim();
+  if (!text) return null;
+  if (!STUDENT_DETAIL_NUMBERS.has(field)) return text;
+  const number = Number(text.replace(",", "."));
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function getSubmittedStudentDetails(body) {
+  return STUDENT_DETAIL_FIELDS
+    .filter((field) => Object.prototype.hasOwnProperty.call(body || {}, field))
+    .map((field) => ({ field, value: normalizeStudentDetail(field, body[field]) }));
+}
+
+function prepareStudentDetailsUpsert(env, studentIdOrCode, details, lookupByCode = false) {
+  if (!details.length) return null;
+  const fields = details.map((item) => item.field);
+  const studentIdSql = lookupByCode ? "(SELECT id FROM students WHERE student_code = ?)" : "?";
+  const conflictUpdates = fields.map((field) => `${field} = excluded.${field}`).join(", ");
+  const statement = env.DB.prepare(`INSERT INTO student_details (student_id, ${fields.join(", ")}, updated_at)
+    VALUES (${studentIdSql}, ${fields.map(() => "?").join(", ")}, datetime('now'))
+    ON CONFLICT(student_id) DO UPDATE SET ${conflictUpdates}, updated_at = datetime('now')`);
+  return statement.bind(studentIdOrCode, ...details.map((item) => item.value));
+}
+
+async function saveStudentDetails(env, studentId, body) {
+  const details = getSubmittedStudentDetails(body);
+  if (!details.length) return false;
+  await ensureStudentDetailsSchema(env);
+  await prepareStudentDetailsUpsert(env, studentId, details).run();
+  return true;
+}
+
 // ---------- /api/students (GET) ----------
 async function handleListStudents(request, env) {
   const user = await getCurrentUser(request, env);
@@ -473,13 +532,15 @@ async function handleGetStudent(request, env, studentId) {
   const student = await env.DB.prepare("SELECT * FROM students WHERE id = ?").bind(studentId).first();
   if (!student) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
 
-  const { results: guardians } = await env.DB.prepare(
-    "SELECT * FROM guardians WHERE student_id = ? ORDER BY is_emergency_contact DESC, id"
-  )
-    .bind(studentId)
-    .all();
+  await ensureStudentDetailsSchema(env);
 
-  return jsonResponse({ student: { ...student, guardians } });
+  const [guardianResult, details] = await Promise.all([
+    env.DB.prepare("SELECT * FROM guardians WHERE student_id = ? ORDER BY is_emergency_contact DESC, id")
+      .bind(studentId).all(),
+    env.DB.prepare("SELECT * FROM student_details WHERE student_id = ?").bind(studentId).first(),
+  ]);
+
+  return jsonResponse({ student: { ...student, ...(details || {}), guardians: guardianResult.results } });
 }
 
 // ---------- /api/students (POST) ----------
@@ -541,6 +602,8 @@ async function handleCreateStudent(request, env) {
     )
     .run();
 
+  await saveStudentDetails(env, result.meta.last_row_id, body);
+
   return jsonResponse({ id: result.meta.last_row_id }, 201);
 }
 
@@ -589,10 +652,14 @@ async function handleUpdateStudent(request, env, studentId) {
     }
   }
 
-  if (updates.length === 0) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
+  const hasStudentDetails = getSubmittedStudentDetails(body).length > 0;
+  if (updates.length === 0 && !hasStudentDetails) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
 
-  values.push(studentId);
-  await env.DB.prepare(`UPDATE students SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  if (updates.length > 0) {
+    values.push(studentId);
+    await env.DB.prepare(`UPDATE students SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  }
+  if (hasStudentDetails) await saveStudentDetails(env, studentId, body);
 
   return jsonResponse({ ok: true });
 }
@@ -607,6 +674,8 @@ async function handleDeleteStudent(request, env, studentId) {
     return jsonResponse({ error: "ไม่มีสิทธิ์ลบข้อมูลนักเรียน" }, 403);
   }
 
+  await ensureStudentDetailsSchema(env);
+  await env.DB.prepare("DELETE FROM student_details WHERE student_id = ?").bind(studentId).run();
   await env.DB.prepare("DELETE FROM guardians WHERE student_id = ?").bind(studentId).run();
   await env.DB.prepare("DELETE FROM students WHERE id = ?").bind(studentId).run();
 
@@ -1235,40 +1304,52 @@ async function handleImportStudents(request, env) {
       skipped.push({ row: index + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
       return;
     }
-    validRows.push([
-      studentCode, fullName, asText(row.national_id) || null,
-      prefix || null, first || null, last || null, asText(row.birth_date) || null,
-      asText(row.classroom) || null, asText(row.grade_level) || null,
-      asText(row.health_conditions) || null, asText(row.allergies) || null,
-      asText(row.photo_url) || null,
-    ]);
+    validRows.push({
+      baseValues: [
+        studentCode, fullName, asText(row.national_id) || null,
+        prefix || null, first || null, last || null, asText(row.birth_date) || null,
+        asText(row.classroom) || null, asText(row.grade_level) || null,
+        asText(row.health_conditions) || null, asText(row.allergies) || null,
+        asText(row.photo_url) || null,
+      ],
+      details: getSubmittedStudentDetails(row),
+    });
   });
   if (!validRows.length) return jsonResponse({ created: 0, updated: 0, skipped });
 
   try {
-    // One lookup plus <=20 writes, with one additional query for authentication.
-    const codes = [...new Set(validRows.map((row) => row[0]))];
+    await ensureStudentDetailsSchema(env);
+    // One lookup plus at most two writes per student (ทะเบียนหลัก + ข้อมูลเพิ่มเติม).
+    const codes = [...new Set(validRows.map((row) => row.baseValues[0]))];
     const { results } = await env.DB.prepare(
       `SELECT student_code FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
     ).bind(...codes).all();
     const knownCodes = new Set(results.map((row) => row.student_code));
     let created = 0;
     let updated = 0;
-    const statements = validRows.map((values) => {
+    const statements = [];
+    validRows.forEach(({ baseValues: values, details }) => {
       if (knownCodes.has(values[0])) updated++;
       else { created++; knownCodes.add(values[0]); }
       // Retrying a committed batch updates the same student codes, without duplicates.
-      return env.DB.prepare(`INSERT INTO students
+      statements.push(env.DB.prepare(`INSERT INTO students
         (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
          classroom, grade_level, health_conditions, allergies, photo_url, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')
         ON CONFLICT(student_code) DO UPDATE SET
-          full_name = excluded.full_name, national_id = excluded.national_id,
-          name_prefix = excluded.name_prefix, first_name = excluded.first_name,
-          last_name = excluded.last_name, birth_date = excluded.birth_date,
-          classroom = excluded.classroom, grade_level = excluded.grade_level,
-          health_conditions = excluded.health_conditions, allergies = excluded.allergies,
-          photo_url = excluded.photo_url`).bind(...values);
+          full_name = excluded.full_name,
+          national_id = COALESCE(excluded.national_id, students.national_id),
+          name_prefix = COALESCE(excluded.name_prefix, students.name_prefix),
+          first_name = COALESCE(excluded.first_name, students.first_name),
+          last_name = COALESCE(excluded.last_name, students.last_name),
+          birth_date = COALESCE(excluded.birth_date, students.birth_date),
+          classroom = COALESCE(excluded.classroom, students.classroom),
+          grade_level = COALESCE(excluded.grade_level, students.grade_level),
+          health_conditions = COALESCE(excluded.health_conditions, students.health_conditions),
+          allergies = COALESCE(excluded.allergies, students.allergies),
+          photo_url = COALESCE(excluded.photo_url, students.photo_url)`).bind(...values));
+      const detailStatement = prepareStudentDetailsUpsert(env, values[0], details, true);
+      if (detailStatement) statements.push(detailStatement);
     });
     // D1 batch is transactional: an error rolls back every write in this batch.
     await env.DB.batch(statements);

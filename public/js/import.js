@@ -11,23 +11,42 @@ function normalizeHeader(s) {
 // คืนค่า mapping: { key: headerIndex หรือ null }
 function fuzzyMatchColumns(headers, fieldDefs) {
   const normHeaders = headers.map(normalizeHeader);
-  const mapping = {};
+  const mapping = Object.fromEntries(fieldDefs.map((field) => [field.key, null]));
   const usedIndexes = new Set();
 
+  // จับคู่คำที่ตรงกันทุกช่องก่อน เพื่อไม่ให้คำกว้าง ๆ เช่น "ชื่อ" ถูกฟิลด์อื่นแย่งไป
   fieldDefs.forEach((field) => {
-    let foundIndex = null;
     for (const syn of field.synonyms) {
       const normSyn = normalizeHeader(syn);
-      const idx = normHeaders.findIndex(
-        (h, i) => !usedIndexes.has(i) && (h === normSyn || h.includes(normSyn) || normSyn.includes(h))
-      );
+      if (!normSyn) continue;
+      const idx = normHeaders.findIndex((header, i) => !usedIndexes.has(i) && header && header === normSyn);
       if (idx !== -1) {
-        foundIndex = idx;
+        mapping[field.key] = idx;
+        usedIndexes.add(idx);
         break;
       }
     }
-    mapping[field.key] = foundIndex;
-    if (foundIndex !== null) usedIndexes.add(foundIndex);
+  });
+
+  // รอบที่สองรองรับหัวข้อที่มีหน่วยหรือคำขยาย เช่น "น้ำหนัก (กก.)"
+  fieldDefs.forEach((field) => {
+    if (mapping[field.key] !== null) return;
+    let best = null;
+    field.synonyms.forEach((syn) => {
+      const normSyn = normalizeHeader(syn);
+      if (!normSyn) return;
+      normHeaders.forEach((header, index) => {
+        if (!header || usedIndexes.has(index)) return;
+        const shortest = Math.min(header.length, normSyn.length);
+        if (shortest < 3 || (!header.includes(normSyn) && !normSyn.includes(header))) return;
+        const score = shortest * 10 - Math.abs(header.length - normSyn.length);
+        if (!best || score > best.score) best = { index, score };
+      });
+    });
+    if (best) {
+      mapping[field.key] = best.index;
+      usedIndexes.add(best.index);
+    }
   });
 
   return mapping;
