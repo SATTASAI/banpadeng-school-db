@@ -132,8 +132,13 @@
     <div class="error-box" id="importErrorBox"></div>
 
     <div id="importStep1">
-      <p style="color:var(--color-text-muted); font-size:14px;">เลือกไฟล์ Excel (.xlsx) หรือ CSV ที่มีอยู่ — ไม่ต้องเรียงหัวข้อให้ตรงกับระบบ ระบบจะจับคู่ให้อัตโนมัติ</p>
+      <p style="color:var(--color-text-muted); font-size:14px;">เลือกไฟล์ Excel (.xlsx) หรือ CSV ที่มีอยู่ — ไม่ต้องเรียงหัวข้อให้ตรงกับระบบ ระบบจะจับคู่ให้อัตโนมัติ (รองรับไฟล์จากระบบ DMC ด้วย)</p>
       <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" />
+      <div class="field" id="headerRowField" style="display:none; margin-top:14px;">
+        <label>แถวไหนคือหัวตาราง?</label>
+        <select class="plain" id="headerRowSelect"></select>
+        <p style="color:var(--color-text-muted); font-size:12px; margin-top:4px;">ถ้าไฟล์มีข้อความอื่น (เช่น วันที่ออกรายงาน) อยู่ก่อนหัวตารางจริง เลือกแถวที่ถูกต้องตรงนี้</p>
+      </div>
     </div>
 
     <div id="importStep2" style="display:none;">
@@ -357,21 +362,29 @@
 
   // ---------- นำเข้าจาก Excel/CSV ----------
   const STUDENT_IMPORT_FIELDS = [
-    { key: "student_code", label: "เลขประจำตัว", synonyms: ["เลขประจำตัว", "เลขประจำตัวนักเรียน", "รหัสนักเรียน", "รหัส", "studentid", "studentcode", "id", "code"] },
-    { key: "full_name", label: "ชื่อ-นามสกุล", synonyms: ["ชื่อ-นามสกุล", "ชื่อนักเรียน", "ชื่อสกุล", "ชื่อ สกุล", "ชื่อ", "name", "fullname"] },
+    { key: "student_code", label: "เลขประจำตัว (รหัสในโรงเรียน)", synonyms: ["รหัสนักเรียน", "เลขประจำตัวนักเรียน", "เลขประจำตัว", "รหัส", "studentid", "studentcode", "id", "code"] },
+    { key: "full_name", label: "ชื่อ-นามสกุล (ถ้ารวมอยู่คอลัมน์เดียว)", synonyms: ["ชื่อ-นามสกุล", "ชื่อนักเรียน", "ชื่อสกุล", "ชื่อ สกุล", "fullname", "full name"] },
+    { key: "name_prefix", label: "คำนำหน้าชื่อ (ถ้าแยกคอลัมน์)", synonyms: ["คำนำหน้าชื่อ", "คำนำหน้า"] },
+    { key: "name_first", label: "ชื่อ (ถ้าแยกจากนามสกุล)", synonyms: ["ชื่อ"] },
+    { key: "name_last", label: "นามสกุล (ถ้าแยกจากชื่อ)", synonyms: ["นามสกุล"] },
     { key: "classroom", label: "ห้อง", synonyms: ["ห้อง", "ห้องเรียน", "class", "classroom"] },
     { key: "grade_level", label: "ระดับชั้น", synonyms: ["ระดับชั้น", "ชั้นเรียน", "ชั้น", "grade", "gradelevel"] },
     { key: "health_conditions", label: "โรคประจำตัว", synonyms: ["โรคประจำตัว", "โรค", "สุขภาพ", "health"] },
     { key: "allergies", label: "การแพ้", synonyms: ["การแพ้", "แพ้ยา", "แพ้อาหาร", "แพ้", "allergy", "allergies"] },
   ];
 
+  let importRaw = null;
+  let importHeaderRowIndex = 0;
   let importParsed = null;
   let importMapping = null;
 
   function openImportModal() {
+    importRaw = null;
+    importHeaderRowIndex = 0;
     importParsed = null;
     importMapping = null;
     document.getElementById("importFileInput").value = "";
+    document.getElementById("headerRowField").style.display = "none";
     document.getElementById("importStep1").style.display = "block";
     document.getElementById("importStep2").style.display = "none";
     document.getElementById("importSummary").style.display = "none";
@@ -389,10 +402,10 @@
     const container = document.getElementById("mappingContainer");
     container.innerHTML = STUDENT_IMPORT_FIELDS.map((field) => {
       const options = importParsed.headers
-        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${h}</option>`)
+        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${columnOptionLabel(h, i, importParsed.rows)}</option>`)
         .join("");
       return `<div class="mapping-row">
-        <label>${field.label}${field.key === "student_code" || field.key === "full_name" ? " *" : ""}</label>
+        <label>${field.label}${field.key === "student_code" ? " *" : ""}</label>
         <select class="plain" data-field="${field.key}">
           <option value="">— ไม่นำเข้า —</option>
           ${options}
@@ -420,19 +433,44 @@
     table.innerHTML = `<thead>${headRow}</thead><tbody>${bodyRows}</tbody>`;
   }
 
+  function populateHeaderRowSelect() {
+    const select = document.getElementById("headerRowSelect");
+    const scanCount = Math.min(10, importRaw.length);
+    const opts = [];
+    for (let i = 0; i < scanCount; i++) {
+      const preview = (importRaw[i] || []).filter((c) => String(c || "").trim() !== "").slice(0, 3).join(", ");
+      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${preview || "(ว่าง)"}</option>`);
+    }
+    select.innerHTML = opts.join("");
+    document.getElementById("headerRowField").style.display = "block";
+  }
+
+  function applyHeaderRow() {
+    importParsed = extractHeadersAndRows(importRaw, importHeaderRowIndex);
+    importMapping = fuzzyMatchColumns(importParsed.headers, STUDENT_IMPORT_FIELDS);
+    renderMapping();
+    renderPreview();
+    document.getElementById("importStep2").style.display = "block";
+    document.getElementById("confirmImportBtn").style.display = "inline-flex";
+  }
+
+  document.getElementById("headerRowSelect").addEventListener("change", (e) => {
+    importHeaderRowIndex = Number(e.target.value);
+    applyHeaderRow();
+  });
+
   document.getElementById("importFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const errorBox = document.getElementById("importErrorBox");
     errorBox.classList.remove("visible");
     try {
-      importParsed = await parseSpreadsheetFile(file);
-      if (importParsed.rows.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์นี้");
-      importMapping = fuzzyMatchColumns(importParsed.headers, STUDENT_IMPORT_FIELDS);
-      renderMapping();
-      renderPreview();
-      document.getElementById("importStep2").style.display = "block";
-      document.getElementById("confirmImportBtn").style.display = "inline-flex";
+      importRaw = await parseSpreadsheetRaw(file);
+      if (importRaw.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์นี้");
+      importHeaderRowIndex = guessHeaderRowIndex(importRaw);
+      populateHeaderRowSelect();
+      applyHeaderRow();
+      if (importParsed.rows.length === 0) throw new Error("ไม่พบแถวข้อมูลหลังหัวตารางที่เลือก ลองเลือกแถวหัวตารางใหม่");
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
@@ -441,11 +479,23 @@
 
   document.getElementById("confirmImportBtn").addEventListener("click", async () => {
     if (!importParsed) return;
-    if (importMapping.student_code === null || importMapping.full_name === null) {
-      alert("กรุณาจับคู่อย่างน้อย เลขประจำตัว และ ชื่อ-นามสกุล");
+    if (importMapping.student_code === null) {
+      alert("กรุณาจับคู่คอลัมน์เลขประจำตัวอย่างน้อย");
       return;
     }
-    const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS);
+    if (importMapping.full_name === null && importMapping.name_first === null) {
+      alert("กรุณาจับคู่ 'ชื่อ-นามสกุล' หรือ 'ชื่อ' (แบบแยกคอลัมน์) อย่างน้อยหนึ่งแบบ");
+      return;
+    }
+    const rows = buildImportRows(importParsed.rows, importMapping, STUDENT_IMPORT_FIELDS).map((row) => {
+      if (!row.full_name) {
+        row.full_name = [row.name_prefix, row.name_first, row.name_last]
+          .map((v) => (v || "").toString().trim())
+          .filter(Boolean)
+          .join(" ");
+      }
+      return row;
+    });
     const btn = document.getElementById("confirmImportBtn");
     btn.disabled = true;
     btn.textContent = "กำลังนำเข้า...";

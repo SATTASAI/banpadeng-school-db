@@ -84,6 +84,11 @@
     <div id="importStep1">
       <p style="color:var(--color-text-muted); font-size:14px;">ระบบจะจับคู่บุคลากรด้วย "อีเมล" ที่ตรงกับบัญชีที่มีอยู่ในระบบเท่านั้น (แถวที่หาอีเมลไม่เจอจะถูกข้าม)</p>
       <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" />
+      <div class="field" id="headerRowField" style="display:none; margin-top:14px;">
+        <label>แถวไหนคือหัวตาราง?</label>
+        <select class="plain" id="headerRowSelect"></select>
+        <p style="color:var(--color-text-muted); font-size:12px; margin-top:4px;">ถ้าไฟล์มีข้อความอื่นอยู่ก่อนหัวตารางจริง เลือกแถวที่ถูกต้องตรงนี้</p>
+      </div>
     </div>
 
     <div id="importStep2" style="display:none;">
@@ -218,13 +223,18 @@
     { key: "license_expiry_date", label: "วันหมดอายุใบประกอบวิชาชีพ", synonyms: ["วันหมดอายุใบประกอบวิชาชีพ", "ใบประกอบวิชาชีพ", "license", "licenseexpiry"] },
   ];
 
+  let importRaw = null;
+  let importHeaderRowIndex = 0;
   let importParsed = null;
   let importMapping = null;
 
   function openImportModal() {
+    importRaw = null;
+    importHeaderRowIndex = 0;
     importParsed = null;
     importMapping = null;
     document.getElementById("importFileInput").value = "";
+    document.getElementById("headerRowField").style.display = "none";
     document.getElementById("importStep1").style.display = "block";
     document.getElementById("importStep2").style.display = "none";
     document.getElementById("importSummary").style.display = "none";
@@ -242,7 +252,7 @@
     const container = document.getElementById("mappingContainer");
     container.innerHTML = STAFF_IMPORT_FIELDS.map((field) => {
       const options = importParsed.headers
-        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${h}</option>`)
+        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${columnOptionLabel(h, i, importParsed.rows)}</option>`)
         .join("");
       return `<div class="mapping-row">
         <label>${field.label}${field.key === "email" ? " *" : ""}</label>
@@ -273,19 +283,44 @@
     table.innerHTML = `<thead>${headRow}</thead><tbody>${bodyRows}</tbody>`;
   }
 
+  function populateHeaderRowSelect() {
+    const select = document.getElementById("headerRowSelect");
+    const scanCount = Math.min(10, importRaw.length);
+    const opts = [];
+    for (let i = 0; i < scanCount; i++) {
+      const preview = (importRaw[i] || []).filter((c) => String(c || "").trim() !== "").slice(0, 3).join(", ");
+      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${preview || "(ว่าง)"}</option>`);
+    }
+    select.innerHTML = opts.join("");
+    document.getElementById("headerRowField").style.display = "block";
+  }
+
+  function applyHeaderRow() {
+    importParsed = extractHeadersAndRows(importRaw, importHeaderRowIndex);
+    importMapping = fuzzyMatchColumns(importParsed.headers, STAFF_IMPORT_FIELDS);
+    renderMapping();
+    renderPreview();
+    document.getElementById("importStep2").style.display = "block";
+    document.getElementById("confirmImportBtn").style.display = "inline-flex";
+  }
+
+  document.getElementById("headerRowSelect").addEventListener("change", (e) => {
+    importHeaderRowIndex = Number(e.target.value);
+    applyHeaderRow();
+  });
+
   document.getElementById("importFileInput").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const errorBox = document.getElementById("importErrorBox");
     errorBox.classList.remove("visible");
     try {
-      importParsed = await parseSpreadsheetFile(file);
-      if (importParsed.rows.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์นี้");
-      importMapping = fuzzyMatchColumns(importParsed.headers, STAFF_IMPORT_FIELDS);
-      renderMapping();
-      renderPreview();
-      document.getElementById("importStep2").style.display = "block";
-      document.getElementById("confirmImportBtn").style.display = "inline-flex";
+      importRaw = await parseSpreadsheetRaw(file);
+      if (importRaw.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์นี้");
+      importHeaderRowIndex = guessHeaderRowIndex(importRaw);
+      populateHeaderRowSelect();
+      applyHeaderRow();
+      if (importParsed.rows.length === 0) throw new Error("ไม่พบแถวข้อมูลหลังหัวตารางที่เลือก ลองเลือกแถวหัวตารางใหม่");
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
