@@ -5,5 +5,12 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "banpadeng_school_db",
+      "database_id": "870fa9ec-122f-4161-a1ca-cc9979dcfa30"
+    }
+  ]
 }
