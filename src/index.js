@@ -1248,6 +1248,14 @@ async function handleOverview(request, env) {
   const pendingLeave = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'"
   ).first();
+  const { results: departmentRows } = await env.DB.prepare(
+    `SELECT department,
+            COUNT(*) AS project_count,
+            ROUND(AVG(progress_percent), 0) AS average_progress,
+            COALESCE(SUM(budget_amount), 0) AS total_budget
+     FROM projects
+     GROUP BY department`
+  ).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
     `SELECT u.full_name, sp.license_expiry_date
@@ -1257,6 +1265,17 @@ async function handleOverview(request, env) {
      ORDER BY sp.license_expiry_date ASC`
   ).all();
 
+  const departmentMap = Object.fromEntries(departmentRows.map((row) => [row.department, row]));
+  const departmentSummary = DEPARTMENTS.map((department) => {
+    const row = departmentMap[department];
+    return {
+      department,
+      project_count: Number(row?.project_count || 0),
+      average_progress: Number(row?.average_progress || 0),
+      total_budget: Number(row?.total_budget || 0),
+    };
+  });
+
   return jsonResponse({
     students_enrolled: studentsEnrolled.count,
     staff_count: staffCount.count,
@@ -1264,6 +1283,8 @@ async function handleOverview(request, env) {
     overdue_tasks: overdueTasks.count,
     ongoing_projects: ongoingProjects.count,
     pending_leave_requests: pendingLeave.count,
+    total_project_budget: departmentSummary.reduce((sum, row) => sum + row.total_budget, 0),
+    department_summary: departmentSummary,
     licenses_expiring: licensesExpiring,
   });
 }

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>หมวดงาน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  .module-head { display:flex; justify-content:space-between; align-items:flex-start; gap:20px; margin-bottom:24px; }
+  .module-kicker { color:var(--color-ochre-600); font-size:13px; font-weight:700; margin-bottom:4px; }
+  .module-description { color:var(--color-text-muted); margin:0; max-width:720px; }
+  .module-count { flex-shrink:0; background:rgba(59,75,174,.1); color:var(--color-forest-700); border-radius:999px; padding:7px 12px; font-size:13px; font-weight:600; }
+  .feature-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:14px; }
+  .feature-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px; min-height:132px; display:flex; flex-direction:column; }
+  .feature-number { width:28px; height:28px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; background:var(--color-forest-900); color:#fff; font-size:12px; font-weight:700; margin-bottom:12px; }
+  .feature-card h3 { font-size:15px; line-height:1.45; margin-bottom:6px; }
+  .feature-card p { color:var(--color-text-muted); font-size:13px; margin:0 0 12px; }
+  .feature-footer { margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .feature-status { font-size:11px; color:var(--color-text-muted); }
+  .feature-status.ready { color:var(--color-success); font-weight:600; }
+  .feature-link { font-size:12px; font-weight:600; text-decoration:none; }
+  .quick-actions { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 24px; }
+  .quick-actions .btn { width:auto; padding:9px 16px; text-decoration:none; }
+  .notice { margin-top:24px; background:#fff8df; border:1px solid #ead99b; border-radius:var(--radius-lg); padding:14px 16px; color:#6d5813; font-size:13px; }
+  @media (max-width:640px) {
+    .module-head { flex-direction:column; gap:10px; }
+    .feature-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="app-topbar">
+    <div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน" /></div>โรงเรียนบ้านป่าเด็ง</div>
+    <div class="app-user"><a href="/dashboard.html" id="backHomeLink">← กลับแดชบอร์ด</a></div>
+  </div>
+
+  <main class="app-main">
+    <div class="module-head">
+      <div>
+        <div class="module-kicker" id="moduleKicker">หมวดงาน</div>
+        <h2 id="moduleTitle">ระบบจัดการข้อมูลโรงเรียน</h2>
+        <p class="module-description" id="moduleDescription"></p>
+      </div>
+      <div class="module-count" id="moduleCount"></div>
+    </div>
+
+    <div class="error-box" id="errorBox"></div>
+    <div class="quick-actions" id="quickActions"></div>
+    <section class="feature-grid" id="featureGrid"></section>
+    <div class="notice" id="moduleNotice">
+      รายการที่ระบุว่า “วางโครงสร้างแล้ว” ถูกเพิ่มไว้ในระบบเรียบร้อย และพร้อมต่อยอดฐานข้อมูล แบบฟอร์ม และขั้นตอนอนุมัติในเฟสถัดไป
+    </div>
+  </main>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  const MODULES = {
+    students: {
+      number: 2,
+      title: "ข้อมูลนักเรียน",
+      description: "ทะเบียนนักเรียน ข้อมูลครอบครัว สุขภาพ การเรียน และประวัติการเปลี่ยนสถานะของนักเรียน",
+      actions: [{ label: "เปิดทะเบียนนักเรียน", href: "/students.html" }],
+      ready: [0, 1, 2, 3, 4],
+      items: [
+        "ประวัติและข้อมูลส่วนตัว",
+        "ข้อมูลผู้ปกครองและครอบครัว",
+        "ที่อยู่ สุขภาพ และข้อมูลความด้อยโอกาส",
+        "ชั้นเรียน ห้องเรียน และครูประจำชั้น",
+        "การย้ายเข้า ย้ายออก และจำหน่ายนักเรียน",
+        "การมาเรียนและพฤติกรรม",
+        "ผลการเรียนและกิจกรรมของนักเรียน"
+      ]
+    },
+    staff: {
+      number: 3,
+      title: "ข้อมูลครูและบุคลากร",
+      description: "ศูนย์รวมประวัติ ภาระงาน การพัฒนาตนเอง ใบประกอบวิชาชีพ ผลงาน และรางวัลของบุคลากร",
+      actions: [
+        { label: "เปิดข้อมูลบุคลากร", href: "/staff.html" },
+        { label: "เปิดระบบการลา", href: "/leave.html", secondary: true }
+      ],
+      ready: [0, 4, 6],
+      items: [
+        "ประวัติส่วนตัวและข้อมูลการติดต่อ",
+        "ตำแหน่ง วิทยฐานะ และอายุราชการ",
+        "วุฒิการศึกษาและวิชาเอก",
+        "ภาระงานและงานที่ได้รับมอบหมาย",
+        "การลา การอบรม และการพัฒนาตนเอง",
+        "คำสั่งปฏิบัติหน้าที่",
+        "วันหมดอายุใบประกอบวิชาชีพ",
+        "ผลงานและรางวัล",
+        "ข้อมูลการอบรมและพัฒนา"
+      ]
+    },
+    academic: {
+      number: 4,
+      title: "ฝ่ายบริหารงานวิชาการ",
+      description: "บริหารหลักสูตร การเรียนการสอน ตารางเรียน การวัดผล นิเทศ และประกันคุณภาพการศึกษา",
+      actions: [{ label: "เปิดงานและโครงการวิชาการ", href: "/department.html?dept=academic" }],
+      ready: [1],
+      items: [
+        "หลักสูตรสถานศึกษา",
+        "โครงการและแผนงานด้านวิชาการ",
+        "แผนการจัดการเรียนรู้",
+        "ตารางเรียนและตารางสอน",
+        "ตารางสอบ",
+        "ผลสัมฤทธิ์ทางการเรียน",
+        "การวัดและประเมินผล",
+        "นิเทศ ติดตาม และประกันคุณภาพ",
+        "ระบบจัดตารางเรียนและตารางสอน",
+        "กำหนดวัน เวลา ห้องเรียน และครู",
+        "ตรวจสอบคาบเรียนชนกัน",
+        "ตารางสอนรายบุคคล",
+        "ตารางเรียนรายห้อง",
+        "ตารางเรียนรายชั้น",
+        "ตารางใช้ห้องเรียน",
+        "ส่งออกและพิมพ์ตาราง"
+      ]
+    },
+    budget: {
+      number: 5,
+      title: "ฝ่ายบริหารงานงบประมาณ",
+      description: "วางแผนงบประมาณ รับ–จ่าย อนุมัติเบิกจ่าย พัสดุ ครุภัณฑ์ และรายงานการเงิน",
+      actions: [{ label: "เปิดงานและโครงการงบประมาณ", href: "/department.html?dept=budget" }],
+      ready: [0],
+      items: [
+        "โครงการและแผนการใช้จ่าย",
+        "งบประมาณประจำปี",
+        "รายรับ–รายจ่าย",
+        "เงินอุดหนุนและค่าใช้จ่ายนักเรียน",
+        "ระบบรับ–ส่งหนังสือขอใช้งบประมาณ",
+        "ระบบขออนุมัติเบิกจ่าย",
+        "เอกสารเบิกจ่าย",
+        "รายงานการเงิน",
+        "ครุภัณฑ์และพัสดุ",
+        "ทะเบียนวัสดุ ครุภัณฑ์ และการตรวจสอบทรัพย์สิน"
+      ]
+    },
+    personnel: {
+      number: 6,
+      title: "ฝ่ายบริหารงานบุคคล",
+      description: "โครงการ คำสั่ง เวร การลา การประเมิน และการพัฒนาบุคลากรอย่างเป็นระบบ",
+      actions: [
+        { label: "เปิดงานและโครงการบุคคล", href: "/department.html?dept=personnel" },
+        { label: "เปิดระบบการลา", href: "/leave.html", secondary: true },
+        { label: "เปิดระบบมอบหมายงาน", href: "/tasks.html", secondary: true }
+      ],
+      ready: [0, 2, 4],
+      items: [
+        "โครงการและแผนงานฝ่ายบุคคล",
+        "คำสั่งปฏิบัติหน้าที่",
+        "ระบบการลา",
+        "ระบบเวรประจำวัน",
+        "บันทึกการปฏิบัติงาน",
+        "แบบประเมิน PA",
+        "การอบรมและพัฒนาบุคลากร",
+        "แฟ้มประวัติและผลงานบุคลากร"
+      ]
+    },
+    general: {
+      number: 7,
+      title: "ฝ่ายบริหารงานทั่วไป",
+      description: "งานสารบรรณ อาคารสถานที่ การแจ้งซ่อม ยานพาหนะ ประชาสัมพันธ์ และกิจกรรมโรงเรียน",
+      actions: [{ label: "เปิดงานและโครงการบริหารทั่วไป", href: "/department.html?dept=general" }],
+      ready: [0],
+      items: [
+        "โครงการและแผนงานฝ่ายบริหารทั่วไป",
+        "หนังสือราชการ",
+        "งานสารบรรณ",
+        "รับ–ส่งหนังสือ",
+        "อาคารสถานที่และห้องเรียน",
+        "การแจ้งซ่อมและติดตามงานซ่อม",
+        "ยานพาหนะ",
+        "งานประชาสัมพันธ์",
+        "ข่าวสารและกิจกรรมของโรงเรียน"
+      ]
+    },
+    "student-support": {
+      number: 8,
+      title: "ระบบดูแลช่วยเหลือนักเรียน",
+      description: "คัดกรอง ดูแล ติดตาม ส่งต่อ และประสานความร่วมมือเพื่อช่วยเหลือนักเรียนรายบุคคล",
+      actions: [{ label: "เปิดข้อมูลนักเรียน", href: "/students.html" }],
+      ready: [],
+      items: [
+        "คัดกรองนักเรียน",
+        "เยี่ยมบ้าน",
+        "ทุนการศึกษา",
+        "นักเรียนกลุ่มเสี่ยง",
+        "บันทึกการช่วยเหลือและติดตามผล",
+        "บันทึกพฤติกรรม",
+        "ระบบส่งต่อและประสานผู้ปกครอง",
+        "สรุปรายงานนักเรียนรายบุคคล"
+      ]
+    },
+    documents: {
+      number: 9,
+      title: "เอกสารและคลังไฟล์",
+      description: "คลังเอกสารกลางที่จัดหมวด ค้นหา กำหนดสิทธิ์ และตรวจสอบประวัติการแก้ไขได้",
+      actions: [],
+      ready: [],
+      items: [
+        "จัดเก็บไฟล์แยกตามฝ่าย",
+        "แยกตามปีการศึกษา โครงการ และประเภทเอกสาร",
+        "รองรับไฟล์ Word, Excel, PDF และรูปภาพ",
+        "ค้นหาเอกสารด้วยชื่อหรือคำสำคัญ",
+        "ดาวน์โหลดและดูตัวอย่างไฟล์",
+        "กำหนดสิทธิ์การเข้าถึงเอกสาร",
+        "บันทึกเวอร์ชันและประวัติการแก้ไขไฟล์"
+      ]
+    },
+    reports: {
+      number: 10,
+      title: "รายงานและการส่งออกข้อมูล",
+      description: "รายงานเพื่อการบริหาร หน่วยงานต้นสังกัด และการส่งออกข้อมูลในรูปแบบมาตรฐาน",
+      actions: [{ label: "เปิดหน้ารายงาน", href: "/reports.html" }],
+      ready: [0, 1, 7],
+      items: [
+        "รายงานข้อมูลนักเรียน",
+        "รายงานข้อมูลครูและบุคลากร",
+        "รายงานการมาเรียน",
+        "รายงานผลการเรียน",
+        "รายงานงบประมาณและการเงิน",
+        "รายงานโครงการ",
+        "รายงานพัสดุและครุภัณฑ์",
+        "รายงานสำหรับผู้บริหาร",
+        "รายงานสำหรับหน่วยงานต้นสังกัด",
+        "ส่งออกเป็น Excel, PDF และ Word"
+      ]
+    },
+    users: {
+      number: 11,
+      title: "ผู้ใช้งานและสิทธิ์",
+      description: "กำหนดบทบาทและสิทธิ์แยกตามเมนู ข้อมูล และการดำเนินการของผู้ใช้งานแต่ละกลุ่ม",
+      actions: [{ label: "เปิดจัดการผู้ใช้งาน", href: "/admin-users.html" }],
+      ready: [0, 1, 2, 7],
+      items: [
+        "ผู้ดูแลระบบ",
+        "ผู้บริหาร",
+        "ครู",
+        "ครูประจำชั้น",
+        "เจ้าหน้าที่ฝ่ายวิชาการ",
+        "เจ้าหน้าที่การเงิน",
+        "เจ้าหน้าที่พัสดุ",
+        "เจ้าหน้าที่ธุรการ",
+        "ผู้ปกครอง",
+        "กำหนดสิทธิ์แยกตามเมนู ข้อมูล และการดำเนินการ"
+      ]
+    },
+    security: {
+      number: 12,
+      title: "ระบบสำรองข้อมูลและความปลอดภัย",
+      description: "ควบคุมความปลอดภัย ความต่อเนื่องของข้อมูล การตรวจสอบย้อนหลัง และการใช้งานหลายคนพร้อมกัน",
+      actions: [{ label: "เปิดจัดการผู้ใช้งาน", href: "/admin-users.html" }],
+      ready: [4, 5, 6],
+      items: [
+        "สำรองและกู้คืนข้อมูล",
+        "ประวัติการแก้ไขข้อมูล",
+        "บันทึกผู้ใช้งาน วันเวลา และรายการดำเนินการ",
+        "ล็อกข้อมูลสำคัญ",
+        "ยืนยันตัวตนและเปลี่ยนรหัสผ่าน",
+        "รองรับการใช้งานหลายคนพร้อมกัน",
+        "ป้องกันการเข้าถึงข้อมูลส่วนบุคคล",
+        "ระบบแจ้งเตือนความผิดปกติ"
+      ]
+    }
+  };
+
+  function renderModule(key, module) {
+    document.title = `${module.title} — ระบบจัดการโรงเรียนบ้านป่าเด็ง`;
+    document.getElementById("moduleKicker").textContent = `หมวดที่ ${module.number}`;
+    document.getElementById("moduleTitle").textContent = module.title;
+    document.getElementById("moduleDescription").textContent = module.description;
+    document.getElementById("moduleCount").textContent = `${module.items.length} หัวข้องาน`;
+
+    const actions = document.getElementById("quickActions");
+    actions.innerHTML = module.actions.map((action) =>
+      `<a class="btn ${action.secondary ? "btn-ghost" : "btn-primary"}" href="${action.href}">${action.label}</a>`
+    ).join("");
+
+    document.getElementById("featureGrid").innerHTML = module.items.map((item, index) => {
+      const ready = module.ready.includes(index);
+      return `<article class="feature-card">
+        <span class="feature-number">${String(index + 1).padStart(2, "0")}</span>
+        <h3>${item}</h3>
+        <div class="feature-footer">
+          <span class="feature-status ${ready ? "ready" : ""}">${ready ? "เปิดใช้งานแล้ว" : "วางโครงสร้างแล้ว"}</span>
+        </div>
+      </article>`;
+    }).join("");
+  }
+
+  if (window.parent && window.parent !== window) {
+    document.getElementById("backHomeLink").addEventListener("click", (event) => {
+      event.preventDefault();
+      if (window.parent.showOverview) window.parent.showOverview();
+    });
+  }
+
+  (async () => {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get("module") || "students";
+    const module = MODULES[key];
+    const { user } = await apiRequest("/api/auth/me");
+    if (!user) { window.location.href = "/login.html"; return; }
+    if (!user.role) { window.location.href = "/pending.html"; return; }
+    if ((key === "users" || key === "security") && !user.is_admin) {
+      document.getElementById("errorBox").textContent = "ไม่มีสิทธิ์เข้าถึงหมวดบริหารระบบ";
+      document.getElementById("errorBox").classList.add("visible");
+      document.getElementById("featureGrid").innerHTML = "";
+      document.getElementById("moduleNotice").style.display = "none";
+      return;
+    }
+    if (!module) {
+      document.getElementById("errorBox").textContent = "ไม่พบหมวดงานที่ต้องการ";
+      document.getElementById("errorBox").classList.add("visible");
+      return;
+    }
+    renderModule(key, module);
+  })();
+</script>
+</body>
+</html>

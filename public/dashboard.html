@@ -8,7 +8,7 @@
 <style>
   .layout { display:flex; height:100vh; overflow:hidden; }
   .sidebar {
-    width:240px; flex-shrink:0; background:var(--color-forest-900);
+    width:274px; flex-shrink:0; background:var(--color-forest-900);
     color:#fff; padding:24px 16px; display:flex; flex-direction:column; overflow-y:auto;
   }
   .sidebar-brand { display:flex; align-items:center; gap:10px; font-weight:600; margin-bottom:28px; padding:0 8px; cursor:pointer; }
@@ -16,17 +16,18 @@
   .sidebar-brand .brand-mark img { width:100%; height:100%; object-fit:contain; padding:2px; }
   .sidebar nav { display:flex; flex-direction:column; gap:2px; flex:1; }
   .sidebar nav a {
-    color:rgba(255,255,255,0.85); text-decoration:none; padding:10px 12px;
-    border-radius:8px; font-size:14px; transition:background .15s;
+    color:rgba(255,255,255,0.85); text-decoration:none; padding:8px 10px;
+    border-radius:8px; font-size:13px; transition:background .15s; display:flex; align-items:center; gap:9px;
   }
   .sidebar nav a:hover { background:rgba(255,255,255,0.08); }
   .sidebar nav a.active { background:rgba(255,255,255,0.16); color:#fff; font-weight:600; }
   .nav-label { font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:rgba(255,255,255,0.5); padding:14px 12px 4px; }
+  .nav-number { width:22px; height:22px; border-radius:7px; background:rgba(255,255,255,.1); display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
   .sidebar-footer { border-top:1px solid rgba(255,255,255,0.15); padding-top:14px; margin-top:14px; font-size:13px; }
   .sidebar-footer .role-chip { background:rgba(255,255,255,0.15); color:#fff; margin-bottom:8px; display:inline-block; }
   .sidebar-footer a { color:rgba(255,255,255,0.75); text-decoration:underline; display:block; margin-top:8px; }
   .content-area { flex:1; overflow-y:auto; position:relative; }
-  .main-content { padding:32px 40px; max-width:1080px; }
+  .main-content { padding:32px 40px 56px; max-width:1180px; }
   .content-frame { display:none; width:100%; height:100%; border:none; }
   .content-frame.active { display:block; }
   .overview-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:16px; margin-top:24px; }
@@ -34,15 +35,40 @@
   .overview-number { font-size:30px; font-weight:700; color:var(--color-forest-900); }
   .overview-label { font-size:13px; color:var(--color-text-muted); margin-top:4px; }
   .overview-number.warn { color:var(--color-danger); }
-  .license-panel { margin-top:32px; }
+  .dashboard-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
+  .dashboard-head .btn { width:auto; padding:8px 14px; font-size:13px; }
+  .updated-at { color:var(--color-text-muted); font-size:12px; margin-top:5px; text-align:right; }
+  .dashboard-section { margin-top:32px; }
+  .section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+  .section-head p { margin:0; color:var(--color-text-muted); font-size:13px; }
+  .department-grid { display:grid; grid-template-columns:repeat(4, minmax(150px, 1fr)); gap:14px; }
+  .department-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:16px; }
+  .department-card h4 { margin:0 0 8px; color:var(--color-forest-900); font-size:14px; }
+  .department-metric { font-size:24px; font-weight:700; color:var(--color-forest-900); }
+  .department-meta { color:var(--color-text-muted); font-size:12px; }
+  .snapshot-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .snapshot-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .snapshot-card h3 { font-size:16px; margin-bottom:8px; }
+  .snapshot-card p { margin:0; color:var(--color-text-muted); font-size:13px; }
+  .snapshot-value { font-size:24px; color:var(--color-forest-900); font-weight:700; margin-bottom:3px; }
+  .alert-list { display:grid; gap:9px; margin-top:12px; }
+  .alert-item { display:flex; justify-content:space-between; gap:12px; background:var(--color-bg); border-radius:10px; padding:9px 11px; font-size:13px; }
+  .alert-count { font-weight:700; color:var(--color-danger); }
+  .inline-link { display:inline-block; margin-top:10px; font-size:13px; font-weight:600; }
+  .quick-actions { display:flex; flex-wrap:wrap; gap:8px; }
+  .quick-actions .btn { width:auto; padding:8px 14px; font-size:13px; text-decoration:none; }
   @media (max-width: 720px) {
-    .layout { flex-direction:column; height:auto; }
-    .sidebar { width:100%; flex-direction:row; align-items:center; padding:14px 16px; flex-wrap:wrap; overflow:visible; }
-    .sidebar-brand { margin-bottom:0; }
-    .sidebar nav { flex-direction:row; flex-wrap:wrap; }
+    .layout { display:block; height:100vh; }
+    .sidebar { width:100%; height:240px; padding:14px 16px; display:block; overflow-y:auto; }
+    .sidebar-brand { margin-bottom:10px; }
+    .sidebar nav { display:grid; grid-template-columns:1fr 1fr; gap:3px; }
+    .nav-label { grid-column:1 / -1; }
     .sidebar-footer { display:none; }
-    .content-area { height:calc(100vh - 60px); }
+    .content-area { height:calc(100vh - 240px); }
     .main-content { padding:24px 20px; }
+    .department-grid, .snapshot-grid { grid-template-columns:1fr; }
+    .dashboard-head { flex-direction:column; }
+    .updated-at { text-align:left; }
   }
 </style>
 </head>
@@ -54,18 +80,25 @@
       โรงเรียนบ้านป่าเด็ง
     </div>
     <nav>
-      <a href="/tasks.html" data-page="tasks">จัดการงาน</a>
-      <a href="/students.html" data-page="students">ข้อมูลนักเรียน</a>
-      <a href="/staff.html" data-page="staff">ข้อมูลครู/บุคลากร</a>
-      <a href="/leave.html" data-page="leave">วันลา</a>
+      <a href="#" id="overviewNav" class="active"><span class="nav-number">01</span>แดชบอร์ดภาพรวม</a>
+      <div class="nav-label">ข้อมูลหลัก</div>
+      <a href="/modules.html?module=students" data-page="students"><span class="nav-number">02</span>ข้อมูลนักเรียน</a>
+      <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
       <div class="nav-label">4 ฝ่ายงาน</div>
-      <a href="/department.html?dept=academic" data-page="dept-academic">ฝ่ายบริหารงานวิชาการ</a>
-      <a href="/department.html?dept=budget" data-page="dept-budget">ฝ่ายบริหารงานงบประมาณ</a>
-      <a href="/department.html?dept=personnel" data-page="dept-personnel">ฝ่ายบริหารงานบุคคล</a>
-      <a href="/department.html?dept=general" data-page="dept-general">ฝ่ายบริหารงานทั่วไป</a>
-      <div class="nav-label">อื่นๆ</div>
-      <a href="/reports.html" data-page="reports">รายงาน</a>
-      <a href="/admin-users.html" data-page="admin-users" id="adminNavLink" style="display:none;">จัดการผู้ใช้งาน</a>
+      <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
+      <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
+      <a href="/modules.html?module=personnel" data-page="personnel"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล</a>
+      <a href="/modules.html?module=general" data-page="general"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป</a>
+      <div class="nav-label">ระบบสนับสนุน</div>
+      <a href="/modules.html?module=student-support" data-page="student-support"><span class="nav-number">08</span>ดูแลช่วยเหลือนักเรียน</a>
+      <a href="/modules.html?module=documents" data-page="documents"><span class="nav-number">09</span>เอกสารและคลังไฟล์</a>
+      <a href="/modules.html?module=reports" data-page="reports"><span class="nav-number">10</span>รายงานและส่งออกข้อมูล</a>
+      <div class="nav-label admin-only" style="display:none;">บริหารระบบ</div>
+      <a href="/modules.html?module=users" data-page="users" class="admin-only" style="display:none;"><span class="nav-number">11</span>ผู้ใช้งานและสิทธิ์</a>
+      <a href="/modules.html?module=security" data-page="security" class="admin-only" style="display:none;"><span class="nav-number">12</span>สำรองข้อมูลและความปลอดภัย</a>
+      <div class="nav-label">เครื่องมือที่ใช้งานอยู่</div>
+      <a href="/tasks.html" data-page="tasks">จัดการและติดตามงาน</a>
+      <a href="/leave.html" data-page="leave">ระบบการลา</a>
     </nav>
     <div class="sidebar-footer">
       <span class="role-chip" id="roleChip">—</span>
@@ -76,14 +109,57 @@
 
   <div class="content-area">
     <div class="main-content" id="overviewWrap">
-      <h2 id="greeting" style="margin-bottom:2px;">สวัสดีครับ/ค่ะ</h2>
-      <p style="color:var(--color-text-muted); margin:0;">ภาพรวมของโรงเรียนบ้านป่าเด็ง</p>
+      <div class="dashboard-head">
+        <div>
+          <h2 id="greeting" style="margin-bottom:2px;">สวัสดีครับ/ค่ะ</h2>
+          <p style="color:var(--color-text-muted); margin:0;">ข้อมูลภาพรวมสำหรับติดตามการดำเนินงานของโรงเรียนบ้านป่าเด็ง</p>
+        </div>
+        <div>
+          <button class="btn btn-ghost" id="refreshOverviewBtn">อัปเดตข้อมูล</button>
+          <div class="updated-at" id="updatedAt">—</div>
+        </div>
+      </div>
 
       <div class="error-box" id="errorBox"></div>
 
       <div class="overview-grid" id="overviewGrid"></div>
 
-      <div class="license-panel">
+      <section class="dashboard-section">
+        <div class="section-head">
+          <div><h3 style="margin:0;">สรุปผลการดำเนินงานแต่ละฝ่าย</h3><p>จำนวนโครงการ ความคืบหน้าเฉลี่ย และกรอบงบประมาณที่บันทึกไว้</p></div>
+        </div>
+        <div class="department-grid" id="departmentGrid"></div>
+      </section>
+
+      <section class="dashboard-section snapshot-grid">
+        <div class="snapshot-card">
+          <h3>การมาเรียนวันนี้</h3>
+          <p>ข้อมูลมาเรียน ขาด ลา และมาสาย ใช้ข้อมูลจาก Q-info เพื่อไม่บันทึกคะแนนหรือเวลาเรียนซ้ำซ้อน</p>
+          <span class="inline-link">รอเชื่อมข้อมูลสรุปจาก Q-info</span>
+        </div>
+        <div class="snapshot-card">
+          <h3>งบประมาณภาพรวม</h3>
+          <div class="snapshot-value" id="projectBudgetTotal">0 บาท</div>
+          <p>กรอบงบประมาณรวมของโครงการที่บันทึกในระบบ ส่วนรายรับ–รายจ่ายและงบคงเหลือจะแสดงเมื่อเชื่อมโมดูลงบประมาณ</p>
+        </div>
+      </section>
+
+      <section class="dashboard-section snapshot-grid">
+        <div class="snapshot-card">
+          <h3>การแจ้งเตือนสำคัญ</h3>
+          <div class="alert-list" id="alertList"></div>
+        </div>
+        <div class="snapshot-card">
+          <h3>ทางลัดงานประจำ</h3>
+          <div class="quick-actions" style="margin:12px 0 0;">
+            <a class="btn btn-primary" href="#tasks" data-dashboard-page="tasks">ติดตามงาน</a>
+            <a class="btn btn-ghost" href="#leave" data-dashboard-page="leave">ตรวจคำขอลา</a>
+            <a class="btn btn-ghost" href="#reports" data-dashboard-page="reports">เปิดรายงาน</a>
+          </div>
+        </div>
+      </section>
+
+      <div class="dashboard-section">
         <h3 style="margin-bottom:12px;">ใบประกอบวิชาชีพใกล้หมดอายุ (ภายใน 90 วัน)</h3>
         <div class="panel" id="licensePanel"></div>
         <div class="empty-state" id="licenseEmpty" style="display:none;">ไม่มีใบประกอบวิชาชีพที่ใกล้หมดอายุ</div>
@@ -98,15 +174,18 @@
 <script>
   const PAGE_URLS = {
     tasks: "/tasks.html",
-    students: "/students.html",
-    staff: "/staff.html",
+    students: "/modules.html?module=students",
+    staff: "/modules.html?module=staff",
     leave: "/leave.html",
-    "dept-academic": "/department.html?dept=academic",
-    "dept-budget": "/department.html?dept=budget",
-    "dept-personnel": "/department.html?dept=personnel",
-    "dept-general": "/department.html?dept=general",
-    reports: "/reports.html",
-    "admin-users": "/admin-users.html",
+    academic: "/modules.html?module=academic",
+    budget: "/modules.html?module=budget",
+    personnel: "/modules.html?module=personnel",
+    general: "/modules.html?module=general",
+    "student-support": "/modules.html?module=student-support",
+    documents: "/modules.html?module=documents",
+    reports: "/modules.html?module=reports",
+    users: "/modules.html?module=users",
+    security: "/modules.html?module=security",
   };
 
   function showOverview() {
@@ -115,6 +194,7 @@
     frame.classList.remove("active");
     frame.src = "about:blank";
     document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
+    document.getElementById("overviewNav").classList.add("active");
     history.replaceState(null, "", "#");
   }
 
@@ -140,6 +220,17 @@
   });
 
   document.getElementById("homeLink").addEventListener("click", () => showOverview());
+  document.getElementById("overviewNav").addEventListener("click", (event) => {
+    event.preventDefault();
+    showOverview();
+  });
+
+  document.querySelectorAll("[data-dashboard-page]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      showPage(link.getAttribute("data-dashboard-page"));
+    });
+  });
 
   window.addEventListener("popstate", () => {
     const key = window.location.hash.replace("#", "");
@@ -149,6 +240,89 @@
       showOverview();
     }
   });
+
+  const DEPARTMENT_LABELS = {
+    academic: "วิชาการ",
+    budget: "งบประมาณ",
+    personnel: "บุคคล",
+    general: "บริหารทั่วไป",
+  };
+
+  const formatMoney = (value) => new Intl.NumberFormat("th-TH", {
+    style: "currency",
+    currency: "THB",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+
+  const escapeHtml = (value) => String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+  async function loadOverview() {
+    const errorBox = document.getElementById("errorBox");
+    const refreshButton = document.getElementById("refreshOverviewBtn");
+    errorBox.classList.remove("visible");
+    refreshButton.disabled = true;
+    refreshButton.textContent = "กำลังอัปเดต...";
+    try {
+      const data = await apiRequest("/api/overview");
+
+      document.getElementById("overviewGrid").innerHTML = `
+        <div class="overview-card"><div class="overview-number">${data.students_enrolled}</div><div class="overview-label">นักเรียนกำลังศึกษาอยู่</div></div>
+        <div class="overview-card"><div class="overview-number">${data.staff_count}</div><div class="overview-label">ครู/บุคลากรทั้งหมด</div></div>
+        <div class="overview-card"><div class="overview-number">${data.open_tasks}</div><div class="overview-label">งานที่ยังเปิดอยู่</div></div>
+        <div class="overview-card"><div class="overview-number ${data.overdue_tasks > 0 ? "warn" : ""}">${data.overdue_tasks}</div><div class="overview-label">งานเลยกำหนด</div></div>
+        <div class="overview-card"><div class="overview-number">${data.ongoing_projects}</div><div class="overview-label">โครงการที่กำลังดำเนินการ</div></div>
+        <div class="overview-card"><div class="overview-number ${data.pending_leave_requests > 0 ? "warn" : ""}">${data.pending_leave_requests}</div><div class="overview-label">คำขอลารอดำเนินการ</div></div>
+      `;
+
+      document.getElementById("departmentGrid").innerHTML = data.department_summary.map((department) => `
+        <article class="department-card">
+          <h4>ฝ่าย${DEPARTMENT_LABELS[department.department] || department.department}</h4>
+          <div class="department-metric">${department.project_count}</div>
+          <div class="department-meta">โครงการ · คืบหน้าเฉลี่ย ${department.average_progress}%</div>
+          <div class="department-meta">กรอบงบ ${formatMoney(department.total_budget)}</div>
+        </article>
+      `).join("");
+
+      document.getElementById("projectBudgetTotal").textContent = formatMoney(data.total_project_budget);
+      document.getElementById("alertList").innerHTML = `
+        <div class="alert-item"><span>งานเลยกำหนด</span><span class="alert-count">${data.overdue_tasks}</span></div>
+        <div class="alert-item"><span>คำขอลารอดำเนินการ</span><span class="alert-count">${data.pending_leave_requests}</span></div>
+        <div class="alert-item"><span>ใบประกอบวิชาชีพใกล้หมดอายุ</span><span class="alert-count">${data.licenses_expiring.length}</span></div>
+      `;
+
+      const licensePanel = document.getElementById("licensePanel");
+      const licenseEmpty = document.getElementById("licenseEmpty");
+      if (data.licenses_expiring.length === 0) {
+        licensePanel.innerHTML = "";
+        licenseEmpty.style.display = "block";
+      } else {
+        licenseEmpty.style.display = "none";
+        licensePanel.innerHTML = `<table>
+          <thead><tr><th>ชื่อ</th><th>วันหมดอายุ</th></tr></thead>
+          <tbody>${data.licenses_expiring
+            .map((r) => `<tr><td>${escapeHtml(r.full_name)}</td><td>${escapeHtml(r.license_expiry_date)}</td></tr>`)
+            .join("")}</tbody>
+        </table>`;
+      }
+      document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด ${new Intl.DateTimeFormat("th-TH", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date())}`;
+    } catch (err) {
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    } finally {
+      refreshButton.disabled = false;
+      refreshButton.textContent = "อัปเดตข้อมูล";
+    }
+  }
+
+  document.getElementById("refreshOverviewBtn").addEventListener("click", loadOverview);
 
   (async () => {
     const { user } = await apiRequest("/api/auth/me");
@@ -166,40 +340,12 @@
     document.getElementById("greeting").textContent = `สวัสดีครับ/ค่ะ คุณ${user.full_name}`;
 
     if (user.is_admin) {
-      document.getElementById("adminNavLink").style.display = "block";
+      document.querySelectorAll(".admin-only").forEach((element) => {
+        element.style.display = element.classList.contains("nav-label") ? "block" : "flex";
+      });
     }
 
-    const errorBox = document.getElementById("errorBox");
-    try {
-      const data = await apiRequest("/api/overview");
-
-      document.getElementById("overviewGrid").innerHTML = `
-        <div class="overview-card"><div class="overview-number">${data.students_enrolled}</div><div class="overview-label">นักเรียนกำลังศึกษาอยู่</div></div>
-        <div class="overview-card"><div class="overview-number">${data.staff_count}</div><div class="overview-label">ครู/บุคลากรทั้งหมด</div></div>
-        <div class="overview-card"><div class="overview-number">${data.open_tasks}</div><div class="overview-label">งานที่ยังเปิดอยู่</div></div>
-        <div class="overview-card"><div class="overview-number ${data.overdue_tasks > 0 ? "warn" : ""}">${data.overdue_tasks}</div><div class="overview-label">งานเลยกำหนด</div></div>
-        <div class="overview-card"><div class="overview-number">${data.ongoing_projects}</div><div class="overview-label">โครงการที่กำลังดำเนินการ</div></div>
-        <div class="overview-card"><div class="overview-number ${data.pending_leave_requests > 0 ? "warn" : ""}">${data.pending_leave_requests}</div><div class="overview-label">คำขอลารอดำเนินการ</div></div>
-      `;
-
-      const licensePanel = document.getElementById("licensePanel");
-      const licenseEmpty = document.getElementById("licenseEmpty");
-      if (data.licenses_expiring.length === 0) {
-        licensePanel.innerHTML = "";
-        licenseEmpty.style.display = "block";
-      } else {
-        licenseEmpty.style.display = "none";
-        licensePanel.innerHTML = `<table>
-          <thead><tr><th>ชื่อ</th><th>วันหมดอายุ</th></tr></thead>
-          <tbody>${data.licenses_expiring
-            .map((r) => `<tr><td>${r.full_name}</td><td>${r.license_expiry_date}</td></tr>`)
-            .join("")}</tbody>
-        </table>`;
-      }
-    } catch (err) {
-      errorBox.textContent = err.message;
-      errorBox.classList.add("visible");
-    }
+    await loadOverview();
 
     const initialKey = window.location.hash.replace("#", "");
     if (initialKey && PAGE_URLS[initialKey]) {
