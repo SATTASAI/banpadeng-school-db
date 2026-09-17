@@ -1,5 +1,5 @@
 {
-  "name": "banpadeng-school",
+  "name": "banpadeng-school-db",
   "compatibility_date": "2024-09-23",
   "main": "src/index.js",
   "assets": {
@@ -7,6 +7,7 @@
     "binding": "ASSETS"
   },
   "vars": {
+    "FILE_STORAGE_PROVIDER": "drive",
     "GOOGLE_DRIVE_FOLDER_ID": "1miKzaiIj3Y0CJ1RQHma7cDA7G3pz6ca9"
   },
   "d1_databases": [
