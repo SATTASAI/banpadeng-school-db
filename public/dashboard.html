@@ -39,7 +39,20 @@
   .global-topbar { height:62px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:0 22px; background:rgba(255,255,255,.72); border-bottom:1px solid var(--color-border); backdrop-filter:blur(24px) saturate(150%); }
   .global-search { flex:1; max-width:500px; position:relative; margin-left:auto; }
   .global-search input { width:100%; height:36px; border:1px solid rgba(113,145,177,.22); border-radius:999px; padding:0 14px 0 39px; background:rgba(232,239,246,.72); font-family:var(--font-body); color:var(--color-text); box-shadow:inset 0 1px 2px rgba(42,70,100,.04); }
+  .global-search input:focus { outline:none; border-color:rgba(42,133,216,.55); background:#fff; box-shadow:0 0 0 3px rgba(42,133,216,.10),0 8px 24px rgba(48,82,118,.09); }
   .global-search::before { content:"⌕"; position:absolute; left:13px; top:5px; font-size:20px; color:var(--color-text-muted); }
+  .global-search-results { display:none; position:absolute; z-index:90; top:43px; left:0; right:0; max-height:min(560px,70vh); overflow:auto; padding:7px; border:1px solid rgba(93,132,170,.22); border-radius:16px; background:rgba(251,253,255,.98); box-shadow:0 22px 56px rgba(30,57,86,.20); backdrop-filter:blur(24px); }
+  .global-search-results.open { display:block; }
+  .search-result { width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:10px; padding:9px 10px; border:0; border-radius:11px; background:transparent; color:var(--color-text); text-align:left; font:inherit; cursor:pointer; }
+  .search-result:hover,.search-result.active { background:#EAF4FC; }
+  .search-result-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(180deg,#E9F5FF,#DAEBFA); color:#176CB8; font-size:11px; font-weight:800; }
+  .search-result-copy { min-width:0; }
+  .search-result-copy strong,.search-result-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .search-result-copy strong { font-size:13px; }
+  .search-result-copy small { margin-top:2px; color:var(--color-text-muted); font-size:11px; }
+  .search-result-type { color:#7290AA; font-size:10px; }
+  .search-group-label { padding:7px 10px 4px; color:#7A91A7; font-size:10px; font-weight:800; letter-spacing:.07em; text-transform:uppercase; }
+  .search-message { padding:21px 14px; text-align:center; color:var(--color-text-muted); font-size:12px; }
   .topbar-actions { display:flex; align-items:center; gap:12px; }
   .period-pill,.user-pill { display:flex; align-items:center; gap:8px; min-height:36px; padding:5px 10px; border:1px solid rgba(113,145,177,.20); border-radius:999px; background:rgba(255,255,255,.70); font-size:12px; color:var(--color-text-muted); box-shadow:0 4px 12px rgba(53,88,123,.05); }
   .period-pill strong,.user-pill strong { color:var(--color-text); }
@@ -139,8 +152,8 @@
     .nav-label { grid-column:1 / -1; }
     .sidebar-footer { display:none; }
     .content-area { height:calc(100vh - 240px); }
-    .global-topbar { height:auto; min-height:58px; padding:10px 14px; }
-    .global-search { display:none; }
+    .global-topbar { height:auto; min-height:58px; padding:10px 14px; flex-wrap:wrap; }
+    .global-search { display:block; order:2; flex-basis:100%; max-width:none; }
     .period-pill span,.user-pill span { display:none; }
     .main-content { padding:24px 20px; }
     .department-grid, .snapshot-grid, .budget-summary-grid, .budget-department-grid { grid-template-columns:1fr; }
@@ -193,7 +206,10 @@
 
   <div class="content-area">
     <header class="global-topbar">
-      <div class="global-search"><input type="search" placeholder="ค้นหานักเรียน บุคลากร เอกสาร หรืองาน..." aria-label="ค้นหาทั่วทั้งระบบ" /></div>
+      <div class="global-search" id="globalSearch">
+        <input type="search" id="globalSearchInput" placeholder="ค้นหานักเรียน บุคลากร เอกสาร หรืองาน..." aria-label="ค้นหาทั่วทั้งระบบ" aria-autocomplete="list" aria-controls="globalSearchResults" aria-expanded="false" autocomplete="off" />
+        <div class="global-search-results" id="globalSearchResults" role="listbox"></div>
+      </div>
       <div class="topbar-actions">
         <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
         <div class="user-pill"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span></div>
@@ -318,8 +334,8 @@
     history.replaceState(null, "", "#");
   }
 
-  function showPage(key, updateHash) {
-    const url = PAGE_URLS[key];
+  function showPage(key, updateHash, overrideUrl) {
+    const url = overrideUrl || PAGE_URLS[key];
     if (!url) return;
     document.getElementById("overviewWrap").style.display = "none";
     const frame = document.getElementById("contentFrame");
@@ -330,6 +346,94 @@
     });
     if (updateHash !== false) history.pushState(null, "", "#" + key);
   }
+
+  const SEARCH_TYPE_LABELS = {
+    page:"เมนู",student:"นักเรียน",staff:"บุคลากร",project:"โครงการ",document:"เอกสาร",
+    inventory:"พัสดุ",maintenance:"แจ้งซ่อม",task:"งาน",
+  };
+  const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน" };
+  const SEARCH_PAGES = [
+    {title:"แดชบอร์ดภาพรวม",subtitle:"ข้อมูลสรุปสำหรับผู้บริหาร",page_key:"overview",url:"/dashboard.html",keywords:"หน้าหลัก ภาพรวม dashboard"},
+    {title:"ข้อมูลนักเรียน",subtitle:"ทะเบียนนักเรียนและผู้ปกครอง",page_key:"students",url:"/students.html",keywords:"นักเรียน ห้องเรียน ผู้ปกครอง"},
+    {title:"ข้อมูลครูและบุคลากร",subtitle:"ทะเบียนบุคลากรและใบประกอบวิชาชีพ",page_key:"staff",url:"/staff.html",keywords:"ครู บุคลากร ใบประกอบ"},
+    {title:"ปีการศึกษาและภาคเรียน",subtitle:"กำหนดช่วงเวลาการดำเนินงาน",page_key:"academic-periods",url:"/academic-years.html",keywords:"ปี ภาคเรียน เทอม"},
+    {title:"ฝ่ายบริหารงานวิชาการ",subtitle:"โครงการและงานวิชาการ",page_key:"academic",url:"/modules.html?module=academic",keywords:"หลักสูตร ตารางเรียน วิชาการ"},
+    {title:"ฝ่ายบริหารงานงบประมาณ",subtitle:"โครงการ งบประมาณ และการเงิน",page_key:"budget",url:"/modules.html?module=budget",keywords:"เงิน รายรับ รายจ่าย งบ"},
+    {title:"ระบบพัสดุและครุภัณฑ์",subtitle:"ทะเบียนวัสดุ ครุภัณฑ์ และการตรวจนับ",page_key:"budget",url:"/inventory.html",keywords:"พัสดุ ครุภัณฑ์ วัสดุ serial"},
+    {title:"ฝ่ายบริหารงานบุคคล",subtitle:"การลา คำสั่ง และพัฒนาบุคลากร",page_key:"personnel",url:"/modules.html?module=personnel",keywords:"บุคคล ลา เวร pa"},
+    {title:"ฝ่ายบริหารงานทั่วไป",subtitle:"อาคาร สารบรรณ และประชาสัมพันธ์",page_key:"general",url:"/modules.html?module=general",keywords:"ทั่วไป อาคาร สารบรรณ"},
+    {title:"อาคารสถานที่และแจ้งซ่อม",subtitle:"แจ้งเหตุและติดตามงานซ่อม",page_key:"maintenance",url:"/maintenance.html",keywords:"ซ่อม ชำรุด อาคาร สถานที่"},
+    {title:"ระบบดูแลช่วยเหลือนักเรียน",subtitle:"คัดกรอง เยี่ยมบ้าน และติดตาม",page_key:"student-support",url:"/support.html",keywords:"ทุน กลุ่มเสี่ยง เยี่ยมบ้าน"},
+    {title:"เอกสารและคลังไฟล์",subtitle:"ค้นหาและจัดเก็บเอกสาร",page_key:"documents",url:"/documents.html",keywords:"ไฟล์ pdf หนังสือ เอกสาร"},
+    {title:"รายงานและส่งออกข้อมูล",subtitle:"รายงานสำหรับผู้บริหาร",page_key:"reports",url:"/reports.html",keywords:"รายงาน excel pdf word ส่งออก"},
+    {title:"จัดการและติดตามงาน",subtitle:"งานที่ได้รับมอบหมาย",page_key:"tasks",url:"/tasks.html",keywords:"งาน มอบหมาย กำหนดส่ง"},
+    {title:"ระบบการลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
+    {title:"ผู้ใช้งานและสิทธิ์",subtitle:"กำหนดบทบาทผู้ใช้",page_key:"users",url:"/admin-users.html",keywords:"user role ผู้ใช้ สิทธิ์",admin_only:true},
+    {title:"สำรองข้อมูลและความปลอดภัย",subtitle:"Audit log และการสำรองข้อมูล",page_key:"security",url:"/security.html",keywords:"backup log ความปลอดภัย",admin_only:true},
+  ];
+  let dashboardUser=null,globalSearchItems=[],globalSearchActive=-1,globalSearchTimer=null,globalSearchVersion=0;
+
+  function closeGlobalSearch(){
+    const results=document.getElementById("globalSearchResults");
+    results.classList.remove("open");
+    document.getElementById("globalSearchInput").setAttribute("aria-expanded","false");
+    globalSearchActive=-1;
+  }
+  function openGlobalSearch(){
+    document.getElementById("globalSearchResults").classList.add("open");
+    document.getElementById("globalSearchInput").setAttribute("aria-expanded","true");
+  }
+  function renderGlobalSearch(items,message=""){
+    const results=document.getElementById("globalSearchResults");
+    globalSearchItems=items;globalSearchActive=-1;
+    if(!items.length){results.innerHTML=`<div class="search-message">${escapeHtml(message||"ไม่พบข้อมูลที่ตรงกับคำค้นหา")}</div>`;openGlobalSearch();return}
+    let previousType="";
+    results.innerHTML=items.map((item,index)=>{
+      const group=item.type===previousType?"":`<div class="search-group-label">${escapeHtml(SEARCH_TYPE_LABELS[item.type]||item.type)}</div>`;
+      previousType=item.type;
+      return `${group}<button class="search-result" type="button" role="option" data-search-index="${index}"><span class="search-result-icon">${escapeHtml(SEARCH_TYPE_ICONS[item.type]||"ไป")}</span><span class="search-result-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.subtitle||"")}</small></span><span class="search-result-type">เปิด ›</span></button>`;
+    }).join("");
+    results.querySelectorAll("[data-search-index]").forEach(button=>button.onclick=()=>openGlobalSearchResult(globalSearchItems[Number(button.dataset.searchIndex)]));
+    openGlobalSearch();
+  }
+  function openGlobalSearchResult(item){
+    if(!item)return;
+    closeGlobalSearch();document.getElementById("globalSearchInput").blur();
+    if(item.page_key==="overview"){showOverview();return}
+    showPage(item.page_key,true,item.url);
+  }
+  function updateGlobalSearchActive(next){
+    const buttons=[...document.querySelectorAll("[data-search-index]")];
+    if(!buttons.length)return;
+    globalSearchActive=(next+buttons.length)%buttons.length;
+    buttons.forEach((button,index)=>button.classList.toggle("active",index===globalSearchActive));
+    buttons[globalSearchActive].scrollIntoView({block:"nearest"});
+  }
+  async function runGlobalSearch(){
+    const input=document.getElementById("globalSearchInput");
+    const query=input.value.trim();const version=++globalSearchVersion;
+    if(!query){closeGlobalSearch();return}
+    const normalized=query.toLocaleLowerCase("th");
+    const pageItems=SEARCH_PAGES.filter(item=>(!item.admin_only||dashboardUser?.is_admin)&&`${item.title} ${item.subtitle} ${item.keywords}`.toLocaleLowerCase("th").includes(normalized)).slice(0,6).map(item=>({...item,type:"page"}));
+    if(query.length<2){renderGlobalSearch(pageItems,pageItems.length?"":"พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาข้อมูล");return}
+    renderGlobalSearch(pageItems,"กำลังค้นหา...");
+    try{
+      const data=await apiRequest(`/api/search?q=${encodeURIComponent(query)}`);
+      if(version!==globalSearchVersion)return;
+      renderGlobalSearch([...pageItems,...data.results],"ไม่พบข้อมูลที่ตรงกับคำค้นหา");
+    }catch(error){if(version===globalSearchVersion)renderGlobalSearch(pageItems,error.message)}
+  }
+
+  const globalSearchInput=document.getElementById("globalSearchInput");
+  globalSearchInput.addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(runGlobalSearch,220)});
+  globalSearchInput.addEventListener("focus",()=>{if(globalSearchInput.value.trim())runGlobalSearch()});
+  globalSearchInput.addEventListener("keydown",event=>{
+    if(event.key==="ArrowDown"){event.preventDefault();updateGlobalSearchActive(globalSearchActive+1)}
+    else if(event.key==="ArrowUp"){event.preventDefault();updateGlobalSearchActive(globalSearchActive-1)}
+    else if(event.key==="Enter"&&globalSearchActive>=0){event.preventDefault();openGlobalSearchResult(globalSearchItems[globalSearchActive])}
+    else if(event.key==="Escape")closeGlobalSearch();
+  });
+  document.addEventListener("click",event=>{if(!document.getElementById("globalSearch").contains(event.target))closeGlobalSearch()});
 
   document.querySelectorAll(".sidebar nav a[data-page]").forEach((a) => {
     a.addEventListener("click", (e) => {
@@ -561,6 +665,7 @@
       window.location.href = "/pending.html";
       return;
     }
+    dashboardUser = user;
 
     document.getElementById("roleChip").textContent = ROLE_LABELS[user.role] || user.role;
     document.getElementById("userName").textContent = user.full_name;
