@@ -528,6 +528,7 @@ CREATE TABLE IF NOT EXISTS maintenance_requests (
   request_no TEXT NOT NULL UNIQUE,
   facility_id INTEGER REFERENCES facilities(id),
   inventory_item_id INTEGER REFERENCES inventory_items(id),
+  custom_location TEXT,
   title TEXT NOT NULL,
   description TEXT NOT NULL,
   category TEXT NOT NULL
