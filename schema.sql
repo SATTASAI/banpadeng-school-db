@@ -561,11 +561,22 @@ CREATE TABLE IF NOT EXISTS maintenance_updates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS maintenance_notifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL DEFAULT 'line',
+  event_type TEXT NOT NULL,
+  delivery_status TEXT NOT NULL,
+  error_message TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_facilities_status ON facilities(status, facility_type);
 CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status, priority, due_date);
 CREATE INDEX IF NOT EXISTS idx_maintenance_facility ON maintenance_requests(facility_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status);
 CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC);
 
 -- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
 CREATE TABLE IF NOT EXISTS audit_logs (
