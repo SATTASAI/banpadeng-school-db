@@ -535,13 +535,13 @@ async function handleGlobalSearch(request, env) {
   const [students,staff,projects,documents,inventory,maintenance,tasks] = await env.DB.batch(statements);
   const departmentLabels = { academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป" };
   const results = [
-    ...students.results.map((row) => ({ type:"student",title:row.full_name,subtitle:[row.student_code,row.classroom||row.grade_level].filter(Boolean).join(" · "),page_key:"students",url:`/students.html?q=${encodeURIComponent(row.full_name)}` })),
-    ...staff.results.map((row) => ({ type:"staff",title:row.full_name,subtitle:[row.position,row.homeroom_classroom].filter(Boolean).join(" · ")||"ข้อมูลบุคลากร",page_key:"staff",url:`/staff.html?q=${encodeURIComponent(row.full_name)}` })),
-    ...projects.results.map((row) => ({ type:"project",title:row.name,subtitle:`โครงการฝ่าย${departmentLabels[row.department]||row.department}`,page_key:row.department,url:`/department.html?dept=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.name)}` })),
-    ...documents.results.map((row) => ({ type:"document",title:row.title,subtitle:[row.document_type,departmentLabels[row.department]||row.department].filter(Boolean).join(" · "),page_key:"documents",url:`/documents.html?q=${encodeURIComponent(row.title)}` })),
-    ...inventory.results.map((row) => ({ type:"inventory",title:`${row.item_code} · ${row.name}`,subtitle:row.location||"พัสดุและครุภัณฑ์",page_key:"budget",url:`/inventory.html?q=${encodeURIComponent(row.name)}` })),
+    ...students.results.map((row) => ({ type:"student",title:row.full_name,subtitle:[row.student_code,row.classroom||row.grade_level].filter(Boolean).join(" · "),page_key:"students",url:`/students.html?student=${row.id}` })),
+    ...staff.results.map((row) => ({ type:"staff",title:row.full_name,subtitle:[row.position,row.homeroom_classroom].filter(Boolean).join(" · ")||"ข้อมูลบุคลากร",page_key:"staff",url:`/staff.html?staff=${row.id}` })),
+    ...projects.results.map((row) => ({ type:"project",title:row.name,subtitle:`โครงการฝ่าย${departmentLabels[row.department]||row.department}`,page_key:row.department,url:`/department.html?dept=${encodeURIComponent(row.department)}&project=${row.id}` })),
+    ...documents.results.map((row) => ({ type:"document",title:row.title,subtitle:[row.document_type,departmentLabels[row.department]||row.department].filter(Boolean).join(" · "),page_key:"documents",url:`/documents.html?document=${row.id}` })),
+    ...inventory.results.map((row) => ({ type:"inventory",title:`${row.item_code} · ${row.name}`,subtitle:row.location||"พัสดุและครุภัณฑ์",page_key:"budget",url:`/inventory.html?item=${row.id}` })),
     ...maintenance.results.map((row) => ({ type:"maintenance",title:`${row.request_no} · ${row.title}`,subtitle:row.location_name||"ใบแจ้งซ่อม",page_key:"maintenance",url:`/maintenance.html?request=${row.id}` })),
-    ...tasks.results.map((row) => ({ type:"task",title:row.title,subtitle:row.due_date?`กำหนด ${row.due_date}`:"งานและการมอบหมาย",page_key:"tasks",url:"/tasks.html" })),
+    ...tasks.results.map((row) => ({ type:"task",title:row.title,subtitle:row.due_date?`กำหนด ${row.due_date}`:"งานและการมอบหมาย",page_key:"tasks",url:`/tasks.html?task=${row.id}` })),
   ].slice(0, 30);
   return jsonResponse({ query:q, results });
 }
