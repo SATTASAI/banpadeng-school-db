@@ -196,33 +196,10 @@
       <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
       <a href="/academic-years.html" data-page="academic-periods"><span class="nav-number">ปี</span>ปีการศึกษา/ภาคเรียน</a>
       <div class="nav-label">4 ฝ่ายงาน</div>
-      <div class="nav-group" data-nav-group="academic">
-        <a href="/modules.html?module=academic" data-page="academic" aria-expanded="false"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ<span class="nav-chevron">›</span></a>
-        <div class="nav-children"><div class="nav-children-inner">
-          <a class="nav-child" href="/department.html?dept=academic" data-parent-page="academic" data-url="/department.html?dept=academic">งานและโครงการวิชาการ</a>
-        </div></div>
-      </div>
-      <div class="nav-group" data-nav-group="budget">
-        <a href="/modules.html?module=budget" data-page="budget" aria-expanded="false"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ<span class="nav-chevron">›</span></a>
-        <div class="nav-children"><div class="nav-children-inner">
-          <a class="nav-child" href="/department.html?dept=budget" data-parent-page="budget" data-url="/department.html?dept=budget">งานและโครงการงบประมาณ</a>
-          <a class="nav-child" href="/inventory.html" data-parent-page="budget" data-url="/inventory.html">พัสดุและครุภัณฑ์</a>
-        </div></div>
-      </div>
-      <div class="nav-group" data-nav-group="personnel">
-        <a href="/modules.html?module=personnel" data-page="personnel" aria-expanded="false"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล<span class="nav-chevron">›</span></a>
-        <div class="nav-children"><div class="nav-children-inner">
-          <a class="nav-child" href="/department.html?dept=personnel" data-parent-page="personnel" data-url="/department.html?dept=personnel">งานและโครงการบุคคล</a>
-          <a class="nav-child" href="/leave.html" data-parent-page="personnel" data-url="/leave.html">ระบบการลา</a>
-          <a class="nav-child" href="/tasks.html" data-parent-page="personnel" data-url="/tasks.html">มอบหมายและติดตามงาน</a>
-        </div></div>
-      </div>
-      <div class="nav-group" data-nav-group="general">
-        <a href="/modules.html?module=general" data-page="general" aria-expanded="false"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป<span class="nav-chevron">›</span></a>
-        <div class="nav-children"><div class="nav-children-inner">
-          <a class="nav-child" href="/department.html?dept=general" data-parent-page="general" data-url="/department.html?dept=general">งานและโครงการบริหารทั่วไป</a>
-        </div></div>
-      </div>
+      <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
+      <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
+      <a href="/modules.html?module=personnel" data-page="personnel"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล</a>
+      <a href="/modules.html?module=general" data-page="general"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป</a>
       <div class="nav-label">ระบบอัตโนมัติ</div>
       <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>ระบบแจ้งซ่อมและติดตาม</a>
       <div class="nav-label">ระบบสนับสนุน</div>
@@ -361,6 +338,128 @@
     security: "/modules.html?module=security",
     "line-settings": "/line-settings.html",
   };
+
+  const moduleEntries = (module, labels, routes = {}) => labels.map((label, index) => ({
+    label,
+    url: routes[index] || `/modules.html?module=${module}&focus=${index}`,
+  }));
+  const pageEntries = (page, labels) => labels.map((label, index) => ({
+    label,
+    url: `${page}?section=${index}`,
+  }));
+
+  const SIDEBAR_SUBMENUS = {
+    students: pageEntries("/students.html", [
+      "ประวัติและข้อมูลส่วนตัว", "ข้อมูลผู้ปกครองและครอบครัว", "ที่อยู่ สุขภาพ และความด้อยโอกาส",
+      "ชั้นเรียน ห้องเรียน และครูประจำชั้น", "ย้ายเข้า ย้ายออก และจำหน่ายนักเรียน",
+      "การมาเรียนและพฤติกรรม", "ผลการเรียนและกิจกรรมนักเรียน",
+    ]),
+    staff: moduleEntries("staff", [
+      "ประวัติและข้อมูลการติดต่อ", "ตำแหน่ง วิทยฐานะ และอายุราชการ", "วุฒิการศึกษาและวิชาเอก",
+      "ภาระงานและงานที่ได้รับมอบหมาย", "การลา การอบรม และพัฒนาตนเอง", "คำสั่งปฏิบัติหน้าที่",
+      "วันหมดอายุใบประกอบวิชาชีพ", "ผลงานและรางวัล", "ข้อมูลการอบรมและพัฒนา",
+    ], {
+      0: "/staff.html?section=profile",
+      4: "/leave.html",
+      6: "/staff.html?section=license",
+    }),
+    "academic-periods": pageEntries("/academic-years.html", [
+      "ปีการศึกษา", "ภาคเรียน", "ช่วงเวลาที่กำลังใช้งาน",
+    ]),
+    academic: moduleEntries("academic", [
+      "หลักสูตรสถานศึกษา", "โครงการและแผนงานด้านวิชาการ", "แผนการจัดการเรียนรู้",
+      "ตารางเรียนและตารางสอน", "ตารางสอบ", "ผลสัมฤทธิ์ทางการเรียน", "การวัดและประเมินผล",
+      "นิเทศ ติดตาม และประกันคุณภาพ", "จัดตารางเรียนและตารางสอน", "กำหนดวัน เวลา ห้องเรียน และครู",
+      "ตรวจสอบคาบเรียนชนกัน", "ตารางสอนรายบุคคล", "ตารางเรียนรายห้อง", "ตารางเรียนรายชั้น",
+      "ตารางใช้ห้องเรียน", "ส่งออกและพิมพ์ตาราง",
+    ], { 1: "/department.html?dept=academic" }),
+    budget: moduleEntries("budget", [
+      "โครงการและแผนการใช้จ่าย", "งบประมาณประจำปี", "รายรับ–รายจ่าย",
+      "เงินอุดหนุนและค่าใช้จ่ายนักเรียน", "หนังสือขอใช้งบประมาณ", "ขออนุมัติเบิกจ่าย",
+      "เอกสารเบิกจ่าย", "รายงานการเงิน", "ครุภัณฑ์และพัสดุ", "ทะเบียนและตรวจสอบทรัพย์สิน",
+    ], {
+      0: "/department.html?dept=budget",
+      8: "/inventory.html?section=items",
+      9: "/inventory.html?section=inspection",
+    }),
+    personnel: moduleEntries("personnel", [
+      "โครงการและแผนงานฝ่ายบุคคล", "คำสั่งปฏิบัติหน้าที่", "ระบบการลา", "ระบบเวรประจำวัน",
+      "บันทึกการปฏิบัติงาน", "แบบประเมิน PA", "การอบรมและพัฒนาบุคลากร", "แฟ้มประวัติและผลงานบุคลากร",
+    ], {
+      0: "/department.html?dept=personnel",
+      2: "/leave.html",
+      4: "/tasks.html",
+    }),
+    general: moduleEntries("general", [
+      "โครงการและแผนงานฝ่ายบริหารทั่วไป", "หนังสือราชการ", "งานสารบรรณ", "รับ–ส่งหนังสือ",
+      "อาคารสถานที่และห้องเรียน", "ยานพาหนะ", "งานประชาสัมพันธ์", "ข่าวสารและกิจกรรมโรงเรียน",
+    ], { 0: "/department.html?dept=general" }),
+    maintenance: pageEntries("/maintenance.html", [
+      "แจ้งซ่อมใหม่", "ติดตามสถานะงานซ่อม", "อาคารและสถานที่", "ประวัติการดำเนินงาน",
+    ]),
+    "student-support": pageEntries("/support.html", [
+      "คัดกรองนักเรียน", "เยี่ยมบ้าน", "ทุนการศึกษา", "นักเรียนกลุ่มเสี่ยง",
+      "บันทึกการช่วยเหลือและติดตามผล", "บันทึกพฤติกรรม", "ส่งต่อและประสานผู้ปกครอง", "รายงานนักเรียนรายบุคคล",
+    ]),
+    documents: pageEntries("/documents.html", [
+      "ไฟล์แยกตามฝ่าย", "ปีการศึกษา โครงการ และประเภท", "ไฟล์ Word Excel PDF และรูปภาพ",
+      "ค้นหาด้วยชื่อหรือคำสำคัญ", "ดาวน์โหลดและดูตัวอย่าง", "กำหนดสิทธิ์เอกสาร", "เวอร์ชันและประวัติการแก้ไข",
+    ]),
+    reports: pageEntries("/reports.html", [
+      "รายงานข้อมูลนักเรียน", "รายงานครูและบุคลากร", "รายงานการมาเรียน", "รายงานผลการเรียน",
+      "รายงานงบประมาณและการเงิน", "รายงานโครงการ", "รายงานพัสดุและครุภัณฑ์",
+      "รายงานสำหรับผู้บริหาร", "รายงานหน่วยงานต้นสังกัด", "ส่งออก Excel PDF และ Word",
+    ]),
+    users: pageEntries("/admin-users.html", [
+      "ผู้ดูแลระบบ", "ผู้บริหาร", "ครู", "ครูประจำชั้น", "เจ้าหน้าที่วิชาการ",
+      "เจ้าหน้าที่การเงิน", "เจ้าหน้าที่พัสดุ", "เจ้าหน้าที่ธุรการ", "ผู้ปกครอง", "กำหนดสิทธิ์การใช้งาน",
+    ]),
+    security: pageEntries("/security.html", [
+      "สำรองและกู้คืนข้อมูล", "ประวัติการแก้ไขข้อมูล", "Audit Log", "ล็อกข้อมูลสำคัญ",
+      "ยืนยันตัวตนและรหัสผ่าน", "รองรับผู้ใช้พร้อมกัน", "ป้องกันข้อมูลส่วนบุคคล", "แจ้งเตือนความผิดปกติ",
+    ]),
+    "line-settings": pageEntries("/line-settings.html", [
+      "สถานะการเชื่อมต่อ", "กลุ่ม LINE ปลายทาง", "ทดสอบการแจ้งเตือน",
+    ]),
+  };
+
+  function buildSidebarSubmenus() {
+    Object.entries(SIDEBAR_SUBMENUS).forEach(([key, items]) => {
+      const parent = document.querySelector(`.sidebar nav > a[data-page="${key}"]`);
+      if (!parent || !items.length) return;
+      const permissionClass = parent.classList.contains("superadmin-only")
+        ? "superadmin-only"
+        : parent.classList.contains("admin-only") ? "admin-only" : "";
+      const group = document.createElement("div");
+      group.className = `nav-group${permissionClass ? ` ${permissionClass}` : ""}`;
+      group.dataset.navGroup = key;
+      if (permissionClass) group.style.display = "none";
+      parent.before(group);
+      group.appendChild(parent);
+      parent.setAttribute("aria-expanded", "false");
+      const chevron = document.createElement("span");
+      chevron.className = "nav-chevron";
+      chevron.textContent = "›";
+      parent.appendChild(chevron);
+
+      const children = document.createElement("div");
+      children.className = "nav-children";
+      const inner = document.createElement("div");
+      inner.className = "nav-children-inner";
+      items.forEach((item) => {
+        const link = document.createElement("a");
+        link.className = "nav-child";
+        link.href = item.url;
+        link.dataset.parentPage = key;
+        link.dataset.url = item.url;
+        link.textContent = item.label;
+        inner.appendChild(link);
+      });
+      children.appendChild(inner);
+      group.appendChild(children);
+    });
+  }
+  buildSidebarSubmenus();
 
   function showOverview() {
     document.getElementById("overviewWrap").style.display = "block";
@@ -746,12 +845,12 @@
 
     if (user.is_admin) {
       document.querySelectorAll(".admin-only").forEach((element) => {
-        element.style.display = element.classList.contains("nav-label") ? "block" : "flex";
+        element.style.display = element.classList.contains("nav-label") || element.classList.contains("nav-group") ? "block" : "flex";
       });
     }
     if (user.role === "superadmin") {
       document.querySelectorAll(".superadmin-only").forEach((element) => {
-        element.style.display = "flex";
+        element.style.display = element.classList.contains("nav-group") ? "block" : "flex";
       });
     }
 
