@@ -159,7 +159,7 @@ async function ensureMaintenanceSchema(env) {
       buddhist_year INTEGER PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0)`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS maintenance_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT, request_no TEXT NOT NULL UNIQUE, facility_id INTEGER REFERENCES facilities(id),
-      inventory_item_id INTEGER REFERENCES inventory_items(id), title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
+      inventory_item_id INTEGER REFERENCES inventory_items(id), custom_location TEXT, title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
       priority TEXT NOT NULL DEFAULT 'normal', status TEXT NOT NULL DEFAULT 'reported', reported_by INTEGER NOT NULL REFERENCES users(id),
       assigned_to INTEGER REFERENCES users(id), due_date TEXT, estimated_cost REAL NOT NULL DEFAULT 0, actual_cost REAL NOT NULL DEFAULT 0,
       resolution TEXT, started_at TEXT, completed_at TEXT, verified_by INTEGER REFERENCES users(id), verified_at TEXT,
@@ -179,6 +179,11 @@ async function ensureMaintenanceSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC)"),
   ]);
+  try {
+    await env.DB.prepare("ALTER TABLE maintenance_requests ADD COLUMN custom_location TEXT").run();
+  } catch (error) {
+    if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+  }
 }
 
 async function ensureLineSchema(env) {
@@ -517,14 +522,14 @@ async function handleGlobalSearch(request, env) {
     env.DB.prepare(`SELECT id,item_code,name,item_type,location FROM inventory_items
       WHERE item_code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR COALESCE(serial_number,'') LIKE ? ESCAPE '\\'
       ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,name LIMIT 5`).bind(like,like,like,prefix),
-    env.DB.prepare(`SELECT m.id,m.request_no,m.title,m.status,COALESCE(f.name,i.name) AS location_name
+    env.DB.prepare(`SELECT m.id,m.request_no,m.title,m.status,COALESCE(f.name,m.custom_location,i.name) AS location_name
       FROM maintenance_requests m
       LEFT JOIN facilities f ON f.id=m.facility_id LEFT JOIN inventory_items i ON i.id=m.inventory_item_id
       WHERE ${maintenanceVisibility.sql}
         AND (m.request_no LIKE ? ESCAPE '\\' OR m.title LIKE ? ESCAPE '\\' OR m.description LIKE ? ESCAPE '\\'
-          OR COALESCE(f.name,'') LIKE ? ESCAPE '\\')
+          OR COALESCE(f.name,'') LIKE ? ESCAPE '\\' OR COALESCE(m.custom_location,'') LIKE ? ESCAPE '\\')
       ORDER BY CASE WHEN m.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,m.created_at DESC LIMIT 5`)
-      .bind(...maintenanceVisibility.binds,like,like,like,like,prefix),
+      .bind(...maintenanceVisibility.binds,like,like,like,like,like,prefix),
     taskStatement,
   ];
   const [students,staff,projects,documents,inventory,maintenance,tasks] = await env.DB.batch(statements);
@@ -2435,11 +2440,11 @@ async function handleListMaintenanceRequests(request, env) {
     LEFT JOIN file_attachments before_file ON before_file.entity_type='maintenance_before' AND before_file.entity_id=m.id
     LEFT JOIN file_attachments after_file ON after_file.entity_type='maintenance_after' AND after_file.entity_id=m.id
     WHERE ${visibility.sql}
-      AND (?='' OR m.request_no LIKE '%'||?||'%' OR m.title LIKE '%'||?||'%' OR m.description LIKE '%'||?||'%' OR f.name LIKE '%'||?||'%')
+      AND (?='' OR m.request_no LIKE '%'||?||'%' OR m.title LIKE '%'||?||'%' OR m.description LIKE '%'||?||'%' OR f.name LIKE '%'||?||'%' OR m.custom_location LIKE '%'||?||'%')
       AND (?='' OR m.status=?) AND (?='' OR m.priority=?) AND (?='' OR m.category=?) AND (?=0 OR m.facility_id=?)
     ORDER BY CASE m.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
       CASE WHEN m.status IN ('verified','cancelled') THEN 2 ELSE 1 END,m.created_at DESC`)
-    .bind(...visibility.binds,q,q,q,q,q,status,status,priority,priority,category,category,facilityId,facilityId).all();
+    .bind(...visibility.binds,q,q,q,q,q,q,status,status,priority,priority,category,category,facilityId,facilityId).all();
   return jsonResponse({ requests: results.map((row)=>({
     ...row,estimated_cost:Number(row.estimated_cost||0),actual_cost:Number(row.actual_cost||0),
     before_url:row.before_attachment_id ? `/api/attachments/${row.before_attachment_id}` : null,
@@ -2476,18 +2481,19 @@ async function handleCreateMaintenanceRequest(request, env) {
   if (!body || !title || !description || !MAINTENANCE_CATEGORIES.includes(body.category)) return jsonResponse({ error: "กรุณาระบุเรื่อง รายละเอียด และหมวดงานซ่อมให้ครบถ้วน" },400);
   const facilityId = Number(body.facility_id||0) || null;
   const inventoryItemId = Number(body.inventory_item_id||0) || null;
-  if (!facilityId && !inventoryItemId) return jsonResponse({ error: "กรุณาเลือกสถานที่หรือครุภัณฑ์ที่ชำรุด" },400);
+  const customLocation = cleanText(body.custom_location, 300);
+  if (!facilityId && !inventoryItemId && !customLocation) return jsonResponse({ error: "กรุณาเลือกสถานที่หรือระบุจุดที่เสียหาย" },400);
   if (facilityId && !(await env.DB.prepare("SELECT id FROM facilities WHERE id=? AND status<>'closed'").bind(facilityId).first())) return jsonResponse({ error: "ไม่พบสถานที่หรือสถานที่ปิดใช้งานแล้ว" },400);
   if (inventoryItemId && !(await env.DB.prepare("SELECT id FROM inventory_items WHERE id=?").bind(inventoryItemId).first())) return jsonResponse({ error: "ไม่พบครุภัณฑ์ที่เลือก" },400);
   const requestNo = await nextMaintenanceNumber(env);
   const result = await env.DB.prepare(`INSERT INTO maintenance_requests
-    (request_no,facility_id,inventory_item_id,title,description,category,priority,reported_by)
-    VALUES (?,?,?,?,?,?,?,?)`).bind(requestNo,facilityId,inventoryItemId,title,description,body.category,
+    (request_no,facility_id,inventory_item_id,custom_location,title,description,category,priority,reported_by)
+    VALUES (?,?,?,?,?,?,?,?,?)`).bind(requestNo,facilityId,inventoryItemId,customLocation,title,description,body.category,
       MAINTENANCE_PRIORITIES.includes(body.priority)?body.priority:"normal",user.id).run();
   const requestId = result.meta.last_row_id;
   await env.DB.prepare(`INSERT INTO maintenance_updates(request_id,previous_status,new_status,comment,created_by)
     VALUES (?,NULL,'reported',?,?)`).bind(requestId,"สร้างใบแจ้งซ่อม",user.id).run();
-  await writeAuditLog(env,user,"create","maintenance_request",requestId,{ request_no:requestNo,facility_id:facilityId,inventory_item_id:inventoryItemId },request);
+  await writeAuditLog(env,user,"create","maintenance_request",requestId,{ request_no:requestNo,facility_id:facilityId,inventory_item_id:inventoryItemId,custom_location:customLocation },request);
   if (!body.defer_notification) await sendMaintenanceLineNotification(request,env,requestId,"reported").catch(()=>{});
   return jsonResponse({ id:requestId,request_no:requestNo },201);
 }
@@ -2561,7 +2567,8 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
       const origin = new URL(request.url).origin;
       const eventLabels = {reported:"แจ้งซ่อมใหม่",assigned:"มอบหมายงาน",in_progress:"เริ่มดำเนินการ",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ รอตรวจรับ",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
       const priorityLabels = {low:"ต่ำ",normal:"ปกติ",high:"สูง",urgent:"เร่งด่วน"};
-      const location = [item.facility_name,item.building_name,item.floor?`ชั้น ${item.floor}`:null].filter(Boolean).join(" · ") || item.inventory_name || "ไม่ระบุจุด";
+      const registeredLocation = [item.facility_name,item.building_name,item.floor?`ชั้น ${item.floor}`:null].filter(Boolean).join(" · ");
+      const location = [registeredLocation,item.custom_location].filter(Boolean).join(" · ") || item.inventory_name || "ไม่ระบุจุด";
       const contents = {
         type:"bubble", body:{type:"box",layout:"vertical",spacing:"md",contents:[
           {type:"text",text:eventLabels[eventType]||"อัปเดตงานซ่อม",weight:"bold",size:"sm",color:"#2563EB"},
