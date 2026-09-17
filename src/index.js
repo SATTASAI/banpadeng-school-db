@@ -473,6 +473,74 @@ async function handleListUsers(request, env) {
   return jsonResponse({ users: results });
 }
 
+// ---------- /api/search (GET) — ค้นหาทั่วทั้งระบบโดยคงสิทธิ์ของแต่ละโมดูล ----------
+function escapeLikePattern(value) {
+  return String(value || "").replace(/[\\%_]/g, "\\$&");
+}
+
+async function handleGlobalSearch(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const q = cleanText(new URL(request.url).searchParams.get("q"), 100) || "";
+  if (q.length < 2) return jsonResponse({ query: q, results: [] });
+  await ensurePersonnelData(env);
+  const like = `%${escapeLikePattern(q)}%`;
+  const prefix = `${escapeLikePattern(q)}%`;
+  const adminFlag = isAdmin(user) ? 1 : 0;
+  const maintenanceVisibility = maintenanceVisibilitySql(user);
+  const taskStatement = isAdmin(user)
+    ? env.DB.prepare(`SELECT DISTINCT t.id,t.title,t.status,t.due_date
+        FROM tasks t WHERE (t.title LIKE ? ESCAPE '\\' OR COALESCE(t.description,'') LIKE ? ESCAPE '\\')
+        ORDER BY CASE WHEN t.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,t.created_at DESC LIMIT 5`).bind(like,like,prefix)
+    : env.DB.prepare(`SELECT DISTINCT t.id,t.title,t.status,t.due_date
+        FROM tasks t LEFT JOIN task_assignees ta ON ta.task_id=t.id
+        WHERE (t.created_by=? OR ta.user_id=?)
+          AND (t.title LIKE ? ESCAPE '\\' OR COALESCE(t.description,'') LIKE ? ESCAPE '\\')
+        ORDER BY CASE WHEN t.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,t.created_at DESC LIMIT 5`)
+        .bind(user.id,user.id,like,like,prefix);
+  const statements = [
+    env.DB.prepare(`SELECT id,student_code,full_name,grade_level,classroom
+      FROM students WHERE full_name LIKE ? ESCAPE '\\' OR student_code LIKE ? ESCAPE '\\'
+      ORDER BY CASE WHEN full_name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,full_name LIMIT 5`).bind(like,like,prefix),
+    env.DB.prepare(`SELECT id,full_name,position,homeroom_classroom
+      FROM personnel_records WHERE status='active'
+        AND (full_name LIKE ? ESCAPE '\\' OR COALESCE(position,'') LIKE ? ESCAPE '\\' OR COALESCE(homeroom_classroom,'') LIKE ? ESCAPE '\\')
+      ORDER BY CASE WHEN full_name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,full_name LIMIT 5`).bind(like,like,like,prefix),
+    env.DB.prepare(`SELECT id,name,department,status FROM projects
+      WHERE name LIKE ? ESCAPE '\\' OR COALESCE(description,'') LIKE ? ESCAPE '\\'
+      ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,created_at DESC LIMIT 5`).bind(like,like,prefix),
+    env.DB.prepare(`SELECT id,title,department,document_type FROM documents
+      WHERE COALESCE(record_status,'active')='active'
+        AND (title LIKE ? ESCAPE '\\' OR COALESCE(keywords,'') LIKE ? ESCAPE '\\')
+        AND (access_level='staff' OR uploaded_by=? OR (?=1 AND access_level IN ('private','admin')))
+      ORDER BY CASE WHEN title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,updated_at DESC LIMIT 5`).bind(like,like,user.id,adminFlag,prefix),
+    env.DB.prepare(`SELECT id,item_code,name,item_type,location FROM inventory_items
+      WHERE item_code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\' OR COALESCE(serial_number,'') LIKE ? ESCAPE '\\'
+      ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,name LIMIT 5`).bind(like,like,like,prefix),
+    env.DB.prepare(`SELECT m.id,m.request_no,m.title,m.status,COALESCE(f.name,i.name) AS location_name
+      FROM maintenance_requests m
+      LEFT JOIN facilities f ON f.id=m.facility_id LEFT JOIN inventory_items i ON i.id=m.inventory_item_id
+      WHERE ${maintenanceVisibility.sql}
+        AND (m.request_no LIKE ? ESCAPE '\\' OR m.title LIKE ? ESCAPE '\\' OR m.description LIKE ? ESCAPE '\\'
+          OR COALESCE(f.name,'') LIKE ? ESCAPE '\\')
+      ORDER BY CASE WHEN m.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,m.created_at DESC LIMIT 5`)
+      .bind(...maintenanceVisibility.binds,like,like,like,like,prefix),
+    taskStatement,
+  ];
+  const [students,staff,projects,documents,inventory,maintenance,tasks] = await env.DB.batch(statements);
+  const departmentLabels = { academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป" };
+  const results = [
+    ...students.results.map((row) => ({ type:"student",title:row.full_name,subtitle:[row.student_code,row.classroom||row.grade_level].filter(Boolean).join(" · "),page_key:"students",url:`/students.html?q=${encodeURIComponent(row.full_name)}` })),
+    ...staff.results.map((row) => ({ type:"staff",title:row.full_name,subtitle:[row.position,row.homeroom_classroom].filter(Boolean).join(" · ")||"ข้อมูลบุคลากร",page_key:"staff",url:`/staff.html?q=${encodeURIComponent(row.full_name)}` })),
+    ...projects.results.map((row) => ({ type:"project",title:row.name,subtitle:`โครงการฝ่าย${departmentLabels[row.department]||row.department}`,page_key:row.department,url:`/department.html?dept=${encodeURIComponent(row.department)}&q=${encodeURIComponent(row.name)}` })),
+    ...documents.results.map((row) => ({ type:"document",title:row.title,subtitle:[row.document_type,departmentLabels[row.department]||row.department].filter(Boolean).join(" · "),page_key:"documents",url:`/documents.html?q=${encodeURIComponent(row.title)}` })),
+    ...inventory.results.map((row) => ({ type:"inventory",title:`${row.item_code} · ${row.name}`,subtitle:row.location||"พัสดุและครุภัณฑ์",page_key:"budget",url:`/inventory.html?q=${encodeURIComponent(row.name)}` })),
+    ...maintenance.results.map((row) => ({ type:"maintenance",title:`${row.request_no} · ${row.title}`,subtitle:row.location_name||"ใบแจ้งซ่อม",page_key:"maintenance",url:`/maintenance.html?request=${row.id}` })),
+    ...tasks.results.map((row) => ({ type:"task",title:row.title,subtitle:row.due_date?`กำหนด ${row.due_date}`:"งานและการมอบหมาย",page_key:"tasks",url:"/tasks.html" })),
+  ].slice(0, 30);
+  return jsonResponse({ query:q, results });
+}
+
 // ---------- /api/tasks (GET) ----------
 async function handleListTasks(request, env) {
   const user = await getCurrentUser(request, env);
@@ -3319,6 +3387,7 @@ export default {
       }
 
       if (pathname === "/api/users" && method === "GET") return await handleListUsers(request, env);
+      if (pathname === "/api/search" && method === "GET") return await handleGlobalSearch(request, env);
       if (pathname === "/api/tasks" && method === "GET") return await handleListTasks(request, env);
       if (pathname === "/api/tasks" && method === "POST") return await handleCreateTask(request, env);
 
