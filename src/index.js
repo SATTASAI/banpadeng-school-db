@@ -218,6 +218,47 @@ async function ensureLineSchema(env) {
   lineSchemaReady = true;
 }
 
+async function ensureWorkRecordSchema(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS work_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      area TEXT NOT NULL,
+      topic_key TEXT NOT NULL,
+      topic_label TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      academic_year_id INTEGER REFERENCES academic_years(id),
+      academic_term_id INTEGER REFERENCES academic_terms(id),
+      responsible_user_id INTEGER REFERENCES users(id),
+      start_date TEXT,
+      due_date TEXT,
+      status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','in_progress','waiting','completed','cancelled')),
+      priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low','normal','high','urgent')),
+      progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+      notes TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      updated_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      CHECK (start_date IS NULL OR due_date IS NULL OR start_date <= due_date)
+    )`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS work_record_updates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_record_id INTEGER NOT NULL REFERENCES work_records(id) ON DELETE CASCADE,
+      previous_status TEXT,
+      new_status TEXT,
+      progress_percent INTEGER,
+      comment TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_records_area_topic ON work_records(area,topic_key,status,updated_at DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_records_period ON work_records(academic_year_id,academic_term_id)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_records_responsible ON work_records(responsible_user_id,status,due_date)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_record_updates_record ON work_record_updates(work_record_id,created_at DESC)"),
+  ]);
+}
+
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
   await env.DB.batch([
@@ -246,6 +287,7 @@ async function ensureExtendedSchema(env) {
   await ensureDocumentWorkflowSchema(env);
   await ensureMaintenanceSchema(env);
   await ensureLineSchema(env);
+  await ensureWorkRecordSchema(env);
   extendedSchemaReady = true;
 }
 
@@ -531,8 +573,13 @@ async function handleGlobalSearch(request, env) {
       ORDER BY CASE WHEN m.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,m.created_at DESC LIMIT 5`)
       .bind(...maintenanceVisibility.binds,like,like,like,like,like,prefix),
     taskStatement,
+    env.DB.prepare(`SELECT id,area,topic_key,topic_label,title,status,due_date FROM work_records
+      WHERE title LIKE ? ESCAPE '\\' OR COALESCE(description,'') LIKE ? ESCAPE '\\'
+        OR COALESCE(notes,'') LIKE ? ESCAPE '\\' OR topic_label LIKE ? ESCAPE '\\'
+      ORDER BY CASE WHEN title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,updated_at DESC LIMIT 8`)
+      .bind(like,like,like,like,prefix),
   ];
-  const [students,staff,projects,documents,inventory,maintenance,tasks] = await env.DB.batch(statements);
+  const [students,staff,projects,documents,inventory,maintenance,tasks,workRecords] = await env.DB.batch(statements);
   const departmentLabels = { academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป" };
   const results = [
     ...students.results.map((row) => ({ type:"student",title:row.full_name,subtitle:[row.student_code,row.classroom||row.grade_level].filter(Boolean).join(" · "),page_key:"students",url:`/students.html?student=${row.id}` })),
@@ -542,6 +589,7 @@ async function handleGlobalSearch(request, env) {
     ...inventory.results.map((row) => ({ type:"inventory",title:`${row.item_code} · ${row.name}`,subtitle:row.location||"พัสดุและครุภัณฑ์",page_key:"budget",url:`/inventory.html?item=${row.id}` })),
     ...maintenance.results.map((row) => ({ type:"maintenance",title:`${row.request_no} · ${row.title}`,subtitle:row.location_name||"ใบแจ้งซ่อม",page_key:"maintenance",url:`/maintenance.html?request=${row.id}` })),
     ...tasks.results.map((row) => ({ type:"task",title:row.title,subtitle:row.due_date?`กำหนด ${row.due_date}`:"งานและการมอบหมาย",page_key:"tasks",url:`/tasks.html?task=${row.id}` })),
+    ...workRecords.results.map((row) => ({ type:"work",title:row.title,subtitle:`${row.topic_label}${row.due_date?` · กำหนด ${row.due_date}`:""}`,page_key:row.area,url:`/work-center.html?area=${encodeURIComponent(row.area)}&topic=${encodeURIComponent(row.topic_key)}&record=${row.id}` })),
   ].slice(0, 30);
   return jsonResponse({ query:q, results });
 }
@@ -1827,6 +1875,160 @@ function cleanText(value, maxLength = 500) {
   return text ? text.slice(0, maxLength) : null;
 }
 
+// ---------- ศูนย์ปฏิบัติงานของหัวข้อที่ยังไม่มีระบบเฉพาะ ----------
+const WORK_RECORD_AREAS = new Set(["staff", "academic", "budget", "personnel", "general"]);
+const WORK_RECORD_STATUSES = ["planned", "in_progress", "waiting", "completed", "cancelled"];
+const WORK_RECORD_PRIORITIES = ["low", "normal", "high", "urgent"];
+
+function validIsoDateOrEmpty(value) {
+  return !value || /^\d{4}-\d{2}-\d{2}$/.test(String(value));
+}
+
+function canManageWorkRecord(user, record) {
+  return !!user && (isAdmin(user) || user.role === "staff" || record.created_by === user.id || record.responsible_user_id === user.id);
+}
+
+async function handleListWorkRecords(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const params = new URL(request.url).searchParams;
+  const area = cleanText(params.get("area"), 40);
+  const topicKey = cleanText(params.get("topic"), 80);
+  const status = cleanText(params.get("status"), 30);
+  const q = cleanText(params.get("q"), 100);
+  const academicYearId = Number(params.get("academic_year_id")) || null;
+  if (area && !WORK_RECORD_AREAS.has(area)) return jsonResponse({ error: "หมวดงานไม่ถูกต้อง" }, 400);
+  if (status && !WORK_RECORD_STATUSES.includes(status)) return jsonResponse({ error: "สถานะไม่ถูกต้อง" }, 400);
+
+  const baseConditions = ["1=1"];
+  const baseBinds = [];
+  if (area) { baseConditions.push("w.area=?"); baseBinds.push(area); }
+  if (topicKey) { baseConditions.push("w.topic_key=?"); baseBinds.push(topicKey); }
+  if (academicYearId) { baseConditions.push("w.academic_year_id=?"); baseBinds.push(academicYearId); }
+  if (q) {
+    baseConditions.push("(w.title LIKE ? OR COALESCE(w.description,'') LIKE ? OR COALESCE(w.notes,'') LIKE ? OR w.topic_label LIKE ?)");
+    const like = `%${q}%`;
+    baseBinds.push(like, like, like, like);
+  }
+  const listConditions = [...baseConditions];
+  const listBinds = [...baseBinds];
+  if (status) { listConditions.push("w.status=?"); listBinds.push(status); }
+
+  const [listResult, summaryResult, currentPeriod] = await Promise.all([
+    env.DB.prepare(`SELECT w.*, creator.full_name AS creator_name, responsible.full_name AS responsible_name,
+        y.year_be, t.name AS term_name, a.id AS attachment_id, a.file_name AS attachment_name
+      FROM work_records w
+      LEFT JOIN users creator ON creator.id=w.created_by
+      LEFT JOIN users responsible ON responsible.id=w.responsible_user_id
+      LEFT JOIN academic_years y ON y.id=w.academic_year_id
+      LEFT JOIN academic_terms t ON t.id=w.academic_term_id
+      LEFT JOIN file_attachments a ON a.entity_type='work_record' AND a.entity_id=w.id
+      WHERE ${listConditions.join(" AND ")}
+      ORDER BY CASE w.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
+        CASE WHEN w.due_date IS NULL THEN 1 ELSE 0 END,w.due_date,w.updated_at DESC,w.id DESC LIMIT 250`).bind(...listBinds).all(),
+    env.DB.prepare(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN w.status='planned' THEN 1 ELSE 0 END) AS planned,
+        SUM(CASE WHEN w.status='in_progress' THEN 1 ELSE 0 END) AS in_progress,
+        SUM(CASE WHEN w.status='waiting' THEN 1 ELSE 0 END) AS waiting,
+        SUM(CASE WHEN w.status='completed' THEN 1 ELSE 0 END) AS completed,
+        SUM(CASE WHEN w.status NOT IN ('completed','cancelled') AND w.due_date < date('now') THEN 1 ELSE 0 END) AS overdue
+      FROM work_records w WHERE ${baseConditions.join(" AND ")}`).bind(...baseBinds).first(),
+    getCurrentAcademicPeriod(env),
+  ]);
+  return jsonResponse({
+    records: listResult.results.map((record) => ({ ...record, can_manage: canManageWorkRecord(user, record) })),
+    summary: summaryResult,
+    current_academic_period: currentPeriod,
+    permissions: { can_create: true, can_manage_all: isAdmin(user) || user.role === "staff" },
+  });
+}
+
+async function handleGetWorkRecord(request, env, recordId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const record = await env.DB.prepare(`SELECT w.*, creator.full_name AS creator_name, responsible.full_name AS responsible_name,
+      y.year_be,t.name AS term_name,a.id AS attachment_id,a.file_name AS attachment_name
+    FROM work_records w
+    LEFT JOIN users creator ON creator.id=w.created_by LEFT JOIN users responsible ON responsible.id=w.responsible_user_id
+    LEFT JOIN academic_years y ON y.id=w.academic_year_id LEFT JOIN academic_terms t ON t.id=w.academic_term_id
+    LEFT JOIN file_attachments a ON a.entity_type='work_record' AND a.entity_id=w.id WHERE w.id=?`).bind(recordId).first();
+  if (!record) return jsonResponse({ error: "ไม่พบรายการงาน" }, 404);
+  const { results: updates } = await env.DB.prepare(`SELECT x.*,u.full_name AS created_by_name
+    FROM work_record_updates x LEFT JOIN users u ON u.id=x.created_by
+    WHERE x.work_record_id=? ORDER BY x.created_at DESC,x.id DESC`).bind(recordId).all();
+  return jsonResponse({ record: { ...record, can_manage: canManageWorkRecord(user, record) }, updates });
+}
+
+async function handleCreateWorkRecord(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const area = cleanText(body.area, 40);
+  const topicKey = cleanText(body.topic_key, 80);
+  const topicLabel = cleanText(body.topic_label, 200);
+  const title = cleanText(body.title, 240);
+  const status = WORK_RECORD_STATUSES.includes(body.status) ? body.status : "planned";
+  const priority = WORK_RECORD_PRIORITIES.includes(body.priority) ? body.priority : "normal";
+  const startDate = cleanText(body.start_date, 10);
+  const dueDate = cleanText(body.due_date, 10);
+  if (!WORK_RECORD_AREAS.has(area)) return jsonResponse({ error: "หมวดงานไม่ถูกต้อง" }, 400);
+  if (!topicKey || !topicLabel || !title) return jsonResponse({ error: "กรุณาระบุหัวข้องานและชื่อรายการ" }, 400);
+  if (!validIsoDateOrEmpty(startDate) || !validIsoDateOrEmpty(dueDate) || (startDate && dueDate && startDate > dueDate)) {
+    return jsonResponse({ error: "ช่วงวันที่ไม่ถูกต้อง" }, 400);
+  }
+  const responsibleId = Number(body.responsible_user_id) || user.id;
+  const responsible = await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL").bind(responsibleId).first();
+  if (!responsible) return jsonResponse({ error: "ไม่พบผู้รับผิดชอบที่เลือก" }, 400);
+  const current = await getCurrentAcademicPeriod(env);
+  const progress = status === "completed" ? 100 : Math.max(0, Math.min(100, Number(body.progress_percent) || 0));
+  const result = await env.DB.prepare(`INSERT INTO work_records
+      (area,topic_key,topic_label,title,description,academic_year_id,academic_term_id,responsible_user_id,
+       start_date,due_date,status,priority,progress_percent,notes,created_by,updated_by)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+      area,topicKey,topicLabel,title,cleanText(body.description,3000),Number(body.academic_year_id)||current?.academic_year_id||null,
+      Number(body.academic_term_id)||current?.academic_term_id||null,responsibleId,startDate,dueDate,status,priority,progress,
+      cleanText(body.notes,2000),user.id,user.id).run();
+  const recordId = result.meta.last_row_id;
+  await env.DB.prepare(`INSERT INTO work_record_updates(work_record_id,new_status,progress_percent,comment,created_by)
+    VALUES (?,?,?,?,?)`).bind(recordId,status,progress,"สร้างรายการงาน",user.id).run();
+  await writeAuditLog(env,user,"create","work_record",recordId,{ area,topic_key:topicKey,status },request);
+  return jsonResponse({ id: recordId }, 201);
+}
+
+async function handleUpdateWorkRecord(request, env, recordId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const existing = await env.DB.prepare("SELECT * FROM work_records WHERE id=?").bind(recordId).first();
+  if (!existing) return jsonResponse({ error: "ไม่พบรายการงาน" }, 404);
+  if (!canManageWorkRecord(user, existing)) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขรายการนี้" }, 403);
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const title = body.title === undefined ? existing.title : cleanText(body.title,240);
+  if (!title) return jsonResponse({ error: "กรุณาระบุชื่อรายการ" }, 400);
+  const status = body.status === undefined ? existing.status : body.status;
+  const priority = body.priority === undefined ? existing.priority : body.priority;
+  if (!WORK_RECORD_STATUSES.includes(status) || !WORK_RECORD_PRIORITIES.includes(priority)) return jsonResponse({ error: "สถานะหรือความสำคัญไม่ถูกต้อง" },400);
+  const startDate = body.start_date === undefined ? existing.start_date : cleanText(body.start_date,10);
+  const dueDate = body.due_date === undefined ? existing.due_date : cleanText(body.due_date,10);
+  if (!validIsoDateOrEmpty(startDate) || !validIsoDateOrEmpty(dueDate) || (startDate && dueDate && startDate > dueDate)) return jsonResponse({ error:"ช่วงวันที่ไม่ถูกต้อง" },400);
+  const responsibleId = body.responsible_user_id === undefined ? existing.responsible_user_id : Number(body.responsible_user_id)||user.id;
+  const responsible = await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL").bind(responsibleId).first();
+  if (!responsible) return jsonResponse({ error:"ไม่พบผู้รับผิดชอบที่เลือก" },400);
+  const progress = status === "completed" ? 100 : Math.max(0,Math.min(100,body.progress_percent===undefined?Number(existing.progress_percent):Number(body.progress_percent)||0));
+  await env.DB.prepare(`UPDATE work_records SET title=?,description=?,responsible_user_id=?,start_date=?,due_date=?,status=?,priority=?,
+      progress_percent=?,notes=?,updated_by=?,updated_at=datetime('now') WHERE id=?`).bind(
+      title,body.description===undefined?existing.description:cleanText(body.description,3000),responsibleId,startDate,dueDate,status,priority,progress,
+      body.notes===undefined?existing.notes:cleanText(body.notes,2000),user.id,recordId).run();
+  const comment = cleanText(body.comment,1000);
+  if (status !== existing.status || progress !== Number(existing.progress_percent) || comment) {
+    await env.DB.prepare(`INSERT INTO work_record_updates(work_record_id,previous_status,new_status,progress_percent,comment,created_by)
+      VALUES (?,?,?,?,?,?)`).bind(recordId,existing.status,status,progress,comment,user.id).run();
+  }
+  await writeAuditLog(env,user,"update","work_record",recordId,{ fields:Object.keys(body),status,progress_percent:progress },request);
+  return jsonResponse({ ok:true });
+}
+
 async function handleInventorySummary(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
@@ -2725,6 +2927,10 @@ async function getDriveFolderSegments(env, entityType, entityId) {
   }
   if (entityType.startsWith("inventory_")) return ["พัสดุและครุภัณฑ์", entityType === "inventory_transaction" ? "รายการเคลื่อนไหว" : "การตรวจสอบ"];
   if (entityType.startsWith("maintenance_")) return ["อาคารสถานที่และแจ้งซ่อม", entityType.replace("maintenance_", "")];
+  if (entityType === "work_record") {
+    const row = await env.DB.prepare("SELECT area,topic_label FROM work_records WHERE id=?").bind(entityId).first();
+    return ["ศูนย์ปฏิบัติงาน", departmentDriveLabel(row?.area), row?.topic_label || "ไม่ระบุหัวข้องาน"];
+  }
   return ["ไฟล์แนบ", entityType];
 }
 
@@ -2781,6 +2987,7 @@ const ATTACHMENT_ENTITY_TABLES = {
   maintenance_before: { table: "maintenance_requests", owner: "reported_by" },
   maintenance_after: { table: "maintenance_requests", owner: "reported_by" },
   maintenance_update: { table: "maintenance_updates", owner: "created_by" },
+  work_record: { table: "work_records", owner: "created_by" },
 };
 
 async function handleUploadAttachment(request, env, entityType, entityId) {
@@ -2797,6 +3004,10 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
       ? await env.DB.prepare(`SELECT m.reported_by,m.assigned_to FROM maintenance_updates x JOIN maintenance_requests m ON m.id=x.request_id WHERE x.id=?`).bind(entityId).first()
       : await env.DB.prepare("SELECT reported_by,assigned_to FROM maintenance_requests WHERE id=?").bind(entityId).first();
     canUpload = !!maintenance && (canManageMaintenance(user) || maintenance.reported_by===user.id || maintenance.assigned_to===user.id);
+  }
+  if (entityType === "work_record") {
+    const workRecord = await env.DB.prepare("SELECT created_by,responsible_user_id FROM work_records WHERE id=?").bind(entityId).first();
+    canUpload = !!workRecord && canManageWorkRecord(user, workRecord);
   }
   if (!canUpload) {
     return jsonResponse({ error: "ไม่มีสิทธิ์แนบไฟล์ในรายการนี้" },403);
@@ -3069,7 +3280,7 @@ async function handleSecurityOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงข้อมูลความปลอดภัย" }, 403);
   await ensureExtendedSchema(env);
-  const tables = ["users", "students", "personnel_records", "projects", "project_expenses", "inventory_items", "inventory_transactions", "student_support_cases", "documents", "file_attachments", "audit_logs"];
+  const tables = ["users", "students", "personnel_records", "projects", "project_expenses", "inventory_items", "inventory_transactions", "student_support_cases", "work_records", "documents", "file_attachments", "audit_logs"];
   const counts = {};
   for (const table of tables) counts[table] = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first()).count;
   const { results: logs } = await env.DB.prepare(`SELECT a.*, u.full_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 50`).all();
@@ -3402,6 +3613,11 @@ export default {
 
       if (pathname === "/api/users" && method === "GET") return await handleListUsers(request, env);
       if (pathname === "/api/search" && method === "GET") return await handleGlobalSearch(request, env);
+      if (pathname === "/api/work-records" && method === "GET") return await handleListWorkRecords(request, env);
+      if (pathname === "/api/work-records" && method === "POST") return await handleCreateWorkRecord(request, env);
+      const workRecordMatch = pathname.match(/^\/api\/work-records\/(\d+)$/);
+      if (workRecordMatch && method === "GET") return await handleGetWorkRecord(request, env, Number(workRecordMatch[1]));
+      if (workRecordMatch && method === "PATCH") return await handleUpdateWorkRecord(request, env, Number(workRecordMatch[1]));
       if (pathname === "/api/tasks" && method === "GET") return await handleListTasks(request, env);
       if (pathname === "/api/tasks" && method === "POST") return await handleCreateTask(request, env);
 
@@ -3501,7 +3717,7 @@ export default {
       if (maintenanceRequestMatch && method === "GET") return await handleGetMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
       if (maintenanceRequestMatch && method === "PATCH") return await handleUpdateMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
 
-      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_before|maintenance_after|maintenance_update)\/(\d+)$/);
+      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_before|maintenance_after|maintenance_update|work_record)\/(\d+)$/);
       if (uploadAttachmentMatch && method === "POST") return await handleUploadAttachment(request, env, uploadAttachmentMatch[1], Number(uploadAttachmentMatch[2]));
       const downloadAttachmentMatch = pathname.match(/^\/api\/attachments\/(\d+)$/);
       if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));
