@@ -36,13 +36,15 @@
   .sidebar-footer .role-chip { background:rgba(45,127,211,.10); color:#1D66AD; margin-bottom:8px; display:inline-block; }
   .sidebar-footer a { color:#4C759C; text-decoration:none; display:block; margin-top:8px; }
   .content-area { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; position:relative; background:rgba(246,249,252,.82); }
-  .global-topbar { height:62px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:0 22px; background:rgba(255,255,255,.72); border-bottom:1px solid var(--color-border); backdrop-filter:blur(24px) saturate(150%); }
-  .global-search { flex:1; max-width:500px; position:relative; margin-left:auto; }
+  .global-topbar { height:62px; flex-shrink:0; display:flex; align-items:center; justify-content:space-between; gap:18px; padding:0 22px; background:rgba(255,255,255,.72); border-bottom:1px solid var(--color-border); backdrop-filter:blur(24px) saturate(150%); position:relative; z-index:202; }
+  .global-search { flex:1; max-width:500px; position:relative; z-index:204; margin-left:auto; }
   .global-search input { width:100%; height:36px; border:1px solid rgba(113,145,177,.22); border-radius:999px; padding:0 14px 0 39px; background:rgba(232,239,246,.72); font-family:var(--font-body); color:var(--color-text); box-shadow:inset 0 1px 2px rgba(42,70,100,.04); }
   .global-search input:focus { outline:none; border-color:rgba(42,133,216,.55); background:#fff; box-shadow:0 0 0 3px rgba(42,133,216,.10),0 8px 24px rgba(48,82,118,.09); }
   .global-search::before { content:"⌕"; position:absolute; left:13px; top:5px; font-size:20px; color:var(--color-text-muted); }
-  .global-search-results { display:none; position:absolute; z-index:90; top:43px; left:0; right:0; max-height:min(560px,70vh); overflow:auto; padding:7px; border:1px solid rgba(93,132,170,.22); border-radius:16px; background:rgba(251,253,255,.98); box-shadow:0 22px 56px rgba(30,57,86,.20); backdrop-filter:blur(24px); }
+  .global-search-results { display:none; position:absolute; z-index:205; top:43px; left:0; right:0; max-height:min(560px,70vh); overflow:auto; overscroll-behavior:contain; padding:7px; border:1px solid rgba(93,132,170,.22); border-radius:16px; background:rgba(251,253,255,.99); box-shadow:0 24px 70px rgba(21,48,78,.28); backdrop-filter:blur(24px); pointer-events:auto; }
   .global-search-results.open { display:block; }
+  .global-search-backdrop { display:none; position:fixed; inset:0; z-index:200; background:rgba(22,43,66,.16); backdrop-filter:blur(2px); }
+  .global-search-backdrop.open { display:block; }
   .search-result { width:100%; display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:10px; padding:9px 10px; border:0; border-radius:11px; background:transparent; color:var(--color-text); text-align:left; font:inherit; cursor:pointer; }
   .search-result:hover,.search-result.active { background:#EAF4FC; }
   .search-result-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:10px; background:linear-gradient(180deg,#E9F5FF,#DAEBFA); color:#176CB8; font-size:11px; font-weight:800; }
@@ -163,6 +165,7 @@
 </style>
 </head>
 <body>
+<div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
 <div class="layout">
   <div class="sidebar">
     <div class="window-controls" aria-hidden="true">
@@ -376,11 +379,13 @@
   function closeGlobalSearch(){
     const results=document.getElementById("globalSearchResults");
     results.classList.remove("open");
+    document.getElementById("globalSearchBackdrop").classList.remove("open");
     document.getElementById("globalSearchInput").setAttribute("aria-expanded","false");
     globalSearchActive=-1;
   }
   function openGlobalSearch(){
     document.getElementById("globalSearchResults").classList.add("open");
+    document.getElementById("globalSearchBackdrop").classList.add("open");
     document.getElementById("globalSearchInput").setAttribute("aria-expanded","true");
   }
   function renderGlobalSearch(items,message=""){
@@ -433,6 +438,7 @@
     else if(event.key==="Enter"&&globalSearchActive>=0){event.preventDefault();openGlobalSearchResult(globalSearchItems[globalSearchActive])}
     else if(event.key==="Escape")closeGlobalSearch();
   });
+  document.getElementById("globalSearchBackdrop").addEventListener("click",closeGlobalSearch);
   document.addEventListener("click",event=>{if(!document.getElementById("globalSearch").contains(event.target))closeGlobalSearch()});
 
   document.querySelectorAll(".sidebar nav a[data-page]").forEach((a) => {
