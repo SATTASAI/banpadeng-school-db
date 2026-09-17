@@ -2192,7 +2192,7 @@ async function pushLineMessages(env, targetId, messages) {
 
 async function handleLineStatus(request, env) {
   const user = await getCurrentUser(request, env);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
+  if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
   await ensureLineSchema(env);
   const { results } = await env.DB.prepare(`SELECT id,target_type,display_name,status,is_default,
       first_seen_at,last_seen_at,last_event_type,target_id
@@ -2222,7 +2222,7 @@ async function handleLineStatus(request, env) {
 
 async function handleUpdateLineTarget(request, env, targetId) {
   const user = await getCurrentUser(request, env);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
+  if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
   const body = await request.json().catch(() => null);
   const action = body?.action;
   await ensureLineSchema(env);
@@ -2250,7 +2250,7 @@ async function handleUpdateLineTarget(request, env, targetId) {
 
 async function handleLineTest(request, env) {
   const user = await getCurrentUser(request, env);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ส่งข้อความทดสอบได้" }, 403);
+  if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบเท่านั้นที่ส่งข้อความทดสอบได้" }, 403);
   const target = await getSelectedLineTarget(env);
   if (!target) return jsonResponse({ error: "ยังไม่พบหรือยังไม่ได้เลือกกลุ่ม LINE ปลายทาง" }, 409);
   try {
@@ -3368,6 +3368,13 @@ export default {
       if (pathname === "/api/auth/login" && method === "POST") return await handleLogin(request, env);
       if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout();
       if (pathname === "/api/auth/me" && method === "GET") return await handleMe(request, env);
+
+      // หน้าตั้งค่า LINE เป็นส่วนบริหารระบบ: ป้องกันตั้งแต่ก่อนเสิร์ฟไฟล์หน้าเว็บ
+      if (pathname === "/line-settings.html" && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
+        if (user.role !== "superadmin") return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+      }
 
       // ติดตั้ง/อัปเกรดโครงสร้างปีการศึกษาก่อนใช้ API ภายในระบบ
       if (pathname.startsWith("/api/")) {
