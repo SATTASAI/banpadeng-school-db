@@ -167,11 +167,16 @@ async function ensureMaintenanceSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
       previous_status TEXT, new_status TEXT, comment TEXT, cost_amount REAL NOT NULL DEFAULT 0,
       created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS maintenance_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
+      channel TEXT NOT NULL DEFAULT 'line', event_type TEXT NOT NULL, delivery_status TEXT NOT NULL,
+      error_message TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_facilities_status ON facilities(status, facility_type)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status, priority, due_date)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_facility ON maintenance_requests(facility_id, created_at DESC)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC)"),
   ]);
 }
 
@@ -1939,6 +1944,345 @@ async function handleCreateInventoryInspection(request, env, itemId) {
   return jsonResponse({ id: inserted.meta.last_row_id, result },201);
 }
 
+// ---------- อาคาร สถานที่ และระบบแจ้งซ่อม ----------
+const FACILITY_TYPES = ["building", "classroom", "office", "restroom", "utility", "grounds", "other"];
+const FACILITY_STATUSES = ["active", "maintenance", "closed"];
+const MAINTENANCE_CATEGORIES = ["electrical", "plumbing", "building", "equipment", "it", "sanitation", "grounds", "other"];
+const MAINTENANCE_PRIORITIES = ["low", "normal", "high", "urgent"];
+const MAINTENANCE_STATUSES = ["reported", "assigned", "in_progress", "waiting_parts", "completed", "verified", "cancelled"];
+const MAINTENANCE_TRANSITIONS = {
+  reported: ["assigned", "cancelled"],
+  assigned: ["reported", "in_progress", "cancelled"],
+  in_progress: ["waiting_parts", "completed", "cancelled"],
+  waiting_parts: ["in_progress", "completed", "cancelled"],
+  completed: ["in_progress", "verified"],
+  verified: [],
+  cancelled: ["reported"],
+};
+
+function canManageMaintenance(user) {
+  return isAdmin(user) || user?.role === "staff";
+}
+
+function maintenanceVisibilitySql(user, alias = "m") {
+  return canManageMaintenance(user) ? { sql: "1=1", binds: [] }
+    : { sql: `(${alias}.reported_by=? OR ${alias}.assigned_to=?)`, binds: [user.id, user.id] };
+}
+
+async function getMaintenanceRequest(env, requestId) {
+  return env.DB.prepare(`SELECT m.*, f.facility_code, f.name AS facility_name, f.facility_type,
+      f.building_name, f.floor, f.location_detail, i.item_code, i.name AS inventory_name,
+      reporter.full_name AS reporter_name, assignee.full_name AS assignee_name,
+      verifier.full_name AS verifier_name,
+      before_file.id AS before_attachment_id, before_file.file_name AS before_attachment_name,
+      after_file.id AS after_attachment_id, after_file.file_name AS after_attachment_name
+    FROM maintenance_requests m
+    LEFT JOIN facilities f ON f.id=m.facility_id
+    LEFT JOIN inventory_items i ON i.id=m.inventory_item_id
+    LEFT JOIN users reporter ON reporter.id=m.reported_by
+    LEFT JOIN users assignee ON assignee.id=m.assigned_to
+    LEFT JOIN users verifier ON verifier.id=m.verified_by
+    LEFT JOIN file_attachments before_file ON before_file.entity_type='maintenance_before' AND before_file.entity_id=m.id
+    LEFT JOIN file_attachments after_file ON after_file.entity_type='maintenance_after' AND after_file.entity_id=m.id
+    WHERE m.id=?`).bind(requestId).first();
+}
+
+async function nextMaintenanceNumber(env) {
+  const yearBe = new Date().getUTCFullYear() + 543;
+  const row = await env.DB.prepare(`INSERT INTO maintenance_counters (buddhist_year,last_number) VALUES (?,1)
+    ON CONFLICT(buddhist_year) DO UPDATE SET last_number=last_number+1 RETURNING last_number`)
+    .bind(yearBe).first();
+  return `MR-${yearBe}-${String(Number(row?.last_number || 1)).padStart(4, "0")}`;
+}
+
+async function handleListFacilities(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const params = new URL(request.url).searchParams;
+  const q = cleanText(params.get("q"), 100) || "";
+  const type = FACILITY_TYPES.includes(params.get("type")) ? params.get("type") : "";
+  const status = FACILITY_STATUSES.includes(params.get("status")) ? params.get("status") : "";
+  const { results } = await env.DB.prepare(`SELECT f.*,
+      COUNT(m.id) AS request_count,
+      SUM(CASE WHEN m.status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS open_request_count
+    FROM facilities f LEFT JOIN maintenance_requests m ON m.facility_id=f.id
+    WHERE (?='' OR f.facility_code LIKE '%'||?||'%' OR f.name LIKE '%'||?||'%' OR f.building_name LIKE '%'||?||'%')
+      AND (?='' OR f.facility_type=?) AND (?='' OR f.status=?)
+    GROUP BY f.id ORDER BY CASE f.status WHEN 'active' THEN 1 WHEN 'maintenance' THEN 2 ELSE 3 END, f.name`)
+    .bind(q,q,q,q,type,type,status,status).all();
+  return jsonResponse({ facilities: results.map((row) => ({
+    ...row, request_count: Number(row.request_count || 0), open_request_count: Number(row.open_request_count || 0),
+  })), can_manage: canManageMaintenance(user) });
+}
+
+async function handleCreateFacility(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageMaintenance(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่เพิ่มสถานที่ได้" }, 403);
+  const body = await request.json().catch(() => null);
+  const code = cleanText(body?.facility_code, 60);
+  const name = cleanText(body?.name, 200);
+  if (!body || !code || !name || !FACILITY_TYPES.includes(body.facility_type)) {
+    return jsonResponse({ error: "กรุณาระบุรหัส ชื่อ และประเภทสถานที่ให้ครบถ้วน" }, 400);
+  }
+  try {
+    const result = await env.DB.prepare(`INSERT INTO facilities
+      (facility_code,name,facility_type,building_name,floor,location_detail,responsible_person,status,notes,created_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(code,name,body.facility_type,cleanText(body.building_name,160),cleanText(body.floor,40),
+        cleanText(body.location_detail,300),cleanText(body.responsible_person,160),
+        FACILITY_STATUSES.includes(body.status) ? body.status : "active",cleanText(body.notes,1000),user.id).run();
+    await writeAuditLog(env,user,"create","facility",result.meta.last_row_id,{ facility_code: code },request);
+    return jsonResponse({ id: result.meta.last_row_id }, 201);
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) return jsonResponse({ error: "รหัสสถานที่นี้มีอยู่แล้ว" }, 409);
+    throw error;
+  }
+}
+
+async function handleUpdateFacility(request, env, facilityId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!canManageMaintenance(user)) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขสถานที่" }, 403);
+  const existing = await env.DB.prepare("SELECT id FROM facilities WHERE id=?").bind(facilityId).first();
+  if (!existing) return jsonResponse({ error: "ไม่พบสถานที่" }, 404);
+  const body = await request.json().catch(() => null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const fields = {
+    facility_code: [60, null], name: [200, null], building_name: [160, null], floor: [40, null],
+    location_detail: [300, null], responsible_person: [160, null], notes: [1000, null],
+  };
+  const updates = [], values = [];
+  for (const [field, [max]] of Object.entries(fields)) if (body[field] !== undefined) {
+    const value = cleanText(body[field], max);
+    if (["facility_code", "name"].includes(field) && !value) return jsonResponse({ error: "รหัสและชื่อสถานที่ห้ามว่าง" },400);
+    updates.push(`${field}=?`); values.push(value);
+  }
+  if (body.facility_type !== undefined) {
+    if (!FACILITY_TYPES.includes(body.facility_type)) return jsonResponse({ error: "ประเภทสถานที่ไม่ถูกต้อง" },400);
+    updates.push("facility_type=?"); values.push(body.facility_type);
+  }
+  if (body.status !== undefined) {
+    if (!FACILITY_STATUSES.includes(body.status)) return jsonResponse({ error: "สถานะสถานที่ไม่ถูกต้อง" },400);
+    updates.push("status=?"); values.push(body.status);
+  }
+  if (!updates.length) return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" },400);
+  updates.push("updated_at=datetime('now')"); values.push(facilityId);
+  try {
+    await env.DB.prepare(`UPDATE facilities SET ${updates.join(",")} WHERE id=?`).bind(...values).run();
+  } catch (error) {
+    if (String(error).includes("UNIQUE")) return jsonResponse({ error: "รหัสสถานที่นี้มีอยู่แล้ว" },409);
+    throw error;
+  }
+  await writeAuditLog(env,user,"update","facility",facilityId,{ fields: Object.keys(body) },request);
+  return jsonResponse({ ok: true });
+}
+
+async function handleMaintenanceSummary(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const visibility = maintenanceVisibilitySql(user);
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS total_count,
+      SUM(CASE WHEN status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS open_count,
+      SUM(CASE WHEN status='in_progress' THEN 1 ELSE 0 END) AS in_progress_count,
+      SUM(CASE WHEN status='waiting_parts' THEN 1 ELSE 0 END) AS waiting_parts_count,
+      SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS awaiting_verification_count,
+      SUM(CASE WHEN status NOT IN ('verified','cancelled') AND due_date IS NOT NULL AND due_date < date('now') THEN 1 ELSE 0 END) AS overdue_count,
+      SUM(CASE WHEN priority='urgent' AND status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS urgent_count,
+      COALESCE(SUM(CASE WHEN strftime('%Y-%m',completed_at)=strftime('%Y-%m','now') THEN actual_cost ELSE 0 END),0) AS month_cost
+    FROM maintenance_requests m WHERE ${visibility.sql}`).bind(...visibility.binds).first();
+  return jsonResponse({
+    total_count:Number(row?.total_count||0), open_count:Number(row?.open_count||0), in_progress_count:Number(row?.in_progress_count||0),
+    waiting_parts_count:Number(row?.waiting_parts_count||0), awaiting_verification_count:Number(row?.awaiting_verification_count||0),
+    overdue_count:Number(row?.overdue_count||0), urgent_count:Number(row?.urgent_count||0), month_cost:Number(row?.month_cost||0),
+    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_TARGET_ID),
+  });
+}
+
+async function handleListMaintenanceRequests(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const params = new URL(request.url).searchParams;
+  const q = cleanText(params.get("q"),100) || "";
+  const status = MAINTENANCE_STATUSES.includes(params.get("status")) ? params.get("status") : "";
+  const priority = MAINTENANCE_PRIORITIES.includes(params.get("priority")) ? params.get("priority") : "";
+  const category = MAINTENANCE_CATEGORIES.includes(params.get("category")) ? params.get("category") : "";
+  const facilityId = Number(params.get("facility_id") || 0);
+  const visibility = maintenanceVisibilitySql(user);
+  const { results } = await env.DB.prepare(`SELECT m.*,f.facility_code,f.name AS facility_name,f.building_name,f.floor,
+      i.item_code,i.name AS inventory_name,reporter.full_name AS reporter_name,assignee.full_name AS assignee_name,
+      before_file.id AS before_attachment_id,after_file.id AS after_attachment_id,
+      (SELECT delivery_status FROM maintenance_notifications n WHERE n.request_id=m.id ORDER BY n.id DESC LIMIT 1) AS notification_status
+    FROM maintenance_requests m
+    LEFT JOIN facilities f ON f.id=m.facility_id LEFT JOIN inventory_items i ON i.id=m.inventory_item_id
+    LEFT JOIN users reporter ON reporter.id=m.reported_by LEFT JOIN users assignee ON assignee.id=m.assigned_to
+    LEFT JOIN file_attachments before_file ON before_file.entity_type='maintenance_before' AND before_file.entity_id=m.id
+    LEFT JOIN file_attachments after_file ON after_file.entity_type='maintenance_after' AND after_file.entity_id=m.id
+    WHERE ${visibility.sql}
+      AND (?='' OR m.request_no LIKE '%'||?||'%' OR m.title LIKE '%'||?||'%' OR m.description LIKE '%'||?||'%' OR f.name LIKE '%'||?||'%')
+      AND (?='' OR m.status=?) AND (?='' OR m.priority=?) AND (?='' OR m.category=?) AND (?=0 OR m.facility_id=?)
+    ORDER BY CASE m.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
+      CASE WHEN m.status IN ('verified','cancelled') THEN 2 ELSE 1 END,m.created_at DESC`)
+    .bind(...visibility.binds,q,q,q,q,q,status,status,priority,priority,category,category,facilityId,facilityId).all();
+  return jsonResponse({ requests: results.map((row)=>({
+    ...row,estimated_cost:Number(row.estimated_cost||0),actual_cost:Number(row.actual_cost||0),
+    before_url:row.before_attachment_id ? `/api/attachments/${row.before_attachment_id}` : null,
+    after_url:row.after_attachment_id ? `/api/attachments/${row.after_attachment_id}` : null,
+  })), can_manage:canManageMaintenance(user), current_user_id:user.id });
+}
+
+async function handleGetMaintenanceRequest(request, env, requestId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const item = await getMaintenanceRequest(env,requestId);
+  if (!item) return jsonResponse({ error: "ไม่พบใบแจ้งซ่อม" },404);
+  if (!canManageMaintenance(user) && item.reported_by !== user.id && item.assigned_to !== user.id) return jsonResponse({ error: "ไม่มีสิทธิ์ดูใบแจ้งซ่อมนี้" },403);
+  const { results: updates } = await env.DB.prepare(`SELECT x.*,u.full_name AS creator_name,a.id AS attachment_id,a.file_name AS attachment_name
+    FROM maintenance_updates x LEFT JOIN users u ON u.id=x.created_by
+    LEFT JOIN file_attachments a ON a.entity_type='maintenance_update' AND a.entity_id=x.id
+    WHERE x.request_id=? ORDER BY x.created_at,x.id`).bind(requestId).all();
+  const { results: notifications } = await env.DB.prepare(`SELECT * FROM maintenance_notifications WHERE request_id=? ORDER BY id DESC LIMIT 20`).bind(requestId).all();
+  return jsonResponse({
+    request:{...item,estimated_cost:Number(item.estimated_cost||0),actual_cost:Number(item.actual_cost||0),
+      before_url:item.before_attachment_id?`/api/attachments/${item.before_attachment_id}`:null,
+      after_url:item.after_attachment_id?`/api/attachments/${item.after_attachment_id}`:null},
+    updates:updates.map((row)=>({...row,cost_amount:Number(row.cost_amount||0)})), notifications,
+    permissions:{ can_manage:canManageMaintenance(user), can_operate:canManageMaintenance(user)||item.assigned_to===user.id,
+      can_verify:canManageMaintenance(user)||item.reported_by===user.id, can_upload:item.reported_by===user.id||item.assigned_to===user.id||canManageMaintenance(user) },
+  });
+}
+
+async function handleCreateMaintenanceRequest(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const body = await request.json().catch(()=>null);
+  const title = cleanText(body?.title,200), description = cleanText(body?.description,2000);
+  if (!body || !title || !description || !MAINTENANCE_CATEGORIES.includes(body.category)) return jsonResponse({ error: "กรุณาระบุเรื่อง รายละเอียด และหมวดงานซ่อมให้ครบถ้วน" },400);
+  const facilityId = Number(body.facility_id||0) || null;
+  const inventoryItemId = Number(body.inventory_item_id||0) || null;
+  if (!facilityId && !inventoryItemId) return jsonResponse({ error: "กรุณาเลือกสถานที่หรือครุภัณฑ์ที่ชำรุด" },400);
+  if (facilityId && !(await env.DB.prepare("SELECT id FROM facilities WHERE id=? AND status<>'closed'").bind(facilityId).first())) return jsonResponse({ error: "ไม่พบสถานที่หรือสถานที่ปิดใช้งานแล้ว" },400);
+  if (inventoryItemId && !(await env.DB.prepare("SELECT id FROM inventory_items WHERE id=?").bind(inventoryItemId).first())) return jsonResponse({ error: "ไม่พบครุภัณฑ์ที่เลือก" },400);
+  const requestNo = await nextMaintenanceNumber(env);
+  const result = await env.DB.prepare(`INSERT INTO maintenance_requests
+    (request_no,facility_id,inventory_item_id,title,description,category,priority,reported_by)
+    VALUES (?,?,?,?,?,?,?,?)`).bind(requestNo,facilityId,inventoryItemId,title,description,body.category,
+      MAINTENANCE_PRIORITIES.includes(body.priority)?body.priority:"normal",user.id).run();
+  const requestId = result.meta.last_row_id;
+  await env.DB.prepare(`INSERT INTO maintenance_updates(request_id,previous_status,new_status,comment,created_by)
+    VALUES (?,NULL,'reported',?,?)`).bind(requestId,"สร้างใบแจ้งซ่อม",user.id).run();
+  await writeAuditLog(env,user,"create","maintenance_request",requestId,{ request_no:requestNo,facility_id:facilityId,inventory_item_id:inventoryItemId },request);
+  if (!body.defer_notification) await sendMaintenanceLineNotification(request,env,requestId,"reported").catch(()=>{});
+  return jsonResponse({ id:requestId,request_no:requestNo },201);
+}
+
+async function handleUpdateMaintenanceRequest(request, env, requestId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const item = await getMaintenanceRequest(env,requestId);
+  if (!item) return jsonResponse({ error: "ไม่พบใบแจ้งซ่อม" },404);
+  const body = await request.json().catch(()=>null);
+  if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" },400);
+  const manager = canManageMaintenance(user), assigned = item.assigned_to===user.id, reporter = item.reported_by===user.id;
+  const nextStatus = body.status === undefined ? item.status : body.status;
+  if (!MAINTENANCE_STATUSES.includes(nextStatus)) return jsonResponse({ error: "สถานะไม่ถูกต้อง" },400);
+  const statusChanged = nextStatus !== item.status;
+  if (statusChanged && !MAINTENANCE_TRANSITIONS[item.status]?.includes(nextStatus)) return jsonResponse({ error: `ไม่สามารถเปลี่ยนจาก ${item.status} เป็น ${nextStatus} ได้` },409);
+  if (statusChanged) {
+    if (["assigned","cancelled","reported"].includes(nextStatus) && !manager) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่เปลี่ยนสถานะนี้ได้" },403);
+    if (["in_progress","waiting_parts","completed"].includes(nextStatus) && !manager && !assigned) return jsonResponse({ error: "เฉพาะผู้รับผิดชอบหรือเจ้าหน้าที่เท่านั้นที่อัปเดตงานซ่อมได้" },403);
+    if (nextStatus === "verified" && !manager && !reporter) return jsonResponse({ error: "เฉพาะผู้แจ้งหรือเจ้าหน้าที่เท่านั้นที่ตรวจรับงานได้" },403);
+  }
+  if (!statusChanged && !manager && !assigned) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขใบแจ้งซ่อมนี้" },403);
+  let assignedTo = item.assigned_to;
+  if (body.assigned_to !== undefined) {
+    if (!manager) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่มอบหมายงานได้" },403);
+    assignedTo = Number(body.assigned_to||0)||null;
+    if (assignedTo && !(await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL").bind(assignedTo).first())) return jsonResponse({ error: "ไม่พบผู้รับผิดชอบที่เลือก" },400);
+  }
+  const estimatedCost = body.estimated_cost===undefined ? Number(item.estimated_cost||0) : Number(body.estimated_cost);
+  const actualCost = body.actual_cost===undefined ? Number(item.actual_cost||0) : Number(body.actual_cost);
+  if (![estimatedCost,actualCost].every(Number.isFinite) || estimatedCost<0 || actualCost<0) return jsonResponse({ error: "ค่าใช้จ่ายต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" },400);
+  if ((body.estimated_cost!==undefined || body.due_date!==undefined || body.assigned_to!==undefined) && !manager) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขการมอบหมายและประมาณการ" },403);
+  if (body.due_date && !isIsoDate(body.due_date)) return jsonResponse({ error: "กำหนดเสร็จไม่ถูกต้อง" },400);
+  if (nextStatus === "assigned" && !assignedTo) return jsonResponse({ error: "กรุณาเลือกผู้รับผิดชอบก่อนมอบหมายงาน" },400);
+  const resolution = body.resolution===undefined ? item.resolution : cleanText(body.resolution,2000);
+  if (nextStatus === "completed" && !resolution) return jsonResponse({ error: "กรุณาระบุวิธีแก้ไขก่อนปิดงานซ่อม" },400);
+  const comment = cleanText(body.comment,1500);
+  if (statusChanged && !comment && ["cancelled","waiting_parts"].includes(nextStatus)) return jsonResponse({ error: "กรุณาระบุเหตุผลประกอบการเปลี่ยนสถานะ" },400);
+  await env.DB.prepare(`UPDATE maintenance_requests SET assigned_to=?,due_date=?,estimated_cost=?,actual_cost=?,resolution=?,status=?,
+      started_at=CASE WHEN ?='in_progress' AND started_at IS NULL THEN datetime('now') ELSE started_at END,
+      completed_at=CASE WHEN ?='completed' THEN datetime('now') WHEN ?='in_progress' THEN NULL ELSE completed_at END,
+      verified_by=CASE WHEN ?='verified' THEN ? WHEN ?='in_progress' THEN NULL ELSE verified_by END,
+      verified_at=CASE WHEN ?='verified' THEN datetime('now') WHEN ?='in_progress' THEN NULL ELSE verified_at END,
+      updated_at=datetime('now') WHERE id=?`).bind(assignedTo,body.due_date===undefined?item.due_date:(body.due_date||null),estimatedCost,actualCost,resolution,nextStatus,
+        nextStatus,nextStatus,nextStatus,nextStatus,user.id,nextStatus,nextStatus,nextStatus,requestId).run();
+  if (statusChanged || comment || actualCost!==Number(item.actual_cost||0) || assignedTo!==item.assigned_to) {
+    await env.DB.prepare(`INSERT INTO maintenance_updates(request_id,previous_status,new_status,comment,cost_amount,created_by)
+      VALUES (?,?,?,?,?,?)`).bind(requestId,item.status,nextStatus,comment || (assignedTo!==item.assigned_to?"มอบหมายผู้รับผิดชอบ":"อัปเดตใบแจ้งซ่อม"),actualCost,user.id).run();
+  }
+  await writeAuditLog(env,user,"update","maintenance_request",requestId,{ previous_status:item.status,new_status:nextStatus,assigned_to:assignedTo,actual_cost:actualCost },request);
+  if (statusChanged || assignedTo!==item.assigned_to) await sendMaintenanceLineNotification(request,env,requestId,statusChanged?nextStatus:"assigned").catch(()=>{});
+  return jsonResponse({ ok:true });
+}
+
+function bytesToHex(bytes) {
+  return [...new Uint8Array(bytes)].map((byte)=>byte.toString(16).padStart(2,"0")).join("");
+}
+
+async function maintenanceImageSignature(env, attachmentId, expires) {
+  const key = await crypto.subtle.importKey("raw",new TextEncoder().encode(String(env.JWT_SECRET||"")),{name:"HMAC",hash:"SHA-256"},false,["sign"]);
+  return bytesToHex(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(`${attachmentId}:${expires}`)));
+}
+
+async function sendMaintenanceLineNotification(request, env, requestId, eventType) {
+  let deliveryStatus = "not_configured", errorMessage = null;
+  if (env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_TARGET_ID) {
+    try {
+      const item = await getMaintenanceRequest(env,requestId);
+      if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
+      const origin = new URL(request.url).origin;
+      const eventLabels = {reported:"แจ้งซ่อมใหม่",assigned:"มอบหมายงาน",in_progress:"เริ่มดำเนินการ",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ รอตรวจรับ",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
+      const priorityLabels = {low:"ต่ำ",normal:"ปกติ",high:"สูง",urgent:"เร่งด่วน"};
+      const location = [item.facility_name,item.building_name,item.floor?`ชั้น ${item.floor}`:null].filter(Boolean).join(" · ") || item.inventory_name || "ไม่ระบุจุด";
+      const contents = {
+        type:"bubble", body:{type:"box",layout:"vertical",spacing:"md",contents:[
+          {type:"text",text:eventLabels[eventType]||"อัปเดตงานซ่อม",weight:"bold",size:"sm",color:"#2563EB"},
+          {type:"text",text:item.title,weight:"bold",size:"xl",wrap:true,color:"#102A43"},
+          {type:"text",text:`${item.request_no} · ความสำคัญ ${priorityLabels[item.priority]||item.priority}`,size:"sm",color:item.priority==="urgent"?"#DC2626":"#52667A",wrap:true},
+          {type:"separator",margin:"md"},
+          {type:"text",text:`สถานที่: ${location}`,size:"sm",color:"#334E68",wrap:true},
+          {type:"text",text:`ผู้แจ้ง: ${item.reporter_name||"-"}`,size:"sm",color:"#334E68",wrap:true},
+          {type:"text",text:item.assignee_name?`ผู้รับผิดชอบ: ${item.assignee_name}`:"ยังไม่ได้มอบหมาย",size:"sm",color:"#334E68",wrap:true},
+        ]}, footer:{type:"box",layout:"vertical",contents:[{type:"button",style:"primary",color:"#2563EB",action:{type:"uri",label:"เปิดใบแจ้งซ่อม",uri:`${origin}/maintenance.html?request=${requestId}`}}]},
+      };
+      const previewId = eventType === "completed" || eventType === "verified" ? item.after_attachment_id : item.before_attachment_id;
+      if (previewId && env.JWT_SECRET) {
+        const expires = Math.floor(Date.now()/1000)+(7*24*60*60);
+        const sig = await maintenanceImageSignature(env,previewId,expires);
+        contents.hero={type:"image",url:`${origin}/api/public/maintenance-image/${previewId}?expires=${expires}&sig=${sig}`,size:"full",aspectRatio:"20:13",aspectMode:"cover"};
+      }
+      const response = await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,"Content-Type":"application/json"},body:JSON.stringify({to:String(env.LINE_TARGET_ID),messages:[{type:"flex",altText:`${eventLabels[eventType]||"อัปเดตงานซ่อม"}: ${item.title}`,contents}]})});
+      if (!response.ok) throw new Error(`LINE API ${response.status}: ${(await response.text()).slice(0,300)}`);
+      deliveryStatus="sent";
+    } catch (error) {
+      deliveryStatus="failed"; errorMessage=cleanText(error?.message||error,500);
+    }
+  }
+  await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
+    .bind(requestId,eventType,deliveryStatus,errorMessage).run();
+  return { delivery_status:deliveryStatus,error:errorMessage };
+}
+
+async function handleNotifyMaintenanceRequest(request, env, requestId) {
+  const user = await getCurrentUser(request,env);
+  if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
+  const item = await getMaintenanceRequest(env,requestId);
+  if (!item) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
+  if (!canManageMaintenance(user) && item.reported_by!==user.id && item.assigned_to!==user.id) return jsonResponse({ error:"ไม่มีสิทธิ์ส่งการแจ้งเตือน" },403);
+  const result = await sendMaintenanceLineNotification(request,env,requestId,item.status);
+  return jsonResponse(result,result.delivery_status==="failed"?502:200);
+}
+
 // PDF ไม่เกิน 1 MiB, รูปภาพไม่เกิน 2 MiB; ตรวจทั้ง MIME และลายเซ็นไฟล์จริง
 const MANAGED_FILE_LIMITS = {
   "application/pdf": 1024 * 1024,
@@ -2110,6 +2454,8 @@ const ATTACHMENT_ENTITY_TABLES = {
   inventory_transaction: { table: "inventory_transactions", owner: "created_by" },
   inventory_inspection: { table: "inventory_inspections", owner: "created_by" },
   maintenance_request: { table: "maintenance_requests", owner: "reported_by" },
+  maintenance_before: { table: "maintenance_requests", owner: "reported_by" },
+  maintenance_after: { table: "maintenance_requests", owner: "reported_by" },
   maintenance_update: { table: "maintenance_updates", owner: "created_by" },
 };
 
@@ -2121,7 +2467,14 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   const entity = await env.DB.prepare(`SELECT id,${config.owner} AS owner_id FROM ${config.table} WHERE id=?`).bind(entityId).first();
   if (!entity) return jsonResponse({ error: "ไม่พบรายการที่ต้องการแนบไฟล์" },404);
   const inventoryEntity = entityType.startsWith("inventory_");
-  if (inventoryEntity ? !canManageInventory(user) : (entity.owner_id !== user.id && !isAdmin(user) && user.role !== "staff")) {
+  let canUpload = inventoryEntity ? canManageInventory(user) : entity.owner_id === user.id || isAdmin(user) || user.role === "staff";
+  if (entityType.startsWith("maintenance_")) {
+    const maintenance = entityType === "maintenance_update"
+      ? await env.DB.prepare(`SELECT m.reported_by,m.assigned_to FROM maintenance_updates x JOIN maintenance_requests m ON m.id=x.request_id WHERE x.id=?`).bind(entityId).first()
+      : await env.DB.prepare("SELECT reported_by,assigned_to FROM maintenance_requests WHERE id=?").bind(entityId).first();
+    canUpload = !!maintenance && (canManageMaintenance(user) || maintenance.reported_by===user.id || maintenance.assigned_to===user.id);
+  }
+  if (!canUpload) {
     return jsonResponse({ error: "ไม่มีสิทธิ์แนบไฟล์ในรายการนี้" },403);
   }
   const form = await request.formData().catch(()=>null);
@@ -2196,6 +2549,41 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   return jsonResponse({ id:attachmentId,file_name:safeName,file_size:file.size,storage_provider:provider,url:`/api/attachments/${attachmentId}` },201);
 }
 
+async function readStoredAttachment(env, attachment) {
+  const storageProvider = attachment.storage_provider || "r2";
+  if (storageProvider === "drive") {
+    if (!attachment.drive_file_id) throw new Error("ไม่พบรหัสไฟล์ Google Drive");
+    const accessToken = await getGoogleDriveAccessToken(env);
+    const response = await googleDriveRequest(accessToken, `/files/${encodeURIComponent(attachment.drive_file_id)}?alt=media`);
+    return response.body;
+  }
+  if (!env.FILES) throw new Error("ยังไม่ได้เชื่อม R2 Storage");
+  const object = await env.FILES.get(attachment.object_key);
+  if (!object) throw new Error("ไม่พบไฟล์ในพื้นที่จัดเก็บ");
+  return object.body;
+}
+
+async function handlePublicMaintenanceImage(request, env, attachmentId) {
+  const url = new URL(request.url);
+  const expires = Number(url.searchParams.get("expires"));
+  const signature = String(url.searchParams.get("sig") || "");
+  if (!env.JWT_SECRET || !Number.isInteger(expires) || expires < Math.floor(Date.now()/1000) || expires > Math.floor(Date.now()/1000)+(8*24*60*60)) {
+    return jsonResponse({ error:"ลิงก์รูปภาพหมดอายุหรือไม่ถูกต้อง" },403);
+  }
+  const expected = await maintenanceImageSignature(env,attachmentId,expires);
+  if (signature.length!==expected.length || signature!==expected) return jsonResponse({ error:"ลายเซ็นลิงก์ไม่ถูกต้อง" },403);
+  const attachment = await env.DB.prepare("SELECT * FROM file_attachments WHERE id=?").bind(attachmentId).first();
+  if (!attachment || !["maintenance_before","maintenance_after"].includes(attachment.entity_type) || !String(attachment.mime_type||"").startsWith("image/")) {
+    return jsonResponse({ error:"ไม่พบรูปภาพ" },404);
+  }
+  try {
+    const body = await readStoredAttachment(env,attachment);
+    return new Response(body,{headers:{"Content-Type":attachment.mime_type,"Content-Length":String(attachment.file_size),"Cache-Control":"public, max-age=3600","X-Content-Type-Options":"nosniff"}});
+  } catch (error) {
+    return jsonResponse({ error:error.message||"เปิดรูปภาพไม่สำเร็จ" },502);
+  }
+}
+
 async function handleDownloadAttachment(request, env, attachmentId) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
@@ -2208,23 +2596,16 @@ async function handleDownloadAttachment(request, env, attachmentId) {
     const deniedAdmin = document.access_level === "admin" && !isAdmin(user);
     if (deniedPrivate || deniedAdmin) return jsonResponse({ error: "ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
   }
-  const storageProvider = attachment.storage_provider || "r2";
-  let body;
-  if (storageProvider === "drive") {
-    if (!attachment.drive_file_id) return jsonResponse({ error: "ไม่พบรหัสไฟล์ Google Drive" },404);
-    try {
-      const accessToken = await getGoogleDriveAccessToken(env);
-      const response = await googleDriveRequest(accessToken, `/files/${encodeURIComponent(attachment.drive_file_id)}?alt=media`);
-      body = response.body;
-    } catch (error) {
-      return jsonResponse({ error: error.message || "เปิดไฟล์จาก Google Drive ไม่สำเร็จ" }, 502);
-    }
-  } else {
-    if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage" },503);
-    const object = await env.FILES.get(attachment.object_key);
-    if (!object) return jsonResponse({ error: "ไม่พบไฟล์ในพื้นที่จัดเก็บ" },404);
-    body = object.body;
+  if (attachment.entity_type.startsWith("maintenance_")) {
+    const maintenance = attachment.entity_type === "maintenance_update"
+      ? await env.DB.prepare(`SELECT m.reported_by,m.assigned_to FROM maintenance_updates x JOIN maintenance_requests m ON m.id=x.request_id WHERE x.id=?`).bind(attachment.entity_id).first()
+      : await env.DB.prepare("SELECT reported_by,assigned_to FROM maintenance_requests WHERE id=?").bind(attachment.entity_id).first();
+    if (!maintenance) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
+    if (!canManageMaintenance(user) && maintenance.reported_by!==user.id && maintenance.assigned_to!==user.id) return jsonResponse({ error:"ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
   }
+  let body;
+  try { body = await readStoredAttachment(env,attachment); }
+  catch (error) { return jsonResponse({ error:error.message||"เปิดไฟล์ไม่สำเร็จ" },502); }
   const asciiName = attachment.file_name.replace(/[^A-Za-z0-9._-]/g,"_");
   return new Response(body,{headers:{
     "Content-Type":attachment.mime_type,
@@ -2666,6 +3047,9 @@ export default {
         await ensureExtendedSchema(env);
       }
 
+      const publicMaintenanceImageMatch = pathname.match(/^\/api\/public\/maintenance-image\/(\d+)$/);
+      if (publicMaintenanceImageMatch && method === "GET") return await handlePublicMaintenanceImage(request,env,Number(publicMaintenanceImageMatch[1]));
+
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
       if (pathname === "/api/admin/users" && method === "GET") return await handleAdminListUsers(request, env);
@@ -2761,7 +3145,21 @@ export default {
       if (inventoryItemMatch && method === "GET") return await handleGetInventoryItem(request, env, Number(inventoryItemMatch[1]));
       if (inventoryItemMatch && method === "PATCH") return await handleUpdateInventoryItem(request, env, Number(inventoryItemMatch[1]));
 
-      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_update)\/(\d+)$/);
+      if (pathname === "/api/facilities" && method === "GET") return await handleListFacilities(request,env);
+      if (pathname === "/api/facilities" && method === "POST") return await handleCreateFacility(request,env);
+      const facilityMatch = pathname.match(/^\/api\/facilities\/(\d+)$/);
+      if (facilityMatch && method === "PATCH") return await handleUpdateFacility(request,env,Number(facilityMatch[1]));
+
+      if (pathname === "/api/maintenance/summary" && method === "GET") return await handleMaintenanceSummary(request,env);
+      if (pathname === "/api/maintenance/requests" && method === "GET") return await handleListMaintenanceRequests(request,env);
+      if (pathname === "/api/maintenance/requests" && method === "POST") return await handleCreateMaintenanceRequest(request,env);
+      const maintenanceNotifyMatch = pathname.match(/^\/api\/maintenance\/requests\/(\d+)\/notify$/);
+      if (maintenanceNotifyMatch && method === "POST") return await handleNotifyMaintenanceRequest(request,env,Number(maintenanceNotifyMatch[1]));
+      const maintenanceRequestMatch = pathname.match(/^\/api\/maintenance\/requests\/(\d+)$/);
+      if (maintenanceRequestMatch && method === "GET") return await handleGetMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
+      if (maintenanceRequestMatch && method === "PATCH") return await handleUpdateMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
+
+      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_before|maintenance_after|maintenance_update)\/(\d+)$/);
       if (uploadAttachmentMatch && method === "POST") return await handleUploadAttachment(request, env, uploadAttachmentMatch[1], Number(uploadAttachmentMatch[2]));
       const downloadAttachmentMatch = pathname.match(/^\/api\/attachments\/(\d+)$/);
       if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));
