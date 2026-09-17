@@ -32,6 +32,17 @@
   .nav-label { font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:#8297AC; padding:14px 12px 4px; font-weight:700; }
   .nav-number { width:23px; height:23px; border-radius:7px; background:rgba(255,255,255,.56); border:1px solid rgba(93,132,170,.12); display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
   .sidebar nav a.active .nav-number { background:rgba(0,122,255,.12); border-color:rgba(0,122,255,.13); color:#07599F; }
+  .nav-group { position:relative; }
+  .nav-group > a { padding-right:32px; }
+  .nav-chevron { position:absolute; right:10px; top:50%; color:#71869A; font-size:11px; transform:translateY(-50%) rotate(0deg); transition:transform .18s ease; pointer-events:none; }
+  .nav-group.open .nav-chevron { transform:translateY(-50%) rotate(90deg); }
+  .nav-children { display:grid; grid-template-rows:0fr; opacity:.35; transition:grid-template-rows .2s ease,opacity .18s ease; }
+  .nav-group.open .nav-children { grid-template-rows:1fr; opacity:1; }
+  .nav-children-inner { min-height:0; overflow:hidden; display:grid; gap:2px; padding-left:31px; }
+  .nav-group.open .nav-children-inner { padding-top:3px; padding-bottom:5px; }
+  .sidebar nav .nav-child { min-height:31px; padding:6px 9px; border-left:1px solid rgba(87,120,150,.20); border-radius:0 9px 9px 0; color:#61788E; font-size:12px; line-height:1.35; }
+  .sidebar nav .nav-child:hover { transform:none; border-left-color:rgba(0,122,255,.34); }
+  .sidebar nav .nav-child.active { color:#075FAE; background:rgba(0,122,255,.10); border-left-color:#2587DB; box-shadow:none; }
   .sidebar-footer { border-top:1px solid rgba(103,137,169,.18); padding:14px 8px 0; margin-top:14px; font-size:13px; position:relative; z-index:1; }
   .sidebar-footer .role-chip { background:rgba(45,127,211,.10); color:#1D66AD; margin-bottom:8px; display:inline-block; }
   .sidebar-footer a { color:#4C759C; text-decoration:none; display:block; margin-top:8px; }
@@ -185,11 +196,35 @@
       <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
       <a href="/academic-years.html" data-page="academic-periods"><span class="nav-number">ปี</span>ปีการศึกษา/ภาคเรียน</a>
       <div class="nav-label">4 ฝ่ายงาน</div>
-      <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
-      <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
-      <a href="/modules.html?module=personnel" data-page="personnel"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล</a>
-      <a href="/modules.html?module=general" data-page="general"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป</a>
-      <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>อาคารสถานที่และแจ้งซ่อม</a>
+      <div class="nav-group" data-nav-group="academic">
+        <a href="/modules.html?module=academic" data-page="academic" aria-expanded="false"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ<span class="nav-chevron">›</span></a>
+        <div class="nav-children"><div class="nav-children-inner">
+          <a class="nav-child" href="/department.html?dept=academic" data-parent-page="academic" data-url="/department.html?dept=academic">งานและโครงการวิชาการ</a>
+        </div></div>
+      </div>
+      <div class="nav-group" data-nav-group="budget">
+        <a href="/modules.html?module=budget" data-page="budget" aria-expanded="false"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ<span class="nav-chevron">›</span></a>
+        <div class="nav-children"><div class="nav-children-inner">
+          <a class="nav-child" href="/department.html?dept=budget" data-parent-page="budget" data-url="/department.html?dept=budget">งานและโครงการงบประมาณ</a>
+          <a class="nav-child" href="/inventory.html" data-parent-page="budget" data-url="/inventory.html">พัสดุและครุภัณฑ์</a>
+        </div></div>
+      </div>
+      <div class="nav-group" data-nav-group="personnel">
+        <a href="/modules.html?module=personnel" data-page="personnel" aria-expanded="false"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล<span class="nav-chevron">›</span></a>
+        <div class="nav-children"><div class="nav-children-inner">
+          <a class="nav-child" href="/department.html?dept=personnel" data-parent-page="personnel" data-url="/department.html?dept=personnel">งานและโครงการบุคคล</a>
+          <a class="nav-child" href="/leave.html" data-parent-page="personnel" data-url="/leave.html">ระบบการลา</a>
+          <a class="nav-child" href="/tasks.html" data-parent-page="personnel" data-url="/tasks.html">มอบหมายและติดตามงาน</a>
+        </div></div>
+      </div>
+      <div class="nav-group" data-nav-group="general">
+        <a href="/modules.html?module=general" data-page="general" aria-expanded="false"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป<span class="nav-chevron">›</span></a>
+        <div class="nav-children"><div class="nav-children-inner">
+          <a class="nav-child" href="/department.html?dept=general" data-parent-page="general" data-url="/department.html?dept=general">งานและโครงการบริหารทั่วไป</a>
+        </div></div>
+      </div>
+      <div class="nav-label">ระบบอัตโนมัติ</div>
+      <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>ระบบแจ้งซ่อมและติดตาม</a>
       <div class="nav-label">ระบบสนับสนุน</div>
       <a href="/modules.html?module=student-support" data-page="student-support"><span class="nav-number">08</span>ดูแลช่วยเหลือนักเรียน</a>
       <a href="/modules.html?module=documents" data-page="documents"><span class="nav-number">09</span>เอกสารและคลังไฟล์</a>
@@ -197,9 +232,7 @@
       <div class="nav-label admin-only" style="display:none;">บริหารระบบ</div>
       <a href="/modules.html?module=users" data-page="users" class="admin-only" style="display:none;"><span class="nav-number">11</span>ผู้ใช้งานและสิทธิ์</a>
       <a href="/modules.html?module=security" data-page="security" class="admin-only" style="display:none;"><span class="nav-number">12</span>สำรองข้อมูลและความปลอดภัย</a>
-      <div class="nav-label">เครื่องมือที่ใช้งานอยู่</div>
-      <a href="/tasks.html" data-page="tasks">จัดการและติดตามงาน</a>
-      <a href="/leave.html" data-page="leave">ระบบการลา</a>
+      <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่าการแจ้งเตือน LINE</a>
     </nav>
     <div class="sidebar-footer">
       <span class="role-chip" id="roleChip">—</span>
@@ -326,6 +359,7 @@
     reports: "/modules.html?module=reports",
     users: "/modules.html?module=users",
     security: "/modules.html?module=security",
+    "line-settings": "/line-settings.html",
   };
 
   function showOverview() {
@@ -337,6 +371,18 @@
     document.getElementById("overviewNav").classList.add("active");
     history.replaceState(null, "", "#");
   }
+  window.showOverview = showOverview;
+
+  function setNavGroupOpen(group, open) {
+    if (!group) return;
+    group.classList.toggle("open", open);
+    const parentLink = group.querySelector(":scope > a[data-page]");
+    if (parentLink) parentLink.setAttribute("aria-expanded", String(open));
+  }
+
+  function openOnlyNavGroup(group) {
+    document.querySelectorAll(".nav-group").forEach((item) => setNavGroupOpen(item, item === group));
+  }
 
   function showPage(key, updateHash, overrideUrl) {
     const url = overrideUrl || PAGE_URLS[key];
@@ -345,9 +391,17 @@
     const frame = document.getElementById("contentFrame");
     frame.src = url;
     frame.classList.add("active");
-    document.querySelectorAll(".sidebar nav a").forEach((a) => {
-      a.classList.toggle("active", a.getAttribute("data-page") === key);
-    });
+    document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
+    const matchingChild = [...document.querySelectorAll(".nav-child")].find((item) => item.dataset.url === url);
+    const parentKey = matchingChild?.dataset.parentPage || key;
+    const parentLink = document.querySelector(`.sidebar nav a[data-page="${parentKey}"]`);
+    if (parentLink) parentLink.classList.add("active");
+    if (matchingChild) {
+      matchingChild.classList.add("active");
+      openOnlyNavGroup(matchingChild.closest(".nav-group"));
+    } else if (parentLink?.closest(".nav-group")) {
+      openOnlyNavGroup(parentLink.closest(".nav-group"));
+    }
     if (updateHash !== false) history.pushState(null, "", "#" + key);
   }
 
@@ -374,6 +428,7 @@
     {title:"ระบบการลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
     {title:"ผู้ใช้งานและสิทธิ์",subtitle:"กำหนดบทบาทผู้ใช้",page_key:"users",url:"/admin-users.html",keywords:"user role ผู้ใช้ สิทธิ์",admin_only:true},
     {title:"สำรองข้อมูลและความปลอดภัย",subtitle:"Audit log และการสำรองข้อมูล",page_key:"security",url:"/security.html",keywords:"backup log ความปลอดภัย",admin_only:true},
+    {title:"ตั้งค่าการแจ้งเตือน LINE",subtitle:"เชื่อมต่อ LINE Official Account และกลุ่มปลายทาง",page_key:"line-settings",url:"/line-settings.html",keywords:"line webhook token target แจ้งเตือน",superadmin_only:true},
   ];
   let dashboardUser=null,globalSearchItems=[],globalSearchActive=-1,globalSearchTimer=null,globalSearchVersion=0;
 
@@ -420,7 +475,7 @@
     const query=input.value.trim();const version=++globalSearchVersion;
     if(!query){closeGlobalSearch();return}
     const normalized=query.toLocaleLowerCase("th");
-    const pageItems=SEARCH_PAGES.filter(item=>(!item.admin_only||dashboardUser?.is_admin)&&`${item.title} ${item.subtitle} ${item.keywords}`.toLocaleLowerCase("th").includes(normalized)).slice(0,6).map(item=>({...item,type:"page"}));
+    const pageItems=SEARCH_PAGES.filter(item=>(!item.admin_only||dashboardUser?.is_admin)&&(!item.superadmin_only||dashboardUser?.role==="superadmin")&&`${item.title} ${item.subtitle} ${item.keywords}`.toLocaleLowerCase("th").includes(normalized)).slice(0,6).map(item=>({...item,type:"page"}));
     if(query.length<2){renderGlobalSearch(pageItems,pageItems.length?"":"พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาข้อมูล");return}
     renderGlobalSearch(pageItems,"กำลังค้นหา...");
     try{
@@ -447,6 +502,14 @@
       if (e.ctrlKey || e.metaKey || e.shiftKey) return; // ให้เปิดแท็บใหม่ได้ตามปกติ
       e.preventDefault();
       showPage(a.getAttribute("data-page"));
+    });
+  });
+
+  document.querySelectorAll(".nav-child").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      event.preventDefault();
+      showPage(link.dataset.parentPage, true, link.dataset.url);
     });
   });
 
@@ -684,6 +747,11 @@
     if (user.is_admin) {
       document.querySelectorAll(".admin-only").forEach((element) => {
         element.style.display = element.classList.contains("nav-label") ? "block" : "flex";
+      });
+    }
+    if (user.role === "superadmin") {
+      document.querySelectorAll(".superadmin-only").forEach((element) => {
+        element.style.display = "flex";
       });
     }
 
