@@ -89,7 +89,13 @@ wrangler.jsonc     → ไฟล์ตั้งค่าโปรเจกต์
 เมื่อต้องการเปิดการแจ้งเตือน ให้เพิ่ม Secret ใน Cloudflare Worker แล้วสร้าง deployment ใหม่:
 
 - `LINE_CHANNEL_ACCESS_TOKEN` = Channel access token ของ Messaging API
-- `LINE_TARGET_ID` = User ID, Group ID หรือ Room ID ที่ต้องการรับแจ้งเตือน
+- `LINE_CHANNEL_SECRET` = Channel secret จากหน้า Basic settings
+
+ตั้ง Webhook URL เป็น `https://<โดเมนของระบบ>/api/line/webhook` แล้วเปิด **Use webhook** และ
+**Allow bot to join group chats** เมื่อเพิ่มบัญชีทางการเข้ากลุ่มและมีสมาชิกส่งข้อความ ระบบจะตรวจพบ
+Group ID อัตโนมัติ ผู้บริหารเลือกกลุ่มและส่งข้อความทดสอบได้ที่ `/line-settings.html`
+
+ตัวแปร `LINE_TARGET_ID` ยังรองรับเฉพาะกรณีย้ายมาจากระบบเดิม แต่ระบบใหม่ไม่จำเป็นต้องกรอกเอง
 
 ข้อความ LINE จะแสดงเลขที่ใบแจ้งซ่อม เรื่อง ระดับความสำคัญ สถานที่ ผู้แจ้ง ผู้รับผิดชอบ
 และภาพก่อน/หลังซ่อมผ่านลิงก์ลงนามชั่วคราวที่หมดอายุเอง โดยไม่เปิดไฟล์ Google Drive เป็นสาธารณะ
