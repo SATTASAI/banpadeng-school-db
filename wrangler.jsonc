@@ -7,7 +7,6 @@
     "binding": "ASSETS"
   },
   "vars": {
-    "FILE_STORAGE_PROVIDER": "drive",
     "GOOGLE_DRIVE_FOLDER_ID": "1miKzaiIj3Y0CJ1RQHma7cDA7G3pz6ca9"
   },
   "d1_databases": [
