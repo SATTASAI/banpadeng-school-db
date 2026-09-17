@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ศูนย์ปฏิบัติงาน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .work-page{max-width:1320px}.page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:12px 0 18px}.page-head h2{margin:0}.page-head p{margin:4px 0 0;color:var(--color-text-muted)}
+    .head-actions{display:flex;gap:8px;flex-wrap:wrap}.head-actions .btn,.form-actions .btn,.modal-head .btn{width:auto}.context-chip{display:inline-flex;align-items:center;gap:6px;margin-top:8px;padding:5px 10px;border:1px solid #c8dcec;border-radius:999px;background:#eef7fd;color:#315f87;font-size:11px;font-weight:600}
+    .summary-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}.summary-card{padding:14px 15px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.85);box-shadow:0 8px 25px rgba(39,77,116,.055)}.summary-card span{display:block;font-size:11px;color:var(--color-text-muted)}.summary-card strong{display:block;margin-top:2px;font-size:22px;color:#173b60}.summary-card.warn strong{color:#a6660b}.summary-card.danger strong{color:#b33d4e}.summary-card.success strong{color:#23724d}
+    .toolbar{display:grid;grid-template-columns:minmax(240px,1fr) 190px auto;gap:10px;align-items:center;margin-bottom:15px}.toolbar input,.toolbar select,.form-grid input,.form-grid select,.form-grid textarea{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:11px;background:rgba(255,255,255,.9);font:inherit;color:var(--color-text)}.toolbar .btn{width:auto}
+    .record-list{display:grid;gap:10px}.record-card{display:grid;grid-template-columns:6px minmax(0,1fr) auto;gap:14px;padding:15px 16px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.86);box-shadow:0 7px 20px rgba(45,79,115,.04);cursor:pointer;transition:.18s}.record-card:hover{transform:translateY(-1px);border-color:rgba(44,129,210,.4);box-shadow:0 12px 29px rgba(45,79,115,.1)}.record-card.is-overdue{border-color:#ecc4ca}.record-card.search-target{box-shadow:inset 0 0 0 2px #4a9fe6,0 14px 35px rgba(45,133,210,.18)}.priority-bar{border-radius:8px;background:#88a0b5}.priority-bar.low{background:#56a489}.priority-bar.normal{background:#3c8ed8}.priority-bar.high{background:#e6902e}.priority-bar.urgent{background:#d44357}.record-main h3{font-size:15px;margin:0;color:#173654}.record-desc{margin:5px 0 0;color:var(--color-text-muted);font-size:12px;line-height:1.5;white-space:pre-wrap}.record-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;color:var(--color-text-muted);font-size:11px}.record-side{text-align:right;min-width:145px}.record-side small{display:block;margin-top:6px;color:var(--color-text-muted)}
+    .pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;background:#e8f0f7;color:#426079;font-size:11px;font-weight:600}.pill.planned{background:#e8f0f7;color:#426079}.pill.in_progress{background:#e3f2ff;color:#236cae}.pill.waiting{background:#fff0d8;color:#996109}.pill.completed{background:#e2f4e9;color:#28744f}.pill.cancelled{background:#f3e8ea;color:#9c4652}.progress-track{height:6px;margin-top:10px;border-radius:999px;background:#e8eef3;overflow:hidden}.progress-fill{height:100%;border-radius:inherit;background:linear-gradient(90deg,#3e8fdb,#42b2a0)}
+    .empty{padding:42px 20px;text-align:center;color:var(--color-text-muted)}.modal-backdrop{position:fixed;inset:0;z-index:90;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(16,35,57,.42)}.modal-panel{width:min(900px,100%);max-height:92vh;overflow:auto;padding:22px;border:1px solid rgba(255,255,255,.85);border-radius:21px;background:rgba(249,252,255,.99);box-shadow:0 28px 80px rgba(18,43,70,.28)}.modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px}.modal-head h2{margin:0}.modal-head p{margin:3px 0 0;color:var(--color-text-muted);font-size:12px}.form-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.field{margin:0}.field label{display:block;margin-bottom:5px;font-size:12px;font-weight:600}.span-2{grid-column:span 2}.span-3{grid-column:1/-1}.form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.file-help{padding:10px 12px;border:1px solid #c4dcec;border-radius:11px;background:#eef8fd;color:#315d81;font-size:11px;line-height:1.55}.file-link{display:inline-flex;margin-top:6px;color:#2776ba;font-size:12px}.timeline{display:grid;gap:8px;margin-top:9px}.timeline-item{display:grid;grid-template-columns:11px 1fr;gap:9px}.timeline-dot{width:8px;height:8px;margin-top:7px;border-radius:50%;background:#3e8fdb;box-shadow:0 0 0 4px #e6f2fc}.timeline-body{padding:9px 11px;border:1px solid var(--color-border);border-radius:11px;background:#fff;font-size:12px}.timeline-body small{display:block;margin-top:3px;color:var(--color-text-muted)}.toast{position:fixed;right:20px;bottom:20px;z-index:120;display:none;max-width:390px;padding:12px 15px;border-radius:13px;background:#183153;color:#fff;box-shadow:0 12px 35px rgba(24,49,83,.28)}.toast.error{background:#a83f4c}
+    html.embedded .page-back{display:none}html.embedded body{background:transparent}html.embedded .app-main{padding-top:18px}
+    @media(max-width:900px){.summary-grid{grid-template-columns:repeat(3,1fr)}.toolbar{grid-template-columns:1fr 1fr}.toolbar .btn{grid-column:1/-1}.form-grid{grid-template-columns:1fr 1fr}.span-3{grid-column:1/-1}}
+    @media(max-width:620px){.page-head{align-items:flex-start;flex-direction:column}.summary-grid,.toolbar,.form-grid{grid-template-columns:1fr}.span-2,.span-3{grid-column:auto}.record-card{grid-template-columns:5px 1fr}.record-side{grid-column:2;text-align:left}.modal-backdrop{padding:7px}.modal-panel{padding:15px;border-radius:16px}}
+  </style>
+</head>
+<body>
+<main class="app-main work-page">
+  <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
+  <div class="page-head">
+    <div>
+      <h2 id="pageTitle">ศูนย์ปฏิบัติงาน</h2>
+      <p id="pageSubtitle">บันทึก มอบหมาย และติดตามงานของโรงเรียน</p>
+      <span class="context-chip" id="periodChip">กำลังตรวจสอบปีการศึกษา...</span>
+    </div>
+    <div class="head-actions"><button class="btn btn-ghost" id="exportBtn">ส่งออก CSV</button><button class="btn btn-primary" id="newBtn">+ เพิ่มรายการ</button></div>
+  </div>
+  <div class="summary-grid" id="summaryGrid"></div>
+  <section class="panel">
+    <div class="toolbar">
+      <input type="search" id="searchInput" placeholder="ค้นหาชื่องาน รายละเอียด หรือหมายเหตุ" />
+      <select id="statusFilter"><option value="">ทุกสถานะ</option><option value="planned">วางแผน</option><option value="in_progress">กำลังดำเนินการ</option><option value="waiting">รอดำเนินการ</option><option value="completed">เสร็จสิ้น</option><option value="cancelled">ยกเลิก</option></select>
+      <button class="btn btn-ghost" id="refreshBtn">รีเฟรชข้อมูล</button>
+    </div>
+    <div class="record-list" id="recordList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+  </section>
+</main>
+
+<div class="modal-backdrop" id="recordModal"><div class="modal-panel">
+  <div class="modal-head"><div><h2 id="modalTitle">เพิ่มรายการงาน</h2><p id="modalSubtitle"></p></div><button class="btn btn-ghost" data-close="recordModal">ปิด</button></div>
+  <div class="form-grid">
+    <div class="field span-2"><label>ชื่อรายการ *</label><input id="fTitle" maxlength="240" /></div>
+    <div class="field"><label>ผู้รับผิดชอบ *</label><select id="fResponsible"></select></div>
+    <div class="field span-3"><label>รายละเอียด</label><textarea id="fDescription" rows="3" maxlength="3000"></textarea></div>
+    <div class="field"><label>วันที่เริ่ม</label><input type="date" id="fStartDate" /></div>
+    <div class="field"><label>กำหนดเสร็จ</label><input type="date" id="fDueDate" /></div>
+    <div class="field"><label>ความสำคัญ</label><select id="fPriority"><option value="low">ต่ำ</option><option value="normal">ปกติ</option><option value="high">สูง</option><option value="urgent">เร่งด่วน</option></select></div>
+    <div class="field"><label>สถานะ</label><select id="fStatus"><option value="planned">วางแผน</option><option value="in_progress">กำลังดำเนินการ</option><option value="waiting">รอดำเนินการ</option><option value="completed">เสร็จสิ้น</option><option value="cancelled">ยกเลิก</option></select></div>
+    <div class="field span-2"><label>ความคืบหน้า <strong id="progressLabel">0%</strong></label><input type="range" id="fProgress" min="0" max="100" step="5" value="0" /></div>
+    <div class="field span-3"><label>หมายเหตุภายใน</label><textarea id="fNotes" rows="2" maxlength="2000"></textarea></div>
+    <div class="field span-3" id="commentField"><label>บันทึกการอัปเดตครั้งนี้</label><textarea id="fComment" rows="2" maxlength="1000" placeholder="เช่น ส่งเอกสารให้ฝ่ายบริหารตรวจแล้ว"></textarea></div>
+    <div class="field span-3"><label>ไฟล์แนบ</label><input type="file" id="fFile" accept="application/pdf,image/jpeg,image/png,image/webp,image/gif" /><a class="file-link" id="currentFile" target="_blank" rel="noopener" style="display:none"></a></div>
+    <div class="file-help span-3">PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB (รูปขนาดใหญ่ระบบจะลดขนาดให้อัตโนมัติ) หากไฟล์สแกนใหญ่เกินไป แนะนำสแกนที่ 150 DPI ใช้ขาวดำหรือ Grayscale และเลือกบันทึกแบบบีบอัด</div>
+    <div class="field span-3" id="historySection" style="display:none"><label>ประวัติความคืบหน้า</label><div class="timeline" id="timeline"></div></div>
+  </div>
+  <div class="form-actions"><button class="btn btn-ghost" data-close="recordModal">ยกเลิก</button><button class="btn btn-primary" id="saveBtn">บันทึก</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/file-upload.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const AREA_LABEL={staff:"ข้อมูลครูและบุคลากร",academic:"ฝ่ายบริหารงานวิชาการ",budget:"ฝ่ายบริหารงานงบประมาณ",personnel:"ฝ่ายบริหารงานบุคคล",general:"ฝ่ายบริหารงานทั่วไป"};
+const TOPICS={
+  staff:["ประวัติและข้อมูลการติดต่อ","ตำแหน่ง วิทยฐานะ และอายุราชการ","วุฒิการศึกษาและวิชาเอก","ภาระงานและงานที่ได้รับมอบหมาย","การลา การอบรม และพัฒนาตนเอง","คำสั่งปฏิบัติหน้าที่","วันหมดอายุใบประกอบวิชาชีพ","ผลงานและรางวัล","ข้อมูลการอบรมและพัฒนา"],
+  academic:["หลักสูตรสถานศึกษา","โครงการและแผนงานด้านวิชาการ","แผนการจัดการเรียนรู้","ตารางเรียนและตารางสอน","ตารางสอบ","ผลสัมฤทธิ์ทางการเรียน","การวัดและประเมินผล","นิเทศ ติดตาม และประกันคุณภาพ","จัดตารางเรียนและตารางสอน","กำหนดวัน เวลา ห้องเรียน และครู","ตรวจสอบคาบเรียนชนกัน","ตารางสอนรายบุคคล","ตารางเรียนรายห้อง","ตารางเรียนรายชั้น","ตารางใช้ห้องเรียน","ส่งออกและพิมพ์ตาราง"],
+  budget:["โครงการและแผนการใช้จ่าย","งบประมาณประจำปี","รายรับ–รายจ่าย","เงินอุดหนุนและค่าใช้จ่ายนักเรียน","หนังสือขอใช้งบประมาณ","ขออนุมัติเบิกจ่าย","เอกสารเบิกจ่าย","รายงานการเงิน","ครุภัณฑ์และพัสดุ","ทะเบียนและตรวจสอบทรัพย์สิน"],
+  personnel:["โครงการและแผนงานฝ่ายบุคคล","คำสั่งปฏิบัติหน้าที่","ระบบการลา","ระบบเวรประจำวัน","บันทึกการปฏิบัติงาน","แบบประเมิน PA","การอบรมและพัฒนาบุคลากร","แฟ้มประวัติและผลงานบุคลากร"],
+  general:["โครงการและแผนงานฝ่ายบริหารทั่วไป","หนังสือราชการ","งานสารบรรณ","รับ–ส่งหนังสือ","อาคารสถานที่และห้องเรียน","ยานพาหนะ","งานประชาสัมพันธ์","ข่าวสารและกิจกรรมโรงเรียน"]
+};
+const STATUS={planned:"วางแผน",in_progress:"กำลังดำเนินการ",waiting:"รอดำเนินการ",completed:"เสร็จสิ้น",cancelled:"ยกเลิก"};
+const PRIORITY={low:"ต่ำ",normal:"ปกติ",high:"สูง",urgent:"เร่งด่วน"};
+const params=new URLSearchParams(location.search);const area=params.get("area")||"";const topicKey=String(params.get("topic")??"");
+const topicIndex=Number(topicKey);const topicLabel=TOPICS[area]?.[topicIndex]||"หัวข้องาน";const requestedRecord=Number(params.get("record")||0);
+let records=[],users=[],currentUser=null,editingId=null,searchTimer=null;
+
+function toast(message,error=false){const el=$("toast");el.textContent=message;el.className=`toast${error?" error":""}`;el.style.display="block";clearTimeout(el._timer);el._timer=setTimeout(()=>el.style.display="none",3600)}
+function formatDate(value){if(!value)return "ไม่ระบุ";const date=new Date(`${value}T00:00:00`);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"short",year:"numeric"}).format(date)}
+function formatDateTime(value){if(!value)return "";const normalized=String(value).includes("T")?value:`${value.replace(" ","T")}Z`;const date=new Date(normalized);return Number.isNaN(date.getTime())?value:new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short"}).format(date)}
+function overdue(record){return record.due_date&&!['completed','cancelled'].includes(record.status)&&record.due_date<new Date().toISOString().slice(0,10)}
+function openModal(){$("recordModal").style.display="flex"}function closeModal(){$("recordModal").style.display="none"}
+document.querySelectorAll('[data-close="recordModal"]').forEach(button=>button.onclick=closeModal);$("recordModal").onclick=event=>{if(event.target===$("recordModal"))closeModal()};
+
+function renderSummary(summary={}){$("summaryGrid").innerHTML=[
+  ["ทั้งหมด",summary.total||0,""],["วางแผน",summary.planned||0,""],["กำลังดำเนินการ",summary.in_progress||0,"warn"],["เสร็จสิ้น",summary.completed||0,"success"],["เลยกำหนด",summary.overdue||0,"danger"]
+].map(([label,value,kind])=>`<div class="summary-card ${kind}"><span>${label}</span><strong>${Number(value)}</strong></div>`).join("")}
+function renderRecords(){const list=$("recordList");if(!records.length){list.innerHTML='<div class="empty">ยังไม่มีรายการในหัวข้อนี้ กด “เพิ่มรายการ” เพื่อเริ่มใช้งาน</div>';return}list.innerHTML=records.map(record=>`<article class="record-card ${overdue(record)?"is-overdue":""}" data-id="${record.id}">
+  <div class="priority-bar ${esc(record.priority)}"></div><div class="record-main"><h3>${esc(record.title)}</h3>${record.description?`<p class="record-desc">${esc(record.description)}</p>`:""}
+  <div class="record-meta"><span>ผู้รับผิดชอบ: ${esc(record.responsible_name||"ไม่ระบุ")}</span><span>กำหนด: ${esc(formatDate(record.due_date))}${overdue(record)?" · เลยกำหนด":""}</span>${record.attachment_id?`<span>มีไฟล์แนบ</span>`:""}</div>
+  <div class="progress-track"><div class="progress-fill" style="width:${Number(record.progress_percent)||0}%"></div></div></div>
+  <div class="record-side"><span class="pill ${esc(record.status)}">${esc(STATUS[record.status]||record.status)}</span><small>${esc(PRIORITY[record.priority]||record.priority)} · ${Number(record.progress_percent)||0}%</small></div></article>`).join("");
+  list.querySelectorAll("[data-id]").forEach(card=>card.onclick=()=>editRecord(Number(card.dataset.id)))}
+async function loadRecords(){const query=new URLSearchParams({area,topic:topicKey});const q=$("searchInput").value.trim();const status=$("statusFilter").value;if(q)query.set("q",q);if(status)query.set("status",status);const data=await apiRequest(`/api/work-records?${query}`);records=data.records||[];renderSummary(data.summary);renderRecords();const period=data.current_academic_period;$("periodChip").textContent=period?`${period.academic_year_label} · ${period.academic_term_name||"ยังไม่เปิดภาคเรียน"}`:"ยังไม่มีปีการศึกษาที่เปิดใช้งาน"}
+function resetForm(){editingId=null;$("modalTitle").textContent="เพิ่มรายการงาน";$("modalSubtitle").textContent=topicLabel;$("fTitle").value="";$("fDescription").value="";$("fResponsible").value=String(currentUser.id);$("fStartDate").value=new Date().toISOString().slice(0,10);$("fDueDate").value="";$("fPriority").value="normal";$("fStatus").value="planned";$("fProgress").value="0";$("progressLabel").textContent="0%";$("fNotes").value="";$("fComment").value="";$("fFile").value="";$("currentFile").style.display="none";$("commentField").style.display="none";$("historySection").style.display="none";setEditable(true)}
+function setEditable(canEdit){["fTitle","fDescription","fResponsible","fStartDate","fDueDate","fPriority","fStatus","fProgress","fNotes","fComment","fFile"].forEach(id=>$(id).disabled=!canEdit);$("saveBtn").style.display=canEdit?"inline-flex":"none"}
+function timelineHtml(updates){return updates.length?updates.map(update=>`<div class="timeline-item"><span class="timeline-dot"></span><div class="timeline-body"><strong>${esc(STATUS[update.new_status]||update.new_status||"อัปเดตข้อมูล")} · ${Number(update.progress_percent)||0}%</strong>${update.comment?`<div>${esc(update.comment)}</div>`:""}<small>${esc(update.created_by_name||"ผู้ใช้งาน")} · ${esc(formatDateTime(update.created_at))}</small></div></div>`).join(""):'<div class="empty">ยังไม่มีประวัติการอัปเดต</div>'}
+async function editRecord(id){const data=await apiRequest(`/api/work-records/${id}`);const record=data.record;editingId=id;$("modalTitle").textContent=record.can_manage?"แก้ไขรายการงาน":"รายละเอียดรายการงาน";$("modalSubtitle").textContent=`${topicLabel} · สร้างโดย ${record.creator_name||"ผู้ใช้งาน"}`;$("fTitle").value=record.title||"";$("fDescription").value=record.description||"";$("fResponsible").value=String(record.responsible_user_id||"");$("fStartDate").value=record.start_date||"";$("fDueDate").value=record.due_date||"";$("fPriority").value=record.priority;$("fStatus").value=record.status;$("fProgress").value=Number(record.progress_percent)||0;$("progressLabel").textContent=`${Number(record.progress_percent)||0}%`;$("fNotes").value=record.notes||"";$("fComment").value="";$("fFile").value="";$("commentField").style.display=record.can_manage?"block":"none";$("historySection").style.display="block";$("timeline").innerHTML=timelineHtml(data.updates||[]);if(record.attachment_id){$("currentFile").href=`/api/attachments/${record.attachment_id}`;$("currentFile").textContent=`เปิดไฟล์ปัจจุบัน: ${record.attachment_name||"ไฟล์แนบ"}`;$("currentFile").style.display="inline-flex"}else $("currentFile").style.display="none";setEditable(record.can_manage);openModal()}
+async function uploadFile(recordId){let file=$("fFile").files[0];if(!file)return;const prepared=await prepareManagedImage(file);file=prepared.file;if(file.type==="application/pdf"&&file.size>1048576)throw new Error("PDF ต้องไม่เกิน 1 MB");if(file.type.startsWith("image/")&&file.size>2097152)throw new Error("รูปภาพหลังลดขนาดยังเกิน 2 MB");const form=new FormData();form.append("file",file);await apiRequest(`/api/attachments/work_record/${recordId}`,{method:"POST",body:form})}
+async function saveRecord(){const payload={area,topic_key:topicKey,topic_label:topicLabel,title:$("fTitle").value,description:$("fDescription").value,responsible_user_id:Number($("fResponsible").value),start_date:$("fStartDate").value||null,due_date:$("fDueDate").value||null,priority:$("fPriority").value,status:$("fStatus").value,progress_percent:Number($("fProgress").value),notes:$("fNotes").value,comment:$("fComment").value};if(!payload.title.trim())throw new Error("กรุณาระบุชื่อรายการ");$("saveBtn").disabled=true;try{const result=await apiRequest(editingId?`/api/work-records/${editingId}`:"/api/work-records",{method:editingId?"PATCH":"POST",body:payload});const id=editingId||result.id;await uploadFile(id);closeModal();await loadRecords();toast(editingId?"บันทึกการอัปเดตแล้ว":"เพิ่มรายการเรียบร้อยแล้ว")}finally{$("saveBtn").disabled=false}}
+function exportCsv(){const rows=[["หัวข้องาน","ชื่อรายการ","ผู้รับผิดชอบ","สถานะ","ความสำคัญ","ความคืบหน้า","วันที่เริ่ม","กำหนดเสร็จ"],...records.map(r=>[topicLabel,r.title,r.responsible_name||"",STATUS[r.status]||r.status,PRIORITY[r.priority]||r.priority,`${r.progress_percent}%`,r.start_date||"",r.due_date||""])];const csv="\ufeff"+rows.map(row=>row.map(value=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\r\n");const url=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download=`${topicLabel}.csv`;link.click();URL.revokeObjectURL(url)}
+
+$("fProgress").oninput=()=>$("progressLabel").textContent=`${$("fProgress").value}%`;$("fStatus").onchange=()=>{if($("fStatus").value==="completed"){$("fProgress").value=100;$("progressLabel").textContent="100%"}};
+$("newBtn").onclick=()=>{resetForm();openModal()};$("saveBtn").onclick=()=>saveRecord().catch(error=>toast(error.message,true));$("refreshBtn").onclick=()=>loadRecords().catch(error=>toast(error.message,true));$("exportBtn").onclick=exportCsv;$("statusFilter").onchange=()=>loadRecords().catch(error=>toast(error.message,true));$("searchInput").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadRecords().catch(error=>toast(error.message,true)),280)};
+
+(async()=>{if(!TOPICS[area]||!Number.isInteger(topicIndex)||topicIndex<0||topicIndex>=TOPICS[area].length){$("recordList").innerHTML='<div class="empty">ไม่พบหัวข้องานที่ร้องขอ</div>';$("newBtn").style.display="none";return}const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}currentUser=me.user;const userData=await apiRequest("/api/users");users=userData.users||[];$("fResponsible").innerHTML=users.map(user=>`<option value="${user.id}">${esc(user.full_name)} · ${esc(ROLE_LABELS[user.role]||user.role)}</option>`).join("");$("pageTitle").textContent=topicLabel;$("pageSubtitle").textContent=AREA_LABEL[area]||"ศูนย์ปฏิบัติงาน";document.title=`${topicLabel} — ระบบจัดการโรงเรียนบ้านป่าเด็ง`;await loadRecords();if(requestedRecord)await editRecord(requestedRecord)})().catch(error=>toast(error.message,true));
+</script>
+</body>
+</html>
