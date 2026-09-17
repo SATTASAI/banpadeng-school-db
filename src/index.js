@@ -12,6 +12,7 @@ import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-dat
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 
 let extendedSchemaReady = false;
+let lineSchemaReady = false;
 async function ensureProjectExpenseSchema(env) {
   await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS project_expenses (
@@ -180,6 +181,38 @@ async function ensureMaintenanceSchema(env) {
   ]);
 }
 
+async function ensureLineSchema(env) {
+  if (lineSchemaReady) return;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS line_targets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_type TEXT NOT NULL CHECK (target_type IN ('user','group','room')),
+      target_id TEXT NOT NULL UNIQUE,
+      display_name TEXT,
+      source_user_id TEXT,
+      status TEXT NOT NULL DEFAULT 'detected' CHECK (status IN ('detected','active','disabled')),
+      is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+      first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_event_type TEXT,
+      selected_by INTEGER REFERENCES users(id),
+      selected_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS line_webhook_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      webhook_event_id TEXT UNIQUE,
+      target_id TEXT,
+      source_type TEXT,
+      event_type TEXT NOT NULL,
+      received_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_targets_default ON line_targets(is_default, status)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_targets_last_seen ON line_targets(last_seen_at DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_webhook_events_received ON line_webhook_events(received_at DESC)"),
+  ]);
+  lineSchemaReady = true;
+}
+
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
   await env.DB.batch([
@@ -207,6 +240,7 @@ async function ensureExtendedSchema(env) {
   await ensureAttachmentStorageSchema(env);
   await ensureDocumentWorkflowSchema(env);
   await ensureMaintenanceSchema(env);
+  await ensureLineSchema(env);
   extendedSchemaReady = true;
 }
 
@@ -1944,6 +1978,220 @@ async function handleCreateInventoryInspection(request, env, itemId) {
   return jsonResponse({ id: inserted.meta.last_row_id, result },201);
 }
 
+// ---------- LINE Messaging API / Webhook ----------
+function decodeBase64(value) {
+  try {
+    return Uint8Array.from(atob(String(value || "")), (character) => character.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+
+async function verifyLineWebhookSignature(rawBody, signature, channelSecret) {
+  const signatureBytes = decodeBase64(signature);
+  if (!signatureBytes?.length || !channelSecret) return false;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(String(channelSecret)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["verify"]
+  );
+  return crypto.subtle.verify("HMAC", key, signatureBytes, new TextEncoder().encode(rawBody));
+}
+
+function getLineSourceTarget(source) {
+  if (!source || typeof source !== "object") return null;
+  if (source.type === "group" && source.groupId) return { targetType: "group", targetId: String(source.groupId) };
+  if (source.type === "room" && source.roomId) return { targetType: "room", targetId: String(source.roomId) };
+  if (source.type === "user" && source.userId) return { targetType: "user", targetId: String(source.userId) };
+  return null;
+}
+
+async function fetchLineTargetDisplayName(env, targetType, targetId) {
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN || targetType === "room") return null;
+  const path = targetType === "group"
+    ? `/v2/bot/group/${encodeURIComponent(targetId)}/summary`
+    : `/v2/bot/profile/${encodeURIComponent(targetId)}`;
+  try {
+    const response = await fetch(`https://api.line.me${path}`, {
+      headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return cleanText(targetType === "group" ? data.groupName : data.displayName, 160);
+  } catch {
+    return null;
+  }
+}
+
+async function processLineWebhookEvents(env, events) {
+  if (!Array.isArray(events) || events.length === 0) return;
+  await ensureLineSchema(env);
+  for (const event of events.slice(0, 100)) {
+    const source = getLineSourceTarget(event?.source);
+    const eventType = cleanText(event?.type, 50) || "unknown";
+    const webhookEventId = cleanText(event?.webhookEventId, 160);
+    if (source) {
+      await env.DB.prepare(`INSERT INTO line_targets
+        (target_type,target_id,source_user_id,last_event_type)
+        VALUES (?,?,?,?)
+        ON CONFLICT(target_id) DO UPDATE SET
+          target_type=excluded.target_type,
+          source_user_id=COALESCE(excluded.source_user_id,line_targets.source_user_id),
+          last_event_type=excluded.last_event_type,
+          last_seen_at=datetime('now'),
+          updated_at=datetime('now')`)
+        .bind(source.targetType, source.targetId, cleanText(event?.source?.userId, 160), eventType).run();
+
+      const target = await env.DB.prepare("SELECT id,display_name FROM line_targets WHERE target_id=?")
+        .bind(source.targetId).first();
+      if (target && !target.display_name) {
+        const displayName = await fetchLineTargetDisplayName(env, source.targetType, source.targetId);
+        if (displayName) {
+          await env.DB.prepare("UPDATE line_targets SET display_name=?,updated_at=datetime('now') WHERE id=?")
+            .bind(displayName, target.id).run();
+        }
+      }
+    }
+    if (webhookEventId) {
+      await env.DB.prepare(`INSERT OR IGNORE INTO line_webhook_events
+        (webhook_event_id,target_id,source_type,event_type) VALUES (?,?,?,?)`)
+        .bind(webhookEventId, source?.targetId || null, source?.targetType || null, eventType).run();
+    }
+  }
+}
+
+async function handleLineWebhook(request, env, context) {
+  if (!env.LINE_CHANNEL_SECRET) return jsonResponse({ error: "ยังไม่ได้ตั้งค่า LINE_CHANNEL_SECRET" }, 503);
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 1024 * 1024) return jsonResponse({ error: "ข้อมูล Webhook มีขนาดใหญ่เกินกำหนด" }, 413);
+  const rawBody = await request.text();
+  const signature = request.headers.get("x-line-signature") || "";
+  if (!(await verifyLineWebhookSignature(rawBody, signature, env.LINE_CHANNEL_SECRET))) {
+    return jsonResponse({ error: "ลายเซ็น Webhook ไม่ถูกต้อง" }, 401);
+  }
+  let payload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return jsonResponse({ error: "รูปแบบข้อมูล Webhook ไม่ถูกต้อง" }, 400);
+  }
+  const events = Array.isArray(payload?.events) ? payload.events : [];
+  if (events.length && context?.waitUntil) {
+    context.waitUntil(processLineWebhookEvents(env, events).catch((error) => {
+      console.error("LINE webhook processing failed", String(error?.message || error).slice(0, 300));
+    }));
+  } else if (events.length) {
+    await processLineWebhookEvents(env, events);
+  }
+  return jsonResponse({ ok: true });
+}
+
+function maskLineTargetId(targetId) {
+  const value = String(targetId || "");
+  if (value.length <= 10) return value;
+  return `${value.slice(0, 5)}••••${value.slice(-5)}`;
+}
+
+async function getSelectedLineTarget(env) {
+  await ensureLineSchema(env);
+  const selected = await env.DB.prepare(`SELECT id,target_type,target_id,display_name
+    FROM line_targets WHERE is_default=1 AND status='active' ORDER BY selected_at DESC,id DESC LIMIT 1`).first();
+  if (selected) return selected;
+  const legacyTarget = cleanText(env.LINE_TARGET_ID, 255);
+  return legacyTarget ? { id: null, target_type: "legacy", target_id: legacyTarget, display_name: "ปลายทางจาก Environment" } : null;
+}
+
+async function pushLineMessages(env, targetId, messages) {
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN) throw new Error("ยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN");
+  if (!targetId) throw new Error("ยังไม่ได้เลือกกลุ่มรับการแจ้งเตือน");
+  const response = await fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ to: String(targetId), messages }),
+  });
+  if (!response.ok) throw new Error(`LINE API ${response.status}: ${(await response.text()).slice(0, 300)}`);
+}
+
+async function handleLineStatus(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
+  await ensureLineSchema(env);
+  const { results } = await env.DB.prepare(`SELECT id,target_type,display_name,status,is_default,
+      first_seen_at,last_seen_at,last_event_type,target_id
+    FROM line_targets ORDER BY is_default DESC,last_seen_at DESC,id DESC`).all();
+  const selectedTarget = await getSelectedLineTarget(env);
+  return jsonResponse({
+    webhook_url: `${new URL(request.url).origin}/api/line/webhook`,
+    credentials: {
+      channel_secret: !!env.LINE_CHANNEL_SECRET,
+      access_token: !!env.LINE_CHANNEL_ACCESS_TOKEN,
+    },
+    configured: !!(env.LINE_CHANNEL_SECRET && env.LINE_CHANNEL_ACCESS_TOKEN && selectedTarget),
+    legacy_target: !!env.LINE_TARGET_ID,
+    targets: results.map((target) => ({
+      id: target.id,
+      target_type: target.target_type,
+      display_name: target.display_name,
+      masked_id: maskLineTargetId(target.target_id),
+      status: target.status,
+      is_default: !!target.is_default,
+      first_seen_at: target.first_seen_at,
+      last_seen_at: target.last_seen_at,
+      last_event_type: target.last_event_type,
+    })),
+  });
+}
+
+async function handleUpdateLineTarget(request, env, targetId) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ตั้งค่า LINE ได้" }, 403);
+  const body = await request.json().catch(() => null);
+  const action = body?.action;
+  await ensureLineSchema(env);
+  const target = await env.DB.prepare("SELECT id FROM line_targets WHERE id=?").bind(targetId).first();
+  if (!target) return jsonResponse({ error: "ไม่พบปลายทาง LINE ที่เลือก" }, 404);
+  if (action === "select") {
+    await env.DB.batch([
+      env.DB.prepare("UPDATE line_targets SET is_default=0,status=CASE WHEN status='active' THEN 'detected' ELSE status END,updated_at=datetime('now') WHERE is_default=1"),
+      env.DB.prepare("UPDATE line_targets SET is_default=1,status='active',selected_by=?,selected_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(user.id, targetId),
+    ]);
+  } else if (action === "disable") {
+    await env.DB.prepare("UPDATE line_targets SET status='disabled',is_default=0,updated_at=datetime('now') WHERE id=?").bind(targetId).run();
+  } else if (action === "enable") {
+    await env.DB.prepare("UPDATE line_targets SET status='detected',updated_at=datetime('now') WHERE id=?").bind(targetId).run();
+  } else if (action === "rename") {
+    const displayName = cleanText(body?.display_name, 160);
+    if (!displayName) return jsonResponse({ error: "กรุณาระบุชื่อปลายทาง" }, 400);
+    await env.DB.prepare("UPDATE line_targets SET display_name=?,updated_at=datetime('now') WHERE id=?").bind(displayName, targetId).run();
+  } else {
+    return jsonResponse({ error: "คำสั่งไม่ถูกต้อง" }, 400);
+  }
+  await writeAuditLog(env, user, "update", "line_target", targetId, { action }, request);
+  return jsonResponse({ ok: true });
+}
+
+async function handleLineTest(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่ส่งข้อความทดสอบได้" }, 403);
+  const target = await getSelectedLineTarget(env);
+  if (!target) return jsonResponse({ error: "ยังไม่พบหรือยังไม่ได้เลือกกลุ่ม LINE ปลายทาง" }, 409);
+  try {
+    await pushLineMessages(env, target.target_id, [{
+      type: "text",
+      text: "ทดสอบสำเร็จ ✅\nระบบจัดการข้อมูลโรงเรียนบ้านป่าเด็งเชื่อมต่อ LINE พร้อมใช้งานแล้ว",
+    }]);
+    await writeAuditLog(env, user, "test", "line_notification", target.id, { target_type: target.target_type }, request);
+    return jsonResponse({ ok: true });
+  } catch (error) {
+    return jsonResponse({ error: cleanText(error?.message || error, 500) || "ส่งข้อความทดสอบไม่สำเร็จ" }, 502);
+  }
+}
+
 // ---------- อาคาร สถานที่ และระบบแจ้งซ่อม ----------
 const FACILITY_TYPES = ["building", "classroom", "office", "restroom", "utility", "grounds", "other"];
 const FACILITY_STATUSES = ["active", "maintenance", "closed"];
@@ -2090,11 +2338,12 @@ async function handleMaintenanceSummary(request, env) {
       SUM(CASE WHEN priority='urgent' AND status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS urgent_count,
       COALESCE(SUM(CASE WHEN strftime('%Y-%m',completed_at)=strftime('%Y-%m','now') THEN actual_cost ELSE 0 END),0) AS month_cost
     FROM maintenance_requests m WHERE ${visibility.sql}`).bind(...visibility.binds).first();
+  const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
   return jsonResponse({
     total_count:Number(row?.total_count||0), open_count:Number(row?.open_count||0), in_progress_count:Number(row?.in_progress_count||0),
     waiting_parts_count:Number(row?.waiting_parts_count||0), awaiting_verification_count:Number(row?.awaiting_verification_count||0),
     overdue_count:Number(row?.overdue_count||0), urgent_count:Number(row?.urgent_count||0), month_cost:Number(row?.month_cost||0),
-    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_TARGET_ID),
+    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget),
   });
 }
 
@@ -2236,7 +2485,8 @@ async function maintenanceImageSignature(env, attachmentId, expires) {
 
 async function sendMaintenanceLineNotification(request, env, requestId, eventType) {
   let deliveryStatus = "not_configured", errorMessage = null;
-  if (env.LINE_CHANNEL_ACCESS_TOKEN && env.LINE_TARGET_ID) {
+  const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
+  if (env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget) {
     try {
       const item = await getMaintenanceRequest(env,requestId);
       if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
@@ -2261,8 +2511,7 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
         const sig = await maintenanceImageSignature(env,previewId,expires);
         contents.hero={type:"image",url:`${origin}/api/public/maintenance-image/${previewId}?expires=${expires}&sig=${sig}`,size:"full",aspectRatio:"20:13",aspectMode:"cover"};
       }
-      const response = await fetch("https://api.line.me/v2/bot/message/push",{method:"POST",headers:{Authorization:`Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`,"Content-Type":"application/json"},body:JSON.stringify({to:String(env.LINE_TARGET_ID),messages:[{type:"flex",altText:`${eventLabels[eventType]||"อัปเดตงานซ่อม"}: ${item.title}`,contents}]})});
-      if (!response.ok) throw new Error(`LINE API ${response.status}: ${(await response.text()).slice(0,300)}`);
+      await pushLineMessages(env, lineTarget.target_id, [{type:"flex",altText:`${eventLabels[eventType]||"อัปเดตงานซ่อม"}: ${item.title}`,contents}]);
       deliveryStatus="sent";
     } catch (error) {
       deliveryStatus="failed"; errorMessage=cleanText(error?.message||error,500);
@@ -3030,12 +3279,16 @@ async function handleImportStaff(request, env) {
 
 // ---------- Router ----------
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, context) {
     const url = new URL(request.url);
     const { pathname } = url;
     const method = request.method;
 
     try {
+      // LINE ต้องได้รับ HTTP 200 อย่างรวดเร็ว: ตรวจลายเซ็นและตอบก่อน migration/auth ของ API ภายใน
+      if (pathname === "/api/line/webhook" && method === "POST") return await handleLineWebhook(request, env, context);
+      if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
+
       if (pathname === "/api/auth/register" && method === "POST") return await handleRegister(request, env);
       if (pathname === "/api/auth/login" && method === "POST") return await handleLogin(request, env);
       if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout();
@@ -3052,6 +3305,12 @@ export default {
 
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
+
+      if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
+      if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);
+      const lineTargetMatch = pathname.match(/^\/api\/line\/targets\/(\d+)$/);
+      if (lineTargetMatch && method === "PATCH") return await handleUpdateLineTarget(request, env, Number(lineTargetMatch[1]));
+
       if (pathname === "/api/admin/users" && method === "GET") return await handleAdminListUsers(request, env);
 
       const adminUserMatch = pathname.match(/^\/api\/admin\/users\/(\d+)$/);
