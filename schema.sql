@@ -611,6 +611,48 @@ CREATE INDEX IF NOT EXISTS idx_line_targets_default ON line_targets(is_default, 
 CREATE INDEX IF NOT EXISTS idx_line_targets_last_seen ON line_targets(last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_line_webhook_events_received ON line_webhook_events(received_at DESC);
 
+-- ศูนย์ปฏิบัติงานกลางสำหรับหัวข้องานที่ยังไม่มีระบบเฉพาะ
+CREATE TABLE IF NOT EXISTS work_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  area TEXT NOT NULL,
+  topic_key TEXT NOT NULL,
+  topic_label TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  academic_year_id INTEGER REFERENCES academic_years(id),
+  academic_term_id INTEGER REFERENCES academic_terms(id),
+  responsible_user_id INTEGER REFERENCES users(id),
+  start_date TEXT,
+  due_date TEXT,
+  status TEXT NOT NULL DEFAULT 'planned'
+    CHECK (status IN ('planned','in_progress','waiting','completed','cancelled')),
+  priority TEXT NOT NULL DEFAULT 'normal'
+    CHECK (priority IN ('low','normal','high','urgent')),
+  progress_percent INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
+  notes TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  updated_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK (start_date IS NULL OR due_date IS NULL OR start_date <= due_date)
+);
+
+CREATE TABLE IF NOT EXISTS work_record_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  work_record_id INTEGER NOT NULL REFERENCES work_records(id) ON DELETE CASCADE,
+  previous_status TEXT,
+  new_status TEXT,
+  progress_percent INTEGER,
+  comment TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_work_records_area_topic ON work_records(area, topic_key, status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_work_records_period ON work_records(academic_year_id, academic_term_id);
+CREATE INDEX IF NOT EXISTS idx_work_records_responsible ON work_records(responsible_user_id, status, due_date);
+CREATE INDEX IF NOT EXISTS idx_work_record_updates_record ON work_record_updates(work_record_id, created_at DESC);
+
 -- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
 CREATE TABLE IF NOT EXISTS audit_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
