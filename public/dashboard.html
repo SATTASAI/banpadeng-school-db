@@ -341,7 +341,7 @@
 
   const moduleEntries = (module, labels, routes = {}) => labels.map((label, index) => ({
     label,
-    url: routes[index] || `/modules.html?module=${module}&focus=${index}`,
+    url: routes[index] || `/work-center.html?area=${encodeURIComponent(module)}&topic=${index}`,
   }));
   const pageEntries = (page, labels) => labels.map((label, index) => ({
     label,
@@ -372,7 +372,11 @@
       "นิเทศ ติดตาม และประกันคุณภาพ", "จัดตารางเรียนและตารางสอน", "กำหนดวัน เวลา ห้องเรียน และครู",
       "ตรวจสอบคาบเรียนชนกัน", "ตารางสอนรายบุคคล", "ตารางเรียนรายห้อง", "ตารางเรียนรายชั้น",
       "ตารางใช้ห้องเรียน", "ส่งออกและพิมพ์ตาราง",
-    ], { 1: "/department.html?dept=academic" }),
+    ], {
+      1: "/department.html?dept=academic",
+      5: "/modules.html?module=academic&focus=5",
+      6: "/modules.html?module=academic&focus=6",
+    }),
     budget: moduleEntries("budget", [
       "โครงการและแผนการใช้จ่าย", "งบประมาณประจำปี", "รายรับ–รายจ่าย",
       "เงินอุดหนุนและค่าใช้จ่ายนักเรียน", "หนังสือขอใช้งบประมาณ", "ขออนุมัติเบิกจ่าย",
@@ -506,9 +510,9 @@
 
   const SEARCH_TYPE_LABELS = {
     page:"เมนู",student:"นักเรียน",staff:"บุคลากร",project:"โครงการ",document:"เอกสาร",
-    inventory:"พัสดุ",maintenance:"แจ้งซ่อม",task:"งาน",
+    inventory:"พัสดุ",maintenance:"แจ้งซ่อม",task:"งาน",work:"งานฝ่าย",
   };
-  const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน" };
+  const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน",work:"ฝ่าย" };
   const SEARCH_PAGES = [
     {title:"แดชบอร์ดภาพรวม",subtitle:"ข้อมูลสรุปสำหรับผู้บริหาร",page_key:"overview",url:"/dashboard.html",keywords:"หน้าหลัก ภาพรวม dashboard"},
     {title:"ข้อมูลนักเรียน",subtitle:"ทะเบียนนักเรียนและผู้ปกครอง",page_key:"students",url:"/students.html",keywords:"นักเรียน ห้องเรียน ผู้ปกครอง"},
