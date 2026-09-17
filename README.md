@@ -48,7 +48,31 @@ wrangler.jsonc     → ไฟล์ตั้งค่าโปรเจกต์
 2. สมัครสมาชิกคนแรก — จะได้สิทธิ์ **ผู้ดูแลระบบ (superadmin)** อัตโนมัติ
 3. คนถัดไปที่สมัครจะรอที่หน้า "รอกำหนดสิทธิ์" จนกว่าแอดมินจะเข้าไปที่หน้า **จัดการผู้ใช้งาน** แล้วกำหนดบทบาทให้
 
-### การเชื่อม R2 สำหรับไฟล์แนบ
+### การจัดเก็บไฟล์ใน Google Drive (แนะนำสำหรับระบบโรงเรียน)
+
+บัญชี Google Drive เป้าหมายของโรงเรียนคือ `bbdschool2016@gmail.com` ระบบเก็บไฟล์จริงใน Google Drive ได้โดยตรง ส่วน D1 จะเก็บชื่อไฟล์ ขนาดไฟล์ สิทธิ์ และ `Drive File ID`
+เท่านั้น ไฟล์จะไม่ถูกเปิดเป็นสาธารณะ ระบบ Worker จะตรวจสิทธิ์ผู้ใช้ก่อนเปิดไฟล์ทุกครั้ง
+
+#### เตรียม Google Drive
+
+1. สร้างโฟลเดอร์หลักใน Google Drive ของโรงเรียน เช่น `School Management Files`
+2. คัดลอก Folder ID จาก URL ของโฟลเดอร์ (ค่าหลัง `/folders/`)
+3. ใน Google Cloud Console สร้าง Project และเปิด **Google Drive API**
+4. สร้าง OAuth Client (Web application) และเพิ่ม Authorized redirect URI เป็น `http://127.0.0.1:8787/oauth2callback`
+5. ขอ refresh token โดยรัน `node scripts/google-drive-oauth.mjs CLIENT_ID CLIENT_SECRET` แล้วลงชื่อเข้าใช้ด้วย `bbdschool2016@gmail.com`
+6. ใน Cloudflare Worker → **Settings → Variables and secrets** เพิ่มค่าเหล่านี้เป็น Secret:
+
+   - `FILE_STORAGE_PROVIDER` = `drive`
+   - `GOOGLE_DRIVE_CLIENT_ID`
+   - `GOOGLE_DRIVE_CLIENT_SECRET`
+   - `GOOGLE_DRIVE_REFRESH_TOKEN`
+   - `GOOGLE_DRIVE_FOLDER_ID` = Folder ID ของโฟลเดอร์หลัก
+
+ระบบจะสร้างโฟลเดอร์ย่อยให้อัตโนมัติตามปีการศึกษา ฝ่ายงาน และโมดูล เช่น
+`เอกสารและคลังไฟล์/2569/ฝ่ายวิชาการ` หรือ `พัสดุและครุภัณฑ์/การตรวจสอบ`
+
+หากยังไม่ตั้งค่า Drive ระบบยังรองรับ R2 เดิมเพื่อเปิดไฟล์เก่าหรือใช้เป็นโหมดชั่วคราว โดยกำหนด
+`FILE_STORAGE_PROVIDER` เป็น `r2` และผูก R2 binding ชื่อ `FILES`:
 1. Cloudflare Dashboard → **R2 Object Storage** → **Create bucket** ตั้งชื่อ เช่น `banpadeng-school-files`
 2. เปิด Worker → **Settings → Bindings → Add → R2 bucket**
 3. Variable name ต้องเป็น `FILES` และเลือก bucket ที่สร้างไว้

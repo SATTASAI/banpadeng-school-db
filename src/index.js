@@ -104,6 +104,53 @@ async function ensureInventorySchema(env) {
   ]);
 }
 
+// เพิ่มข้อมูลผู้ให้บริการจัดเก็บไฟล์โดยไม่ทำลายรายการแนบไฟล์ R2 เดิม
+async function ensureAttachmentStorageSchema(env) {
+  const columns = [
+    ["storage_provider", "TEXT NOT NULL DEFAULT 'r2'"],
+    ["drive_file_id", "TEXT"],
+    ["drive_web_url", "TEXT"],
+    ["storage_error", "TEXT"],
+  ];
+  for (const [name, definition] of columns) {
+    try {
+      await env.DB.prepare(`ALTER TABLE file_attachments ADD COLUMN ${name} ${definition}`).run();
+    } catch (error) {
+      // คอลัมน์มีอยู่แล้วจากการ deploy ก่อนหน้า ให้ทำงานต่อได้
+      if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_file_attachments_storage ON file_attachments(storage_provider, drive_file_id)").run();
+}
+
+async function ensureMaintenanceSchema(env) {
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS facilities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, facility_code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, facility_type TEXT NOT NULL,
+      building_name TEXT, floor TEXT, location_detail TEXT, responsible_person TEXT, status TEXT NOT NULL DEFAULT 'active', notes TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS maintenance_counters (
+      buddhist_year INTEGER PRIMARY KEY, last_number INTEGER NOT NULL DEFAULT 0)`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS maintenance_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, request_no TEXT NOT NULL UNIQUE, facility_id INTEGER REFERENCES facilities(id),
+      inventory_item_id INTEGER REFERENCES inventory_items(id), title TEXT NOT NULL, description TEXT NOT NULL, category TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal', status TEXT NOT NULL DEFAULT 'reported', reported_by INTEGER NOT NULL REFERENCES users(id),
+      assigned_to INTEGER REFERENCES users(id), due_date TEXT, estimated_cost REAL NOT NULL DEFAULT 0, actual_cost REAL NOT NULL DEFAULT 0,
+      resolution TEXT, started_at TEXT, completed_at TEXT, verified_by INTEGER REFERENCES users(id), verified_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS maintenance_updates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, request_id INTEGER NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
+      previous_status TEXT, new_status TEXT, comment TEXT, cost_amount REAL NOT NULL DEFAULT 0,
+      created_by INTEGER NOT NULL REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_facilities_status ON facilities(status, facility_type)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status, priority, due_date)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_facility ON maintenance_requests(facility_id, created_at DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC)"),
+  ]);
+}
+
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
   await env.DB.batch([
@@ -126,6 +173,8 @@ async function ensureExtendedSchema(env) {
   ]);
   await ensureProjectExpenseSchema(env);
   await ensureInventorySchema(env);
+  await ensureAttachmentStorageSchema(env);
+  await ensureMaintenanceSchema(env);
   extendedSchemaReady = true;
 }
 
@@ -1893,10 +1942,136 @@ async function validateManagedFile(file) {
   return { mimeType, limit };
 }
 
+// เลือก Drive เมื่อผู้ดูแลตั้งค่าครบแล้ว; รองรับ R2 เดิมเพื่อไม่ให้ไฟล์เก่าหยุดทำงาน
+function getFileStorageProvider(env) {
+  const explicit = String(env.FILE_STORAGE_PROVIDER || "").trim().toLowerCase();
+  if (explicit === "drive" || explicit === "r2") return explicit;
+  if (env.GOOGLE_DRIVE_FOLDER_ID && env.GOOGLE_DRIVE_REFRESH_TOKEN) return "drive";
+  return "r2";
+}
+
+function requireDriveConfig(env) {
+  const missing = [
+    ["GOOGLE_DRIVE_CLIENT_ID", env.GOOGLE_DRIVE_CLIENT_ID],
+    ["GOOGLE_DRIVE_CLIENT_SECRET", env.GOOGLE_DRIVE_CLIENT_SECRET],
+    ["GOOGLE_DRIVE_REFRESH_TOKEN", env.GOOGLE_DRIVE_REFRESH_TOKEN],
+    ["GOOGLE_DRIVE_FOLDER_ID", env.GOOGLE_DRIVE_FOLDER_ID],
+  ].filter(([, value]) => !String(value || "").trim()).map(([name]) => name);
+  return missing.length ? `ยังไม่ได้ตั้งค่า Google Drive: ${missing.join(", ")}` : null;
+}
+
+async function getGoogleDriveAccessToken(env) {
+  const configError = requireDriveConfig(env);
+  if (configError) throw new Error(configError);
+  const body = new URLSearchParams({
+    client_id: String(env.GOOGLE_DRIVE_CLIENT_ID),
+    client_secret: String(env.GOOGLE_DRIVE_CLIENT_SECRET),
+    refresh_token: String(env.GOOGLE_DRIVE_REFRESH_TOKEN),
+    grant_type: "refresh_token",
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data.access_token) {
+    throw new Error(`เชื่อมต่อ Google Drive ไม่สำเร็จ (${response.status})`);
+  }
+  return data.access_token;
+}
+
+async function googleDriveRequest(accessToken, path, options = {}) {
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", `Bearer ${accessToken}`);
+  const url = path.startsWith("http") ? path
+    : path.startsWith("/upload/") ? `https://www.googleapis.com${path}`
+      : `https://www.googleapis.com/drive/v3${path}`;
+  const response = await fetch(url, { ...options, headers });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Google Drive API ตอบกลับ ${response.status}${detail ? `: ${detail.slice(0, 300)}` : ""}`);
+  }
+  return response;
+}
+
+function escapeDriveQuery(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function findOrCreateDriveFolder(accessToken, parentId, name) {
+  const query = encodeURIComponent(`'${escapeDriveQuery(parentId)}' in parents and name = '${escapeDriveQuery(name)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
+  const existing = await googleDriveRequest(accessToken, `/files?q=${query}&pageSize=1&fields=files(id,name)`).then((res) => res.json());
+  if (existing.files?.[0]?.id) return existing.files[0].id;
+  const created = await googleDriveRequest(accessToken, "/files?fields=id,name", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] }),
+  }).then((res) => res.json());
+  return created.id;
+}
+
+function departmentDriveLabel(department) {
+  return {
+    academic: "ฝ่ายวิชาการ",
+    budget: "ฝ่ายงบประมาณ",
+    personnel: "ฝ่ายบุคคล",
+    general: "ฝ่ายบริหารทั่วไป",
+    "student-support": "ระบบดูแลช่วยเหลือนักเรียน",
+    admin: "ผู้ดูแลระบบ",
+  }[department] || "ไม่ระบุฝ่าย";
+}
+
+async function getDriveFolderSegments(env, entityType, entityId) {
+  if (entityType === "document") {
+    const row = await env.DB.prepare(`SELECT d.department, y.year_be
+      FROM documents d LEFT JOIN academic_years y ON y.id = d.academic_year_id WHERE d.id = ?`).bind(entityId).first();
+    return ["เอกสารและคลังไฟล์", String(row?.year_be || "ไม่ระบุปีการศึกษา"), departmentDriveLabel(row?.department)];
+  }
+  if (entityType.startsWith("inventory_")) return ["พัสดุและครุภัณฑ์", entityType === "inventory_transaction" ? "รายการเคลื่อนไหว" : "การตรวจสอบ"];
+  if (entityType.startsWith("maintenance_")) return ["อาคารสถานที่และแจ้งซ่อม", entityType.replace("maintenance_", "")];
+  return ["ไฟล์แนบ", entityType];
+}
+
+async function resolveDriveFolder(env, accessToken, entityType, entityId) {
+  let parentId = String(env.GOOGLE_DRIVE_FOLDER_ID);
+  for (const segment of await getDriveFolderSegments(env, entityType, entityId)) {
+    parentId = await findOrCreateDriveFolder(accessToken, parentId, segment);
+  }
+  return parentId;
+}
+
+async function uploadToGoogleDrive(env, file, entityType, entityId, safeName, mimeType) {
+  const accessToken = await getGoogleDriveAccessToken(env);
+  const parentId = await resolveDriveFolder(env, accessToken, entityType, entityId);
+  const boundary = `school_${crypto.randomUUID()}`;
+  const metadata = JSON.stringify({ name: safeName, mimeType, parents: [parentId] });
+  const content = new Uint8Array(await file.arrayBuffer());
+  const multipart = new Blob([
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n`,
+    `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`,
+    content,
+    `\r\n--${boundary}--`,
+  ]);
+  return googleDriveRequest(accessToken, `/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink`, {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+    body: multipart,
+  }).then(async (response) => response.json());
+}
+
+async function deleteGoogleDriveFile(env, fileId) {
+  if (!fileId || requireDriveConfig(env)) return;
+  const accessToken = await getGoogleDriveAccessToken(env);
+  await googleDriveRequest(accessToken, `/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
+}
+
 const ATTACHMENT_ENTITY_TABLES = {
   document: { table: "documents", owner: "uploaded_by" },
   inventory_transaction: { table: "inventory_transactions", owner: "created_by" },
   inventory_inspection: { table: "inventory_inspections", owner: "created_by" },
+  maintenance_request: { table: "maintenance_requests", owner: "reported_by" },
+  maintenance_update: { table: "maintenance_updates", owner: "created_by" },
 };
 
 async function handleUploadAttachment(request, env, entityType, entityId) {
@@ -1910,30 +2085,52 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   if (inventoryEntity ? !canManageInventory(user) : (entity.owner_id !== user.id && !isAdmin(user) && user.role !== "staff")) {
     return jsonResponse({ error: "ไม่มีสิทธิ์แนบไฟล์ในรายการนี้" },403);
   }
-  if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage กรุณาสร้าง R2 bucket และผูก binding ชื่อ FILES" },503);
   const form = await request.formData().catch(()=>null);
   const file = form?.get("file");
   const validation = await validateManagedFile(file);
   if (validation.error) return jsonResponse({ error: validation.error },400);
   const safeName = String(file.name || "attachment").replace(/[^\p{L}\p{N}._ -]/gu,"_").slice(0,180);
-  const objectKey = `${entityType}/${entityId}/${crypto.randomUUID()}-${safeName}`;
-  await env.FILES.put(objectKey,file.stream(),{httpMetadata:{contentType:validation.mimeType},customMetadata:{uploadedBy:String(user.id),originalName:safeName}});
-  const existing = await env.DB.prepare("SELECT id,object_key FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
+  const provider = getFileStorageProvider(env);
+  const existing = await env.DB.prepare("SELECT id,object_key,storage_provider,drive_file_id FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
+  let objectKey = null;
+  let driveFile = null;
+  try {
+    if (provider === "drive") {
+      const driveError = requireDriveConfig(env);
+      if (driveError) return jsonResponse({ error: driveError }, 503);
+      driveFile = await uploadToGoogleDrive(env, file, entityType, entityId, safeName, validation.mimeType);
+      objectKey = `drive/${crypto.randomUUID()}`;
+    } else {
+      if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage กรุณาสร้าง R2 bucket และผูก binding ชื่อ FILES" },503);
+      objectKey = `${entityType}/${entityId}/${crypto.randomUUID()}-${safeName}`;
+      await env.FILES.put(objectKey,file.stream(),{httpMetadata:{contentType:validation.mimeType},customMetadata:{uploadedBy:String(user.id),originalName:safeName}});
+    }
+  } catch (error) {
+    return jsonResponse({ error: error.message || "จัดเก็บไฟล์ไม่สำเร็จ" }, 502);
+  }
   let attachmentId;
-  if (existing) {
-    await env.DB.prepare(`UPDATE file_attachments SET object_key=?,file_name=?,mime_type=?,file_size=?,uploaded_by=?,created_at=datetime('now') WHERE id=?`)
-      .bind(objectKey,safeName,validation.mimeType,file.size,user.id,existing.id).run();
-    attachmentId = existing.id;
-    if (existing.object_key !== objectKey) await env.FILES.delete(existing.object_key).catch(()=>{});
-  } else {
-    const inserted = await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by)
-      VALUES (?,?,?,?,?,?,?)`).bind(entityType,entityId,objectKey,safeName,validation.mimeType,file.size,user.id).run();
-    attachmentId = inserted.meta.last_row_id;
+  try {
+    if (existing) {
+      await env.DB.prepare(`UPDATE file_attachments SET object_key=?,file_name=?,mime_type=?,file_size=?,uploaded_by=?,storage_provider=?,drive_file_id=?,drive_web_url=?,storage_error=NULL,created_at=datetime('now') WHERE id=?`)
+        .bind(objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null,existing.id).run();
+      attachmentId = existing.id;
+      if (existing.storage_provider === "drive" && existing.drive_file_id && existing.drive_file_id !== driveFile?.id) await deleteGoogleDriveFile(env, existing.drive_file_id).catch(()=>{});
+      if ((existing.storage_provider || "r2") === "r2" && existing.object_key && provider !== "r2" && env.FILES) await env.FILES.delete(existing.object_key).catch(()=>{});
+      if ((existing.storage_provider || "r2") === "r2" && existing.object_key && provider === "r2" && existing.object_key !== objectKey && env.FILES) await env.FILES.delete(existing.object_key).catch(()=>{});
+    } else {
+      const inserted = await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(entityType,entityId,objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null).run();
+      attachmentId = inserted.meta.last_row_id;
+    }
+  } catch (error) {
+    if (provider === "drive" && driveFile?.id) await deleteGoogleDriveFile(env, driveFile.id).catch(()=>{});
+    if (provider === "r2" && env.FILES && objectKey) await env.FILES.delete(objectKey).catch(()=>{});
+    return jsonResponse({ error: "บันทึกข้อมูลไฟล์ไม่สำเร็จ กรุณาลองใหม่" }, 500);
   }
   if (entityType === "document") await env.DB.prepare("UPDATE documents SET file_name=?,mime_type=?,file_size=?,file_url=?,updated_at=datetime('now') WHERE id=?")
     .bind(safeName,validation.mimeType,file.size,`/api/attachments/${attachmentId}`,entityId).run();
-  await writeAuditLog(env,user,"upload","file_attachment",attachmentId,{entity_type:entityType,entity_id:entityId,file_name:safeName,file_size:file.size},request);
-  return jsonResponse({ id:attachmentId,file_name:safeName,file_size:file.size,url:`/api/attachments/${attachmentId}` },201);
+  await writeAuditLog(env,user,"upload","file_attachment",attachmentId,{entity_type:entityType,entity_id:entityId,file_name:safeName,file_size:file.size,storage_provider:provider,drive_file_id:driveFile?.id || null},request);
+  return jsonResponse({ id:attachmentId,file_name:safeName,file_size:file.size,storage_provider:provider,url:`/api/attachments/${attachmentId}` },201);
 }
 
 async function handleDownloadAttachment(request, env, attachmentId) {
@@ -1948,17 +2145,44 @@ async function handleDownloadAttachment(request, env, attachmentId) {
     const deniedAdmin = document.access_level === "admin" && !isAdmin(user);
     if (deniedPrivate || deniedAdmin) return jsonResponse({ error: "ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
   }
-  if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage" },503);
-  const object = await env.FILES.get(attachment.object_key);
-  if (!object) return jsonResponse({ error: "ไม่พบไฟล์ในพื้นที่จัดเก็บ" },404);
+  const storageProvider = attachment.storage_provider || "r2";
+  let body;
+  if (storageProvider === "drive") {
+    if (!attachment.drive_file_id) return jsonResponse({ error: "ไม่พบรหัสไฟล์ Google Drive" },404);
+    try {
+      const accessToken = await getGoogleDriveAccessToken(env);
+      const response = await googleDriveRequest(accessToken, `/files/${encodeURIComponent(attachment.drive_file_id)}?alt=media`);
+      body = response.body;
+    } catch (error) {
+      return jsonResponse({ error: error.message || "เปิดไฟล์จาก Google Drive ไม่สำเร็จ" }, 502);
+    }
+  } else {
+    if (!env.FILES) return jsonResponse({ error: "ยังไม่ได้เชื่อม R2 Storage" },503);
+    const object = await env.FILES.get(attachment.object_key);
+    if (!object) return jsonResponse({ error: "ไม่พบไฟล์ในพื้นที่จัดเก็บ" },404);
+    body = object.body;
+  }
   const asciiName = attachment.file_name.replace(/[^A-Za-z0-9._-]/g,"_");
-  return new Response(object.body,{headers:{
+  return new Response(body,{headers:{
     "Content-Type":attachment.mime_type,
     "Content-Length":String(attachment.file_size),
     "Content-Disposition":`inline; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(attachment.file_name)}`,
     "Cache-Control":"private, max-age=300",
     "X-Content-Type-Options":"nosniff",
   }});
+}
+
+async function handleStorageStatus(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์ตรวจสอบการจัดเก็บไฟล์" }, 403);
+  const provider = getFileStorageProvider(env);
+  const driveError = provider === "drive" ? requireDriveConfig(env) : null;
+  return jsonResponse({
+    provider,
+    configured: provider === "drive" ? !driveError : !!env.FILES,
+    drive_account: provider === "drive" ? "bbdschool2016@gmail.com" : null,
+    missing: driveError ? driveError.replace("ยังไม่ได้ตั้งค่า Google Drive: ", "").split(", ") : [],
+  });
 }
 
 // ---------- เอกสารและการสำรองข้อมูล (ทะเบียนเมทาดาทา/ส่งออกข้อมูล) ----------
@@ -2389,10 +2613,11 @@ export default {
       if (inventoryItemMatch && method === "GET") return await handleGetInventoryItem(request, env, Number(inventoryItemMatch[1]));
       if (inventoryItemMatch && method === "PATCH") return await handleUpdateInventoryItem(request, env, Number(inventoryItemMatch[1]));
 
-      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection)\/(\d+)$/);
+      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_update)\/(\d+)$/);
       if (uploadAttachmentMatch && method === "POST") return await handleUploadAttachment(request, env, uploadAttachmentMatch[1], Number(uploadAttachmentMatch[2]));
       const downloadAttachmentMatch = pathname.match(/^\/api\/attachments\/(\d+)$/);
       if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));
+      if (pathname === "/api/storage/status" && method === "GET") return await handleStorageStatus(request, env);
 
       if (pathname === "/api/documents" && method === "GET") return await handleListDocuments(request, env);
       if (pathname === "/api/documents" && method === "POST") return await handleCreateDocument(request, env);

@@ -446,16 +446,20 @@ CREATE TABLE IF NOT EXISTS inventory_inspections (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- ไฟล์แนบเก็บจริงใน R2; ตารางนี้เก็บเมทาดาทาและสิทธิ์อ้างอิง
+-- ไฟล์แนบเก็บจริงใน Google Drive (รองรับ R2 เดิมเพื่อย้ายระบบแบบไม่สะดุด)
 CREATE TABLE IF NOT EXISTS file_attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('document','inventory_transaction','inventory_inspection')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('document','inventory_transaction','inventory_inspection','maintenance_request','maintenance_update','maintenance_before','maintenance_after')),
   entity_id INTEGER NOT NULL,
   object_key TEXT NOT NULL UNIQUE,
   file_name TEXT NOT NULL,
   mime_type TEXT NOT NULL,
   file_size INTEGER NOT NULL,
   uploaded_by INTEGER NOT NULL REFERENCES users(id),
+  storage_provider TEXT NOT NULL DEFAULT 'r2' CHECK (storage_provider IN ('r2','drive')),
+  drive_file_id TEXT,
+  drive_web_url TEXT,
+  storage_error TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(entity_type, entity_id)
 );
@@ -483,6 +487,74 @@ BEGIN
       updated_at = datetime('now')
   WHERE id = NEW.item_id;
 END;
+
+-- อาคาร สถานที่ และระบบแจ้งซ่อม
+CREATE TABLE IF NOT EXISTS facilities (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  facility_code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  facility_type TEXT NOT NULL
+    CHECK (facility_type IN ('building','classroom','office','restroom','utility','grounds','other')),
+  building_name TEXT,
+  floor TEXT,
+  location_detail TEXT,
+  responsible_person TEXT,
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active','maintenance','closed')),
+  notes TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_counters (
+  buddhist_year INTEGER PRIMARY KEY,
+  last_number INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_no TEXT NOT NULL UNIQUE,
+  facility_id INTEGER REFERENCES facilities(id),
+  inventory_item_id INTEGER REFERENCES inventory_items(id),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL
+    CHECK (category IN ('electrical','plumbing','building','equipment','it','sanitation','grounds','other')),
+  priority TEXT NOT NULL DEFAULT 'normal'
+    CHECK (priority IN ('low','normal','high','urgent')),
+  status TEXT NOT NULL DEFAULT 'reported'
+    CHECK (status IN ('reported','assigned','in_progress','waiting_parts','completed','verified','cancelled')),
+  reported_by INTEGER NOT NULL REFERENCES users(id),
+  assigned_to INTEGER REFERENCES users(id),
+  due_date TEXT,
+  estimated_cost REAL NOT NULL DEFAULT 0 CHECK (estimated_cost >= 0),
+  actual_cost REAL NOT NULL DEFAULT 0 CHECK (actual_cost >= 0),
+  resolution TEXT,
+  started_at TEXT,
+  completed_at TEXT,
+  verified_by INTEGER REFERENCES users(id),
+  verified_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS maintenance_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL REFERENCES maintenance_requests(id) ON DELETE CASCADE,
+  previous_status TEXT,
+  new_status TEXT,
+  comment TEXT,
+  cost_amount REAL NOT NULL DEFAULT 0 CHECK (cost_amount >= 0),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_facilities_status ON facilities(status, facility_type);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status ON maintenance_requests(status, priority, due_date);
+CREATE INDEX IF NOT EXISTS idx_maintenance_facility ON maintenance_requests(facility_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status);
+CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC);
 
 -- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
 CREATE TABLE IF NOT EXISTS audit_logs (

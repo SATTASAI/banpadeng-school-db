@@ -108,6 +108,7 @@
 </div></div>
 
 <script src="/js/api.js"></script>
+<script src="/js/file-upload.js"></script>
 <script>
 const TYPE_LABEL={material:"วัสดุ",equipment:"ครุภัณฑ์"};
 const DEPT_LABEL={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป"};
@@ -123,8 +124,8 @@ const dateText=value=>value?new Intl.DateTimeFormat("th-TH",{day:"numeric",month
 const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
 function fileSize(bytes){return bytes<1024*1024?`${(bytes/1024).toFixed(0)} KB`:`${(bytes/1024/1024).toFixed(2)} MB`}
 function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);if(!pdf&&!image)return "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF";const limit=pdf?1024*1024:2*1024*1024;if(file.size>limit)return `${pdf?"PDF ต้องไม่เกิน 1 MB":"รูปภาพต้องไม่เกิน 2 MB"} (ไฟล์นี้ ${fileSize(file.size)})`;return null}
-function bindFileCheck(inputId,metaId){$(inputId).addEventListener("change",()=>{const f=$(inputId).files[0];const error=validateFile(f);$(metaId).textContent=f?(error||`${f.name} · ${fileSize(f.size)} · พร้อมอัปโหลด`):"PDF ≤ 1 MB · รูปภาพ ≤ 2 MB";$(metaId).style.color=error?"var(--color-danger)":"var(--color-text-muted)"})}
-async function uploadAttachment(entityType,id,file){if(!file)return null;const error=validateFile(file);if(error)throw new Error(error);const form=new FormData();form.append("file",file);return apiRequest(`/api/attachments/${entityType}/${id}`,{method:"POST",body:form})}
+function bindFileCheck(inputId,metaId){$(inputId).addEventListener("change",()=>{const f=$(inputId).files[0];const isLargeImage=f&&String(f.type||"").startsWith("image/")&&f.type!=="image/gif"&&f.size>MANAGED_IMAGE_LIMIT;const error=isLargeImage?null:validateFile(f);$(metaId).textContent=f?(isLargeImage?`${f.name} · ${fileSize(f.size)} · ระบบจะลดขนาดอัตโนมัติก่อนอัปโหลด`:(error||`${f.name} · ${fileSize(f.size)} · พร้อมอัปโหลด`)):"PDF ≤ 1 MB · รูปภาพ ≤ 2 MB";$(metaId).style.color=error?"var(--color-danger)":"var(--color-text-muted)"})}
+async function uploadAttachment(entityType,id,file){if(!file)return null;const prepared=await prepareManagedImage(file);file=prepared.file;const error=validateFile(file);if(error)throw new Error(error);const form=new FormData();form.append("file",file);return apiRequest(`/api/attachments/${entityType}/${id}`,{method:"POST",body:form})}
 function openModal(id){$(id).style.display="flex"}function closeModal(id){$(id).style.display="none"}
 document.querySelectorAll("[data-close]").forEach(btn=>btn.onclick=()=>closeModal(btn.dataset.close));
 document.querySelectorAll(".modal-backdrop").forEach(modal=>modal.addEventListener("click",event=>{if(event.target===modal)closeModal(modal.id)}));
