@@ -111,6 +111,7 @@ async function ensureAttachmentStorageSchema(env) {
     ["drive_file_id", "TEXT"],
     ["drive_web_url", "TEXT"],
     ["storage_error", "TEXT"],
+    ["file_hash", "TEXT"],
   ];
   for (const [name, definition] of columns) {
     try {
@@ -121,6 +122,29 @@ async function ensureAttachmentStorageSchema(env) {
     }
   }
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_file_attachments_storage ON file_attachments(storage_provider, drive_file_id)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_file_attachments_hash ON file_attachments(file_hash)").run();
+}
+
+// เพิ่มสถานะการแนบไฟล์และการเก็บรายการซ้ำ โดยไม่ลบทะเบียนเอกสารเดิม
+async function ensureDocumentWorkflowSchema(env) {
+  const columns = [
+    ["record_status", "TEXT NOT NULL DEFAULT 'active'"],
+    ["duplicate_of_id", "INTEGER"],
+    ["archived_at", "TEXT"],
+    ["archive_reason", "TEXT"],
+    ["upload_status", "TEXT NOT NULL DEFAULT 'none'"],
+    ["upload_error", "TEXT"],
+    ["attachment_updated_at", "TEXT"],
+  ];
+  for (const [name, definition] of columns) {
+    try {
+      await env.DB.prepare(`ALTER TABLE documents ADD COLUMN ${name} ${definition}`).run();
+    } catch (error) {
+      if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_documents_record_status ON documents(record_status, updated_at DESC)").run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_documents_duplicate ON documents(duplicate_of_id)").run();
 }
 
 async function ensureMaintenanceSchema(env) {
@@ -163,6 +187,8 @@ async function ensureExtendedSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, department TEXT NOT NULL, academic_year_id INTEGER,
       project_id INTEGER, document_type TEXT, keywords TEXT, file_name TEXT, file_url TEXT, mime_type TEXT, file_size INTEGER,
       version INTEGER NOT NULL DEFAULT 1, access_level TEXT NOT NULL DEFAULT 'staff', uploaded_by INTEGER REFERENCES users(id),
+      record_status TEXT NOT NULL DEFAULT 'active', duplicate_of_id INTEGER, archived_at TEXT, archive_reason TEXT,
+      upload_status TEXT NOT NULL DEFAULT 'none', upload_error TEXT, attachment_updated_at TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), action TEXT NOT NULL, resource TEXT NOT NULL,
@@ -174,6 +200,7 @@ async function ensureExtendedSchema(env) {
   await ensureProjectExpenseSchema(env);
   await ensureInventorySchema(env);
   await ensureAttachmentStorageSchema(env);
+  await ensureDocumentWorkflowSchema(env);
   await ensureMaintenanceSchema(env);
   extendedSchemaReady = true;
 }
@@ -2066,6 +2093,18 @@ async function deleteGoogleDriveFile(env, fileId) {
   await googleDriveRequest(accessToken, `/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
 }
 
+async function hashManagedFile(file) {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function recordDocumentUploadFailure(env, user, documentId, message, request) {
+  const safeMessage = cleanText(message || "จัดเก็บไฟล์ไม่สำเร็จ", 500) || "จัดเก็บไฟล์ไม่สำเร็จ";
+  await env.DB.prepare(`UPDATE documents SET upload_status='failed', upload_error=?, updated_at=datetime('now') WHERE id=?`)
+    .bind(safeMessage, documentId).run();
+  await writeAuditLog(env, user, "upload_failed", "document", documentId, { error: safeMessage }, request).catch(() => {});
+}
+
 const ATTACHMENT_ENTITY_TABLES = {
   document: { table: "documents", owner: "uploaded_by" },
   inventory_transaction: { table: "inventory_transactions", owner: "created_by" },
@@ -2091,7 +2130,23 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   if (validation.error) return jsonResponse({ error: validation.error },400);
   const safeName = String(file.name || "attachment").replace(/[^\p{L}\p{N}._ -]/gu,"_").slice(0,180);
   const provider = getFileStorageProvider(env);
-  const existing = await env.DB.prepare("SELECT id,object_key,storage_provider,drive_file_id FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
+  const allowDuplicate = String(form?.get("allow_duplicate") || "") === "1";
+  const fileHash = await hashManagedFile(file);
+  const existing = await env.DB.prepare("SELECT id,object_key,file_name,file_size,storage_provider,drive_file_id,file_hash FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
+  if (entityType === "document") {
+    const duplicateFile = await env.DB.prepare(`SELECT a.entity_id AS document_id, d.title, a.file_name
+      FROM file_attachments a JOIN documents d ON d.id=a.entity_id
+      WHERE a.entity_type='document' AND a.file_hash=? AND a.entity_id<>?
+        AND COALESCE(d.record_status,'active')='active' LIMIT 1`).bind(fileHash,entityId).first();
+    if (duplicateFile && !allowDuplicate) {
+      return jsonResponse({
+        error: `พบไฟล์เดียวกันในเอกสาร “${duplicateFile.title}”`,
+        code: "duplicate_file",
+        duplicate: duplicateFile,
+      },409);
+    }
+    await env.DB.prepare("UPDATE documents SET upload_status='uploading',upload_error=NULL,updated_at=datetime('now') WHERE id=?").bind(entityId).run();
+  }
   let objectKey = null;
   let driveFile = null;
   try {
@@ -2106,30 +2161,38 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
       await env.FILES.put(objectKey,file.stream(),{httpMetadata:{contentType:validation.mimeType},customMetadata:{uploadedBy:String(user.id),originalName:safeName}});
     }
   } catch (error) {
+    if (entityType === "document") await recordDocumentUploadFailure(env,user,entityId,error.message,request);
     return jsonResponse({ error: error.message || "จัดเก็บไฟล์ไม่สำเร็จ" }, 502);
   }
   let attachmentId;
   try {
     if (existing) {
-      await env.DB.prepare(`UPDATE file_attachments SET object_key=?,file_name=?,mime_type=?,file_size=?,uploaded_by=?,storage_provider=?,drive_file_id=?,drive_web_url=?,storage_error=NULL,created_at=datetime('now') WHERE id=?`)
-        .bind(objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null,existing.id).run();
+      await env.DB.prepare(`UPDATE file_attachments SET object_key=?,file_name=?,mime_type=?,file_size=?,uploaded_by=?,storage_provider=?,drive_file_id=?,drive_web_url=?,storage_error=NULL,file_hash=?,created_at=datetime('now') WHERE id=?`)
+        .bind(objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null,fileHash,existing.id).run();
       attachmentId = existing.id;
       if (existing.storage_provider === "drive" && existing.drive_file_id && existing.drive_file_id !== driveFile?.id) await deleteGoogleDriveFile(env, existing.drive_file_id).catch(()=>{});
       if ((existing.storage_provider || "r2") === "r2" && existing.object_key && provider !== "r2" && env.FILES) await env.FILES.delete(existing.object_key).catch(()=>{});
       if ((existing.storage_provider || "r2") === "r2" && existing.object_key && provider === "r2" && existing.object_key !== objectKey && env.FILES) await env.FILES.delete(existing.object_key).catch(()=>{});
     } else {
-      const inserted = await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url)
-        VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(entityType,entityId,objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null).run();
+      const inserted = await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url,file_hash)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(entityType,entityId,objectKey,safeName,validation.mimeType,file.size,user.id,provider,driveFile?.id || null,driveFile?.webViewLink || null,fileHash).run();
       attachmentId = inserted.meta.last_row_id;
     }
   } catch (error) {
     if (provider === "drive" && driveFile?.id) await deleteGoogleDriveFile(env, driveFile.id).catch(()=>{});
     if (provider === "r2" && env.FILES && objectKey) await env.FILES.delete(objectKey).catch(()=>{});
+    if (entityType === "document") await recordDocumentUploadFailure(env,user,entityId,"บันทึกข้อมูลไฟล์ไม่สำเร็จ กรุณาลองใหม่",request);
     return jsonResponse({ error: "บันทึกข้อมูลไฟล์ไม่สำเร็จ กรุณาลองใหม่" }, 500);
   }
-  if (entityType === "document") await env.DB.prepare("UPDATE documents SET file_name=?,mime_type=?,file_size=?,file_url=?,updated_at=datetime('now') WHERE id=?")
-    .bind(safeName,validation.mimeType,file.size,`/api/attachments/${attachmentId}`,entityId).run();
-  await writeAuditLog(env,user,"upload","file_attachment",attachmentId,{entity_type:entityType,entity_id:entityId,file_name:safeName,file_size:file.size,storage_provider:provider,drive_file_id:driveFile?.id || null},request);
+  if (entityType === "document") await env.DB.prepare(`UPDATE documents SET file_name=?,mime_type=?,file_size=?,file_url=?,
+      upload_status='success',upload_error=NULL,attachment_updated_at=datetime('now'),
+      version=CASE WHEN ?=1 THEN version+1 ELSE version END,updated_at=datetime('now') WHERE id=?`)
+    .bind(safeName,validation.mimeType,file.size,`/api/attachments/${attachmentId}`,existing ? 1 : 0,entityId).run();
+  await writeAuditLog(env,user,existing ? "replace" : "upload","file_attachment",attachmentId,{
+    entity_type:entityType,entity_id:entityId,file_name:safeName,file_size:file.size,file_hash:fileHash,
+    previous_file_name:existing?.file_name || null,previous_file_size:existing?.file_size || null,
+    storage_provider:provider,drive_file_id:driveFile?.id || null
+  },request);
   return jsonResponse({ id:attachmentId,file_name:safeName,file_size:file.size,storage_provider:provider,url:`/api/attachments/${attachmentId}` },201);
 }
 
@@ -2186,17 +2249,68 @@ async function handleStorageStatus(request, env) {
 }
 
 // ---------- เอกสารและการสำรองข้อมูล (ทะเบียนเมทาดาทา/ส่งออกข้อมูล) ----------
+async function findDocumentDuplicates(env, user, { title, department, documentType, excludeId = 0 }) {
+  const normalizedTitle = cleanText(title, 200);
+  if (!normalizedTitle || !department) return [];
+  const { results } = await env.DB.prepare(`SELECT d.id,d.title,d.department,d.document_type,d.file_name,d.updated_at,u.full_name AS uploader_name
+    FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by
+    WHERE d.id<>? AND lower(trim(d.title))=lower(trim(?)) AND d.department=?
+      AND lower(trim(COALESCE(d.document_type,'')))=lower(trim(COALESCE(?,'')))
+      AND COALESCE(d.record_status,'active')='active'
+      AND (d.access_level='staff' OR d.uploaded_by=? OR (?=1 AND d.access_level IN ('private','admin')))
+    ORDER BY d.updated_at DESC LIMIT 10`)
+    .bind(excludeId,normalizedTitle,department,cleanText(documentType,120) || "",user.id,isAdmin(user) ? 1 : 0).all();
+  return results;
+}
+
+async function handleFindDocumentDuplicates(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+  const params = new URL(request.url).searchParams;
+  const department = params.get("department") || "";
+  const documentDepartments = [...DEPARTMENTS,"student-support","admin"];
+  if (!documentDepartments.includes(department)) return jsonResponse({ duplicates: [] });
+  const duplicates = await findDocumentDuplicates(env,user,{
+    title:params.get("title"),department,documentType:params.get("document_type"),excludeId:Number(params.get("exclude_id")) || 0,
+  });
+  return jsonResponse({ duplicates });
+}
+
 async function handleListDocuments(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureExtendedSchema(env);
-  const q = new URL(request.url).searchParams.get("q") || "";
-  const { results } = await env.DB.prepare(`SELECT d.*, u.full_name AS uploader_name FROM documents d
+  const params = new URL(request.url).searchParams;
+  const q = cleanText(params.get("q"),100) || "";
+  const view = params.get("view") === "archive" ? "archive" : "active";
+  const { results } = await env.DB.prepare(`SELECT d.*,u.full_name AS uploader_name,
+      a.id AS attachment_id,a.storage_provider,a.created_at AS attachment_created_at,a.storage_error,a.file_hash,
+      (SELECT d2.id FROM documents d2
+       WHERE d2.id<d.id AND lower(trim(d2.title))=lower(trim(d.title)) AND d2.department=d.department
+         AND lower(trim(COALESCE(d2.document_type,'')))=lower(trim(COALESCE(d.document_type,'')))
+         AND COALESCE(d2.record_status,'active')='active' ORDER BY d2.id LIMIT 1) AS duplicate_candidate_id
+    FROM documents d
     LEFT JOIN users u ON u.id=d.uploaded_by
+    LEFT JOIN file_attachments a ON a.entity_type='document' AND a.entity_id=d.id
     WHERE (? = '' OR d.title LIKE '%'||?||'%' OR d.keywords LIKE '%'||?||'%')
       AND (d.access_level='staff' OR d.uploaded_by=? OR (?=1 AND d.access_level IN ('private','admin')))
-    ORDER BY d.updated_at DESC`).bind(q, q, q, user.id, isAdmin(user) ? 1 : 0).all();
-  return jsonResponse({ documents: results });
+      AND ((?='active' AND COALESCE(d.record_status,'active')='active')
+        OR (?='archive' AND COALESCE(d.record_status,'active') IN ('archived','duplicate')))
+    ORDER BY d.updated_at DESC`).bind(q,q,q,user.id,isAdmin(user) ? 1 : 0,view,view).all();
+  const canArchive = isAdmin(user) || user.role === "staff";
+  const documents = results.map((row) => ({
+    ...row,
+    can_manage_file: row.uploaded_by === user.id || isAdmin(user) || user.role === "staff",
+    can_archive: canArchive,
+  }));
+  const counts = await env.DB.prepare(`SELECT
+      SUM(CASE WHEN COALESCE(record_status,'active')='active' THEN 1 ELSE 0 END) AS active,
+      SUM(CASE WHEN COALESCE(record_status,'active')='active' AND file_url IS NOT NULL THEN 1 ELSE 0 END) AS with_file,
+      SUM(CASE WHEN COALESCE(record_status,'active')='active' AND file_url IS NULL THEN 1 ELSE 0 END) AS without_file,
+      SUM(CASE WHEN COALESCE(record_status,'active') IN ('archived','duplicate') THEN 1 ELSE 0 END) AS archive
+    FROM documents WHERE access_level='staff' OR uploaded_by=? OR (?=1 AND access_level IN ('private','admin'))`)
+    .bind(user.id,isAdmin(user) ? 1 : 0).first();
+  return jsonResponse({ documents, counts, view });
 }
 async function handleCreateDocument(request, env) {
   const user = await getCurrentUser(request, env);
@@ -2206,11 +2320,45 @@ async function handleCreateDocument(request, env) {
   const documentDepartments = [...DEPARTMENTS, "student-support", "admin"];
   if (!body || !cleanText(body.title, 200) || !documentDepartments.includes(body.department)) return jsonResponse({ error: "กรุณาระบุชื่อเอกสารและฝ่ายงานให้ถูกต้อง" }, 400);
   const accessLevel = ["private", "staff", "admin"].includes(body.access_level) ? body.access_level : "staff";
+  const duplicates = await findDocumentDuplicates(env,user,{
+    title:body.title,department:body.department,documentType:body.document_type,
+  });
+  if (duplicates.length && body.allow_duplicate !== true) {
+    return jsonResponse({ error:"พบทะเบียนเอกสารที่มีชื่อ ฝ่ายงาน และประเภทเดียวกัน",code:"duplicate_document",duplicates },409);
+  }
   const result = await env.DB.prepare(`INSERT INTO documents
-    (title, department, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?)`).bind(cleanText(body.title, 200), body.department, body.academic_year_id || null, body.project_id || null,
+    (title, department, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by,record_status,upload_status)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?,'active','none')`).bind(cleanText(body.title, 200), body.department, body.academic_year_id || null, body.project_id || null,
       cleanText(body.document_type, 120), cleanText(body.keywords, 500), accessLevel, user.id).run();
-  return jsonResponse({ id: result.meta.last_row_id }, 201);
+  await writeAuditLog(env,user,"create","document",result.meta.last_row_id,{ title:cleanText(body.title,200),department:body.department,duplicate_warning_acknowledged:duplicates.length>0 },request);
+  return jsonResponse({ id: result.meta.last_row_id, duplicate_warning_acknowledged:duplicates.length>0 }, 201);
+}
+
+async function handleUpdateDocumentWorkflow(request, env, documentId) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
+  if (!(isAdmin(user) || user.role === "staff")) return jsonResponse({ error:"ไม่มีสิทธิ์จัดเก็บหรือกู้คืนทะเบียนเอกสาร" },403);
+  const document = await env.DB.prepare("SELECT * FROM documents WHERE id=?").bind(documentId).first();
+  if (!document) return jsonResponse({ error:"ไม่พบทะเบียนเอกสาร" },404);
+  const body = await request.json().catch(()=>null);
+  const action = body?.action;
+  if (action === "restore") {
+    await env.DB.prepare(`UPDATE documents SET record_status='active',duplicate_of_id=NULL,archived_at=NULL,archive_reason=NULL,updated_at=datetime('now') WHERE id=?`).bind(documentId).run();
+  } else if (action === "archive") {
+    await env.DB.prepare(`UPDATE documents SET record_status='archived',duplicate_of_id=NULL,archived_at=datetime('now'),archive_reason=?,updated_at=datetime('now') WHERE id=?`)
+      .bind(cleanText(body.reason,300) || "จัดเก็บจากหน้าคลังเอกสาร",documentId).run();
+  } else if (action === "mark_duplicate") {
+    const duplicateOfId = Number(body.duplicate_of_id);
+    if (!Number.isInteger(duplicateOfId) || duplicateOfId <= 0 || duplicateOfId === documentId) return jsonResponse({ error:"กรุณาระบุรายการต้นฉบับให้ถูกต้อง" },400);
+    const original = await env.DB.prepare("SELECT id FROM documents WHERE id=? AND COALESCE(record_status,'active')='active'").bind(duplicateOfId).first();
+    if (!original) return jsonResponse({ error:"ไม่พบรายการต้นฉบับที่ใช้งานอยู่" },404);
+    await env.DB.prepare(`UPDATE documents SET record_status='duplicate',duplicate_of_id=?,archived_at=datetime('now'),archive_reason=?,updated_at=datetime('now') WHERE id=?`)
+      .bind(duplicateOfId,cleanText(body.reason,300) || `รายการซ้ำกับทะเบียนเลขที่ ${duplicateOfId}`,documentId).run();
+  } else {
+    return jsonResponse({ error:"คำสั่งจัดการทะเบียนเอกสารไม่ถูกต้อง" },400);
+  }
+  await writeAuditLog(env,user,action,"document",documentId,{ duplicate_of_id:Number(body?.duplicate_of_id) || null,reason:cleanText(body?.reason,300) },request);
+  return jsonResponse({ ok:true });
 }
 async function handleSecurityOverview(request, env) {
   const user = await getCurrentUser(request, env);
@@ -2619,8 +2767,11 @@ export default {
       if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));
       if (pathname === "/api/storage/status" && method === "GET") return await handleStorageStatus(request, env);
 
+      if (pathname === "/api/documents/duplicates" && method === "GET") return await handleFindDocumentDuplicates(request, env);
       if (pathname === "/api/documents" && method === "GET") return await handleListDocuments(request, env);
       if (pathname === "/api/documents" && method === "POST") return await handleCreateDocument(request, env);
+      const documentMatch = pathname.match(/^\/api\/documents\/(\d+)$/);
+      if (documentMatch && method === "PATCH") return await handleUpdateDocumentWorkflow(request, env, Number(documentMatch[1]));
       if (pathname === "/api/security/overview" && method === "GET") return await handleSecurityOverview(request, env);
 
       if (pathname === "/api/overview" && method === "GET") return await handleOverview(request, env);
