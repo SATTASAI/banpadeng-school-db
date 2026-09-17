@@ -25,7 +25,7 @@
   <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
   <div class="page-head">
     <div><h2>อาคารสถานที่และแจ้งซ่อม</h2><p>แจ้งเหตุ มอบหมาย ติดตามค่าใช้จ่าย และตรวจรับงาน พร้อมภาพก่อน–หลัง</p></div>
-    <div class="actions"><button class="btn btn-ghost" id="facilityBtn" style="display:none">ทะเบียนสถานที่</button><button class="btn btn-primary" id="newRequestBtn">+ แจ้งซ่อม</button></div>
+    <div class="actions"><a class="btn btn-ghost" id="lineSettingsBtn" href="/line-settings.html" style="display:none">ตั้งค่า LINE</a><button class="btn btn-ghost" id="facilityBtn" style="display:none">ทะเบียนสถานที่</button><button class="btn btn-primary" id="newRequestBtn">+ แจ้งซ่อม</button></div>
   </div>
   <div class="summary-grid" id="summaryGrid"></div>
   <section class="panel">
@@ -121,7 +121,7 @@ $("saveUpdateBtn").onclick=async()=>{const r=current.request,status=$("uStatus")
 function renderFacilities(){if(!facilities.length){$("facilityList").innerHTML='<div class="empty">ยังไม่มีทะเบียนสถานที่</div>';return}$("facilityList").innerHTML=facilities.map(f=>`<div class="facility-item"><strong>${esc(f.facility_code)} · ${esc(f.name)}</strong><small>${esc(FACILITY_TYPE[f.facility_type])} · ${esc([f.building_name,f.floor?"ชั้น "+f.floor:null,f.location_detail].filter(Boolean).join(" · ")||"ไม่ระบุตำแหน่ง")}</small><small>งานซ่อมที่เปิด ${f.open_request_count} รายการ · ผู้ดูแล ${esc(f.responsible_person||"-")}</small></div>`).join("")}
 $("facilityBtn").onclick=()=>openModal("facilityModal");$("saveFacilityBtn").onclick=async()=>{const body={facility_code:$("fCode").value.trim(),name:$("fName").value.trim(),facility_type:$("fType").value,building_name:$("fBuilding").value.trim(),floor:$("fFloor").value.trim(),location_detail:$("fLocation").value.trim(),responsible_person:$("fResponsible").value.trim()};if(!body.facility_code||!body.name)return toast("กรุณากรอกรหัสและชื่อสถานที่",true);const btn=$("saveFacilityBtn");btn.disabled=true;try{await apiRequest("/api/facilities",{method:"POST",body});["fCode","fName","fBuilding","fFloor","fLocation","fResponsible"].forEach(id=>$(id).value="");await loadReference();toast("เพิ่มสถานที่แล้ว")}catch(e){toast(e.message,true)}finally{btn.disabled=false}};
 ["statusFilter","priorityFilter","categoryFilter"].forEach(id=>$(id).onchange=loadRequests);$("searchInput").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(loadRequests,250)};bindImage("rBeforeFile","beforeMeta");bindImage("uAfterFile","afterMeta");
-(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await Promise.all([loadReference(),loadSummary(),loadRequests()]);const requested=Number(new URLSearchParams(location.search).get("request"));if(requested)openDetail(requested).catch(e=>toast(e.message,true))})().catch(e=>toast(e.message,true));
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}$("lineSettingsBtn").style.display=["superadmin","executive"].includes(me.user.role)?"inline-flex":"none";await Promise.all([loadReference(),loadSummary(),loadRequests()]);const requested=Number(new URLSearchParams(location.search).get("request"));if(requested)openDetail(requested).catch(e=>toast(e.message,true))})().catch(e=>toast(e.message,true));
 </script>
 </body>
 </html>
