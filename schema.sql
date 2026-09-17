@@ -578,6 +578,38 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assi
 CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC);
 
+-- LINE Messaging API: ปลายทางที่ตรวจพบจาก Webhook และประวัติรับเหตุการณ์แบบไม่เก็บข้อความสนทนา
+CREATE TABLE IF NOT EXISTS line_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  target_type TEXT NOT NULL CHECK (target_type IN ('user','group','room')),
+  target_id TEXT NOT NULL UNIQUE,
+  display_name TEXT,
+  source_user_id TEXT,
+  status TEXT NOT NULL DEFAULT 'detected'
+    CHECK (status IN ('detected','active','disabled')),
+  is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
+  first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_event_type TEXT,
+  selected_by INTEGER REFERENCES users(id),
+  selected_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS line_webhook_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  webhook_event_id TEXT UNIQUE,
+  target_id TEXT,
+  source_type TEXT,
+  event_type TEXT NOT NULL,
+  received_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_targets_default ON line_targets(is_default, status);
+CREATE INDEX IF NOT EXISTS idx_line_targets_last_seen ON line_targets(last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_line_webhook_events_received ON line_webhook_events(received_at DESC);
+
 -- ประวัติการดำเนินการกลางและทะเบียนสำรองข้อมูล
 CREATE TABLE IF NOT EXISTS audit_logs (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
