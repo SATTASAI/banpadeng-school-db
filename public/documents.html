@@ -1,15 +1,19 @@
 <!doctype html>
 <html lang="th">
 <head>
-  <meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>เอกสารและคลังไฟล์</title><link rel="stylesheet" href="/css/style.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>เอกสารและคลังไฟล์</title>
+  <link rel="stylesheet" href="/css/style.css" />
   <style>
-    .doc-page{max-width:1080px}.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.doc-grid .span-2{grid-column:1/-1}.doc-grid input,.doc-grid select{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:white}.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}.upload-help{margin-top:12px;padding:13px 15px;border:1px solid #B9D5EA;border-radius:13px;background:#EDF7FD;color:#315C86;font-size:12px;line-height:1.55}.upload-help strong{color:#183153}.upload-help ul{margin:6px 0 0;padding-left:20px}.file-meta{font-size:12px;color:var(--color-text-muted);margin-top:5px}.toolbar{display:flex;gap:10px;margin:16px 0}.toolbar input{flex:1;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px}.table-wrap{overflow:auto}.table-wrap table{min-width:760px}html.embedded .page-back{display:none}html.embedded body{background:transparent}@media(max-width:650px){.doc-grid{grid-template-columns:1fr}.doc-grid .span-2{grid-column:auto}}
+    .doc-page{max-width:1180px}.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.doc-grid .span-2{grid-column:1/-1}.doc-grid input,.doc-grid select{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:#fff}.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}.upload-help{margin-top:12px;padding:13px 15px;border:1px solid #b9d5ea;border-radius:13px;background:#edf7fd;color:#315c86;font-size:12px;line-height:1.55}.upload-help strong{color:#183153}.upload-help ul{margin:6px 0 0;padding-left:20px}.file-meta,.muted{font-size:12px;color:var(--color-text-muted);margin-top:5px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.summary-card{padding:14px 16px;border:1px solid var(--color-border);border-radius:15px;background:rgba(255,255,255,.78)}.summary-card strong{display:block;font-size:24px;color:#17324d}.summary-card span{font-size:12px;color:var(--color-text-muted)}.toolbar{display:flex;align-items:center;gap:10px;margin:14px 0}.toolbar input{flex:1;min-width:160px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px}.view-tabs{display:flex;gap:6px}.tab-btn,.mini-btn{border:1px solid var(--color-border);background:#fff;color:#294766;border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-size:12px}.tab-btn.active{background:#173c63;color:#fff;border-color:#173c63}.mini-btn.primary{background:#eaf4fb;border-color:#afd2e8;color:#174d75}.mini-btn.warn{background:#fff7e8;border-color:#f0cf8e;color:#8a5a00}.mini-btn.danger{background:#fff1f1;border-color:#efb8b8;color:#9c2e2e}.table-wrap{overflow:auto}.table-wrap table{min-width:980px}.status-pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:650}.status-pill.ok{background:#e8f7ef;color:#187449}.status-pill.empty{background:#eef2f6;color:#536579}.status-pill.failed{background:#ffeded;color:#b72f2f}.status-pill.warning{background:#fff4dc;color:#956200}.status-pill.archived{background:#ececf5;color:#535470}.file-cell{min-width:235px}.file-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.upload-state{font-size:11px;margin-top:6px;color:#35617f}.row-note{max-width:260px;white-space:normal}.empty-state{padding:30px;text-align:center;color:var(--color-text-muted)}html.embedded .page-back{display:none}html.embedded body{background:transparent}@media(max-width:760px){.doc-grid{grid-template-columns:1fr}.doc-grid .span-2{grid-column:auto}.summary-grid{grid-template-columns:1fr 1fr}.toolbar{align-items:stretch;flex-direction:column}.toolbar input{width:100%}.view-tabs{width:100%}.tab-btn{flex:1}}
   </style>
 </head>
-<body><main class="app-main doc-page">
+<body>
+<main class="app-main doc-page">
   <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
-  <h2>เอกสารและคลังไฟล์</h2><p style="color:var(--color-text-muted)">จัดหมวด ค้นหา กำหนดสิทธิ์ และเก็บไฟล์อย่างปลอดภัย</p>
+  <h2>เอกสารและคลังไฟล์</h2>
+  <p style="color:var(--color-text-muted)">จัดหมวด ค้นหา แนบไฟล์ย้อนหลัง และเก็บประวัติการเปลี่ยนไฟล์อย่างปลอดภัย</p>
   <section class="panel">
     <form id="form">
       <div class="doc-grid">
@@ -20,20 +24,93 @@
         <div class="field"><label>สิทธิ์เข้าถึง</label><select id="accessLevel"><option value="staff">บุคลากรทุกคน</option><option value="private">ส่วนตัว/เจ้าของไฟล์</option><option value="admin">ผู้บริหารเท่านั้น</option></select></div>
         <div class="field span-2"><label>ไฟล์แนบ</label><input type="file" id="fileInput" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="fileMeta">PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB</div></div>
       </div>
-      <div class="upload-help"><strong>วิธีลดขนาดไฟล์ก่อนอัปโหลด</strong><ul><li>ระบบจัดเก็บไฟล์จริงใน Google Drive ของโรงเรียน และบันทึกประวัติไว้ในระบบ</li><li>ตั้งค่าสแกนประมาณ 150 DPI และเลือกขาวดำหรือ Grayscale สำหรับเอกสารทั่วไป</li><li>ตัดขอบและหน้าว่างออก แล้วเลือก Compressed PDF / Reduce file size</li><li>รูปถ่ายให้ย่อด้านยาวประมาณ 1,600 พิกเซล และบันทึก JPG คุณภาพ 70–80%</li><li>เปิดตรวจความชัดเจนของตัวหนังสือก่อนอัปโหลดทุกครั้ง</li></ul></div>
+      <div class="upload-help"><strong>วิธีลดขนาดไฟล์ก่อนอัปโหลด</strong><ul><li>ระบบจัดเก็บไฟล์จริงใน Google Drive ของโรงเรียน และบันทึกประวัติไว้ในระบบ</li><li>ตั้งค่าสแกนประมาณ 150 DPI และเลือกขาวดำหรือ Grayscale สำหรับเอกสารทั่วไป</li><li>ตัดขอบและหน้าว่างออก แล้วเลือก Compressed PDF / Reduce file size</li><li>รูปถ่ายขนาดใหญ่จะถูกลดขนาดอัตโนมัติ โดยไฟล์ต้นฉบับในเครื่องไม่ถูกแก้ไข</li><li>เปิดตรวจความชัดเจนของตัวหนังสือก่อนอัปโหลดทุกครั้ง</li></ul></div>
       <button class="btn btn-primary" id="saveBtn" style="width:auto;margin-top:14px">บันทึกเอกสาร</button>
     </form>
   </section>
-  <div class="toolbar"><input id="q" type="search" placeholder="ค้นหาชื่อเอกสารหรือคำสำคัญ" /></div>
+  <div class="summary-grid">
+    <div class="summary-card"><strong id="countActive">0</strong><span>ทะเบียนที่ใช้งาน</span></div>
+    <div class="summary-card"><strong id="countWithFile">0</strong><span>มีไฟล์แล้ว</span></div>
+    <div class="summary-card"><strong id="countWithoutFile">0</strong><span>รอแนบไฟล์</span></div>
+    <div class="summary-card"><strong id="countArchive">0</strong><span>คลังรายการซ้ำ/เก็บแล้ว</span></div>
+  </div>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="ค้นหาชื่อเอกสารหรือคำสำคัญ" />
+    <div class="view-tabs"><button class="tab-btn active" data-view="active">กำลังใช้งาน</button><button class="tab-btn" data-view="archive">คลังรายการ</button></div>
+  </div>
   <div class="panel table-wrap" id="list">กำลังโหลด...</div>
 </main>
-<script src="/js/api.js"></script><script src="/js/file-upload.js"></script><script>
-const $=id=>document.getElementById(id);const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
-const DEPT={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป","student-support":"ดูแลช่วยเหลือ",admin:"ผู้ดูแลระบบ"};const ACCESS={staff:"บุคลากรทุกคน",private:"ส่วนตัว",admin:"ผู้บริหาร"};
-function sizeText(n){return n<1024*1024?`${Math.round(n/1024)} KB`:`${(n/1024/1024).toFixed(2)} MB`}
+<script src="/js/api.js"></script>
+<script src="/js/file-upload.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const DEPT={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป","student-support":"ดูแลช่วยเหลือ",admin:"ผู้ดูแลระบบ"};
+const ACCESS={staff:"บุคลากรทุกคน",private:"ส่วนตัว",admin:"ผู้บริหาร"};
+let currentView="active";
+let currentDocuments=[];
+function sizeText(n){if(!Number(n))return "";return n<1024*1024?`${Math.round(n/1024)} KB`:`${(n/1024/1024).toFixed(2)} MB`}
+function dateText(value){if(!value)return "-";const raw=String(value);const date=new Date(raw.replace(" ","T")+(/Z$|[+-]\d\d:\d\d$/.test(raw)?"":"Z"));return Number.isNaN(date.getTime())?raw:date.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"})}
 function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);if(!pdf&&!image)return "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF";if(file.size>(pdf?1024*1024:2*1024*1024))return `${pdf?"PDF ต้องไม่เกิน 1 MB":"รูปภาพต้องไม่เกิน 2 MB"} (ไฟล์นี้ ${sizeText(file.size)})`;return null}
+function resetFileMeta(){$("fileMeta").textContent="PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB";$("fileMeta").style.color="var(--color-text-muted)"}
 $("fileInput").onchange=()=>{const file=$("fileInput").files[0],error=validateFile(file);$("fileMeta").textContent=file?(error||`${file.name} · ${sizeText(file.size)} · พร้อมอัปโหลด`):"PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB";$("fileMeta").style.color=error?"var(--color-danger)":"var(--color-text-muted)"};
-async function load(){const data=await apiRequest("/api/documents?q="+encodeURIComponent($("q").value));$("list").innerHTML=data.documents.length?`<table><thead><tr><th>ชื่อเอกสาร</th><th>ฝ่าย/ประเภท</th><th>ไฟล์</th><th>สิทธิ์</th><th>ผู้นำเข้า</th></tr></thead><tbody>${data.documents.map(x=>`<tr><td><strong>${esc(x.title)}</strong><br><small>${esc(x.keywords||"")}</small></td><td>${esc(DEPT[x.department]||x.department)}<br><small>${esc(x.document_type||"-")}</small></td><td>${x.file_url?`<a href="${esc(x.file_url)}" target="_blank" rel="noopener">${esc(x.file_name||"เปิดไฟล์")}</a><br><small>${x.file_size?sizeText(x.file_size):""}</small>`:"ยังไม่แนบไฟล์"}</td><td>${esc(ACCESS[x.access_level]||x.access_level)}</td><td>${esc(x.uploader_name||"-")}</td></tr>`).join("")}</tbody></table>`:'ยังไม่มีเอกสาร'}
-$("form").onsubmit=async event=>{event.preventDefault();let file=$("fileInput").files[0];const btn=$("saveBtn");btn.disabled=true;try{if(file){const prepared=await prepareManagedImage(file);file=prepared.file;const error=validateFile(file);if(error)throw new Error(error);if(prepared.compressed)$("fileMeta").textContent=`ระบบลดขนาดอัตโนมัติ: ${managedSizeText(prepared.originalSize)} → ${managedSizeText(file.size)}`;}const doc=await apiRequest("/api/documents",{method:"POST",body:{title:$("title").value.trim(),department:$("department").value,document_type:$("documentType").value.trim(),keywords:$("keywords").value.trim(),access_level:$("accessLevel").value}});if(file){const form=new FormData();form.append("file",file);try{await apiRequest(`/api/attachments/document/${doc.id}`,{method:"POST",body:form})}catch(e){alert("บันทึกทะเบียนเอกสารแล้ว แต่แนบไฟล์ไม่สำเร็จ: "+e.message)}}event.target.reset();$("fileMeta").textContent="PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB";await load()}catch(e){alert(e.message)}finally{btn.disabled=false}};
-let timer;$("q").oninput=()=>{clearTimeout(timer);timer=setTimeout(load,250)};(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await load()})().catch(e=>alert(e.message));
-</script></body></html>
+function fileStatus(x){
+  const hasFile=Boolean(x.attachment_id&&x.file_url);
+  if(x.upload_status==="failed")return hasFile?`<span class="status-pill warning">ไฟล์เดิมยังใช้ได้</span><div class="muted row-note">อัปโหลดครั้งล่าสุดไม่สำเร็จ: ${esc(x.upload_error||"กรุณาลองใหม่")}</div>`:`<span class="status-pill failed">อัปโหลดไม่สำเร็จ</span><div class="muted row-note">${esc(x.upload_error||"กรุณาลองใหม่")}</div>`;
+  if(hasFile)return `<span class="status-pill ok">มีไฟล์แล้ว · รุ่น ${Number(x.version)||1}</span>`;
+  return `<span class="status-pill empty">ยังไม่แนบไฟล์</span>`;
+}
+function renderRow(x){
+  const hasFile=Boolean(x.attachment_id&&x.file_url),archived=currentView==="archive";
+  const fileLink=hasFile?`<div><a href="${esc(x.file_url)}" target="_blank" rel="noopener"><strong>${esc(x.file_name||"เปิดไฟล์")}</strong></a><br><span class="muted">${sizeText(x.file_size)} · อัปเดต ${dateText(x.attachment_updated_at||x.attachment_created_at)}</span></div>`:"";
+  let actions="";
+  if(!archived&&x.can_manage_file){const label=hasFile?"เปลี่ยนไฟล์":x.upload_status==="failed"?"ลองอัปโหลดอีกครั้ง":"แนบไฟล์";actions+=`<button class="mini-btn primary" data-action="select-file" data-id="${x.id}" data-has-file="${hasFile?1:0}">${label}</button><input hidden type="file" data-upload-input="${x.id}" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" />`;}
+  if(!archived&&x.can_archive&&x.duplicate_candidate_id)actions+=`<button class="mini-btn warn" data-action="mark-duplicate" data-id="${x.id}" data-original="${x.duplicate_candidate_id}">เก็บเป็นรายการซ้ำ</button>`;
+  if(!archived&&x.can_archive)actions+=`<button class="mini-btn danger" data-action="archive" data-id="${x.id}">เก็บเข้าคลัง</button>`;
+  if(archived&&x.can_archive)actions+=`<button class="mini-btn primary" data-action="restore" data-id="${x.id}">กู้คืนรายการ</button>`;
+  const recordBadge=x.record_status==="duplicate"?`<span class="status-pill warning">รายการซ้ำกับ #${esc(x.duplicate_of_id)}</span>`:x.record_status==="archived"?`<span class="status-pill archived">เก็บเข้าคลังแล้ว</span>`:"";
+  return `<tr><td><strong>${esc(x.title)}</strong><br><span class="muted">${esc(x.keywords||"")}</span>${recordBadge?`<div style="margin-top:6px">${recordBadge}</div>`:""}${x.archive_reason?`<div class="muted row-note">${esc(x.archive_reason)}</div>`:""}</td><td>${esc(DEPT[x.department]||x.department)}<br><span class="muted">${esc(x.document_type||"-")}</span></td><td class="file-cell">${fileStatus(x)}${fileLink}<div class="file-actions">${actions}</div><div class="upload-state" id="upload-state-${x.id}"></div></td><td>${esc(ACCESS[x.access_level]||x.access_level)}</td><td>${esc(x.uploader_name||"-")}<br><span class="muted">แก้ไข ${dateText(x.updated_at)}</span></td></tr>`;
+}
+async function load(){
+  const data=await apiRequest(`/api/documents?q=${encodeURIComponent($("q").value)}&view=${currentView}`);currentDocuments=data.documents||[];const counts=data.counts||{};
+  $("countActive").textContent=Number(counts.active)||0;$("countWithFile").textContent=Number(counts.with_file)||0;$("countWithoutFile").textContent=Number(counts.without_file)||0;$("countArchive").textContent=Number(counts.archive)||0;
+  $("list").innerHTML=currentDocuments.length?`<table><thead><tr><th>ชื่อเอกสาร</th><th>ฝ่าย/ประเภท</th><th>สถานะไฟล์และการดำเนินการ</th><th>สิทธิ์</th><th>ผู้นำเข้า</th></tr></thead><tbody>${currentDocuments.map(renderRow).join("")}</tbody></table>`:`<div class="empty-state">${currentView==="archive"?"ยังไม่มีรายการที่เก็บเข้าคลัง":"ยังไม่มีเอกสาร"}</div>`;
+}
+async function uploadDocumentFile(documentId,sourceFile,allowDuplicate=false){
+  const state=$("upload-state-"+documentId);
+  try{
+    if(state)state.textContent="กำลังตรวจและเตรียมไฟล์...";const prepared=await prepareManagedImage(sourceFile),file=prepared.file,error=validateFile(file);if(error)throw new Error(error);
+    if(state)state.textContent=prepared.compressed?`ลดขนาดแล้ว ${managedSizeText(prepared.originalSize)} → ${managedSizeText(file.size)} · กำลังอัปโหลด...`:"กำลังอัปโหลดไป Google Drive...";
+    const form=new FormData();form.append("file",file);if(allowDuplicate)form.append("allow_duplicate","1");await apiRequest(`/api/attachments/document/${documentId}`,{method:"POST",body:form});if(state)state.textContent="อัปโหลดสำเร็จ";await load();return true;
+  }catch(error){
+    if(error.status===409&&error.data?.code==="duplicate_file"){const duplicate=error.data.duplicate||{};if(confirm(`ไฟล์นี้เหมือนกับไฟล์ในเอกสาร “${duplicate.title||"รายการอื่น"}”\nต้องการแนบซ้ำต่อหรือไม่?`))return uploadDocumentFile(documentId,sourceFile,true);if(state)state.textContent="ยกเลิกการแนบไฟล์ซ้ำ";return false;}
+    if(state)state.textContent="อัปโหลดไม่สำเร็จ";alert(error.message);await load();return false;
+  }
+}
+$("list").addEventListener("click",async event=>{
+  const button=event.target.closest("button[data-action]");if(!button)return;const id=Number(button.dataset.id),action=button.dataset.action;
+  if(action==="select-file"){if(button.dataset.hasFile==="1"&&!confirm("ต้องการอัปโหลดไฟล์ฉบับใหม่แทนฉบับปัจจุบันใช่หรือไม่?\nไฟล์เดิมจะยังเปิดได้จนกว่าไฟล์ใหม่อัปโหลดสำเร็จ"))return;$("list").querySelector(`[data-upload-input="${id}"]`)?.click();return;}
+  try{
+    if(action==="mark-duplicate"){const original=Number(button.dataset.original);if(!confirm(`ต้องการเก็บรายการนี้เป็นรายการซ้ำกับทะเบียน #${original} ใช่หรือไม่?\nข้อมูลจะไม่ถูกลบและสามารถกู้คืนได้`))return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"mark_duplicate",duplicate_of_id:original}});}
+    else if(action==="archive"){const reason=prompt("ระบุเหตุผลที่เก็บเข้าคลัง (กดยกเลิกเพื่อไม่ดำเนินการ)","ยกเลิก/ไม่ใช้งานทะเบียนนี้แล้ว");if(reason===null)return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"archive",reason}});}
+    else if(action==="restore"){if(!confirm("ต้องการกู้คืนทะเบียนนี้กลับมาใช้งานใช่หรือไม่?"))return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"restore"}});}
+    await load();
+  }catch(error){alert(error.message)}
+});
+$("list").addEventListener("change",async event=>{const input=event.target.closest("input[data-upload-input]");if(!input||!input.files[0])return;const id=Number(input.dataset.uploadInput),file=input.files[0];input.value="";await uploadDocumentFile(id,file)});
+$("form").onsubmit=async event=>{
+  event.preventDefault();const btn=$("saveBtn");btn.disabled=true;
+  try{
+    let file=$("fileInput").files[0];if(file){const prepared=await prepareManagedImage(file);file=prepared.file;const error=validateFile(file);if(error)throw new Error(error);if(prepared.compressed)$("fileMeta").textContent=`ระบบลดขนาดอัตโนมัติ: ${managedSizeText(prepared.originalSize)} → ${managedSizeText(file.size)}`;}
+    const payload={title:$("title").value.trim(),department:$("department").value,document_type:$("documentType").value.trim(),keywords:$("keywords").value.trim(),access_level:$("accessLevel").value};const query=new URLSearchParams({title:payload.title,department:payload.department,document_type:payload.document_type});const check=await apiRequest("/api/documents/duplicates?"+query.toString());
+    if(check.duplicates?.length){const names=check.duplicates.slice(0,3).map(x=>`#${x.id} ${x.title}`).join("\n");if(!confirm(`พบทะเบียนที่อาจซ้ำ:\n${names}\n\nยังต้องการสร้างทะเบียนใหม่หรือไม่?`))return;payload.allow_duplicate=true;}
+    let doc;try{doc=await apiRequest("/api/documents",{method:"POST",body:payload})}catch(error){if(error.status===409&&error.data?.code==="duplicate_document"&&confirm("มีผู้สร้างทะเบียนลักษณะเดียวกันระหว่างดำเนินการ ต้องการสร้างต่อหรือไม่?")){payload.allow_duplicate=true;doc=await apiRequest("/api/documents",{method:"POST",body:payload})}else throw error;}
+    event.target.reset();resetFileMeta();await load();if(file){const ok=await uploadDocumentFile(doc.id,file);if(!ok)alert("ทะเบียนเอกสารถูกบันทึกไว้แล้ว สามารถกดแนบไฟล์หรือลองอัปโหลดอีกครั้งจากรายการได้");}
+  }catch(error){alert(error.message)}finally{btn.disabled=false}
+};
+document.querySelectorAll("[data-view]").forEach(button=>button.onclick=async()=>{currentView=button.dataset.view;document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x===button));await load()});
+let timer;$("q").oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>load().catch(error=>alert(error.message)),250)};
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await load()})().catch(error=>alert(error.message));
+</script>
+</body>
+</html>
