@@ -373,11 +373,20 @@ CREATE TABLE IF NOT EXISTS documents (
   version INTEGER NOT NULL DEFAULT 1,
   access_level TEXT NOT NULL DEFAULT 'staff' CHECK (access_level IN ('private','staff','admin')),
   uploaded_by INTEGER REFERENCES users(id),
+  record_status TEXT NOT NULL DEFAULT 'active' CHECK (record_status IN ('active','archived','duplicate')),
+  duplicate_of_id INTEGER REFERENCES documents(id),
+  archived_at TEXT,
+  archive_reason TEXT,
+  upload_status TEXT NOT NULL DEFAULT 'none' CHECK (upload_status IN ('none','uploading','success','failed')),
+  upload_error TEXT,
+  attachment_updated_at TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department, academic_year_id);
 CREATE INDEX IF NOT EXISTS idx_documents_search ON documents(title, keywords);
+CREATE INDEX IF NOT EXISTS idx_documents_record_status ON documents(record_status, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_documents_duplicate ON documents(duplicate_of_id);
 
 -- ระบบพัสดุและครุภัณฑ์
 CREATE TABLE IF NOT EXISTS inventory_items (
@@ -460,6 +469,7 @@ CREATE TABLE IF NOT EXISTS file_attachments (
   drive_file_id TEXT,
   drive_web_url TEXT,
   storage_error TEXT,
+  file_hash TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(entity_type, entity_id)
 );
@@ -469,6 +479,7 @@ CREATE INDEX IF NOT EXISTS idx_inventory_items_department ON inventory_items(dep
 CREATE INDEX IF NOT EXISTS idx_inventory_transactions_item ON inventory_transactions(item_id, transaction_date DESC);
 CREATE INDEX IF NOT EXISTS idx_inventory_inspections_item ON inventory_inspections(item_id, inspection_date DESC);
 CREATE INDEX IF NOT EXISTS idx_file_attachments_entity ON file_attachments(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_file_attachments_hash ON file_attachments(file_hash);
 
 CREATE TRIGGER IF NOT EXISTS trg_inventory_transaction_before_insert
 BEFORE INSERT ON inventory_transactions
