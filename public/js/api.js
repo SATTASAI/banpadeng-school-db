@@ -27,7 +27,10 @@ async function apiRequest(path, options = {}) {
 
   if (!res.ok) {
     const message = (data && data.error) || "เกิดข้อผิดพลาด กรุณาลองใหม่";
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = res.status;
+    error.data = data;
+    throw error;
   }
   return data;
 }
