@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/css/style.css" />
   <style>
     .doc-page{max-width:1180px}.doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.doc-grid .span-2{grid-column:1/-1}.doc-grid input,.doc-grid select{width:100%;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:#fff}.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px}.upload-help{margin-top:12px;padding:13px 15px;border:1px solid #b9d5ea;border-radius:13px;background:#edf7fd;color:#315c86;font-size:12px;line-height:1.55}.upload-help strong{color:#183153}.upload-help ul{margin:6px 0 0;padding-left:20px}.file-meta,.muted{font-size:12px;color:var(--color-text-muted);margin-top:5px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.summary-card{padding:14px 16px;border:1px solid var(--color-border);border-radius:15px;background:rgba(255,255,255,.78)}.summary-card strong{display:block;font-size:24px;color:#17324d}.summary-card span{font-size:12px;color:var(--color-text-muted)}.toolbar{display:flex;align-items:center;gap:10px;margin:14px 0}.toolbar input{flex:1;min-width:160px;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px}.view-tabs{display:flex;gap:6px}.tab-btn,.mini-btn{border:1px solid var(--color-border);background:#fff;color:#294766;border-radius:9px;padding:7px 10px;cursor:pointer;font:inherit;font-size:12px}.tab-btn.active{background:#173c63;color:#fff;border-color:#173c63}.mini-btn.primary{background:#eaf4fb;border-color:#afd2e8;color:#174d75}.mini-btn.warn{background:#fff7e8;border-color:#f0cf8e;color:#8a5a00}.mini-btn.danger{background:#fff1f1;border-color:#efb8b8;color:#9c2e2e}.table-wrap{overflow:auto}.table-wrap table{min-width:980px}.status-pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:650}.status-pill.ok{background:#e8f7ef;color:#187449}.status-pill.empty{background:#eef2f6;color:#536579}.status-pill.failed{background:#ffeded;color:#b72f2f}.status-pill.warning{background:#fff4dc;color:#956200}.status-pill.archived{background:#ececf5;color:#535470}.file-cell{min-width:235px}.file-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.upload-state{font-size:11px;margin-top:6px;color:#35617f}.row-note{max-width:260px;white-space:normal}.empty-state{padding:30px;text-align:center;color:var(--color-text-muted)}html.embedded .page-back{display:none}html.embedded body{background:transparent}@media(max-width:760px){.doc-grid{grid-template-columns:1fr}.doc-grid .span-2{grid-column:auto}.summary-grid{grid-template-columns:1fr 1fr}.toolbar{align-items:stretch;flex-direction:column}.toolbar input{width:100%}.view-tabs{width:100%}.tab-btn{flex:1}}
+    .archive-dialog{width:min(440px,calc(100vw - 28px));border:1px solid rgba(74,103,131,.2);border-radius:20px;padding:0;box-shadow:0 24px 70px rgba(26,52,77,.26);color:#17324d}.archive-dialog::backdrop{background:rgba(22,40,59,.34);backdrop-filter:blur(5px)}.dialog-head{padding:20px 22px 10px}.dialog-head h3{margin:0 0 5px;font-size:19px}.dialog-head p{margin:0;color:var(--color-text-muted);font-size:13px}.reason-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding:14px 22px 18px}.reason-btn{min-height:48px;border:1px solid #c7d9e7;border-radius:12px;background:#f5faff;color:#244e70;font:inherit;font-size:13px;font-weight:650;cursor:pointer;padding:9px}.reason-btn:hover{background:#e8f4fc;border-color:#8dbbd9}.dialog-footer{display:flex;justify-content:flex-end;padding:0 22px 20px}.dialog-cancel{border:0;border-radius:10px;padding:9px 16px;background:#edf1f5;color:#43576b;font:inherit;cursor:pointer}@media(max-width:480px){.reason-grid{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -40,6 +41,16 @@
   </div>
   <div class="panel table-wrap" id="list">กำลังโหลด...</div>
 </main>
+<dialog class="archive-dialog" id="archiveDialog">
+  <div class="dialog-head"><h3>เก็บทะเบียนเข้าคลัง</h3><p>เลือกเหตุผลได้เลย ไม่ต้องพิมพ์ข้อความ</p></div>
+  <div class="reason-grid">
+    <button class="reason-btn" data-archive-reason="ยกเลิก/ไม่ใช้งานทะเบียนนี้แล้ว">ไม่ใช้งานแล้ว</button>
+    <button class="reason-btn" data-archive-reason="บันทึกข้อมูลผิดรายการ">บันทึกผิดรายการ</button>
+    <button class="reason-btn" data-archive-reason="เอกสารหมดอายุหรือพ้นระยะเวลาใช้งาน">เอกสารหมดอายุ</button>
+    <button class="reason-btn" data-archive-reason="รายการทดสอบระบบ">รายการทดสอบ</button>
+  </div>
+  <div class="dialog-footer"><button class="dialog-cancel" id="archiveCancel">ยกเลิก</button></div>
+</dialog>
 <script src="/js/api.js"></script>
 <script src="/js/file-upload.js"></script>
 <script>
@@ -49,6 +60,7 @@ const DEPT={academic:"วิชาการ",budget:"งบประมาณ",p
 const ACCESS={staff:"บุคลากรทุกคน",private:"ส่วนตัว",admin:"ผู้บริหาร"};
 let currentView="active";
 let currentDocuments=[];
+let pendingArchiveId=null;
 function sizeText(n){if(!Number(n))return "";return n<1024*1024?`${Math.round(n/1024)} KB`:`${(n/1024/1024).toFixed(2)} MB`}
 function dateText(value){if(!value)return "-";const raw=String(value);const date=new Date(raw.replace(" ","T")+(/Z$|[+-]\d\d:\d\d$/.test(raw)?"":"Z"));return Number.isNaN(date.getTime())?raw:date.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"})}
 function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);if(!pdf&&!image)return "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF";if(file.size>(pdf?1024*1024:2*1024*1024))return `${pdf?"PDF ต้องไม่เกิน 1 MB":"รูปภาพต้องไม่เกิน 2 MB"} (ไฟล์นี้ ${sizeText(file.size)})`;return null}
@@ -92,11 +104,20 @@ $("list").addEventListener("click",async event=>{
   if(action==="select-file"){if(button.dataset.hasFile==="1"&&!confirm("ต้องการอัปโหลดไฟล์ฉบับใหม่แทนฉบับปัจจุบันใช่หรือไม่?\nไฟล์เดิมจะยังเปิดได้จนกว่าไฟล์ใหม่อัปโหลดสำเร็จ"))return;$("list").querySelector(`[data-upload-input="${id}"]`)?.click();return;}
   try{
     if(action==="mark-duplicate"){const original=Number(button.dataset.original);if(!confirm(`ต้องการเก็บรายการนี้เป็นรายการซ้ำกับทะเบียน #${original} ใช่หรือไม่?\nข้อมูลจะไม่ถูกลบและสามารถกู้คืนได้`))return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"mark_duplicate",duplicate_of_id:original}});}
-    else if(action==="archive"){const reason=prompt("ระบุเหตุผลที่เก็บเข้าคลัง (กดยกเลิกเพื่อไม่ดำเนินการ)","ยกเลิก/ไม่ใช้งานทะเบียนนี้แล้ว");if(reason===null)return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"archive",reason}});}
+    else if(action==="archive"){pendingArchiveId=id;$("archiveDialog").showModal();return;}
     else if(action==="restore"){if(!confirm("ต้องการกู้คืนทะเบียนนี้กลับมาใช้งานใช่หรือไม่?"))return;await apiRequest(`/api/documents/${id}`,{method:"PATCH",body:{action:"restore"}});}
     await load();
   }catch(error){alert(error.message)}
 });
+$("archiveCancel").onclick=()=>{$("archiveDialog").close();pendingArchiveId=null};
+$("archiveDialog").addEventListener("click",async event=>{
+  const reasonButton=event.target.closest("[data-archive-reason]");if(!reasonButton||!pendingArchiveId)return;
+  const documentId=pendingArchiveId,reason=reasonButton.dataset.archiveReason;
+  reasonButton.disabled=true;
+  try{await apiRequest(`/api/documents/${documentId}`,{method:"PATCH",body:{action:"archive",reason}});$("archiveDialog").close();pendingArchiveId=null;await load()}
+  catch(error){alert(error.message)}finally{reasonButton.disabled=false}
+});
+$("archiveDialog").addEventListener("cancel",()=>{pendingArchiveId=null});
 $("list").addEventListener("change",async event=>{const input=event.target.closest("input[data-upload-input]");if(!input||!input.files[0])return;const id=Number(input.dataset.uploadInput),file=input.files[0];input.value="";await uploadDocumentFile(id,file)});
 $("form").onsubmit=async event=>{
   event.preventDefault();const btn=$("saveBtn");btn.disabled=true;
