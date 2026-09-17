@@ -600,6 +600,11 @@
     a.addEventListener("click", (e) => {
       if (e.ctrlKey || e.metaKey || e.shiftKey) return; // ให้เปิดแท็บใหม่ได้ตามปกติ
       e.preventDefault();
+      const group = a.closest(".nav-group");
+      if (group?.classList.contains("open")) {
+        setNavGroupOpen(group, false);
+        return;
+      }
       showPage(a.getAttribute("data-page"));
     });
   });
