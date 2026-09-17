@@ -10,6 +10,7 @@
   .staff-panel { margin-top:20px; }
   .staff-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); }
   .staff-row:last-child { border-bottom:none; }
+  .staff-row.search-target { position:relative; z-index:1; border-radius:12px; background:#eaf5ff; box-shadow:inset 4px 0 #2585d8,0 8px 24px rgba(37,133,216,.12); }
   .staff-name { font-weight:600; }
   .staff-sub { font-size:13px; color:var(--color-text-muted); margin-top:2px; }
   .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
@@ -129,6 +130,7 @@
 <script>
   let currentUser = null;
   let editingId = null;
+  const requestedStaffId = Number(new URLSearchParams(window.location.search).get("staff"));
 
   function renderStaff(staff) {
     const panel = document.getElementById("staffPanel");
@@ -146,7 +148,7 @@
           .filter(Boolean)
           .join(" · ");
         return `
-          <div class="staff-row">
+          <div class="staff-row" data-staff-id="${s.id}">
             <div>
               <div class="staff-name">${s.full_name} ${s.role ? `<span class="role-chip">${ROLE_LABELS[s.role] || s.role}</span>` : ""}</div>
               <div class="staff-sub">${details || "ยังไม่มีข้อมูลเพิ่มเติม"}</div>
@@ -162,6 +164,13 @@
         openModal(s);
       });
     });
+    if (requestedStaffId) {
+      const target = panel.querySelector(`[data-staff-id="${requestedStaffId}"]`);
+      if (target) {
+        target.classList.add("search-target");
+        requestAnimationFrame(() => target.scrollIntoView({ behavior:"smooth", block:"center" }));
+      }
+    }
   }
 
   async function loadStaff() {
