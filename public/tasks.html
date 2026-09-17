@@ -9,6 +9,7 @@
   .task-toolbar { display:flex; justify-content:space-between; align-items:center; margin-top:12px; }
   .task-list { margin-top:20px; display:flex; flex-direction:column; gap:12px; }
   .task-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; }
+  .task-card.search-target { border-color:#72afe1; background:#f1f8fe; box-shadow:inset 4px 0 #2585d8,0 10px 28px rgba(37,133,216,.13); }
   .task-card.closed { opacity:0.6; }
   .task-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .task-title { font-size:16px; font-weight:600; margin:0; }
@@ -105,6 +106,7 @@
   let currentUser = null;
   let allUsers = [];
   let editingTaskId = null;
+  const requestedTaskId = Number(new URLSearchParams(window.location.search).get("task"));
 
   const PRIORITY_LABEL = { low: "ต่ำ", normal: "ปกติ", high: "สูง" };
   const STATUS_LABEL = { pending: "ยังไม่เริ่ม", in_progress: "กำลังทำ", done: "เสร็จแล้ว" };
@@ -133,7 +135,7 @@
       .join("");
 
     return `
-      <div class="task-card ${task.status === "closed" ? "closed" : ""}">
+      <div class="task-card ${task.status === "closed" ? "closed" : ""}" data-task-id="${task.id}">
         <div class="task-head">
           <div>
             <p class="task-title">${task.title}</p>
@@ -200,6 +202,13 @@
           }
         });
       });
+      if (requestedTaskId) {
+        const target = list.querySelector(`[data-task-id="${requestedTaskId}"]`);
+        if (target) {
+          target.classList.add("search-target");
+          requestAnimationFrame(() => target.scrollIntoView({ behavior:"smooth", block:"center" }));
+        }
+      }
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
