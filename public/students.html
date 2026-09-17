@@ -826,6 +826,8 @@
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
     await loadStudents();
+    const requestedStudentId = Number(new URLSearchParams(window.location.search).get("student"));
+    if (requestedStudentId) await openStudentDetails(requestedStudentId);
   })();
 
   // ---------- นำเข้าจาก Excel/CSV ----------
