@@ -12,6 +12,7 @@
   .topic-btn { background:var(--color-forest-700); color:#fff; border:none; border-radius:var(--radius-lg); padding:22px 18px; font-family:var(--font-body); font-size:15px; font-weight:600; cursor:pointer; text-align:left; }
   .topic-btn:hover { background:var(--color-forest-900); }
   .project-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:12px; }
+  .project-card.search-target { border-color:#72afe1; background:#f1f8fe; box-shadow:inset 4px 0 #2585d8,0 10px 28px rgba(37,133,216,.13); }
   .project-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .project-actions { display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
   .project-actions .btn { width:auto; padding:6px 10px; font-size:12px; }
@@ -198,6 +199,7 @@
   const EXPENSE_CATEGORY_LABEL = { materials: "วัสดุ", equipment: "ครุภัณฑ์", services: "ค่าใช้สอย/จ้างบริการ", compensation: "ค่าตอบแทน", utilities: "สาธารณูปโภค", travel: "ค่าเดินทาง", food: "ค่าอาหาร/อาหารว่าง", opening_balance: "ยอดยกมา", other: "อื่น ๆ" };
 
   const dept = new URLSearchParams(window.location.search).get("dept");
+  const requestedProjectId = Number(new URLSearchParams(window.location.search).get("project"));
   let currentUser = null;
   let allUsers = [];
   let editingTopicId = null;
@@ -310,7 +312,7 @@
         const canManage = currentUser.is_admin || p.owners.some((o) => o.user_id === currentUser.id);
         const remaining = Number(p.budget_amount || 0) - Number(p.spent_amount || 0);
         return `
-        <div class="project-card">
+        <div class="project-card" data-project-id="${p.id}">
           <div class="project-head">
             <div>
               <div class="project-name">${escapeHtml(p.name)}</div>
@@ -348,6 +350,13 @@
         openExpenseModal(project);
       });
     });
+    if (requestedProjectId) {
+      const target = list.querySelector(`[data-project-id="${requestedProjectId}"]`);
+      if (target) {
+        target.classList.add("search-target");
+        requestAnimationFrame(() => target.scrollIntoView({ behavior:"smooth", block:"center" }));
+      }
+    }
   }
 
   function openProjectModal(project) {
