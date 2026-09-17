@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ตั้งค่าการแจ้งเตือน LINE</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .line-page{max-width:1120px}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:12px 0 18px}.page-head p{margin:4px 0 0;color:var(--color-text-muted)}
+    .page-actions{display:flex;gap:8px;flex-wrap:wrap}.page-actions .btn,.target-actions .btn,.copy-row .btn{width:auto}
+    .status-hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:14px;margin-bottom:14px}.hero-card,.settings-card{background:rgba(255,255,255,.86);border:1px solid var(--color-border);border-radius:19px;box-shadow:0 12px 34px rgba(57,91,128,.07)}
+    .hero-card{padding:22px}.status-title{display:flex;align-items:center;gap:10px}.status-light{width:12px;height:12px;border-radius:50%;background:#A8B5C2;box-shadow:0 0 0 6px rgba(168,181,194,.15)}.status-light.ready{background:#13A46D;box-shadow:0 0 0 6px rgba(19,164,109,.14)}
+    .status-title h2{margin:0;font-size:20px}.status-copy{margin:9px 0 0;color:var(--color-text-muted)}.check-list{display:grid;gap:8px;margin-top:18px}.check-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 11px;border:1px solid var(--color-border);border-radius:12px;background:rgba(246,250,253,.8);font-size:13px}.check-state{font-weight:700;color:#A24A54}.check-state.ok{color:#16815B}
+    .privacy-note{padding:22px;background:linear-gradient(145deg,#ECF7FF,#F7FBFE)}.privacy-note .shield{width:42px;height:42px;display:grid;place-items:center;border-radius:13px;background:#DCEEFF;color:#1D72C5;font-size:21px;margin-bottom:12px}.privacy-note h3{margin:0 0 7px}.privacy-note p{margin:0;color:#47647D;font-size:13px;line-height:1.65}
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:14px}.settings-card{padding:20px;margin-bottom:14px}.settings-card h3{margin:0 0 4px;font-size:16px}.settings-card>p{margin:0 0 15px;color:var(--color-text-muted);font-size:13px}
+    .copy-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.copy-row input{min-width:0;width:100%;padding:11px 12px;border:1px solid var(--color-border);border-radius:11px;background:#F5F9FC;color:#27445E;font:500 13px ui-monospace,SFMono-Regular,Consolas,monospace}
+    .steps{display:grid;gap:11px}.step{display:grid;grid-template-columns:31px minmax(0,1fr);gap:10px}.step-number{width:31px;height:31px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(180deg,#E9F5FF,#D9EBFB);color:#176DBB;font-weight:800;font-size:12px}.step strong{display:block;font-size:13px;margin-top:2px}.step span{display:block;color:var(--color-text-muted);font-size:12px;line-height:1.5;margin-top:2px}
+    .target-list{display:grid;gap:9px}.target-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 14px;border:1px solid var(--color-border);border-radius:14px;background:#fff}.target-card.selected{border-color:#55A5E8;background:#F1F9FF;box-shadow:0 0 0 3px rgba(64,151,222,.08)}.target-name{display:flex;align-items:center;gap:8px;font-weight:700}.target-badge{padding:3px 7px;border-radius:999px;background:#E8F2FA;color:#3B6689;font-size:10px;font-weight:700}.target-badge.active{background:#DDF4E9;color:#16714D}.target-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--color-text-muted);font-size:11px;margin-top:5px}.target-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.target-actions .btn{min-height:34px;padding:6px 10px;font-size:12px}
+    .empty{padding:28px 18px;text-align:center;border:1px dashed #B9CCD9;border-radius:14px;color:var(--color-text-muted);background:rgba(246,250,253,.7)}.empty strong{display:block;color:#365773;margin-bottom:4px}.hint{margin-top:12px;padding:10px 12px;border-radius:11px;background:#FFF7E7;border:1px solid #F1DBA9;color:#7C5B18;font-size:12px;line-height:1.55}
+    .toast{position:fixed;right:20px;bottom:20px;z-index:100;max-width:390px;padding:12px 15px;border-radius:13px;background:#183153;color:#fff;box-shadow:0 12px 35px rgba(24,49,83,.28);display:none}.toast.error{background:#A83F4C}
+    html.embedded .page-back{display:none}html.embedded body{background:transparent}html.embedded .app-main{padding-top:18px}
+    @media(max-width:860px){.status-hero,.layout{grid-template-columns:1fr}.layout aside{display:grid;grid-template-columns:1fr 1fr;gap:14px}.layout aside .settings-card{margin:0}}
+    @media(max-width:620px){.page-head{align-items:flex-start;flex-direction:column}.layout aside{grid-template-columns:1fr}.copy-row,.target-card{grid-template-columns:1fr}.target-actions{justify-content:flex-start}}
+  </style>
+</head>
+<body>
+<main class="app-main line-page">
+  <a class="page-back" href="/maintenance.html">← กลับระบบแจ้งซ่อม</a>
+  <div class="page-head">
+    <div><h2>การเชื่อมต่อ LINE Official Account</h2><p>รับ Group ID ผ่าน Webhook เลือกกลุ่มปลายทาง และทดสอบการแจ้งเตือนจากหน้าเดียว</p></div>
+    <div class="page-actions"><button class="btn btn-ghost" id="refreshBtn">↻ ตรวจสอบอีกครั้ง</button><button class="btn btn-primary" id="testBtn" disabled>ส่งข้อความทดสอบ</button></div>
+  </div>
+
+  <section class="status-hero">
+    <div class="hero-card">
+      <div class="status-title"><i class="status-light" id="statusLight"></i><h2 id="statusTitle">กำลังตรวจสอบการเชื่อมต่อ...</h2></div>
+      <p class="status-copy" id="statusCopy">ระบบกำลังตรวจ Secret, Access Token และกลุ่มปลายทาง</p>
+      <div class="check-list">
+        <div class="check-item"><span>Channel secret</span><span class="check-state" id="secretState">กำลังตรวจสอบ</span></div>
+        <div class="check-item"><span>Channel access token</span><span class="check-state" id="tokenState">กำลังตรวจสอบ</span></div>
+        <div class="check-item"><span>กลุ่มปลายทางที่เลือก</span><span class="check-state" id="targetState">กำลังตรวจสอบ</span></div>
+      </div>
+    </div>
+    <div class="hero-card privacy-note">
+      <div class="shield">✓</div><h3>รับเฉพาะข้อมูลที่จำเป็น</h3>
+      <p>Webhook ตรวจลายเซ็นจาก LINE ก่อนทุกครั้ง ระบบเก็บเฉพาะรหัสปลายทาง ประเภทเหตุการณ์ และเวลาที่ได้รับ ไม่เก็บข้อความสนทนาในกลุ่ม</p>
+    </div>
+  </section>
+
+  <div class="layout">
+    <section>
+      <div class="settings-card">
+        <h3>Webhook URL</h3><p>นำ URL นี้ไปวางใน LINE Developers → Messaging API → Webhook settings</p>
+        <div class="copy-row"><input id="webhookUrl" readonly value="กำลังโหลด..." /><button class="btn btn-ghost" id="copyBtn">คัดลอก URL</button></div>
+      </div>
+      <div class="settings-card">
+        <h3>กลุ่มที่ระบบตรวจพบ</h3><p>เพิ่ม LINE Official Account เข้ากลุ่ม แล้วให้สมาชิกคนใดก็ได้ส่งข้อความหนึ่งครั้ง จากนั้นกด “ตรวจสอบอีกครั้ง”</p>
+        <div class="target-list" id="targetList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+        <div class="hint">หากเพิ่งเปิด Webhook ให้กด Verify และเปิด <strong>Use webhook</strong> ก่อน จากนั้นตรวจว่าเปิด <strong>Allow bot to join group chats</strong> แล้วจึงเชิญบัญชีทางการเข้ากลุ่ม</div>
+      </div>
+    </section>
+    <aside>
+      <div class="settings-card">
+        <h3>ขั้นตอนเชื่อมต่อ</h3><p>ทำตามลำดับเพื่อให้ระบบพบกลุ่มอัตโนมัติ</p>
+        <div class="steps">
+          <div class="step"><div class="step-number">1</div><div><strong>คัดลอก Webhook URL</strong><span>วางในหน้า Messaging API ของ LINE Developers</span></div></div>
+          <div class="step"><div class="step-number">2</div><div><strong>กด Verify</strong><span>เมื่อขึ้น Success ให้เปิดสวิตช์ Use webhook</span></div></div>
+          <div class="step"><div class="step-number">3</div><div><strong>เชิญ OA เข้ากลุ่ม</strong><span>สมาชิกในกลุ่มส่งข้อความหนึ่งครั้ง</span></div></div>
+          <div class="step"><div class="step-number">4</div><div><strong>เลือกกลุ่มปลายทาง</strong><span>กดปุ่ม “ใช้กลุ่มนี้” แล้วส่งข้อความทดสอบ</span></div></div>
+        </div>
+      </div>
+      <div class="settings-card">
+        <h3>ข้อควรทราบ</h3><p>LINE อาจใช้เวลาสองสามวินาทีในการส่งเหตุการณ์ หลังส่งข้อความในกลุ่มแล้วให้รอสักครู่ก่อนรีเฟรช</p>
+      </div>
+    </aside>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id);let lineStatus=null;
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const TYPE_LABEL={group:"กลุ่ม",user:"ผู้ใช้",room:"ห้องสนทนา"};
+function toast(message,error=false){const box=$("toast");box.textContent=message;box.className="toast"+(error?" error":"");box.style.display="block";clearTimeout(toast.timer);toast.timer=setTimeout(()=>box.style.display="none",4200)}
+function dateText(value){if(!value)return "-";return new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short"}).format(new Date(value.replace(" ","T")+"Z"))}
+function setCheck(id,ok,readyText="พร้อมแล้ว",missingText="ยังไม่พร้อม"){$(id).textContent=ok?readyText:missingText;$(id).className="check-state"+(ok?" ok":"")}
+function renderStatus(){
+  const selected=lineStatus.targets.find(target=>target.is_default)||lineStatus.legacy_target;
+  setCheck("secretState",lineStatus.credentials.channel_secret);
+  setCheck("tokenState",lineStatus.credentials.access_token);
+  setCheck("targetState",!!selected,"เลือกแล้ว","ยังไม่ได้เลือก");
+  $("statusLight").className="status-light"+(lineStatus.configured?" ready":"");
+  $("statusTitle").textContent=lineStatus.configured?"LINE พร้อมส่งการแจ้งเตือน":"การเชื่อมต่อยังไม่ครบ";
+  $("statusCopy").textContent=lineStatus.configured?"ระบบแจ้งซ่อมจะส่งสถานะและภาพตัวอย่างไปยังปลายทางที่เลือก":"ทำรายการที่ยังไม่พร้อมให้ครบ แล้วส่งข้อความทดสอบ";
+  $("testBtn").disabled=!lineStatus.configured;
+  $("webhookUrl").value=lineStatus.webhook_url;
+}
+function renderTargets(){
+  const targets=lineStatus.targets;
+  if(!targets.length){$("targetList").innerHTML='<div class="empty"><strong>ยังไม่พบกลุ่ม LINE</strong>หลัง Verify สำเร็จ ให้เชิญบัญชีทางการเข้ากลุ่มและส่งข้อความหนึ่งครั้ง</div>';return}
+  $("targetList").innerHTML=targets.map(target=>`<article class="target-card ${target.is_default?"selected":""}">
+    <div><div class="target-name">${esc(target.display_name||`${TYPE_LABEL[target.target_type]||"ปลายทาง"}ที่ตรวจพบ`)} <span class="target-badge ${target.is_default?"active":""}">${target.is_default?"กำลังใช้งาน":esc(TYPE_LABEL[target.target_type]||target.target_type)}</span></div>
+    <div class="target-meta"><span>${esc(target.masked_id)}</span><span>พบล่าสุด ${esc(dateText(target.last_seen_at))}</span><span>เหตุการณ์ ${esc(target.last_event_type||"-")}</span></div></div>
+    <div class="target-actions">${target.status==="disabled"?`<button class="btn btn-ghost" data-action="enable" data-id="${target.id}">เปิดใช้งาน</button>`:`${!target.is_default?`<button class="btn btn-primary" data-action="select" data-id="${target.id}">ใช้กลุ่มนี้</button>`:""}<button class="btn btn-ghost" data-action="rename" data-id="${target.id}">เปลี่ยนชื่อ</button><button class="btn btn-ghost" data-action="disable" data-id="${target.id}">ปิด</button>`}</div>
+  </article>`).join("");
+  $("targetList").querySelectorAll("[data-action]").forEach(button=>button.onclick=()=>updateTarget(Number(button.dataset.id),button.dataset.action));
+}
+async function loadStatus(showMessage=false){
+  $("refreshBtn").disabled=true;
+  try{lineStatus=await apiRequest("/api/line/status");renderStatus();renderTargets();if(showMessage)toast("ตรวจสอบสถานะล่าสุดแล้ว")}
+  catch(error){if(error.status===403){document.querySelector("main").innerHTML='<div class="panel"><h2>ไม่มีสิทธิ์เข้าถึง</h2><p>หน้านี้สำหรับผู้บริหารหรือผู้ดูแลระบบเท่านั้น</p><a class="btn btn-primary" href="/maintenance.html" style="width:auto">กลับระบบแจ้งซ่อม</a></div>'}else toast(error.message,true)}
+  finally{$("refreshBtn")&&($("refreshBtn").disabled=false)}
+}
+async function updateTarget(id,action){
+  let body={action};
+  if(action==="select"&&!confirm("ต้องการใช้ปลายทางนี้รับการแจ้งเตือนจากระบบใช่หรือไม่"))return;
+  if(action==="disable"&&!confirm("ต้องการปิดปลายทางนี้ใช่หรือไม่"))return;
+  if(action==="rename"){const target=lineStatus.targets.find(item=>item.id===id);const name=prompt("ตั้งชื่อที่จำง่าย เช่น กลุ่มงานบริหารทั่วไป",target?.display_name||"");if(name===null)return;body.display_name=name.trim()}
+  try{await apiRequest(`/api/line/targets/${id}`,{method:"PATCH",body});await loadStatus();toast(action==="select"?"เลือกกลุ่มรับการแจ้งเตือนแล้ว":"บันทึกการตั้งค่าแล้ว")}
+  catch(error){toast(error.message,true)}
+}
+$("refreshBtn").onclick=()=>loadStatus(true);
+$("copyBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("webhookUrl").value);toast("คัดลอก Webhook URL แล้ว")}catch{ $("webhookUrl").select();document.execCommand("copy");toast("คัดลอก Webhook URL แล้ว") }};
+$("testBtn").onclick=async()=>{const button=$("testBtn");button.disabled=true;button.textContent="กำลังส่ง...";try{await apiRequest("/api/line/test",{method:"POST"});toast("ส่งข้อความทดสอบสำเร็จ กรุณาตรวจใน LINE")}catch(error){toast(error.message,true)}finally{button.textContent="ส่งข้อความทดสอบ";button.disabled=!lineStatus?.configured}};
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await loadStatus()})().catch(error=>toast(error.message,true));
+</script>
+</body>
+</html>
