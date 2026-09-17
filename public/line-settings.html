@@ -25,7 +25,7 @@
 </head>
 <body>
 <main class="app-main line-page">
-  <a class="page-back" href="/maintenance.html">← กลับระบบแจ้งซ่อม</a>
+  <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
   <div class="page-head">
     <div><h2>การเชื่อมต่อ LINE Official Account</h2><p>รับ Group ID ผ่าน Webhook เลือกกลุ่มปลายทาง และทดสอบการแจ้งเตือนจากหน้าเดียว</p></div>
     <div class="page-actions"><button class="btn btn-ghost" id="refreshBtn">↻ ตรวจสอบอีกครั้ง</button><button class="btn btn-primary" id="testBtn" disabled>ส่งข้อความทดสอบ</button></div>
@@ -123,7 +123,7 @@ async function updateTarget(id,action){
 $("refreshBtn").onclick=()=>loadStatus(true);
 $("copyBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("webhookUrl").value);toast("คัดลอก Webhook URL แล้ว")}catch{ $("webhookUrl").select();document.execCommand("copy");toast("คัดลอก Webhook URL แล้ว") }};
 $("testBtn").onclick=async()=>{const button=$("testBtn");button.disabled=true;button.textContent="กำลังส่ง...";try{await apiRequest("/api/line/test",{method:"POST"});toast("ส่งข้อความทดสอบสำเร็จ กรุณาตรวจใน LINE")}catch(error){toast(error.message,true)}finally{button.textContent="ส่งข้อความทดสอบ";button.disabled=!lineStatus?.configured}};
-(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await loadStatus()})().catch(error=>toast(error.message,true));
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}if(me.user.role!=="superadmin"){location="/dashboard.html";return}await loadStatus()})().catch(error=>toast(error.message,true));
 </script>
 </body>
 </html>
