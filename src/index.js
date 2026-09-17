@@ -3370,7 +3370,7 @@ export default {
       if (pathname === "/api/auth/me" && method === "GET") return await handleMe(request, env);
 
       // หน้าตั้งค่า LINE เป็นส่วนบริหารระบบ: ป้องกันตั้งแต่ก่อนเสิร์ฟไฟล์หน้าเว็บ
-      if (pathname === "/line-settings.html" && method === "GET") {
+      if ((pathname === "/line-settings.html" || pathname === "/line-settings") && method === "GET") {
         const user = await getCurrentUser(request, env);
         if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
         if (user.role !== "superadmin") return Response.redirect(new URL("/dashboard.html", url.origin), 302);
