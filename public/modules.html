@@ -18,6 +18,8 @@
   .feature-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; }
   .feature-card { background:rgba(255,255,255,.80); border:1px solid rgba(75,97,119,.13); border-radius:14px; padding:14px; min-height:104px; display:flex; flex-direction:column; box-shadow:0 7px 20px rgba(57,91,128,.045); transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease; }
   .feature-card:hover { transform:translateY(-2px); border-color:rgba(0,122,255,.18); box-shadow:0 13px 30px rgba(57,91,128,.10); }
+  .feature-card.focused { border-color:#4A9FE5; background:#F2F9FF; box-shadow:0 0 0 3px rgba(0,122,255,.10),0 15px 34px rgba(40,91,138,.13); animation:focus-card 1.4s ease both; }
+  @keyframes focus-card { 0%,100%{transform:translateY(0)} 35%{transform:translateY(-4px)} }
   .feature-number { width:27px; height:27px; border-radius:9px; display:inline-flex; align-items:center; justify-content:center; background:linear-gradient(180deg,#EBF6FF,#DDEFFD); color:var(--color-ocean-700); border:1px solid rgba(52,131,203,.12); font-size:11px; font-weight:700; margin-bottom:9px; }
   .feature-card h3 { font-size:15px; line-height:1.45; margin-bottom:6px; }
   .feature-card p { color:var(--color-text-muted); font-size:13px; margin:0 0 12px; }
@@ -291,7 +293,7 @@
 
     document.getElementById("featureGrid").innerHTML = module.items.map((item, index) => {
       const ready = module.ready.includes(index);
-      return `<article class="feature-card">
+      return `<article class="feature-card" data-feature-index="${index}">
         <span class="feature-number">${String(index + 1).padStart(2, "0")}</span>
         <h3>${item}</h3>
         <div class="feature-footer">
@@ -299,6 +301,17 @@
         </div>
       </article>`;
     }).join("");
+
+    const rawFocus = new URLSearchParams(window.location.search).get("focus");
+    const focusIndex = rawFocus === null ? -1 : Number(rawFocus);
+    if (Number.isInteger(focusIndex) && focusIndex >= 0) {
+      requestAnimationFrame(() => {
+        const card = document.querySelector(`[data-feature-index="${focusIndex}"]`);
+        if (!card) return;
+        card.classList.add("focused");
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
 
   }
 
