@@ -23,7 +23,7 @@
         <div class="field"><label>ประเภทเอกสาร</label><input id="documentType" placeholder="เช่น หนังสือราชการ/ใบเสร็จ" /></div>
         <div class="field"><label>คำสำคัญ</label><input id="keywords" /></div>
         <div class="field"><label>สิทธิ์เข้าถึง</label><select id="accessLevel"><option value="staff">บุคลากรทุกคน</option><option value="private">ส่วนตัว/เจ้าของไฟล์</option><option value="admin">ผู้บริหารเท่านั้น</option></select></div>
-        <div class="field span-2"><label>ไฟล์แนบ</label><input type="file" id="fileInput" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="fileMeta">PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB</div></div>
+        <div class="field span-2"><label>ไฟล์แนบ</label><input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.pptx,image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="fileMeta">PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB · DOCX/XLSX/PPTX ไม่เกิน 25 MB</div></div>
       </div>
       <div class="upload-help"><strong>วิธีลดขนาดไฟล์ก่อนอัปโหลด</strong><ul><li>ระบบจัดเก็บไฟล์จริงใน Google Drive ของโรงเรียน และบันทึกประวัติไว้ในระบบ</li><li>ตั้งค่าสแกนประมาณ 150 DPI และเลือกขาวดำหรือ Grayscale สำหรับเอกสารทั่วไป</li><li>ตัดขอบและหน้าว่างออก แล้วเลือก Compressed PDF / Reduce file size</li><li>รูปถ่ายขนาดใหญ่จะถูกลดขนาดอัตโนมัติ โดยไฟล์ต้นฉบับในเครื่องไม่ถูกแก้ไข</li><li>เปิดตรวจความชัดเจนของตัวหนังสือก่อนอัปโหลดทุกครั้ง</li></ul></div>
       <button class="btn btn-primary" id="saveBtn" style="width:auto;margin-top:14px">บันทึกเอกสาร</button>
@@ -64,9 +64,9 @@ let pendingArchiveId=null;
 const requestedDocumentId=Number(new URLSearchParams(location.search).get("document"));
 function sizeText(n){if(!Number(n))return "";return n<1024*1024?`${Math.round(n/1024)} KB`:`${(n/1024/1024).toFixed(2)} MB`}
 function dateText(value){if(!value)return "-";const raw=String(value);const date=new Date(raw.replace(" ","T")+(/Z$|[+-]\d\d:\d\d$/.test(raw)?"":"Z"));return Number.isNaN(date.getTime())?raw:date.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"})}
-function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);if(!pdf&&!image)return "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF";if(file.size>(pdf?1024*1024:2*1024*1024))return `${pdf?"PDF ต้องไม่เกิน 1 MB":"รูปภาพต้องไม่เกิน 2 MB"} (ไฟล์นี้ ${sizeText(file.size)})`;return null}
-function resetFileMeta(){$("fileMeta").textContent="PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB";$("fileMeta").style.color="var(--color-text-muted)"}
-$("fileInput").onchange=()=>{const file=$("fileInput").files[0],error=validateFile(file);$("fileMeta").textContent=file?(error||`${file.name} · ${sizeText(file.size)} · พร้อมอัปโหลด`):"PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB";$("fileMeta").style.color=error?"var(--color-danger)":"var(--color-text-muted)"};
+function validateFile(file){if(!file)return null;const pdf=file.type==="application/pdf";const image=["image/jpeg","image/png","image/webp","image/gif"].includes(file.type);const office=/\.(docx|xlsx|pptx)$/i.test(file.name);if(!pdf&&!image&&!office)return "รองรับ PDF, JPG, PNG, WEBP, GIF, DOCX, XLSX และ PPTX";const limit=pdf?1024*1024:image?2*1024*1024:25*1024*1024;if(file.size>limit)return `${pdf?"PDF ต้องไม่เกิน 1 MB":image?"รูปภาพต้องไม่เกิน 2 MB":"ไฟล์เอกสารต้องไม่เกิน 25 MB"} (ไฟล์นี้ ${sizeText(file.size)})`;return null}
+function resetFileMeta(){$("fileMeta").textContent="PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB · DOCX/XLSX/PPTX ไม่เกิน 25 MB";$("fileMeta").style.color="var(--color-text-muted)"}
+$("fileInput").onchange=()=>{const file=$("fileInput").files[0],error=validateFile(file);$("fileMeta").textContent=file?(error||`${file.name} · ${sizeText(file.size)} · พร้อมอัปโหลดไป Google Drive`):"PDF ไม่เกิน 1 MB · รูปภาพไม่เกิน 2 MB · DOCX/XLSX/PPTX ไม่เกิน 25 MB";$("fileMeta").style.color=error?"var(--color-danger)":"var(--color-text-muted)"};
 function fileStatus(x){
   const hasFile=Boolean(x.attachment_id&&x.file_url);
   if(x.upload_status==="failed")return hasFile?`<span class="status-pill warning">ไฟล์เดิมยังใช้ได้</span><div class="muted row-note">อัปโหลดครั้งล่าสุดไม่สำเร็จ: ${esc(x.upload_error||"กรุณาลองใหม่")}</div>`:`<span class="status-pill failed">อัปโหลดไม่สำเร็จ</span><div class="muted row-note">${esc(x.upload_error||"กรุณาลองใหม่")}</div>`;
@@ -77,7 +77,7 @@ function renderRow(x){
   const hasFile=Boolean(x.attachment_id&&x.file_url),archived=currentView==="archive";
   const fileLink=hasFile?`<div><a href="${esc(x.file_url)}" target="_blank" rel="noopener"><strong>${esc(x.file_name||"เปิดไฟล์")}</strong></a><br><span class="muted">${sizeText(x.file_size)} · อัปเดต ${dateText(x.attachment_updated_at||x.attachment_created_at)}</span></div>`:"";
   let actions="";
-  if(!archived&&x.can_manage_file){const label=hasFile?"เปลี่ยนไฟล์":x.upload_status==="failed"?"ลองอัปโหลดอีกครั้ง":"แนบไฟล์";actions+=`<button class="mini-btn primary" data-action="select-file" data-id="${x.id}" data-has-file="${hasFile?1:0}">${label}</button><input hidden type="file" data-upload-input="${x.id}" accept=".pdf,image/jpeg,image/png,image/webp,image/gif" />`;}
+  if(!archived&&x.can_manage_file){const label=hasFile?"เปลี่ยนไฟล์":x.upload_status==="failed"?"ลองอัปโหลดอีกครั้ง":"แนบไฟล์";actions+=`<button class="mini-btn primary" data-action="select-file" data-id="${x.id}" data-has-file="${hasFile?1:0}">${label}</button><input hidden type="file" data-upload-input="${x.id}" accept=".pdf,.docx,.xlsx,.pptx,image/jpeg,image/png,image/webp,image/gif" />`;}
   if(!archived&&x.can_archive&&x.duplicate_candidate_id)actions+=`<button class="mini-btn warn" data-action="mark-duplicate" data-id="${x.id}" data-original="${x.duplicate_candidate_id}">เก็บเป็นรายการซ้ำ</button>`;
   if(!archived&&x.can_archive)actions+=`<button class="mini-btn danger" data-action="archive" data-id="${x.id}">เก็บเข้าคลัง</button>`;
   if(archived&&x.can_archive)actions+=`<button class="mini-btn primary" data-action="restore" data-id="${x.id}">กู้คืนรายการ</button>`;
@@ -137,4 +137,3 @@ let timer;$("q").oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>load().ca
 </script>
 </body>
 </html>
-
