@@ -1,1 +1,90 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ดูแลช่วยเหลือนักเรียน</title><link rel="stylesheet" href="/css/style.css"></head><body><main class="app-main"><a href="/dashboard.html">← กลับแดชบอร์ด</a><h2>ระบบดูแลช่วยเหลือนักเรียน</h2><p>คัดกรอง เยี่ยมบ้าน ทุน กลุ่มเสี่ยง การช่วยเหลือ และการส่งต่อ</p><section class="panel"><form id="form" style="display:grid;gap:10px;max-width:640px"><input id="student_id" type="number" placeholder="รหัสนักเรียน (ID ในระบบ)" required><select id="case_type"><option value="screening">คัดกรอง</option><option value="home_visit">เยี่ยมบ้าน</option><option value="scholarship">ทุนการศึกษา</option><option value="risk">กลุ่มเสี่ยง</option><option value="behavior">พฤติกรรม</option><option value="assistance">การช่วยเหลือ</option><option value="referral">ส่งต่อ</option></select><select id="risk_level"><option value="normal">ปกติ</option><option value="watch">เฝ้าระวัง</option><option value="high">เสี่ยงสูง</option><option value="urgent">เร่งด่วน</option></select><textarea id="summary" placeholder="สรุปกรณี/ปัญหา" required></textarea><textarea id="action_taken" placeholder="การช่วยเหลือ/การดำเนินการ"></textarea><input id="follow_up_date" type="date"><button class="btn btn-primary">บันทึกกรณีช่วยเหลือ</button></form></section><h3>รายการล่าสุด</h3><div class="panel" id="list">กำลังโหลด...</div></main><script src="/js/api.js"></script><script>(async()=>{const me=await apiRequest('/api/auth/me');if(!me.user){location='/login.html';return}const list=async()=>{const d=await apiRequest('/api/student-support');document.getElementById('list').innerHTML=d.cases.length?'<table><tr><th>นักเรียน</th><th>ประเภท</th><th>ระดับ</th><th>สถานะ</th><th>สรุป</th></tr>'+d.cases.map(c=>`<tr><td>${c.student_name}</td><td>${c.case_type}</td><td>${c.risk_level}</td><td>${c.status}</td><td>${c.summary}</td></tr>`).join('')+'</table>':'ยังไม่มีข้อมูล'};document.getElementById('form').onsubmit=async e=>{e.preventDefault();await apiRequest('/api/student-support',{method:'POST',body:JSON.stringify({student_id:+student_id.value,case_type:case_type.value,risk_level:risk_level.value,summary:summary.value,action_taken:action_taken.value,follow_up_date:follow_up_date.value||null})});e.target.reset();await list()};await list()})().catch(e=>alert(e.message))</script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ระบบดูแลช่วยเหลือนักเรียน</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script>if(window.self!==window.top)document.documentElement.classList.add("embedded")</script>
+  <style>
+    .support-page{max-width:1240px}
+    .page-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;margin:10px 0 20px}
+    .page-head p{margin:5px 0 0;color:var(--color-text-muted)}
+    .page-kicker{display:inline-flex;align-items:center;gap:7px;margin-bottom:7px;color:#2573bd;font-size:12px;font-weight:650}
+    .page-kicker::before{content:"";width:7px;height:7px;border-radius:50%;background:#2b86e5;box-shadow:0 0 0 5px rgba(43,134,229,.11)}
+    .support-panel{padding:22px;overflow:visible}
+    .section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}
+    .section-head h3{margin:0;font-size:17px}
+    .section-head p{margin:3px 0 0;color:var(--color-text-muted);font-size:13px}
+    .section-number{display:grid;place-items:center;flex:0 0 34px;height:34px;border-radius:10px;background:#e8f3fd;color:#226eb3;font-size:12px;font-weight:700}
+    .section-title{display:flex;gap:11px;align-items:flex-start}
+    .support-form{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px}
+    .field{margin:0}.field label{display:block;margin:0 0 6px;color:var(--color-forest-900);font-size:12px;font-weight:650}
+    .field input,.field select,.field textarea{width:100%}
+    .field textarea{min-height:118px}
+    .span-3{grid-column:span 3}.span-6{grid-column:span 6}.span-12{grid-column:1/-1}
+    .form-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;padding-top:2px}
+    .form-actions .btn{width:auto;min-width:220px}
+    .form-note{margin-right:auto;color:var(--color-text-muted);font-size:11px}
+    .list-panel{margin-top:18px;padding:0;overflow:hidden}
+    .list-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:18px 20px;border-bottom:1px solid var(--color-border)}
+    .list-head h3{margin:0;font-size:17px}.list-head span{color:var(--color-text-muted);font-size:12px}
+    .table-wrap{overflow:auto}.table-wrap table{min-width:780px}
+    .case-name{font-weight:600;color:var(--color-forest-900)}
+    .case-summary{max-width:360px;white-space:normal;color:#4d6277}
+    .pill{display:inline-flex;align-items:center;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:650;background:#edf2f7;color:#53677a}
+    .pill.normal,.pill.closed{background:#e7f5ed;color:#23734b}.pill.watch{background:#fff4dc;color:#94610a}.pill.high,.pill.urgent{background:#fde9eb;color:#a93b49}.pill.open{background:#e6f1fc;color:#276eae}
+    .empty{padding:48px 22px;text-align:center;color:var(--color-text-muted)}
+    .toast{position:fixed;right:22px;bottom:22px;z-index:100;display:none;max-width:380px;padding:12px 15px;border-radius:13px;background:#183153;color:#fff;box-shadow:0 14px 38px rgba(24,49,83,.28)}
+    .toast.error{background:#a63f4c}
+    html.embedded .support-page{padding-top:18px}
+    @media(max-width:900px){.span-3{grid-column:span 6}.span-6{grid-column:1/-1}}
+    @media(max-width:620px){.page-head{align-items:flex-start;flex-direction:column}.support-panel{padding:16px}.support-form{grid-template-columns:1fr}.span-3,.span-6,.span-12{grid-column:auto}.form-actions{align-items:stretch;flex-direction:column}.form-actions .btn{width:100%;min-width:0}.form-note{margin:0}.list-head{align-items:flex-start;flex-direction:column}.toast{right:12px;bottom:12px;left:12px}}
+  </style>
+</head>
+<body>
+<main class="app-main support-page">
+  <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
+  <header class="page-head">
+    <div>
+      <span class="page-kicker">ระบบสนับสนุนนักเรียน</span>
+      <h2>ระบบดูแลช่วยเหลือนักเรียน</h2>
+      <p>คัดกรอง เยี่ยมบ้าน ทุนการศึกษา กลุ่มเสี่ยง การช่วยเหลือ และการส่งต่อ</p>
+    </div>
+  </header>
+
+  <section class="panel support-panel">
+    <div class="section-head">
+      <div class="section-title"><span class="section-number">01</span><div><h3>บันทึกกรณีช่วยเหลือ</h3><p>ระบุนักเรียน ประเภทกรณี และแนวทางติดตามให้ครบถ้วน</p></div></div>
+    </div>
+    <form id="supportForm" class="support-form">
+      <div class="field span-6"><label for="student_id">รหัสนักเรียน (ID ในระบบ) *</label><input id="student_id" type="number" min="1" placeholder="กรอกรหัสนักเรียน" required /></div>
+      <div class="field span-3"><label for="case_type">ประเภทกรณี *</label><select id="case_type"><option value="screening">คัดกรอง</option><option value="home_visit">เยี่ยมบ้าน</option><option value="scholarship">ทุนการศึกษา</option><option value="risk">กลุ่มเสี่ยง</option><option value="behavior">พฤติกรรม</option><option value="assistance">การช่วยเหลือ</option><option value="referral">ส่งต่อ</option></select></div>
+      <div class="field span-3"><label for="risk_level">ระดับความเสี่ยง *</label><select id="risk_level"><option value="normal">ปกติ</option><option value="watch">เฝ้าระวัง</option><option value="high">เสี่ยงสูง</option><option value="urgent">เร่งด่วน</option></select></div>
+      <div class="field span-6"><label for="summary">สรุปกรณีหรือปัญหา *</label><textarea id="summary" placeholder="บันทึกข้อเท็จจริงและประเด็นสำคัญโดยกระชับ" required></textarea></div>
+      <div class="field span-6"><label for="action_taken">การช่วยเหลือหรือการดำเนินการ</label><textarea id="action_taken" placeholder="ระบุสิ่งที่ดำเนินการแล้วหรือแนวทางช่วยเหลือ"></textarea></div>
+      <div class="field span-3"><label for="follow_up_date">วันที่ติดตามครั้งถัดไป</label><input id="follow_up_date" type="date" /></div>
+      <div class="form-actions span-12"><span class="form-note">ช่องที่มีเครื่องหมาย * จำเป็นต้องกรอก</span><button id="saveBtn" class="btn btn-primary" type="submit">บันทึกกรณีช่วยเหลือ</button></div>
+    </form>
+  </section>
+
+  <section class="panel list-panel">
+    <div class="list-head"><h3>รายการล่าสุด</h3><span id="caseCount">กำลังโหลดข้อมูล...</span></div>
+    <div class="table-wrap" id="caseList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="/js/api.js"></script>
+<script>
+const CASE_LABELS={screening:"คัดกรอง",home_visit:"เยี่ยมบ้าน",scholarship:"ทุนการศึกษา",risk:"กลุ่มเสี่ยง",behavior:"พฤติกรรม",assistance:"การช่วยเหลือ",referral:"ส่งต่อ"};
+const RISK_LABELS={normal:"ปกติ",watch:"เฝ้าระวัง",high:"เสี่ยงสูง",urgent:"เร่งด่วน"};
+const STATUS_LABELS={open:"กำลังดำเนินการ",in_progress:"กำลังติดตาม",closed:"เสร็จสิ้น"};
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+function toast(message,error=false){const box=document.getElementById("toast");box.textContent=message;box.className="toast"+(error?" error":"");box.style.display="block";clearTimeout(toast.timer);toast.timer=setTimeout(()=>box.style.display="none",3800)}
+async function loadCases(){const data=await apiRequest("/api/student-support");const cases=Array.isArray(data.cases)?data.cases:[];document.getElementById("caseCount").textContent=`ทั้งหมด ${cases.length.toLocaleString("th-TH")} รายการ`;const list=document.getElementById("caseList");if(!cases.length){list.innerHTML='<div class="empty">ยังไม่มีข้อมูลการดูแลช่วยเหลือนักเรียน</div>';return}list.innerHTML=`<table><thead><tr><th>นักเรียน</th><th>ประเภท</th><th>ระดับ</th><th>สถานะ</th><th>สรุปกรณี</th></tr></thead><tbody>${cases.map(item=>`<tr><td class="case-name">${esc(item.student_name||"-")}</td><td>${esc(CASE_LABELS[item.case_type]||item.case_type||"-")}</td><td><span class="pill ${esc(item.risk_level)}">${esc(RISK_LABELS[item.risk_level]||item.risk_level||"-")}</span></td><td><span class="pill ${esc(item.status)}">${esc(STATUS_LABELS[item.status]||item.status||"-")}</span></td><td class="case-summary">${esc(item.summary||"-")}</td></tr>`).join("")}</tbody></table>`}
+document.getElementById("supportForm").addEventListener("submit",async event=>{event.preventDefault();const button=document.getElementById("saveBtn");button.disabled=true;try{await apiRequest("/api/student-support",{method:"POST",body:JSON.stringify({student_id:Number(document.getElementById("student_id").value),case_type:document.getElementById("case_type").value,risk_level:document.getElementById("risk_level").value,summary:document.getElementById("summary").value.trim(),action_taken:document.getElementById("action_taken").value.trim(),follow_up_date:document.getElementById("follow_up_date").value||null})});event.target.reset();await loadCases();toast("บันทึกกรณีช่วยเหลือแล้ว")}catch(error){toast(error.message,true)}finally{button.disabled=false}});
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await loadCases()})().catch(error=>toast(error.message,true));
+</script>
+</body>
+</html>
