@@ -3504,7 +3504,11 @@ async function handleImportStudents(request, env) {
       `SELECT student_code, full_name FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
     ).bind(...codes).all();
     const existingByCode = new Map(results.map((row) => [String(row.student_code), row]));
-    const normalizeNameForMatch = (value) => String(value || "").normalize("NFKC").replace(/[\s.]+/g, "").toLocaleLowerCase("th");
+    const normalizeNameForMatch = (value) => String(value || "")
+      .normalize("NFKC")
+      .replace(/(?:^|\s)[\-–—](?=\s|$)/g, " ")
+      .replace(/[\s.]+/g, "")
+      .toLocaleLowerCase("th");
     const rowsToWrite = validRows.filter(({ rowNumber, baseValues }) => {
       const existing = existingByCode.get(String(baseValues[0]));
       if (!existing || normalizeNameForMatch(existing.full_name) === normalizeNameForMatch(baseValues[1])) return true;
