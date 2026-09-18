@@ -376,7 +376,10 @@
       1: "/department.html?dept=academic",
       5: "/modules.html?module=academic&focus=5",
       6: "/modules.html?module=academic&focus=6",
-    }),
+    }).concat([
+      { label: "Q-Info ระบบฐานข้อมูล", url: "https://qinfo.co/", external: true },
+      { label: "Q-Info Dashboard", url: "https://qinfo.co/dashboard/index.html?information", external: true },
+    ]),
     budget: moduleEntries("budget", [
       "โครงการและแผนการใช้จ่าย", "งบประมาณประจำปี", "รายรับ–รายจ่าย",
       "เงินอุดหนุนและค่าใช้จ่ายนักเรียน", "หนังสือขอใช้งบประมาณ", "ขออนุมัติเบิกจ่าย",
@@ -457,6 +460,12 @@
         link.dataset.parentPage = key;
         link.dataset.url = item.url;
         link.textContent = item.label;
+        if (item.external) {
+          link.dataset.external = "true";
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.title = "เปิดเว็บไซต์ภายนอกในแท็บใหม่";
+        }
         inner.appendChild(link);
       });
       children.appendChild(inner);
@@ -519,6 +528,8 @@
     {title:"ข้อมูลครูและบุคลากร",subtitle:"ทะเบียนบุคลากรและใบประกอบวิชาชีพ",page_key:"staff",url:"/staff.html",keywords:"ครู บุคลากร ใบประกอบ"},
     {title:"ปีการศึกษาและภาคเรียน",subtitle:"กำหนดช่วงเวลาการดำเนินงาน",page_key:"academic-periods",url:"/academic-years.html",keywords:"ปี ภาคเรียน เทอม"},
     {title:"ฝ่ายบริหารงานวิชาการ",subtitle:"โครงการและงานวิชาการ",page_key:"academic",url:"/modules.html?module=academic",keywords:"หลักสูตร ตารางเรียน วิชาการ"},
+    {title:"Q-Info ระบบฐานข้อมูล",subtitle:"ระบบฐานข้อมูลสารสนเทศเพื่อการจัดการศึกษาอย่างมีคุณภาพ",page_key:"academic",url:"https://qinfo.co/",keywords:"qinfo q-info คิวอินโฟ นักเรียน ผลการเรียน การมาเรียน",external:true},
+    {title:"Q-Info Dashboard",subtitle:"เปิดแดชบอร์ดสารสนเทศ Q-Info",page_key:"academic",url:"https://qinfo.co/dashboard/index.html?information",keywords:"qinfo q-info dashboard แดชบอร์ด สารสนเทศ",external:true},
     {title:"ฝ่ายบริหารงานงบประมาณ",subtitle:"โครงการ งบประมาณ และการเงิน",page_key:"budget",url:"/modules.html?module=budget",keywords:"เงิน รายรับ รายจ่าย งบ"},
     {title:"ระบบพัสดุและครุภัณฑ์",subtitle:"ทะเบียนวัสดุ ครุภัณฑ์ และการตรวจนับ",page_key:"budget",url:"/inventory.html",keywords:"พัสดุ ครุภัณฑ์ วัสดุ serial"},
     {title:"ฝ่ายบริหารงานบุคคล",subtitle:"การลา คำสั่ง และพัฒนาบุคลากร",page_key:"personnel",url:"/modules.html?module=personnel",keywords:"บุคคล ลา เวร pa"},
@@ -563,6 +574,7 @@
   function openGlobalSearchResult(item){
     if(!item)return;
     closeGlobalSearch();document.getElementById("globalSearchInput").blur();
+    if(item.external){window.open(item.url,"_blank","noopener,noreferrer");return}
     if(item.page_key==="overview"){showOverview();return}
     showPage(item.page_key,true,item.url);
   }
@@ -615,6 +627,7 @@
 
   document.querySelectorAll(".nav-child").forEach((link) => {
     link.addEventListener("click", (event) => {
+      if (link.dataset.external === "true") return;
       if (event.ctrlKey || event.metaKey || event.shiftKey) return;
       event.preventDefault();
       showPage(link.dataset.parentPage, true, link.dataset.url);
