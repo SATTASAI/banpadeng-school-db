@@ -9,6 +9,12 @@ import {
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
 import { ensurePersonnelData } from "./lib/personnel-data.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
+import {
+  ACADEMIC_CENTERS,
+  getAcademicCenter,
+  getAcademicTopicKeys,
+  resolveAcademicCenterKey,
+} from "./lib/academic-registry.js";
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 
 let extendedSchemaReady = false;
@@ -256,6 +262,12 @@ async function ensureWorkRecordSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_records_period ON work_records(academic_year_id,academic_term_id)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_records_responsible ON work_records(responsible_user_id,status,due_date)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_work_record_updates_record ON work_record_updates(work_record_id,created_at DESC)"),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS system_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT,
+      updated_by INTEGER REFERENCES users(id),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`),
   ]);
 }
 
@@ -1903,6 +1915,7 @@ async function handleListWorkRecords(request, env) {
   const params = new URL(request.url).searchParams;
   const area = cleanText(params.get("area"), 40);
   const topicKey = cleanText(params.get("topic"), 80);
+  const topicKeys = topicKey ? topicKey.split(",").map((key) => cleanText(key, 80)).filter(Boolean) : [];
   const status = cleanText(params.get("status"), 30);
   const q = cleanText(params.get("q"), 100);
   const academicYearId = Number(params.get("academic_year_id")) || null;
@@ -1912,7 +1925,10 @@ async function handleListWorkRecords(request, env) {
   const baseConditions = ["1=1"];
   const baseBinds = [];
   if (area) { baseConditions.push("w.area=?"); baseBinds.push(area); }
-  if (topicKey) { baseConditions.push("w.topic_key=?"); baseBinds.push(topicKey); }
+  if (topicKeys.length) {
+    baseConditions.push(`w.topic_key IN (${topicKeys.map(() => "?").join(",")})`);
+    baseBinds.push(...topicKeys);
+  }
   if (academicYearId) { baseConditions.push("w.academic_year_id=?"); baseBinds.push(academicYearId); }
   if (q) {
     baseConditions.push("(w.title LIKE ? OR COALESCE(w.description,'') LIKE ? OR COALESCE(w.notes,'') LIKE ? OR w.topic_label LIKE ?)");
@@ -2825,16 +2841,31 @@ const MANAGED_FILE_LIMITS = {
   "image/png": 2 * 1024 * 1024,
   "image/webp": 2 * 1024 * 1024,
   "image/gif": 2 * 1024 * 1024,
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": 25 * 1024 * 1024,
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": 25 * 1024 * 1024,
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": 25 * 1024 * 1024,
 };
 
-async function validateManagedFile(file) {
+const OFFICE_FILE_MIMES = {
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+};
+
+async function validateManagedFile(file, entityType = "") {
   if (!file || typeof file.arrayBuffer !== "function") return { error: "กรุณาเลือกไฟล์" };
-  const mimeType = String(file.type || "").toLowerCase();
+  const fileName = String(file.name || "").toLowerCase();
+  const extension = Object.keys(OFFICE_FILE_MIMES).find((ext) => fileName.endsWith(ext));
+  const declaredMime = String(file.type || "").toLowerCase();
+  const mimeType = OFFICE_FILE_MIMES[extension] || declaredMime;
+  const officeAllowed = ["document", "work_record", "inventory_transaction", "inventory_inspection"].includes(entityType);
+  if (extension && !officeAllowed) return { error: "หัวข้อนี้ไม่รองรับไฟล์เอกสาร Office" };
   const limit = MANAGED_FILE_LIMITS[mimeType];
-  if (!limit) return { error: "รองรับเฉพาะ PDF, JPG, PNG, WEBP และ GIF" };
+  if (!limit) return { error: "รองรับ PDF, JPG, PNG, WEBP, GIF และไฟล์ DOCX/XLSX/PPTX ในหัวข้องานเอกสาร" };
   if (file.size <= 0) return { error: "ไฟล์ว่างหรือไม่สมบูรณ์" };
   if (file.size > limit) {
-    const label = mimeType === "application/pdf" ? "PDF ต้องไม่เกิน 1 MB" : "รูปภาพต้องไม่เกิน 2 MB";
+    const label = mimeType === "application/pdf" ? "PDF ต้องไม่เกิน 1 MB"
+      : mimeType.startsWith("image/") ? "รูปภาพต้องไม่เกิน 2 MB" : "ไฟล์เอกสารต้องไม่เกิน 25 MB";
     return { error: `${label} กรุณาสแกนที่ 150 DPI ใช้ขาวดำ/Grayscale หรือบีบอัดไฟล์ก่อนอัปโหลด` };
   }
   const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
@@ -2843,7 +2874,8 @@ async function validateManagedFile(file) {
     : mimeType === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
     : mimeType === "image/png" ? bytes.slice(0,8).every((value,index)=>value===[0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a][index])
     : mimeType === "image/webp" ? ascii.startsWith("RIFF") && ascii.slice(8,12) === "WEBP"
-    : ascii.startsWith("GIF87a") || ascii.startsWith("GIF89a");
+    : mimeType === "image/gif" ? ascii.startsWith("GIF87a") || ascii.startsWith("GIF89a")
+    : bytes[0] === 0x50 && bytes[1] === 0x4b;
   if (!valid) return { error: "ชนิดไฟล์ไม่ตรงกับเนื้อหาไฟล์ กรุณาเลือกไฟล์ต้นฉบับที่ถูกต้อง" };
   return { mimeType, limit };
 }
@@ -3023,10 +3055,13 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   }
   const form = await request.formData().catch(()=>null);
   const file = form?.get("file");
-  const validation = await validateManagedFile(file);
+  const validation = await validateManagedFile(file, entityType);
   if (validation.error) return jsonResponse({ error: validation.error },400);
   const safeName = String(file.name || "attachment").replace(/[^\p{L}\p{N}._ -]/gu,"_").slice(0,180);
-  const provider = getFileStorageProvider(env);
+  const officeDocument = Object.values(OFFICE_FILE_MIMES).includes(validation.mimeType);
+  const provider = ["document", "work_record"].includes(entityType) || officeDocument
+    ? "drive"
+    : getFileStorageProvider(env);
   const allowDuplicate = String(form?.get("allow_duplicate") || "") === "1";
   const fileHash = await hashManagedFile(file);
   const existing = await env.DB.prepare("SELECT id,object_key,file_name,file_size,storage_provider,drive_file_id,file_hash FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
