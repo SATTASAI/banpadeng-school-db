@@ -350,81 +350,95 @@
 
   const SIDEBAR_SUBMENUS = {
     students: pageEntries("/students.html", [
-      "ประวัติและข้อมูลส่วนตัว", "ข้อมูลผู้ปกครองและครอบครัว", "ที่อยู่ สุขภาพ และความด้อยโอกาส",
-      "ชั้นเรียน ห้องเรียน และครูประจำชั้น", "ย้ายเข้า ย้ายออก และจำหน่ายนักเรียน",
-      "การมาเรียนและพฤติกรรม", "ผลการเรียนและกิจกรรมนักเรียน",
+      "ข้อมูลส่วนตัว สุขภาพ และความด้อยโอกาส", "ครอบครัวและผู้ปกครอง",
+      "ชั้นเรียน ห้องเรียน และครูประจำชั้น", "การย้ายเข้า ย้ายออก และสถานภาพนักเรียน",
+    ]).concat([
+      { label:"ข้อมูลการเรียนจาก Q-Info", url:"https://qinfo.co/", external:true },
+      { label:"ดาวน์โหลด/นำเข้า Template นักเรียน", url:"/import-center.html?template=students" },
     ]),
-    staff: moduleEntries("staff", [
-      "ประวัติและข้อมูลการติดต่อ", "ตำแหน่ง วิทยฐานะ และอายุราชการ", "วุฒิการศึกษาและวิชาเอก",
-      "ภาระงานและงานที่ได้รับมอบหมาย", "การลา การอบรม และพัฒนาตนเอง", "คำสั่งปฏิบัติหน้าที่",
-      "วันหมดอายุใบประกอบวิชาชีพ", "ผลงานและรางวัล", "ข้อมูลการอบรมและพัฒนา",
-    ], {
-      0: "/staff.html?section=profile",
-      4: "/leave.html",
-      6: "/staff.html?section=license",
-    }),
+    staff: [
+      { label:"ทะเบียนประวัติและคุณวุฒิ", url:"/staff.html?section=profile" },
+      { label:"ภาระงานและคำสั่งปฏิบัติหน้าที่", url:"/work-center.html?area=staff&topic=3,5" },
+      { label:"การลา", url:"/leave.html" },
+      { label:"ใบประกอบวิชาชีพและวันหมดอายุ", url:"/staff.html?section=license" },
+      { label:"การอบรมและพัฒนาตนเอง", url:"/work-center.html?area=staff&topic=4,8" },
+      { label:"ผลงาน รางวัล และแฟ้มสะสมงาน", url:"/work-center.html?area=staff&topic=7" },
+      { label:"ดาวน์โหลด/นำเข้า Template บุคลากร", url:"/import-center.html?template=staff" },
+    ],
     "academic-periods": pageEntries("/academic-years.html", [
       "ปีการศึกษา", "ภาคเรียน", "ช่วงเวลาที่กำลังใช้งาน",
     ]),
-    academic: moduleEntries("academic", [
-      "หลักสูตรสถานศึกษา", "โครงการและแผนงานด้านวิชาการ", "แผนการจัดการเรียนรู้",
-      "ตารางเรียนและตารางสอน", "ตารางสอบ", "ผลสัมฤทธิ์ทางการเรียน", "การวัดและประเมินผล",
-      "นิเทศ ติดตาม และประกันคุณภาพ", "จัดตารางเรียนและตารางสอน", "กำหนดวัน เวลา ห้องเรียน และครู",
-      "ตรวจสอบคาบเรียนชนกัน", "ตารางสอนรายบุคคล", "ตารางเรียนรายห้อง", "ตารางเรียนรายชั้น",
-      "ตารางใช้ห้องเรียน", "ส่งออกและพิมพ์ตาราง",
-    ], {
-      1: "/department.html?dept=academic",
-      5: "/modules.html?module=academic&focus=5",
-      6: "/modules.html?module=academic&focus=6",
-    }).concat([
+    academic: [
+      { label:"หลักสูตรและแผนการจัดการเรียนรู้", url:"/work-center.html?area=academic&topic=0,2" },
+      { label:"โครงการ แผนงาน และปฏิทินวิชาการ", url:"/department.html?dept=academic" },
+      { label:"ตารางเรียน ตารางสอน และการใช้ห้อง", url:"/work-center.html?area=academic&topic=3,8,9,10,11,12,13,14,15" },
+      { label:"ตารางสอบ การวัดผล และประเมินผล", url:"/work-center.html?area=academic&topic=4,6" },
+      { label:"นิเทศ ติดตาม และประกันคุณภาพ", url:"/work-center.html?area=academic&topic=7" },
       { label: "Q-Info ระบบฐานข้อมูล", url: "https://qinfo.co/", external: true },
       { label: "Q-Info Dashboard", url: "https://qinfo.co/dashboard/index.html?information", external: true },
-    ]),
-    budget: moduleEntries("budget", [
-      "โครงการและแผนการใช้จ่าย", "งบประมาณประจำปี", "รายรับ–รายจ่าย",
-      "เงินอุดหนุนและค่าใช้จ่ายนักเรียน", "หนังสือขอใช้งบประมาณ", "ขออนุมัติเบิกจ่าย",
-      "เอกสารเบิกจ่าย", "รายงานการเงิน", "ครุภัณฑ์และพัสดุ", "ทะเบียนและตรวจสอบทรัพย์สิน",
-    ], {
-      0: "/department.html?dept=budget",
-      8: "/inventory.html?section=items",
-      9: "/inventory.html?section=inspection",
-    }),
-    personnel: moduleEntries("personnel", [
-      "โครงการและแผนงานฝ่ายบุคคล", "คำสั่งปฏิบัติหน้าที่", "ระบบการลา", "ระบบเวรประจำวัน",
-      "บันทึกการปฏิบัติงาน", "แบบประเมิน PA", "การอบรมและพัฒนาบุคลากร", "แฟ้มประวัติและผลงานบุคลากร",
-    ], {
-      0: "/department.html?dept=personnel",
-      2: "/leave.html",
-      4: "/tasks.html",
-    }),
-    general: moduleEntries("general", [
-      "โครงการและแผนงานฝ่ายบริหารทั่วไป", "หนังสือราชการ", "งานสารบรรณ", "รับ–ส่งหนังสือ",
-      "อาคารสถานที่และห้องเรียน", "ยานพาหนะ", "งานประชาสัมพันธ์", "ข่าวสารและกิจกรรมโรงเรียน",
-    ], { 0: "/department.html?dept=general" }),
+    ],
+    budget: [
+      { label:"แผนงาน โครงการ และงบประมาณประจำปี", url:"/department.html?dept=budget" },
+      { label:"รายรับ รายจ่าย เงินอุดหนุน และค่าใช้จ่าย", url:"/work-center.html?area=budget&topic=2,3" },
+      { label:"ขอใช้งบประมาณและอนุมัติเบิกจ่าย", url:"/work-center.html?area=budget&topic=4,5" },
+      { label:"เอกสารเบิกจ่ายและรายงานการเงิน", url:"/work-center.html?area=budget&topic=6,7" },
+      { label:"พัสดุ ครุภัณฑ์ และตรวจสอบทรัพย์สิน", url:"/inventory.html" },
+      { label:"Template โครงการและงบประมาณ", url:"/import-center.html?template=projects" },
+      { label:"Template พัสดุและครุภัณฑ์", url:"/import-center.html?template=inventory" },
+    ],
+    personnel: [
+      { label:"โครงการและแผนงานฝ่ายบุคคล", url:"/department.html?dept=personnel" },
+      { label:"คำสั่ง ภาระงาน และเวรประจำวัน", url:"/work-center.html?area=personnel&topic=1,3" },
+      { label:"ระบบการลา", url:"/leave.html" },
+      { label:"บันทึกการปฏิบัติงาน", url:"/tasks.html" },
+      { label:"การประเมิน PA", url:"/work-center.html?area=personnel&topic=5" },
+      { label:"การอบรม ผลงาน และแฟ้มประวัติ", url:"/work-center.html?area=personnel&topic=6,7" },
+    ],
+    general: [
+      { label:"โครงการและแผนงานฝ่ายบริหารทั่วไป", url:"/department.html?dept=general" },
+      { label:"สารบรรณและหนังสือราชการ", url:"/work-center.html?area=general&topic=1,2,3" },
+      { label:"อาคาร สถานที่ และห้องเรียน", url:"/maintenance.html?section=facilities" },
+      { label:"ยานพาหนะ", url:"/work-center.html?area=general&topic=5" },
+      { label:"ประชาสัมพันธ์ ข่าวสาร และกิจกรรม", url:"/work-center.html?area=general&topic=6,7" },
+      { label:"Template อาคารและสถานที่", url:"/import-center.html?template=facilities" },
+    ],
     maintenance: pageEntries("/maintenance.html", [
       "แจ้งซ่อมใหม่", "ติดตามสถานะงานซ่อม", "อาคารและสถานที่", "ประวัติการดำเนินงาน",
     ]),
-    "student-support": pageEntries("/support.html", [
-      "คัดกรองนักเรียน", "เยี่ยมบ้าน", "ทุนการศึกษา", "นักเรียนกลุ่มเสี่ยง",
-      "บันทึกการช่วยเหลือและติดตามผล", "บันทึกพฤติกรรม", "ส่งต่อและประสานผู้ปกครอง", "รายงานนักเรียนรายบุคคล",
-    ]),
-    documents: pageEntries("/documents.html", [
-      "ไฟล์แยกตามฝ่าย", "ปีการศึกษา โครงการ และประเภท", "ไฟล์ Word Excel PDF และรูปภาพ",
-      "ค้นหาด้วยชื่อหรือคำสำคัญ", "ดาวน์โหลดและดูตัวอย่าง", "กำหนดสิทธิ์เอกสาร", "เวอร์ชันและประวัติการแก้ไข",
-    ]),
-    reports: pageEntries("/reports.html", [
-      "รายงานข้อมูลนักเรียน", "รายงานครูและบุคลากร", "รายงานการมาเรียน", "รายงานผลการเรียน",
-      "รายงานงบประมาณและการเงิน", "รายงานโครงการ", "รายงานพัสดุและครุภัณฑ์",
-      "รายงานสำหรับผู้บริหาร", "รายงานหน่วยงานต้นสังกัด", "ส่งออก Excel PDF และ Word",
-    ]),
-    users: pageEntries("/admin-users.html", [
-      "ผู้ดูแลระบบ", "ผู้บริหาร", "ครู", "ครูประจำชั้น", "เจ้าหน้าที่วิชาการ",
-      "เจ้าหน้าที่การเงิน", "เจ้าหน้าที่พัสดุ", "เจ้าหน้าที่ธุรการ", "ผู้ปกครอง", "กำหนดสิทธิ์การใช้งาน",
-    ]),
-    security: pageEntries("/security.html", [
-      "สำรองและกู้คืนข้อมูล", "ประวัติการแก้ไขข้อมูล", "Audit Log", "ล็อกข้อมูลสำคัญ",
-      "ยืนยันตัวตนและรหัสผ่าน", "รองรับผู้ใช้พร้อมกัน", "ป้องกันข้อมูลส่วนบุคคล", "แจ้งเตือนความผิดปกติ",
-    ]),
+    "student-support": [
+      { label:"คัดกรองและนักเรียนกลุ่มเสี่ยง", url:"/support.html?section=screening" },
+      { label:"เยี่ยมบ้านและประสานผู้ปกครอง", url:"/support.html?section=home-visit" },
+      { label:"ทุนการศึกษา", url:"/support.html?section=scholarship" },
+      { label:"พฤติกรรม การช่วยเหลือ และส่งต่อ", url:"/support.html?section=assistance" },
+      { label:"รายงานรายบุคคลและติดตามผล", url:"/support.html?section=reports" },
+      { label:"Template ระบบดูแลช่วยเหลือ", url:"/import-center.html?template=support" },
+    ],
+    documents: [
+      { label:"คลังไฟล์และหมวดหมู่เอกสาร", url:"/documents.html" },
+      { label:"ค้นหา ดาวน์โหลด และดูตัวอย่าง", url:"/documents.html?section=search" },
+      { label:"อัปโหลดและจัดการไฟล์", url:"/documents.html?section=upload" },
+      { label:"สิทธิ์ เวอร์ชัน และประวัติ", url:"/documents.html?section=history" },
+      { label:"ศูนย์แบบฟอร์มนำเข้าข้อมูล", url:"/import-center.html" },
+    ],
+    reports: [
+      { label:"รายงานนักเรียน", url:"/reports.html?section=students" },
+      { label:"รายงานบุคลากร", url:"/reports.html?section=staff" },
+      { label:"รายงานงบประมาณ โครงการ และพัสดุ", url:"/reports.html?section=finance" },
+      { label:"รายงานผู้บริหารและต้นสังกัด", url:"/reports.html?section=executive" },
+      { label:"ส่งออก Excel PDF และ Word", url:"/reports.html?section=export" },
+    ],
+    users: [
+      { label:"บัญชีผู้ใช้งาน", url:"/admin-users.html?section=accounts" },
+      { label:"บทบาทและกลุ่มผู้ใช้งาน", url:"/admin-users.html?section=roles" },
+      { label:"สิทธิ์เมนู ข้อมูล และการดำเนินการ", url:"/admin-users.html?section=permissions" },
+    ],
+    security: [
+      { label:"สำรองและกู้คืนข้อมูล", url:"/security.html?section=backup" },
+      { label:"ประวัติการแก้ไขและ Audit Log", url:"/security.html?section=audit" },
+      { label:"การยืนยันตัวตนและรหัสผ่าน", url:"/security.html?section=authentication" },
+      { label:"ป้องกันข้อมูลส่วนบุคคลและล็อกข้อมูล", url:"/security.html?section=privacy" },
+      { label:"ตรวจสอบและแจ้งเตือนความผิดปกติ", url:"/security.html?section=alerts" },
+    ],
     "line-settings": pageEntries("/line-settings.html", [
       "สถานะการเชื่อมต่อ", "กลุ่ม LINE ปลายทาง", "ทดสอบการแจ้งเตือน",
     ]),
