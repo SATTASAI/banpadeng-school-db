@@ -28,6 +28,7 @@
   .student-mobile-label { display:none; }
   .student-cell-muted { color:var(--color-text-muted); }
   .student-detail-btn { width:auto; white-space:nowrap; padding:8px 12px; font-size:13px; }
+  .detail-count { display:block; margin-top:3px; color:var(--color-text-muted); font-size:10px; font-weight:500; }
   .pagination { display:flex; align-items:center; justify-content:center; gap:10px; margin-top:14px; }
   .pagination .btn { width:auto; min-width:92px; }
   .page-indicator { min-width:110px; text-align:center; color:var(--color-text-muted); font-size:14px; }
@@ -339,7 +340,21 @@
 
   const STATUS_LABEL = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
   const STUDENT_DETAIL_SECTIONS = [
-    { title: "ข้อมูลร่างกายและข้อมูลทั่วไป", fields: [
+    { title: "ข้อมูลทะเบียนนักเรียน", fields: [
+      { key: "student_code", label: "เลขประจำตัวนักเรียน", readOnly: true },
+      { key: "full_name", label: "ชื่อ–นามสกุลในทะเบียน", readOnly: true, wide: true },
+      { key: "national_id", label: "เลขประจำตัวประชาชน" },
+      { key: "name_prefix", label: "คำนำหน้าชื่อ" },
+      { key: "first_name", label: "ชื่อ" },
+      { key: "last_name", label: "นามสกุล" },
+      { key: "birth_date", label: "วันเกิด", type: "date" },
+      { key: "grade_level", label: "ระดับชั้น" },
+      { key: "classroom", label: "ห้องเรียน" },
+      { key: "status", label: "สถานภาพนักเรียน", readOnly: true },
+    ] },
+    { title: "สุขภาพ ร่างกาย และข้อมูลทั่วไป", fields: [
+      { key: "health_conditions", label: "โรคประจำตัว", wide: true },
+      { key: "allergies", label: "การแพ้ยา/อาหาร", wide: true },
       { key: "weight_kg", label: "น้ำหนัก", type: "number", suffix: "กก." },
       { key: "height_cm", label: "ส่วนสูง", type: "number", suffix: "ซม." },
       { key: "blood_type", label: "กลุ่มเลือด" },
@@ -378,6 +393,9 @@
       { key: "disadvantage", label: "ความด้อยโอกาส", multiline: true, wide: true },
     ] },
   ];
+  const STUDENT_COMPLETENESS_FIELDS = STUDENT_DETAIL_SECTIONS
+    .flatMap((section) => section.fields)
+    .filter((field) => !["student_code", "full_name", "status"].includes(field.key));
 
   function escapeStudentText(value) {
     return String(value == null ? "" : value)
@@ -390,6 +408,14 @@
 
   function naturalCompare(a, b) {
     return String(a || "").localeCompare(String(b || ""), "th", { numeric: true, sensitivity: "base" });
+  }
+
+  function hasStudentValue(value) {
+    return value !== null && value !== undefined && String(value).trim() !== "";
+  }
+
+  function studentCompleteness(student) {
+    return STUDENT_COMPLETENESS_FIELDS.reduce((count, field) => count + (hasStudentValue(student[field.key]) ? 1 : 0), 0);
   }
 
   function populateStudentFilters() {
@@ -476,7 +502,7 @@
           <div class="student-grade student-cell-muted"><span class="student-mobile-label">ระดับชั้น: </span>${escapeStudentText(s.grade_level || "-")}</div>
           <div class="student-classroom student-cell-muted"><span class="student-mobile-label">ห้อง: </span>${escapeStudentText(s.classroom || "-")}</div>
           <div class="student-status"><span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${escapeStudentText(STATUS_LABEL[s.status] || s.status || "ไม่ระบุ")}</span></div>
-          <div class="student-actions"><button type="button" class="btn btn-ghost student-detail-btn" data-details-id="${Number(s.id)}">ดูข้อมูลเพิ่มเติม</button></div>
+          <div class="student-actions"><button type="button" class="btn btn-ghost student-detail-btn" data-details-id="${Number(s.id)}">ดูข้อมูลทั้งหมด<span class="detail-count">มีข้อมูล ${studentCompleteness(s)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง</span></button></div>
         </div>`
       )
       .join("")}`;
@@ -545,7 +571,12 @@
   }
 
   function displayDetailValue(field, value) {
-    if (value === null || value === undefined || String(value).trim() === "") return "ยังไม่มีข้อมูล";
+    if (!hasStudentValue(value)) return "-";
+    if (field.key === "status") return STATUS_LABEL[value] || String(value);
+    if (field.type === "date") {
+      const date = new Date(`${value}T00:00:00`);
+      if (!Number.isNaN(date.getTime())) return new Intl.DateTimeFormat("th-TH", { day:"numeric", month:"long", year:"numeric" }).format(date);
+    }
     return field.suffix ? `${value} ${field.suffix}` : String(value);
   }
 
@@ -560,20 +591,30 @@
             <div class="detail-item${field.wide ? " detail-wide" : ""}">
               <label class="detail-label" for="detail-${field.key}">${escapeStudentText(field.label)}</label>
               <div class="detail-value" data-detail-value="${field.key}"></div>
-              ${field.multiline
+              ${field.readOnly ? "" : field.multiline
                 ? `<textarea class="detail-input" id="detail-${field.key}" data-detail-input="${field.key}" style="display:none;"></textarea>`
-                : `<input class="detail-input" id="detail-${field.key}" data-detail-input="${field.key}" type="${field.type === "number" ? "number" : "text"}" ${field.type === "number" ? 'min="0" step="0.1" inputmode="decimal"' : ""} style="display:none;" />`}
+                : `<input class="detail-input" id="detail-${field.key}" data-detail-input="${field.key}" type="${field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}" ${field.type === "number" ? 'min="0" step="0.1" inputmode="decimal"' : ""} style="display:none;" />`}
             </div>`).join("")}
         </div>
-      </section>`).join("");
+      </section>`).join("") + `
+      <section class="detail-section">
+        <h3>ผู้ติดต่อที่บันทึกในระบบ</h3>
+        <div class="detail-grid">
+          ${(student.guardians || []).length ? student.guardians.map((guardian) => `
+            <div class="detail-item detail-wide">
+              <div class="detail-value">${escapeStudentText(guardian.full_name || "-")}</div>
+              <div class="detail-label">${escapeStudentText([guardian.relationship || "-", guardian.phone || "-", guardian.is_emergency_contact ? "ผู้ติดต่อฉุกเฉิน" : ""].filter(Boolean).join(" · "))}</div>
+            </div>`).join("") : `<div class="detail-item detail-wide"><div class="detail-value student-cell-muted">-</div></div>`}
+        </div>
+      </section>`;
 
     STUDENT_DETAIL_SECTIONS.flatMap((section) => section.fields).forEach((field) => {
       const value = student[field.key];
       const display = content.querySelector(`[data-detail-value="${field.key}"]`);
       const input = content.querySelector(`[data-detail-input="${field.key}"]`);
       display.textContent = displayDetailValue(field, value);
-      display.classList.toggle("student-cell-muted", value === null || value === undefined || String(value).trim() === "");
-      input.value = value == null ? "" : value;
+      display.classList.toggle("student-cell-muted", !hasStudentValue(value));
+      if (input) input.value = value == null ? "" : value;
     });
     setStudentDetailsEditMode(false);
   }
@@ -609,6 +650,7 @@
         student.student_code ? `เลขประจำตัว ${student.student_code}` : "",
         student.grade_level || "",
         student.classroom ? `ห้อง ${student.classroom}` : "",
+        `มีข้อมูล ${studentCompleteness(student)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง`,
       ].filter(Boolean).join(" · ");
       renderStudentDetails(student);
     } catch (err) {
