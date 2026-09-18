@@ -807,7 +807,7 @@ function canManageStudents(user) {
 }
 
 const STUDENT_DETAIL_FIELDS = [
-  "weight_kg", "height_cm", "blood_type", "religion", "ethnicity", "nationality",
+  "gender", "weight_kg", "height_cm", "blood_type", "religion", "ethnicity", "nationality",
   "house_number", "village_no", "road_soi", "subdistrict", "district", "province",
   "guardian_prefix", "guardian_first_name", "guardian_last_name", "guardian_occupation",
   "guardian_relationship", "father_prefix", "father_first_name", "father_last_name",
@@ -829,12 +829,16 @@ async function ensureStudentDetailsSchema(env) {
     mother_occupation TEXT, disadvantage TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`).run();
+  const { results: detailColumns } = await env.DB.prepare("PRAGMA table_info(student_details)").all();
+  if (!detailColumns.some((column) => column.name === "gender")) {
+    await env.DB.prepare("ALTER TABLE student_details ADD COLUMN gender TEXT").run();
+  }
   studentDetailsSchemaReady = true;
 }
 
 function normalizeStudentDetail(field, value) {
   const text = value == null ? "" : String(value).trim();
-  if (!text) return null;
+  if (!text || ["-", "–", "—"].includes(text)) return null;
   if (!STUDENT_DETAIL_NUMBERS.has(field)) return text;
   const number = Number(text.replace(",", "."));
   return Number.isFinite(number) && number >= 0 ? number : null;
@@ -3434,7 +3438,31 @@ async function handleImportStudents(request, env) {
   const skipped = [];
   const validRows = [];
   const seenCodes = new Map();
-  const asText = (value) => value == null ? "" : String(value).trim();
+  const asText = (value) => {
+    const text = value == null ? "" : String(value).trim();
+    return ["-", "–", "—"].includes(text) ? "" : text;
+  };
+  const importDate = (value) => {
+    const text = asText(value);
+    if (!text) return "";
+    let match = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+    if (match) {
+      let year = Number(match[3]);
+      if (year > 2400) year -= 543;
+      const month = Number(match[2]);
+      const day = Number(match[1]);
+      if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
+      }
+    }
+    match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      let year = Number(match[1]);
+      if (year > 2400) year -= 543;
+      return `${year.toString().padStart(4, "0")}-${match[2]}-${match[3]}`;
+    }
+    return text;
+  };
   body.rows.forEach((row, index) => {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
       skipped.push({ row: index + 1, reason: "รูปแบบข้อมูลไม่ถูกต้อง" });
@@ -3458,7 +3486,7 @@ async function handleImportStudents(request, env) {
       rowNumber: index + 1,
       baseValues: [
         studentCode, fullName, asText(row.national_id) || null,
-        prefix || null, first || null, last || null, asText(row.birth_date) || null,
+        prefix || null, first || null, last || null, importDate(row.birth_date) || null,
         asText(row.classroom) || null, asText(row.grade_level) || null,
         asText(row.health_conditions) || null, asText(row.allergies) || null,
         asText(row.photo_url) || null,
