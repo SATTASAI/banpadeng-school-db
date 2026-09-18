@@ -874,17 +874,22 @@ async function handleListStudents(request, env) {
 
   const url = new URL(request.url);
   const termId = Number(url.searchParams.get("academic_term_id"));
+  await ensureStudentDetailsSchema(env);
+  const detailColumns = STUDENT_DETAIL_FIELDS.map((field) => `d.${field}`).join(", ");
   let results;
   if (Number.isInteger(termId) && termId > 0) {
     ({ results } = await env.DB.prepare(
-      `SELECT s.*, e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
+      `SELECT s.*, ${detailColumns}, e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
               e.academic_year_id, e.academic_term_id
        FROM student_enrollments e JOIN students s ON s.id = e.student_id
+       LEFT JOIN student_details d ON d.student_id = s.id
        WHERE e.academic_term_id = ? ORDER BY e.classroom, s.full_name`
     ).bind(termId).all());
   } else {
     ({ results } = await env.DB.prepare(
-      "SELECT * FROM students ORDER BY classroom, full_name"
+      `SELECT s.*, ${detailColumns} FROM students s
+       LEFT JOIN student_details d ON d.student_id = s.id
+       ORDER BY s.classroom, s.full_name`
     ).all());
   }
 
@@ -3428,6 +3433,7 @@ async function handleImportStudents(request, env) {
 
   const skipped = [];
   const validRows = [];
+  const seenCodes = new Map();
   const asText = (value) => value == null ? "" : String(value).trim();
   body.rows.forEach((row, index) => {
     if (!row || typeof row !== "object" || Array.isArray(row)) {
@@ -3443,7 +3449,13 @@ async function handleImportStudents(request, env) {
       skipped.push({ row: index + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
       return;
     }
+    if (seenCodes.has(studentCode)) {
+      skipped.push({ row: index + 1, reason: `เลขประจำตัว ${studentCode} ซ้ำกับรายการที่ ${seenCodes.get(studentCode)} ในชุดเดียวกัน` });
+      return;
+    }
+    seenCodes.set(studentCode, index + 1);
     validRows.push({
+      rowNumber: index + 1,
       baseValues: [
         studentCode, fullName, asText(row.national_id) || null,
         prefix || null, first || null, last || null, asText(row.birth_date) || null,
@@ -3461,13 +3473,25 @@ async function handleImportStudents(request, env) {
     // One lookup plus at most two writes per student (ทะเบียนหลัก + ข้อมูลเพิ่มเติม).
     const codes = [...new Set(validRows.map((row) => row.baseValues[0]))];
     const { results } = await env.DB.prepare(
-      `SELECT student_code FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
+      `SELECT student_code, full_name FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
     ).bind(...codes).all();
-    const knownCodes = new Set(results.map((row) => row.student_code));
+    const existingByCode = new Map(results.map((row) => [String(row.student_code), row]));
+    const normalizeNameForMatch = (value) => String(value || "").normalize("NFKC").replace(/[\s.]+/g, "").toLocaleLowerCase("th");
+    const rowsToWrite = validRows.filter(({ rowNumber, baseValues }) => {
+      const existing = existingByCode.get(String(baseValues[0]));
+      if (!existing || normalizeNameForMatch(existing.full_name) === normalizeNameForMatch(baseValues[1])) return true;
+      skipped.push({
+        row: rowNumber,
+        reason: `เลขประจำตัว ${baseValues[0]} มีอยู่แล้ว แต่ชื่อไม่ตรงกับ “${existing.full_name}” ระบบจึงไม่เขียนทับ`,
+      });
+      return false;
+    });
+    if (!rowsToWrite.length) return jsonResponse({ created: 0, updated: 0, skipped });
+    const knownCodes = new Set(existingByCode.keys());
     let created = 0;
     let updated = 0;
     const statements = [];
-    validRows.forEach(({ baseValues: values, details }) => {
+    rowsToWrite.forEach(({ baseValues: values, details }) => {
       if (knownCodes.has(values[0])) updated++;
       else { created++; knownCodes.add(values[0]); }
       // Retrying a committed batch updates the same student codes, without duplicates.
