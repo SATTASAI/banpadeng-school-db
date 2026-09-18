@@ -355,6 +355,7 @@
     { title: "สุขภาพ ร่างกาย และข้อมูลทั่วไป", fields: [
       { key: "health_conditions", label: "โรคประจำตัว", wide: true },
       { key: "allergies", label: "การแพ้ยา/อาหาร", wide: true },
+      { key: "gender", label: "เพศ" },
       { key: "weight_kg", label: "น้ำหนัก", type: "number", suffix: "กก." },
       { key: "height_cm", label: "ส่วนสูง", type: "number", suffix: "ซม." },
       { key: "blood_type", label: "กลุ่มเลือด" },
@@ -885,6 +886,7 @@
     { group: "ข้อมูลทะเบียนหลัก", key: "birth_date", label: "วันเกิด", synonyms: ["วันเกิด", "วันเดือนปีเกิด", "birthdate", "dateofbirth", "dob"] },
     { group: "ข้อมูลทะเบียนหลัก", key: "health_conditions", label: "โรคประจำตัว", synonyms: ["โรคประจำตัว", "โรค", "สุขภาพ", "health"] },
     { group: "ข้อมูลทะเบียนหลัก", key: "allergies", label: "การแพ้", synonyms: ["การแพ้", "แพ้ยา", "แพ้อาหาร", "แพ้", "allergy", "allergies"] },
+    { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "gender", label: "เพศ", synonyms: ["เพศ", "เพศของนักเรียน", "gender", "sex"] },
     { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "weight_kg", label: "น้ำหนัก", synonyms: ["น้ำหนัก", "น้ำหนัก(กก.)", "น้ำหนักกก", "weight", "weightkg"] },
     { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "height_cm", label: "ส่วนสูง", synonyms: ["ส่วนสูง", "ส่วนสูง(ซม.)", "ส่วนสูงซม", "ความสูง", "height", "heightcm"] },
     { group: "ข้อมูลร่างกายและข้อมูลทั่วไป", key: "blood_type", label: "กลุ่มเลือด", synonyms: ["กลุ่มเลือด", "หมู่เลือด", "กรุ๊ปเลือด", "bloodtype", "bloodgroup"] },
@@ -1003,6 +1005,24 @@
   function applyHeaderRow() {
     importParsed = extractHeadersAndRows(importRaw, importHeaderRowIndex);
     importMapping = fuzzyMatchColumns(importParsed.headers, STUDENT_IMPORT_FIELDS);
+    const duplicateStudentIdColumns = importParsed.headers
+      .map((header, index) => ({ index, normalized: normalizeHeader(header) }))
+      .filter((column) => column.normalized === normalizeHeader("เลขประจำตัวนักเรียน"));
+    if (duplicateStudentIdColumns.length >= 2) {
+      const scored = duplicateStudentIdColumns.map(({ index }) => {
+        const samples = importParsed.rows.slice(0, 50)
+          .map((row) => String(row[index] ?? "").replace(/\D/g, ""))
+          .filter(Boolean);
+        const nationalIdRatio = samples.length
+          ? samples.filter((value) => value.length === 13).length / samples.length
+          : 0;
+        return { index, nationalIdRatio };
+      }).sort((a, b) => b.nationalIdRatio - a.nationalIdRatio);
+      if (scored[0].nationalIdRatio >= 0.8) {
+        importMapping.national_id = scored[0].index;
+        importMapping.student_code = scored[scored.length - 1].index;
+      }
+    }
     renderMapping();
     renderPreview();
     document.getElementById("importStep2").style.display = "block";
