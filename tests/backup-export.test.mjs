@@ -46,6 +46,7 @@ test("polling uses a short-lived signed ticket without querying blocked D1", asy
   globalThis.fetch = async (_url, options) => {
     calls++;
     const body = JSON.parse(options.body);
+    assert.deepEqual(body.dump_options, { no_schema: false, no_data: false, tables: [] });
     if (calls === 1) assert.equal(body.current_bookmark, undefined);
     else assert.equal(body.current_bookmark, "bookmark-123");
     return Response.json({ success: true, result: { at_bookmark: "bookmark-123", success: true } });
@@ -62,22 +63,60 @@ test("polling uses a short-lived signed ticket without querying blocked D1", asy
   } finally { globalThis.fetch = originalFetch; }
 });
 
-test("download proxies SQL without exposing signed URL and records audit", async () => {
+test("completed poll downloads SQL directly without exporting again", async () => {
   const env = environment();
   const token = await signJWT({ sub: 1 }, secret);
   const ticket = await signJWT({ purpose: "d1_backup_export", sub: 1, bookmark: "bookmark-123" }, secret, 600);
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => String(url).includes("api.cloudflare.com")
-    ? Response.json({ success: true, result: { status: "complete", at_bookmark: "bookmark-123", result: { signed_url: "https://download.example/file.sql" } } })
-    : new Response("CREATE TABLE example (id INTEGER);");
+  let apiCalls = 0;
+  globalThis.fetch = async url => {
+    if (String(url).includes("api.cloudflare.com")) {
+      apiCalls++;
+      return Response.json({ success: true, result: { status: "complete", at_bookmark: "bookmark-123", result: { signed_url: "https://download.example/file.sql" } } });
+    }
+    return new Response("CREATE TABLE example (id INTEGER);");
+  };
   try {
-    const response = await handleBackupExport(await request("download", token, { ticket }), env, "/api/security/backup/download");
+    const response = await handleBackupExport(await request("poll", token, { ticket }), env, "/api/security/backup/poll");
     assert.equal(response.status, 200);
     assert.match(response.headers.get("Content-Disposition"), /attachment/);
     assert.equal(await response.text(), "CREATE TABLE example (id INTEGER);");
     assert.equal(env.queries.filter(row => row.sql.includes("INSERT INTO backup_registry")).length, 1);
     assert.equal(env.queries.filter(row => row.sql.includes("INSERT INTO audit_logs")).length, 1);
     assert.ok(!JSON.stringify(env.queries).includes("download.example"));
+    assert.equal(apiCalls, 1);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("export that completes on the first request downloads immediately", async () => {
+  const env = environment();
+  const token = await signJWT({ sub: 1 }, secret);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => String(url).includes("api.cloudflare.com")
+    ? Response.json({ success: true, result: { status: "complete", result: { signed_url: "https://download.example/file.sql" } } })
+    : new Response("CREATE TABLE example (id INTEGER);");
+  try {
+    const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
+    assert.equal(response.headers.get("Content-Type"), "application/sql; charset=utf-8");
+    assert.match(await response.text(), /CREATE TABLE/);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("a revoked admin cannot download after a pending export completes", async () => {
+  const env = environment("executive");
+  const token = await signJWT({ sub: 1 }, secret);
+  const ticket = await signJWT({ purpose: "d1_backup_export", sub: 1, bookmark: "bookmark-123" }, secret, 600);
+  const originalFetch = globalThis.fetch;
+  let downloaded = false;
+  globalThis.fetch = async url => {
+    if (String(url).includes("api.cloudflare.com")) return Response.json({ success: true, result: { status: "complete", result: { signed_url: "https://download.example/file.sql" } } });
+    downloaded = true;
+    return new Response("private");
+  };
+  try {
+    const response = await handleBackupExport(await request("poll", token, { ticket }), env, "/api/security/backup/poll");
+    assert.equal(response.status, 403);
+    assert.equal(downloaded, false);
   } finally { globalThis.fetch = originalFetch; }
 });
 

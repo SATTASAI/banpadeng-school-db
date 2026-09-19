@@ -38,7 +38,7 @@ function backupConfig(env) {
 
 async function callExport(env, bookmark) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/d1/database/${DATABASE_ID}/export`;
-  const body = { output_format: "polling" };
+  const body = { output_format: "polling", dump_options: { no_schema: false, no_data: false, tables: [] } };
   if (bookmark) body.current_bookmark = bookmark;
   let response;
   try {
@@ -68,12 +68,13 @@ export async function handleBackupExport(request, env, pathname) {
   const origin = request.headers.get("Origin");
   if (!origin || origin !== new URL(request.url).origin) return jsonResponse({ error: "คำขอไม่ถูกต้อง" }, 403, NO_STORE);
   const action = pathname.slice("/api/security/backup/".length);
-  if (action !== "start" && action !== "poll" && action !== "download") return jsonResponse({ error: "ไม่พบคำสั่ง" }, 404, NO_STORE);
+  if (action === "download") return jsonResponse({ error: "กรุณารีเฟรชหน้าสำรองข้อมูลก่อนทำรายการ" }, 410, NO_STORE);
+  if (action !== "start" && action !== "poll") return jsonResponse({ error: "ไม่พบคำสั่ง" }, 404, NO_STORE);
   let body;
   try { body = await request.json(); } catch { return jsonResponse({ error: "ข้อมูลคำขอไม่ถูกต้อง" }, 400, NO_STORE); }
   let user;
   let bookmark;
-  if (action === "start" || action === "download") {
+  if (action === "start") {
     user = await getCurrentUser(request, env);
     if (!user || user.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบเท่านั้น" }, 403, NO_STORE);
   }
@@ -83,7 +84,6 @@ export async function handleBackupExport(request, env, pathname) {
       typeof ticket.bookmark !== "string" || ticket.bookmark.length > 512) {
       return jsonResponse({ error: "รหัสงานส่งออกไม่ถูกต้องหรือหมดอายุ" }, 403, NO_STORE);
     }
-    if (action === "download" && ticket.sub !== user.id) return jsonResponse({ error: "ไม่มีสิทธิ์ดาวน์โหลดงานนี้" }, 403, NO_STORE);
     bookmark = ticket.bookmark;
   }
   if (!backupConfig(env)) return jsonResponse({ error: "ยังไม่ตั้งค่า CLOUDFLARE_ACCOUNT_ID และ CLOUDFLARE_D1_BACKUP_TOKEN" }, 503, NO_STORE);
@@ -91,12 +91,20 @@ export async function handleBackupExport(request, env, pathname) {
   try {
     const result = await callExport(env, bookmark);
     bookmark = result.at_bookmark || bookmark;
-    if (typeof bookmark !== "string" || !bookmark || bookmark.length > 512) throw new ExportFailure("missing_bookmark");
-    if (action !== "download") {
+    if (result.status !== "complete") {
+      if (typeof bookmark !== "string" || !bookmark || bookmark.length > 512) throw new ExportFailure("missing_bookmark");
       const ticket = action === "start" ? await signJWT({ purpose: "d1_backup_export", sub: user.id, bookmark }, env.JWT_SECRET, 600) : body.ticket;
-      return jsonResponse({ status: result.status === "complete" ? "complete" : "pending", ticket }, 200, NO_STORE);
+      return jsonResponse({ status: "pending", ticket }, 200, NO_STORE);
     }
-    if (result.status !== "complete" || !result.result?.signed_url) return jsonResponse({ error: "งานส่งออกยังไม่เสร็จ กรุณารอสักครู่" }, 409, NO_STORE);
+    // ดาวน์โหลดในคำขอเดียวกับที่ได้รับ signed_url: การ poll ซ้ำหลัง complete จะทำให้งานหมดอายุ
+    if (action === "poll") {
+      user = await getCurrentUser(request, env);
+      const ticket = await verifyJWT(body.ticket, env.JWT_SECRET);
+      if (!user || user.role !== "superadmin" || user.id !== ticket.sub) {
+        return jsonResponse({ error: "ไม่มีสิทธิ์ดาวน์โหลดงานนี้" }, 403, NO_STORE);
+      }
+    }
+    if (!result.result?.signed_url) throw new ExportFailure("missing_download_url");
 
     // URL ชั่วคราวอยู่เฉพาะฝั่งเซิร์ฟเวอร์ ไม่ส่งต่อไปยังเบราว์เซอร์หรือบันทึกลงฐานข้อมูล
     let signedUrl;
