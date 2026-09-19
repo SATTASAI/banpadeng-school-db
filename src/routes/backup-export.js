@@ -5,12 +5,31 @@ const NO_STORE = { "Cache-Control": "private, no-store", "X-Content-Type-Options
 const DATABASE_ID = "870fa9ec-122f-4161-a1ca-cc9979dcfa30";
 
 class ExportFailure extends Error {
-  constructor(stage, httpStatus = null, cloudflareCode = null) {
+  constructor(stage, httpStatus = null, cloudflareCode = null, reason = null) {
     super("D1 export failed");
     this.stage = stage;
     this.httpStatus = httpStatus;
     this.cloudflareCode = cloudflareCode;
+    this.reason = reason;
   }
+}
+
+function safeExportReason(raw, env) {
+  if (typeof raw !== "string") return null;
+  let reason = raw;
+  // Cloudflare อาจใส่ URL / SQL / ข้อมูลในผลตอบกลับ: กรองก่อนแสดงให้ผู้ดูแล
+  for (const secret of [env.CLOUDFLARE_D1_BACKUP_TOKEN, env.CLOUDFLARE_ACCOUNT_ID, DATABASE_ID]) {
+    if (typeof secret === "string" && secret.trim()) reason = reason.replaceAll(secret.trim(), "[hidden]");
+  }
+  reason = reason
+    .replace(/(?:https?:\/\/|www\.)\S+/gi, "[url]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [hidden]")
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/["'`][^"'`\r\n]{0,512}["'`]/g, "[value]")
+    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[hidden]")
+    .replace(/[\r\n<>]/g, " ")
+    .trim();
+  return reason.slice(0, 160) || null;
 }
 
 function backupConfig(env) {
@@ -35,7 +54,10 @@ async function callExport(env, bookmark) {
   if (!payload) throw new ExportFailure("cloudflare_response", response.status);
   if (!response.ok || !payload.success || payload.result?.status === "error" || payload.result?.success === false) {
     const code = payload.errors?.[0]?.code;
-    throw new ExportFailure("cloudflare_export", response.status, Number.isInteger(code) ? code : null);
+    throw new ExportFailure(
+      "cloudflare_export", response.status, Number.isInteger(code) ? code : null,
+      safeExportReason(payload.result?.error || payload.errors?.[0]?.message, env),
+    );
   }
   if (!payload.result) throw new ExportFailure("cloudflare_response", response.status);
   return payload.result;
@@ -96,12 +118,13 @@ export async function handleBackupExport(request, env, pathname) {
   } catch (error) {
     const stage = error instanceof ExportFailure ? error.stage : "download_or_log";
     const diagnostic = error instanceof ExportFailure
-      ? { stage, http_status: error.httpStatus, cloudflare_code: error.cloudflareCode }
+      ? { stage, http_status: error.httpStatus, cloudflare_code: error.cloudflareCode, reason: error.reason }
       : { stage };
     // รายงานเฉพาะรหัสและขั้นตอน ไม่ส่งข้อความดิบซึ่งอาจมี URL ชั่วคราวหรือข้อมูลลับ
     const code = diagnostic.cloudflare_code == null ? "" : `, code ${diagnostic.cloudflare_code}`;
     const status = diagnostic.http_status == null ? "" : ` HTTP ${diagnostic.http_status}${code}`;
-    return jsonResponse({ error: `ส่งออกฐานข้อมูลไม่สำเร็จ (${stage}${status})`, diagnostic }, 502, NO_STORE);
+    const reason = diagnostic.reason ? `: ${diagnostic.reason}` : "";
+    return jsonResponse({ error: `ส่งออกฐานข้อมูลไม่สำเร็จ (${stage}${status})${reason}`, diagnostic }, 502, NO_STORE);
   }
 }
 

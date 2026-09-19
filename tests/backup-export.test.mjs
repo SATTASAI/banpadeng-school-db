@@ -92,9 +92,8 @@ test("Cloudflare failure returns HTTP and error code without leaking credentials
     const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
     const result = await response.json();
     assert.equal(response.status, 502);
-    assert.deepEqual(result.diagnostic, { stage: "cloudflare_export", http_status: 403, cloudflare_code: 10000 });
+    assert.deepEqual(result.diagnostic, { stage: "cloudflare_export", http_status: 403, cloudflare_code: 10000, reason: "invalid [hidden]" });
     assert.ok(!JSON.stringify(result).includes("token-test"));
-    assert.ok(!JSON.stringify(result).includes("invalid"));
   } finally { globalThis.fetch = originalFetch; }
 });
 
@@ -106,5 +105,28 @@ test("Cloudflare response that is not JSON is identified separately", async () =
   try {
     const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
     assert.equal((await response.json()).diagnostic.stage, "cloudflare_response");
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("HTTP 200 with a failed D1 export reveals a redacted reason", async () => {
+  const env = environment();
+  const token = await signJWT({ sub: 1 }, secret);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    success: true,
+    result: {
+      success: false,
+      status: "error",
+      error: "Export failed for test@example.com: database busy at https://private.example/db?token=token-test",
+    },
+  });
+  try {
+    const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
+    const body = await response.json();
+    assert.equal(body.diagnostic.http_status, 200);
+    assert.match(body.diagnostic.reason, /database busy/);
+    assert.ok(!JSON.stringify(body).includes("test@example.com"));
+    assert.ok(!JSON.stringify(body).includes("private.example"));
+    assert.ok(!JSON.stringify(body).includes("token-test"));
   } finally { globalThis.fetch = originalFetch; }
 });
