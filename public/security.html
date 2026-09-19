@@ -49,17 +49,21 @@
     async function downloadBackup(){
       const button=el("backupBtn"),state=el("backupState");button.disabled=true;state.textContent="กำลังเริ่มส่งออก...";
       try{
-        let job=await apiRequest("/api/security/backup/start",{method:"POST",body:{}});
-        for(let tries=0;job.status!=="complete"&&tries<90;tries++){
-          state.textContent=`Cloudflare กำลังส่งออกข้อมูล... (${tries+1})`;
-          await nap(2000);
-          job=await apiRequest("/api/security/backup/poll",{method:"POST",body:{ticket:job.ticket}});
+        let ticket=null,blob=null;
+        for(let tries=0;tries<90;tries++){
+          if(tries){state.textContent=`Cloudflare กำลังส่งออกข้อมูล... (${tries})`;await nap(2000)}
+          const action=ticket?"poll":"start";
+          const response=await fetch(`/api/security/backup/${action}`,{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket?{ticket}:{})});
+          if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||"ส่งออกไม่สำเร็จ")}
+          if(response.headers.get("Content-Type")?.startsWith("application/sql")){blob=await response.blob();break}
+          const job=await response.json();
+          if(job.status!=="pending"||!job.ticket)throw new Error("สถานะการส่งออกไม่ถูกต้อง กรุณาลองอีกครั้ง");
+          ticket=job.ticket;
         }
-        if(job.status!=="complete")throw new Error("การส่งออกใช้เวลานาน กรุณาลองใหม่ในภายหลัง");
+        if(!blob)throw new Error("การส่งออกใช้เวลานาน กรุณาลองใหม่ในภายหลัง");
+        if(!blob.size)throw new Error("ไฟล์สำรองว่างเปล่า กรุณาลองอีกครั้ง");
         state.textContent="กำลังดาวน์โหลดไฟล์...";
-        const response=await fetch("/api/security/backup/download",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticket:job.ticket})});
-        if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||"ดาวน์โหลดไม่สำเร็จ")}
-        const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement("a");
+        const url=URL.createObjectURL(blob),link=document.createElement("a");
         link.href=url;link.download=`banpadeng-d1-${new Date().toISOString().slice(0,10)}.sql`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
         state.textContent="ดาวน์โหลดสำเร็จ โปรดตรวจสอบว่าไฟล์อยู่ในเครื่อง";await load();
       }catch(error){state.textContent=error.message}finally{button.disabled=false}
