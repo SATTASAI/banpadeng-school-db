@@ -5,6 +5,8 @@
 <title>งานวิเคราะห์ผู้เรียนรายบุคคล — โรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css">
 <style>
+  @font-face { font-family:"TH SarabunPSK"; src:url("/fonts/THSarabunPSK-Regular.ttf") format("truetype"); font-weight:400; font-style:normal; font-display:block; }
+  @font-face { font-family:"TH SarabunPSK"; src:url("/fonts/THSarabunPSK-Bold.ttf") format("truetype"); font-weight:700; font-style:normal; font-display:block; }
   .analysis-app { max-width:1240px; margin:auto; padding:24px; }
   .analysis-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:20px; }
   .analysis-head h1 { margin:0; font-size:25px; color:#183d66; }
@@ -192,6 +194,12 @@
       if(!students.length){showStatus("ไม่พบนักเรียนสำหรับพิมพ์",true);return;}
       $("printArea").innerHTML=students.map((s,i)=>buildPaper(s,i+1,students.length)).join("");
       const images=[...$("printArea").querySelectorAll("img")];await Promise.all(images.map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;})));
+      if(document.fonts){
+        try {
+          const [regular,bold]=await Promise.all([document.fonts.load('16pt "TH SarabunPSK"'),document.fonts.load('bold 16pt "TH SarabunPSK"')]);
+          if(!regular.length||!bold.length) throw new Error("โหลดฟอนต์ไม่สำเร็จ");
+        } catch { showStatus("ไม่สามารถโหลดฟอนต์ TH SarabunPSK ได้ กรุณาลองพิมพ์ใหม่เมื่อเชื่อมต่ออินเทอร์เน็ต",true);return; }
+      }
       showStatus(`เตรียมเอกสาร ${students.length} หน้าแล้ว`);window.print();
     }catch(e){showStatus(e.message,true);}
   }
