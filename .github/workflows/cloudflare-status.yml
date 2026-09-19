@@ -48,6 +48,13 @@ jobs:
               sys.exit(1)
           active = deployments[0]
           versions = active.get("versions") or []
+          annotations = active.get("annotations") or {}
+          # Report only short printable text from Cloudflare's optional deployment annotations.
+          def safe_label(value):
+              return "".join(char if char.isprintable() and char not in "`<>&" else " " for char in str(value or "unknown"))[:160].strip()
+          source = safe_label(active.get("source"))
+          triggered_by = safe_label(annotations.get("workers/triggered_by"))
+          message = safe_label(annotations.get("workers/message"))
           lines = [
               "## Cloudflare Worker deployment",
               "",
@@ -55,6 +62,9 @@ jobs:
               f"- Active deployment: `{active.get('id', 'unknown')}`",
               f"- Deployed at (UTC): `{active.get('created_on', 'unknown')}`",
               f"- Version: `{versions[0].get('version_id', 'unknown') if versions else 'unknown'}`",
+              f"- Deployment source: `{source}`",
+              f"- Triggered by: `{triggered_by}`",
+              f"- Deployment message: `{message}`",
               f"- GitHub commit that ran this check: `{os.environ.get('GITHUB_SHA', 'unknown')}`",
               "",
               "The GitHub commit shown above is the check trigger; this API response does not prove that commit is the deployed version.",
