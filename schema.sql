@@ -578,6 +578,7 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_facility ON maintenance_requests(faci
 CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status);
 CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_dedup ON maintenance_notifications(request_id, event_type, delivery_status, created_at DESC);
 
 -- LINE Messaging API: ปลายทางที่ตรวจพบจาก Webhook และประวัติรับเหตุการณ์แบบไม่เก็บข้อความสนทนา
 CREATE TABLE IF NOT EXISTS line_targets (
