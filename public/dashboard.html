@@ -355,6 +355,7 @@
       "ข้อมูลส่วนตัว สุขภาพ และความด้อยโอกาส", "ครอบครัวและผู้ปกครอง",
       "ชั้นเรียน ห้องเรียน และครูประจำชั้น", "การย้ายเข้า ย้ายออก และสถานภาพนักเรียน",
     ]).concat([
+      { label:"งานวิเคราะห์ผู้เรียนรายบุคคล", url:"/learner-analysis.html" },
       { label:"ข้อมูลการเรียนจาก Q-Info", url:"https://qinfo.co/", external:true },
       { label:"ดาวน์โหลด/นำเข้า Template นักเรียน", url:"/import-center.html?template=students" },
     ]),
@@ -544,6 +545,7 @@
   const SEARCH_PAGES = [
     {title:"แดชบอร์ดภาพรวม",subtitle:"ข้อมูลสรุปสำหรับผู้บริหาร",page_key:"overview",url:"/dashboard.html",keywords:"หน้าหลัก ภาพรวม dashboard"},
     {title:"ข้อมูลนักเรียน",subtitle:"ทะเบียนนักเรียนและผู้ปกครอง",page_key:"students",url:"/students.html",keywords:"นักเรียน ห้องเรียน ผู้ปกครอง"},
+    {title:"งานวิเคราะห์ผู้เรียนรายบุคคล",subtitle:"บันทึกและพิมพ์รายคนหรือรายห้อง",page_key:"students",url:"/learner-analysis.html",keywords:"วิเคราะห์ผู้เรียน พิมพ์ รายห้อง ครู"},
     {title:"ข้อมูลครูและบุคลากร",subtitle:"ทะเบียนบุคลากรและใบประกอบวิชาชีพ",page_key:"staff",url:"/staff.html",keywords:"ครู บุคลากร ใบประกอบ"},
     {title:"ปีการศึกษาและภาคเรียน",subtitle:"กำหนดช่วงเวลาการดำเนินงาน",page_key:"academic-periods",url:"/academic-years.html",keywords:"ปี ภาคเรียน เทอม"},
     {title:"ฝ่ายบริหารงานวิชาการ",subtitle:"โครงการและงานวิชาการ",page_key:"academic",url:"/modules.html?module=academic",keywords:"หลักสูตร ตารางเรียน วิชาการ"},
