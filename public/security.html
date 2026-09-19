@@ -34,6 +34,16 @@
       <div id="driveAuditResults" class="security-table" aria-live="polite"></div>
       <p class="muted">รายการนี้ไม่ตรวจไฟล์ที่อยู่ใน Drive แต่ไม่เคยลงทะเบียนในระบบ และไม่ใช่สำเนาสำรองของไฟล์</p>
     </section>
+    <section class="security-panel" aria-labelledby="driveBackupTitle">
+      <h2 id="driveBackupTitle">สำรองไฟล์ Google Drive</h2>
+      <p class="muted">ดาวน์โหลดไฟล์ที่ลงทะเบียนในระบบลงโฟลเดอร์บนเครื่อง พร้อมรายการไฟล์และผลตรวจ SHA-256 เฉพาะผู้ดูแลระบบ</p>
+      <div id="driveBackupControls" class="backup-action" hidden>
+        <button id="driveBackupBtn" type="button">เลือกโฟลเดอร์และเริ่มสำรองไฟล์</button>
+        <span id="driveBackupState" class="backup-state" role="status"></span>
+      </div>
+      <div id="driveBackupResults" class="security-table" aria-live="polite"></div>
+      <p class="muted">ใช้ Chrome หรือ Edge บนคอมพิวเตอร์ เลือกโฟลเดอร์ที่จำกัดสิทธิ์ แล้วเก็บสำเนาแยกจาก Drive ของโรงเรียน ไฟล์สำรองอาจมีข้อมูลส่วนบุคคล</p>
+    </section>
     <section class="security-panel"><h2>จำนวนข้อมูลในระบบ</h2><div class="security-grid" id="counts">กำลังโหลด...</div></section>
     <section class="security-panel"><h2>ประวัติการใช้งานล่าสุด</h2><div class="security-table" id="logs">กำลังโหลด...</div></section>
   </main>
@@ -50,6 +60,7 @@
       const backup=data.backup;
       if(!backup){el("backupConfig").textContent="การส่งออกฐานข้อมูลให้สิทธิ์เฉพาะผู้ดูแลระบบ";el("backupHistory").textContent="เฉพาะผู้ดูแลระบบ";return}
       el("driveAuditControls").hidden=false;
+      el("driveBackupControls").hidden=false;
       el("backupConfig").textContent=backup.configured?"พร้อมส่งออกฐานข้อมูล":"ยังไม่ได้ตั้งค่า CLOUDFLARE_ACCOUNT_ID และ CLOUDFLARE_D1_BACKUP_TOKEN ใน Worker";
       el("backupControls").hidden=!backup.configured;
       el("backupHistory").innerHTML=backup.history.length?`<table><thead><tr><th>วันเวลา</th><th>ไฟล์</th><th>ผู้ดำเนินการ</th></tr></thead><tbody>${backup.history.map(row=>`<tr><td>${escapeHtml(date(row.created_at))}</td><td>${escapeHtml(row.file_name)}</td><td>${escapeHtml(row.created_by)}</td></tr>`).join("")}</tbody></table>`:"ยังไม่มีประวัติการดาวน์โหลด";
@@ -96,6 +107,68 @@
       finally{button.disabled=false}
     }
     el("driveAuditBtn").addEventListener("click",auditDrive);
+    async function backupDrive(){
+      const button=el("driveBackupBtn"),state=el("driveBackupState"),results=el("driveBackupResults");
+      results.textContent="";
+      if(typeof window.showDirectoryPicker!=="function"){
+        state.textContent="เบราว์เซอร์นี้ยังไม่รองรับการเลือกโฟลเดอร์ กรุณาใช้ Chrome หรือ Edge บนคอมพิวเตอร์";return;
+      }
+      let target;
+      try{target=await window.showDirectoryPicker({mode:"readwrite"})}
+      catch(error){state.textContent=error.name==="AbortError"?"ยกเลิกการเลือกโฟลเดอร์":`เลือกโฟลเดอร์ไม่ได้: ${error.message}`;return}
+      button.disabled=true;
+      const report={schema_version:1,source:"banpadeng-school-db",created_at:new Date().toISOString(),
+        snapshot_max_id:null,expected_total:null,complete:false,files:[],error:null};
+      let folder;
+      try{
+        const suffix=crypto.randomUUID().slice(0,8);
+        folder=await target.getDirectoryHandle(`banpadeng-drive-backup-${new Date().toISOString().replace(/[:.]/g,"-")}-${suffix}`,{create:true});
+        const filesFolder=await folder.getDirectoryHandle("files",{create:true});
+        let after=0,maxId=null;
+        do{
+          const params=new URLSearchParams({after:String(after)});
+          if(maxId!==null)params.set("max_id",String(maxId));
+          const page=await apiRequest(`/api/security/drive-backup/manifest?${params}`);
+          if(maxId===null){maxId=page.max_id;report.snapshot_max_id=maxId;report.expected_total=page.total}
+          for(const file of page.files){
+            state.textContent=`กำลังสำรอง ${report.files.length+1}/${report.expected_total} ไฟล์`;
+            const extension=(file.file_name.match(/\.[a-zA-Z0-9]{1,12}$/)||[])[0]||"";
+            const localName=`attachment-${file.id}${extension}`;
+            const entry={...file,local_path:`files/${localName}`,actual_sha256:null,status:"error"};
+            try{
+              const response=await fetch(`/api/security/drive-backup/files/${file.id}`,{credentials:"same-origin",cache:"no-store"});
+              if(!response.ok){
+                if(response.status===401||response.status===403)throw new Error("สิทธิ์ผู้ดูแลระบบหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");
+                const detail=await response.json().catch(()=>({}));throw new Error(detail.error||`ดาวน์โหลดไม่สำเร็จ (${response.status})`);
+              }
+              const bytes=await response.arrayBuffer();
+              const digest=await crypto.subtle.digest("SHA-256",bytes);
+              entry.actual_sha256=Array.from(new Uint8Array(digest),byte=>byte.toString(16).padStart(2,"0")).join("");
+              entry.actual_size=bytes.byteLength;
+              const handle=await filesFolder.getFileHandle(localName,{create:true});
+              const stream=await handle.createWritable();await stream.write(bytes);await stream.close();
+              entry.status=bytes.byteLength!==Number(file.file_size)?"size_mismatch":file.sha256&&entry.actual_sha256!==file.sha256?"hash_mismatch":"ok";
+            }catch(error){entry.error=error.message;report.files.push(entry);if(error.message.includes("สิทธิ์ผู้ดูแลระบบหมดอายุ"))throw error;continue}
+            report.files.push(entry);
+          }
+          after=page.next_after;
+        }while(after!==null);
+        report.complete=report.files.length===report.expected_total&&report.files.every(file=>file.status==="ok");
+      }catch(error){report.error=error.message}
+      finally{
+        if(folder){
+          try{const handle=await folder.getFileHandle("manifest.json",{create:true});const stream=await handle.createWritable();
+            await stream.write(JSON.stringify(report,null,2)+"\n");await stream.close()}
+          catch(error){report.complete=false;report.error=`บันทึกรายการไฟล์ไม่สำเร็จ: ${error.message}`}
+        }
+        const issues=report.files.filter(file=>file.status!=="ok");
+        state.textContent=report.complete?`สำรองครบ ${report.files.length} ไฟล์ และตรวจสอบผ่าน`:`สำรองไม่ครบ: ${report.error||`${issues.length} ไฟล์มีปัญหา`}`;
+        results.innerHTML=`<p>ดาวน์โหลดแล้ว ${report.files.length.toLocaleString("th-TH")}/${Number(report.expected_total||0).toLocaleString("th-TH")} · ต้องตรวจสอบ ${issues.length.toLocaleString("th-TH")}</p>`+
+          (issues.length?`<table><thead><tr><th>รหัสไฟล์</th><th>ชื่อ</th><th>ผลตรวจ</th></tr></thead><tbody>${issues.map(file=>`<tr><td>${Number(file.id)}</td><td>${escapeHtml(file.file_name)}</td><td>${escapeHtml(file.error||file.status)}</td></tr>`).join("")}</tbody></table>`:"");
+        button.disabled=false;
+      }
+    }
+    el("driveBackupBtn").addEventListener("click",backupDrive);
     load().catch(error=>{el("backupConfig").classList.add("error");el("backupConfig").textContent=error.message});
   </script>
 </body>
