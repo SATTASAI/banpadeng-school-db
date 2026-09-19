@@ -136,11 +136,12 @@ function plannedLineEvent(){
   return $("uStatus").value!==r.status?$("uStatus").value:null;
 }
 function refreshNotifyChoice(){
-  const event=plannedLineEvent(),automatic=AUTO_LINE_EVENTS.has(event),recipient=summary.line_recipient_count;
+  const event=plannedLineEvent(),automatic=AUTO_LINE_EVENTS.has(event),recipient=summary.line_recipient_count,remaining=summary.line_remaining;
   $("uNotifyLine").disabled=!event||automatic;
   $("uNotifyLine").checked=!!event&&automatic;
   const estimate=recipient==null?"":` คาดว่าจะนับประมาณ ${Number(recipient).toLocaleString("th-TH")} ข้อความ`;
-  $("uNotifyHint").textContent=!event?"ไม่มีการเปลี่ยนสถานะหรือผู้รับผิดชอบ จึงไม่ส่ง LINE":automatic?`สถานะนี้ส่งอัตโนมัติและป้องกันการส่งซ้ำภายใน 10 นาที${estimate}`:`สถานะนี้ไม่ส่งอัตโนมัติ เลือกได้ว่าต้องการแจ้งกลุ่มหรือไม่${estimate}`;
+  const quotaWarning=remaining!==null&&remaining!==undefined&&Number(remaining)<=0?" · โควตาเดือนนี้หมดแล้ว ระบบจะบันทึกงานแต่ไม่ส่ง LINE":remaining!==null&&recipient!==null&&Number(remaining)<Number(recipient)*2?` · โควตาใกล้หมด เหลือ ${Number(remaining).toLocaleString("th-TH")}`:"";
+  $("uNotifyHint").textContent=!event?"ไม่มีการเปลี่ยนสถานะหรือผู้รับผิดชอบ จึงไม่ส่ง LINE":automatic?`สถานะนี้ส่งอัตโนมัติและป้องกันการส่งซ้ำภายใน 10 นาที${estimate}${quotaWarning}`:`สถานะนี้ไม่ส่งอัตโนมัติ เลือกได้ว่าต้องการแจ้งกลุ่มหรือไม่${estimate}${quotaWarning}`;
 }
 function openUpdate(){
   const r=current.request;$("updateSubtitle").textContent=`${r.request_no} · ${r.title}`;let options=TRANSITIONS[r.status]||[r.status];
