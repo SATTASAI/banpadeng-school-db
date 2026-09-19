@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>สถานะระบบ — โรงเรียนบ้านป่าเด็ง</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    .status-page{max-width:1180px}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:8px 0 18px}.page-head p{margin:4px 0 0;color:var(--color-text-muted)}
+    .page-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.page-actions .btn{width:auto}.refresh-note{font-size:12px;color:var(--color-text-muted)}
+    .health-hero{position:relative;overflow:hidden;display:grid;grid-template-columns:minmax(0,1.45fr) minmax(250px,.55fr);gap:18px;padding:24px;border:1px solid var(--color-border);border-radius:22px;background:linear-gradient(135deg,rgba(255,255,255,.94),rgba(231,244,255,.9));box-shadow:var(--shadow-card);margin-bottom:15px}
+    .health-hero::after{content:"";position:absolute;width:240px;height:240px;border-radius:50%;right:-80px;top:-120px;background:radial-gradient(circle,rgba(57,153,238,.22),transparent 68%);pointer-events:none}.hero-status{display:flex;align-items:center;gap:13px}.hero-light{width:15px;height:15px;border-radius:50%;background:#9BA8B6;box-shadow:0 0 0 7px rgba(155,168,182,.14)}.hero-light.healthy{background:#1AA36F;box-shadow:0 0 0 7px rgba(26,163,111,.14)}.hero-light.warning{background:#E69422;box-shadow:0 0 0 7px rgba(230,148,34,.15)}.hero-light.critical{background:#D74F5D;box-shadow:0 0 0 7px rgba(215,79,93,.14)}
+    .health-hero h2{font-size:23px;margin:0}.health-hero p{color:var(--color-text-muted);margin:8px 0 0}.hero-meta{display:grid;grid-template-columns:1fr 1fr;gap:9px;align-self:center;position:relative;z-index:1}.meta-box{padding:12px;border:1px solid rgba(76,112,148,.14);border-radius:14px;background:rgba(255,255,255,.7)}.meta-box span{display:block;font-size:11px;color:var(--color-text-muted)}.meta-box strong{font-size:14px}
+    .legend{display:flex;gap:13px;flex-wrap:wrap;margin:0 0 15px;color:var(--color-text-muted);font-size:12px}.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{width:8px;height:8px;border-radius:50%;background:#1AA36F}.legend .warn i{background:#E69422}.legend .danger i{background:#D74F5D}.legend .unknown i{background:#9BA8B6}
+    .service-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.service-card{padding:19px;background:rgba(255,255,255,.88);border:1px solid var(--color-border);border-radius:18px;box-shadow:0 10px 28px rgba(54,84,116,.06);min-width:0}.card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.service-name{display:flex;align-items:center;gap:11px}.service-icon{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:#E8F3FE;color:#176FC1;font-size:12px;font-weight:800;letter-spacing:.02em}.service-name h3{font-size:17px;margin:0}.service-name p{font-size:12px;color:var(--color-text-muted);margin:2px 0 0}.state-pill{white-space:nowrap;font-size:11px;font-weight:700;padding:5px 9px;border-radius:999px;background:#EDF1F5;color:#667789}.state-pill.healthy{background:#E7F7F0;color:#147754}.state-pill.warning{background:#FFF3DE;color:#9A6413}.state-pill.danger,.state-pill.critical{background:#FDE9EC;color:#AF3444}
+    .usage{margin-top:17px}.usage-head{display:flex;justify-content:space-between;gap:12px;font-size:13px}.usage-head span{color:var(--color-text-muted)}.usage-track{height:8px;margin-top:7px;border-radius:99px;background:#E8EEF4;overflow:hidden}.usage-bar{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#25A87C,#45C397);transition:width .45s ease}.usage-bar.warning{background:linear-gradient(90deg,#E7A337,#F1BD58)}.usage-bar.danger,.usage-bar.critical{background:linear-gradient(90deg,#D95260,#EE7480)}
+    .metric-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:15px}.metric{padding:10px;border-radius:12px;background:#F5F8FB;min-width:0}.metric span{display:block;font-size:10px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.metric strong{display:block;font-size:14px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card-note{margin:13px 0 0;padding-top:11px;border-top:1px solid rgba(72,91,112,.11);font-size:12px;color:var(--color-text-muted)}
+    .data-card{grid-column:1/-1}.data-counts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:16px}.data-count{padding:12px;text-align:center;border-radius:13px;background:linear-gradient(180deg,#F7FAFD,#EEF5FB)}.data-count strong{display:block;font-size:20px;color:#155F9F}.data-count span{font-size:11px;color:var(--color-text-muted)}
+    .advice-card{grid-column:1/-1;padding:18px 20px;border:1px solid rgba(32,123,199,.18);border-radius:17px;background:linear-gradient(135deg,#EEF8FF,#F8FBFD)}.advice-card h3{font-size:16px}.advice-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 20px;margin-top:10px}.advice-item{display:flex;gap:9px;font-size:13px;color:#48667F}.advice-item::before{content:"✓";font-weight:800;color:#1D83D1}
+    .error-panel{display:none;padding:15px;border-radius:14px;background:var(--color-danger-bg);color:var(--color-danger);margin-bottom:14px}.skeleton{opacity:.52;animation:pulse 1.25s ease-in-out infinite}@keyframes pulse{50%{opacity:.8}}
+    @media(max-width:780px){.page-head,.health-hero{display:block}.page-actions{margin-top:12px}.hero-meta{margin-top:16px}.service-grid{grid-template-columns:1fr}.data-counts{grid-template-columns:repeat(2,1fr)}.advice-list{grid-template-columns:1fr}.data-card,.advice-card{grid-column:auto}}
+    @media(max-width:440px){.app-main{padding:18px 14px}.health-hero{padding:18px}.metric-row{grid-template-columns:1fr 1fr}.hero-meta{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<main class="app-main status-page">
+  <div class="page-head">
+    <div>
+      <a href="/dashboard.html">← กลับแดชบอร์ด</a>
+      <h1 style="margin-top:8px">สถานะระบบ</h1>
+      <p>ตรวจสอบบริการหลัก พื้นที่จัดเก็บ และโควตาการแจ้งเตือนจากจุดเดียว</p>
+    </div>
+    <div class="page-actions">
+      <span class="refresh-note" id="refreshNote">อัปเดตอัตโนมัติทุก 60 วินาที</span>
+      <button class="btn btn-ghost" id="refreshBtn" type="button">ตรวจสอบอีกครั้ง</button>
+    </div>
+  </div>
+
+  <div class="error-panel" id="errorPanel"></div>
+  <section class="health-hero skeleton" id="healthHero">
+    <div>
+      <div class="hero-status"><span class="hero-light" id="overallLight"></span><h2 id="overallTitle">กำลังตรวจสอบระบบ...</h2></div>
+      <p id="overallCopy">ระบบกำลังติดต่อ Cloudflare D1, Google Drive และ LINE</p>
+    </div>
+    <div class="hero-meta">
+      <div class="meta-box"><span>ตรวจสอบล่าสุด</span><strong id="checkedAt">—</strong></div>
+      <div class="meta-box"><span>เวลาตอบสนอง</span><strong id="responseTime">—</strong></div>
+    </div>
+  </section>
+
+  <div class="legend"><span><i></i>ปกติ ต่ำกว่า 70%</span><span class="warn"><i></i>เฝ้าระวัง 70–84%</span><span class="danger"><i></i>เร่งตรวจสอบ ตั้งแต่ 85%</span><span class="unknown"><i></i>ยังไม่มีข้อมูล Usage</span></div>
+
+  <section class="service-grid">
+    <article class="service-card" id="workerCard"></article>
+    <article class="service-card" id="d1Card"></article>
+    <article class="service-card" id="driveCard"></article>
+    <article class="service-card" id="lineCard"></article>
+    <article class="service-card" id="r2Card"></article>
+    <article class="service-card data-card" id="dataCard"></article>
+    <aside class="advice-card">
+      <h3>เกณฑ์ตัดสินใจก่อนอัปเกรด</h3>
+      <div class="advice-list">
+        <div class="advice-item">70% เริ่มตรวจแนวโน้มและลบข้อมูลที่ไม่จำเป็น</div>
+        <div class="advice-item">85% วางแผนอัปเกรดหรือย้ายข้อมูลภายในรอบงบประมาณ</div>
+        <div class="advice-item">95% หยุดงานอัปโหลดที่ไม่เร่งด่วนและดำเนินการทันที</div>
+        <div class="advice-item">Workers Request จริงให้ตรวจใน Cloudflare Dashboard ก่อนซื้อแพ็กเกจ</div>
+      </div>
+    </aside>
+  </section>
+</main>
+
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
+const STATE_LABEL={healthy:"ปกติ",warning:"เฝ้าระวัง",danger:"ใกล้เต็ม",critical:"ต้องตรวจสอบ",unknown:"ไม่มีข้อมูล"};
+const fmtNumber=value=>value==null?"—":new Intl.NumberFormat("th-TH").format(Number(value));
+function fmtBytes(value){if(value==null||!Number.isFinite(Number(value)))return "—";let n=Number(value);const unit=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<unit.length-1){n/=1024;i++}return `${n.toLocaleString("th-TH",{maximumFractionDigits:i>1?2:1})} ${unit[i]}`}
+function fmtDate(value){if(!value)return "—";const date=new Date(String(value).includes("T")?value:String(value).replace(" ","T")+"Z");return Number.isNaN(date.getTime())?"—":new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"medium"}).format(date)}
+function safePercent(value){return value!=null&&Number.isFinite(Number(value))?Math.max(0,Math.min(100,Number(value))):null}
+function cardHead(icon,title,subtitle,state){return `<div class="card-top"><div class="service-name"><div class="service-icon">${esc(icon)}</div><div><h3>${esc(title)}</h3><p>${esc(subtitle)}</p></div></div><span class="state-pill ${esc(state)}">${esc(STATE_LABEL[state]||state)}</span></div>`}
+function usageHtml(used,limit,percent,state,label="พื้นที่ที่ใช้"){const p=safePercent(percent);return `<div class="usage"><div class="usage-head"><span>${esc(label)}</span><strong>${p==null?"ยังไม่มีข้อมูล":`${p.toLocaleString("th-TH",{maximumFractionDigits:1})}%`}</strong></div><div class="usage-track"><div class="usage-bar ${esc(state)}" style="width:${p==null?0:p}%"></div></div><div class="usage-head" style="margin-top:6px"><span>${fmtBytes(used)}</span><span>${limit==null?"ไม่ทราบขีดจำกัด":`จาก ${fmtBytes(limit)}`}</span></div></div>`}
+function metrics(items){return `<div class="metric-row">${items.map(([label,value])=>`<div class="metric"><span>${esc(label)}</span><strong title="${esc(value)}">${esc(value)}</strong></div>`).join("")}</div>`}
+function render(data){
+  const s=data.services;const title={healthy:"ระบบพร้อมใช้งาน",warning:"ระบบใช้งานได้ แต่มีรายการต้องเฝ้าระวัง",critical:"พบรายการที่ควรตรวจสอบ"}[data.overall]||"ตรวจสอบสถานะแล้ว";
+  $("healthHero").classList.remove("skeleton");$("overallLight").className=`hero-light ${data.overall}`;$("overallTitle").textContent=title;
+  $("overallCopy").textContent=data.overall==="healthy"?"บริการหลักตอบสนองตามปกติ ยังไม่จำเป็นต้องอัปเกรด Cloudflare":data.overall==="warning"?"ระบบยังทำงานได้ โปรดตรวจการ์ดสีส้มก่อนถึงเกณฑ์วิกฤต":"โปรดเปิดดูบริการที่ขึ้นสีแดงและแก้ไขก่อนดำเนินงานสำคัญ";
+  $("checkedAt").textContent=fmtDate(data.generated_at);$("responseTime").textContent=`${fmtNumber(data.response_time_ms)} ms`;
+  $("workerCard").innerHTML=cardHead("CF","Cloudflare Workers","API และเว็บแอป",s.worker.status)+metrics([["การเชื่อมต่อ",s.worker.reachable?"พร้อมใช้งาน":"ขัดข้อง"],["โควตาฟรี/วัน",`${fmtNumber(s.worker.request_daily_limit)} requests`],["Usage วันนี้","ดูใน Cloudflare"]])+`<p class="card-note">${esc(s.worker.note)}</p>`;
+  $("d1Card").innerHTML=cardHead("D1","Cloudflare D1","ฐานข้อมูลหลักของระบบ",s.d1.status)+usageHtml(s.d1.used_bytes,s.d1.limit_bytes,s.d1.percent,s.d1.status)+metrics([["ผู้ใช้",fmtNumber(s.d1.counts.users)],["นักเรียน",fmtNumber(s.d1.counts.students)],["Audit log",fmtNumber(s.d1.counts.audit_logs)]]);
+  const driveNote=!s.drive.configured?`ขาดการตั้งค่า: ${(s.drive.missing||[]).join(", ")}`:s.drive.error||(!s.drive.quota_available?"บัญชี OAuth ชุดนี้ไม่อนุญาตให้อ่านโควตารวม แต่โฟลเดอร์ยังใช้งานได้":"โฟลเดอร์และ OAuth ตอบสนองตามปกติ");
+  $("driveCard").innerHTML=cardHead("GD","Google Drive","เอกสารและรูปภาพ",s.drive.status)+usageHtml(s.drive.used_bytes,s.drive.limit_bytes,s.drive.percent,s.drive.status)+metrics([["บัญชี",s.drive.account||"—"],["โฟลเดอร์",s.drive.folder_name||"—"],["ไฟล์ในทะเบียน",fmtNumber(s.drive.registered_files)]])+`<p class="card-note">${esc(driveNote)}</p>`;
+  const lineState=s.line.status;const lineUsage=s.line.monthly_usage==null?null:s.line.monthly_usage;const lineLimit=s.line.monthly_limit==null?null:s.line.monthly_limit;
+  $("lineCard").innerHTML=cardHead("LINE","LINE Messaging API","แจ้งซ่อมและสถานะงาน",lineState)+usageHtml(lineUsage,lineLimit,s.line.percent,lineState,"ข้อความเดือนนี้")+metrics([["คงเหลือ",s.line.remaining==null?"—":`${fmtNumber(s.line.remaining)} ข้อความ`],["ผู้รับโดยประมาณ",s.line.recipient_count==null?"—":`${fmtNumber(s.line.recipient_count)} คน`],["ส่งล้มเหลว 30 วัน",fmtNumber(s.line.failed_30d)]])+`<p class="card-note">${s.line.configured?`ปลายทาง: ${esc(s.line.target_name||"เลือกแล้ว")}`:"ยังตั้งค่า LINE ไม่ครบ"}</p>`;
+  $("r2Card").innerHTML=cardHead("R2","Cloudflare R2","ไฟล์ระบบและไฟล์เดิม",s.r2.status)+usageHtml(s.r2.registered_bytes,s.r2.limit_bytes,s.r2.percent,s.r2.status)+metrics([["Binding",s.r2.configured?"เชื่อมแล้ว":"ยังไม่เชื่อม"],["ไฟล์ในทะเบียน",fmtNumber(s.r2.registered_files)],["ขนาดในทะเบียน",fmtBytes(s.r2.registered_bytes)]])+`<p class="card-note">${esc(s.r2.note)}</p>`;
+  const counts=s.d1.counts||{};$("dataCard").innerHTML=cardHead("DB","ปริมาณข้อมูลในระบบ","จำนวนระเบียนสำคัญที่บันทึกอยู่","healthy")+`<div class="data-counts"><div class="data-count"><strong>${fmtNumber(counts.users)}</strong><span>ผู้ใช้งาน</span></div><div class="data-count"><strong>${fmtNumber(counts.students)}</strong><span>นักเรียน</span></div><div class="data-count"><strong>${fmtNumber(counts.projects)}</strong><span>โครงการ</span></div><div class="data-count"><strong>${fmtNumber(counts.documents)}</strong><span>เอกสาร</span></div><div class="data-count"><strong>${fmtNumber(s.storage.total_files)}</strong><span>ไฟล์แนบ</span></div></div>`;
+}
+async function loadStatus(showNotice=false){
+  const button=$("refreshBtn");button.disabled=true;button.textContent="กำลังตรวจสอบ...";$("errorPanel").style.display="none";
+  try{const data=await apiRequest("/api/system/status");render(data);if(showNotice)$("refreshNote").textContent=`ตรวจสอบแล้ว ${new Date().toLocaleTimeString("th-TH")}`}
+  catch(error){if(error.status===401||error.status===403){window.top.location.href="/dashboard.html";return}$("errorPanel").textContent=error.message;$("errorPanel").style.display="block"}
+  finally{button.disabled=false;button.textContent="ตรวจสอบอีกครั้ง"}
+}
+$("refreshBtn").onclick=()=>loadStatus(true);
+(async()=>{const {user}=await apiRequest("/api/auth/me");if(!user){window.top.location.href="/login.html";return}if(!user.is_admin){window.top.location.href="/dashboard.html";return}await loadStatus()})().catch(error=>{$("errorPanel").textContent=error.message;$("errorPanel").style.display="block"});
+setInterval(()=>{if(!document.hidden)loadStatus(false)},60000);
+</script>
+</body>
+</html>
