@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>งานวิเคราะห์ผู้เรียนรายบุคคล — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+  .analysis-app { max-width:1240px; margin:auto; padding:24px; }
+  .analysis-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:20px; }
+  .analysis-head h1 { margin:0; font-size:25px; color:#183d66; }
+  .analysis-head p { margin:5px 0 0; color:var(--color-text-muted); }
+  .analysis-grid { display:grid; grid-template-columns:minmax(240px,310px) minmax(0,1fr); gap:16px; align-items:start; }
+  .analysis-panel { background:white; border:1px solid #d9e5ef; border-radius:16px; padding:20px; box-shadow:0 7px 26px rgba(44,78,110,.055); }
+  .analysis-panel h2 { font-size:17px; color:#1f527e; margin:0 0 12px; }
+  .analysis-field { display:grid; gap:6px; margin-bottom:13px; }
+  .analysis-field label { color:#36536f; font-weight:600; font-size:13px; }
+  .analysis-field input,.analysis-field select,.analysis-field textarea { width:100%; min-width:0; padding:10px 12px; border:1px solid #cfdeea; border-radius:10px; background:#fff; color:#1b3046; font:inherit; }
+  .analysis-field textarea { min-height:76px; resize:vertical; }
+  .analysis-field :focus { outline:2px solid #b4d6f3; border-color:#2e83c8; }
+  .analysis-row { display:grid; grid-template-columns:1fr 1.2fr; gap:10px; }
+  .analysis-actions { display:flex; flex-wrap:wrap; gap:9px; margin:14px 0; }
+  .analysis-actions button { width:auto; }
+  .analysis-actions button:disabled { opacity:.5; cursor:not-allowed; }
+  .analysis-status { font-size:13px; color:#547087; min-height:1.5em; }
+  .analysis-status.error { color:#b33636; }
+  .analysis-roster { max-height:55vh; overflow:auto; border:1px solid #dce6ee; border-radius:12px; }
+  .analysis-student { width:100%; padding:11px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; border:0; border-bottom:1px solid #edf2f6; background:#fff; text-align:left; cursor:pointer; font:inherit; }
+  .analysis-student:last-child { border-bottom:0; }
+  .analysis-student.active { background:#eaf5ff; color:#174e80; }
+  .analysis-student small { color:#66829c; white-space:nowrap; }
+  .analysis-student:hover { background:#f0f7fc; }
+  .analysis-section { margin-top:20px; padding-top:14px; border-top:1px solid #e3ebf2; }
+  .analysis-section h3 { margin:0 0 12px; font-size:16px; color:#194a75; }
+  .analysis-hint { margin:0 0 12px; font-size:13px; color:#647c93; }
+  .analysis-print { display:none; }
+  @media(max-width:780px) { .analysis-grid { grid-template-columns:1fr; } .analysis-app { padding:14px; } .analysis-row { grid-template-columns:1fr; } }
+
+  @page { size:A4 portrait; margin:0; }
+  @media print {
+    html,body { margin:0; padding:0; background:white; }
+    .analysis-app,.app-topbar { display:none!important; }
+    .analysis-print { display:block; }
+    .analysis-sheet { position:relative; width:210mm; min-height:297mm; padding:16mm 17mm 14mm; break-after:page; page-break-after:always; color:#172a3c; background:#fff;
+      font-family:"TH SarabunPSK","TH Sarabun New",serif; font-size:16pt; line-height:1.22; }
+    .analysis-sheet:last-child { break-after:auto; page-break-after:auto; }
+    .paper-heading { position:relative; min-height:31mm; padding:0 0 8mm; display:flex; align-items:center; justify-content:center; text-align:center; border-bottom:2px solid #225b93; }
+    .paper-heading img { position:absolute; left:0; top:0; width:20mm; height:25mm; object-fit:contain; }
+    .paper-heading h1 { margin:0 0 1mm; font-size:20pt; color:#143d68; line-height:1.13; }
+    .paper-heading p { margin:0; }
+    .paper-meta { display:grid; grid-template-columns:1fr 1fr; gap:1.5mm 10mm; margin:5mm 0 4mm; }
+    .paper-line { display:flex; gap:3mm; align-items:baseline; min-width:0; }
+    .paper-line.wide { grid-column:1/-1; }
+    .paper-line label { white-space:nowrap; }
+    .paper-line span { flex:1; padding:0 2mm; min-height:6.5mm; border-bottom:1px dotted #8a9baaa0; overflow-wrap:anywhere; }
+    .paper-section { margin:3.8mm 0 0; break-inside:avoid; }
+    .paper-section h2 { margin:0 0 2mm; padding:1.2mm 2.3mm; border-left:3px solid #225b93; background:#f0f6fb; color:#173d65; font-size:16pt; }
+    .paper-columns { display:grid; grid-template-columns:1fr 1fr; gap:1.5mm 9mm; }
+    .paper-assessment { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .paper-assessment th,.paper-assessment td { border:1px solid #ccd8e3; padding:.8mm 2mm; text-align:left; vertical-align:top; line-height:1.14; overflow-wrap:anywhere; }
+    .paper-assessment th { background:#f4f8fb; }
+    .paper-box { min-height:13mm; padding:1mm 2mm; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .paper-sign { display:grid; grid-template-columns:1fr 1fr; gap:12mm; text-align:center; margin-top:5mm; }
+    .paper-sign span { display:block; border-bottom:1px dotted #879aaa; height:13mm; }
+    .paper-sign small { font-size:13pt; color:#62758a; }
+    .paper-count { text-align:right; margin-top:4mm; font-size:11pt; color:#789; }
+    .paper-section,.paper-heading,.paper-assessment th { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+<div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div></div>
+<main class="analysis-app">
+  <div class="analysis-head"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>เลือกปีการศึกษา ภาคเรียน และห้องเรียน เพื่อบันทึกหรือพิมพ์งานทั้งห้อง</p></div></div>
+  <div class="analysis-grid">
+    <aside class="analysis-panel"><h2>เลือกข้อมูลสำหรับจัดทำ</h2>
+      <div class="analysis-field"><label for="year">ปีการศึกษา</label><select id="year"></select></div>
+      <div class="analysis-field"><label for="term">ภาคเรียน</label><select id="term"></select></div>
+      <div class="analysis-field"><label for="classroom">ห้องเรียน</label><select id="classroom"></select></div>
+      <p class="analysis-hint" id="roomCount"></p>
+      <div class="analysis-actions"><button class="btn btn-ghost" id="printRoom" type="button" disabled>พิมพ์ทั้งห้อง</button></div>
+      <h2>รายชื่อนักเรียน</h2><div class="analysis-roster" id="roster"><p class="analysis-hint" style="padding:12px;">เลือกปี ภาคเรียน และห้องเรียน</p></div>
+    </aside>
+    <section class="analysis-panel" id="editor"><h2 id="editorTitle">เลือกนักเรียนเพื่อเริ่มบันทึก</h2>
+      <p class="analysis-hint">ข้อมูลทะเบียนจะถูกดึงจากระบบ ส่วนผลการประเมินให้ครูกรอกตามหลักฐานจริง</p>
+      <form id="form" hidden>
+        <div class="analysis-row"><div class="analysis-field"><label for="assessment_date">วันที่วิเคราะห์</label><input type="date" id="assessment_date"></div><div class="analysis-field"><label>ชั้น/ห้อง</label><input id="studentClass" readonly></div></div>
+        <div class="analysis-section"><h3>2. ความพร้อมและทักษะการเรียนรู้</h3><div id="assessmentFields"></div></div>
+        <div class="analysis-section"><h3>3. จุดเด่น ความสนใจ และสิ่งที่ควรพัฒนา</h3>
+          <div class="analysis-field"><label for="strengths">จุดเด่น/ความสนใจ</label><textarea id="strengths"></textarea></div>
+          <div class="analysis-field"><label for="needs">สิ่งที่ควรพัฒนา</label><textarea id="needs"></textarea></div>
+        </div>
+        <div class="analysis-section"><h3>4. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล</h3>
+          <div class="analysis-field"><label for="support_plan">แผนการสอน/ช่วยเหลือ</label><textarea id="support_plan"></textarea></div>
+        </div>
+        <div class="analysis-section"><h3>5. การติดตามผล</h3>
+          <div class="analysis-field"><label for="followup_date">วันที่ติดตาม</label><input type="date" id="followup_date"></div>
+          <div class="analysis-field"><label for="followup_result">ผลที่พบ</label><textarea id="followup_result"></textarea></div>
+          <div class="analysis-field"><label for="followup_next">แนวทางต่อไป</label><textarea id="followup_next"></textarea></div>
+        </div>
+        <div class="analysis-actions"><button class="btn btn-primary" id="save" type="submit">บันทึกผลวิเคราะห์</button><button class="btn btn-ghost" id="printOne" type="button">พิมพ์รายคน</button></div>
+      </form>
+      <p class="analysis-status" id="status" role="status"></p>
+    </section>
+  </div>
+</main>
+<div class="analysis-print" id="printArea" aria-hidden="true"></div>
+<script src="/js/api.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const categories = [["reading","การอ่าน"],["writing","การเขียน"],["thinking","การคิดและการสื่อสาร"],["participation","พฤติกรรมการเรียน"]];
+  const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","followup_date","followup_result","followup_next"];
+  let years=[],roster=[],selected=null,dirty=false,loading=false,viewer=null,rosterVersion=0;
+  const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+  const plain = value => value === null || value === undefined || String(value).trim() === "" ? "–" : String(value).trim();
+  const showStatus = (message,error=false) => { $("status").textContent=message; $("status").classList.toggle("error",error); };
+  const option = (value,label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+  const route = `/api/learner-analysis/`;
+  $("assessmentFields").innerHTML = categories.map(([key,label])=>`<div class="analysis-row"><div class="analysis-field"><label for="${key}_result">${label} — ผลที่พบ</label><input id="${key}_result" maxlength="4000"></div><div class="analysis-field"><label for="${key}_evidence">หลักฐาน/ข้อสังเกต</label><input id="${key}_evidence" maxlength="4000"></div></div>`).join("");
+  const currentYear = () => years.find(x=>x.id===Number($("year").value));
+  const studentLabel = s => `${s.full_name} · ${s.student_code}`;
+  function resetSelected() { selected=null; dirty=false; $("form").hidden=true; $("editorTitle").textContent="เลือกนักเรียนเพื่อเริ่มบันทึก"; showStatus(""); }
+  function renderRoster() {
+    $("roomCount").textContent = `พบ ${roster.length} คนในห้องนี้`;
+    $("printRoom").disabled = !roster.length;
+    $("roster").innerHTML = roster.length ? roster.map(s=>`<button type="button" class="analysis-student${selected?.id===s.id?" active":""}" data-id="${s.id}"><span>${escapeHtml(studentLabel(s))}</span><small>${s.analysis_id?"บันทึกแล้ว":"ยังไม่บันทึก"}</small></button>`).join("") : '<p class="analysis-hint" style="padding:12px;">ไม่พบนักเรียนที่กำลังศึกษาอยู่ในห้องนี้และภาคเรียนที่เลือก</p>';
+    $("roster").querySelectorAll("[data-id]").forEach(button=>button.onclick=()=>openStudent(Number(button.dataset.id)));
+  }
+  async function loadRoster() {
+    const version=++rosterVersion;
+    resetSelected(); roster=[]; $("printRoom").disabled=true;
+    const term=$("term").value,classroom=$("classroom").value;
+    if(!term||!classroom){$("roomCount").textContent="";$("roster").textContent="เลือกภาคเรียนและห้องเรียน";return;}
+    try { const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent(term)}&classroom=${encodeURIComponent(classroom)}`); if(version!==rosterVersion)return;roster=data.students;renderRoster(); }
+    catch(e) {if(version===rosterVersion)showStatus(e.message,true);}
+  }
+  async function loadClassrooms() {
+    ++rosterVersion;
+    const expectedTerm=$("term").value;
+    resetSelected(); roster=[]; $("printRoom").disabled=true; $("roster").textContent="กำลังโหลดห้องเรียน...";
+    const term=$("term").value;
+    if(!term){$("classroom").innerHTML=option("","ไม่มีภาคเรียน");return;}
+    try { const data=await apiRequest(`${route}classrooms?term_id=${encodeURIComponent(term)}`);if($("term").value!==expectedTerm)return;
+      const old=$("classroom").value; $("classroom").innerHTML=option("","เลือกห้องเรียน")+data.classrooms.map(item=>option(item.classroom,`${item.classroom} (${item.student_count} คน)`)).join("");
+      if(data.classrooms.some(item=>item.classroom===old)) $("classroom").value=old;
+      else if(data.classrooms.length===1) $("classroom").value=data.classrooms[0].classroom;
+      await loadRoster();
+    } catch(e){showStatus(e.message,true);}
+  }
+  function loadTerms(){const year=currentYear();$("term").innerHTML=option("","เลือกภาคเรียน")+(year?.terms||[]).map(term=>option(term.id,term.name)).join("");
+    const active=year?.terms.find(t=>t.status==="active") || year?.terms[0]; if(active)$("term").value=active.id;loadClassrooms();}
+  async function openStudent(id) {
+    const item=roster.find(s=>s.id===id);if(!item)return;
+    if(dirty && !(await saveRecord()))return;
+    selected=item;item.selectionYear=$("year").value;item.selectionTerm=$("term").value;item.selectionClass=$("classroom").value;
+    dirty=false;renderRoster();$("form").hidden=true;$("editorTitle").textContent=`${item.full_name} · ${item.grade_level||"–"}/${item.classroom||"–"}`;
+    showStatus("กำลังโหลดข้อมูล...");
+    try {const data=await apiRequest(`${route}records/${id}?term_id=${encodeURIComponent(item.selectionTerm)}`);
+      if(selected!==item)return;fields.forEach(field=>$(field).value=data.analysis?.[field]||"");
+      $("studentClass").value=[item.grade_level,item.classroom].filter(Boolean).join(" / ") || "–";
+      $("form").hidden=false;showStatus(data.analysis?"มีข้อมูลที่บันทึกไว้แล้ว":"ยังไม่มีผลวิเคราะห์ที่บันทึกไว้");
+    }catch(e){showStatus(e.message,true);}
+  }
+  async function saveRecord(){if(!selected||loading)return false; loading=true;$("save").disabled=true;
+    try{const body={term_id:Number(selected.selectionTerm)};fields.forEach(field=>body[field]=$(field).value);
+      await apiRequest(`${route}records/${selected.id}`,{method:"PUT",body});dirty=false;selected.analysis_id=selected.analysis_id||1;renderRoster();showStatus("บันทึกผลวิเคราะห์แล้ว");return true;
+    }catch(e){showStatus(e.message,true);return false;}
+    finally{loading=false;$("save").disabled=false;}
+  }
+  const dateThai = value => {if(!value)return "–";const d=new Date(`${value}T12:00:00+07:00`);return Number.isNaN(d.getTime()) ? "–" : new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"}).format(d);};
+  function paperLine(label,value,wide=false) {return `<div class="paper-line${wide?" wide":""}"><label>${escapeHtml(label)}</label><span>${escapeHtml(plain(value))}</span></div>`;}
+  function paperSection(title,content) {return `<section class="paper-section"><h2>${escapeHtml(title)}</h2>${content}</section>`;}
+  function buildPaper(s,number,total) {
+    const year=currentYear();const teacher=viewer?.full_name||"–";
+    const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
+    const health=[s.health_conditions,s.allergies].filter(Boolean).join("; ");
+    const personal=`<div class="paper-columns">${paperLine("ผู้ปกครอง",guardian)}${paperLine("ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback)}${paperLine("ข้อมูลสุขภาพที่ควรทราบ",health)}${paperLine("ข้อมูลสนับสนุนอื่น",s.disadvantage)}</div>`;
+    const assessment=`<table class="paper-assessment"><thead><tr><th style="width:35%">ด้านที่สังเกต</th><th style="width:22%">ผลที่พบ</th><th>หลักฐาน/ข้อสังเกต</th></tr></thead><tbody>${categories.map(([key,label])=>`<tr><td>${label}</td><td>${escapeHtml(plain(s[`${key}_result`]))}</td><td>${escapeHtml(plain(s[`${key}_evidence`]))}</td></tr>`).join("")}</tbody></table>`;
+    return `<article class="analysis-sheet"><header class="paper-heading"><img src="/logo.jpg" alt="ตราโรงเรียน"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>โรงเรียนบ้านป่าเด็ง</p><p>ปีการศึกษา ${escapeHtml(plain(year?.year_be))} · ${escapeHtml(plain($("term").selectedOptions[0]?.text))}</p></div></header>
+      <div class="paper-meta">${paperLine("ชื่อ–นามสกุล",s.full_name,true)}${paperLine("เลขประจำตัว",s.student_code)}${paperLine("ชั้น/ห้อง",[s.grade_level,s.classroom].filter(Boolean).join(" / "))}${paperLine("ครูผู้วิเคราะห์",teacher)}${paperLine("วันที่วิเคราะห์",dateThai(s.assessment_date))}</div>
+      ${paperSection("1. ข้อมูลพื้นฐานที่เกี่ยวข้อง",personal)}${paperSection("2. ความพร้อมและทักษะการเรียนรู้",assessment)}
+      ${paperSection("3. จุดเด่น ความสนใจ และสิ่งที่ควรพัฒนา",paperLine("จุดเด่น/ความสนใจ",s.strengths,true)+paperLine("สิ่งที่ควรพัฒนา",s.needs,true))}
+      ${paperSection("4. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล",`<div class="paper-box">${escapeHtml(plain(s.support_plan))}</div>`)}
+      ${paperSection("5. การติดตามผล",paperLine("วันที่ติดตาม",dateThai(s.followup_date))+paperLine("ผลที่พบ",s.followup_result,true)+paperLine("แนวทางต่อไป",s.followup_next,true))}
+      <footer class="paper-sign"><div><span></span><small>ลงชื่อครูผู้วิเคราะห์</small></div><div><span></span><small>ลงชื่อผู้ตรวจ/ผู้รับทราบ (ถ้ามี)</small></div></footer><div class="paper-count">ลำดับนักเรียน ${number}/${total}</div>
+    </article>`;
+  }
+  async function printRecords(onlyId){if(!$("term").value||!$("classroom").value)return;
+    if(dirty && !(await saveRecord()))return;
+    try {showStatus("กำลังเตรียมเอกสารพิมพ์...");const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent($("term").value)}&classroom=${encodeURIComponent($("classroom").value)}&print=1`);
+      const students=onlyId?data.students.filter(s=>s.id===onlyId):data.students;
+      if(!students.length){showStatus("ไม่พบนักเรียนสำหรับพิมพ์",true);return;}
+      $("printArea").innerHTML=students.map((s,i)=>buildPaper(s,i+1,students.length)).join("");
+      const images=[...$("printArea").querySelectorAll("img")];await Promise.all(images.map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;})));
+      showStatus(`เตรียมเอกสาร ${students.length} หน้าแล้ว`);window.print();
+    }catch(e){showStatus(e.message,true);}
+  }
+  $("form").addEventListener("submit",async event=>{event.preventDefault();await saveRecord();});
+  $("form").addEventListener("input",()=>{dirty=true;showStatus("มีข้อมูลที่ยังไม่ได้บันทึก");});
+  $("printOne").onclick=()=>selected&&printRecords(selected.id);
+  $("printRoom").onclick=()=>printRecords(null);
+  async function switchSelection(next){
+    if(dirty && !(await saveRecord())) {
+      $("year").value=selected.selectionYear;$("term").value=selected.selectionTerm;$("classroom").value=selected.selectionClass;
+      return;
+    }
+    await next();
+  }
+  $("year").onchange=()=>switchSelection(loadTerms);
+  $("term").onchange=()=>switchSelection(loadClassrooms);
+  $("classroom").onchange=()=>switchSelection(loadRoster);
+  window.addEventListener("afterprint",()=>{$("printArea").replaceChildren();});
+  (async()=>{try{const [{user},data]=await Promise.all([apiRequest("/api/auth/me"),apiRequest("/api/academic-periods")]);
+      if(!user?.role){window.location.href=user?"/pending.html":"/login.html";return;}viewer=user;years=data.years||[];
+      $("year").innerHTML=years.map(y=>option(y.id,y.label||`ปีการศึกษา ${y.year_be}`)).join("");
+      const current=years.find(y=>y.id===data.current?.academic_year_id)||years.find(y=>y.status==="active")||years[0];if(current)$("year").value=current.id;
+      loadTerms();
+    }catch(e){showStatus(e.message,true);}})();
+})();
+</script>
+</body>
+</html>
