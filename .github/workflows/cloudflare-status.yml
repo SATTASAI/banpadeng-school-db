@@ -1,0 +1,66 @@
+name: Check Cloudflare Worker deployment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deployment-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_STATUS_TOKEN: ${{ secrets.CLOUDFLARE_STATUS_TOKEN }}
+    steps:
+      - name: Read active Worker deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$CF_ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]]; then
+            echo '::error::Set the CLOUDFLARE_ACCOUNT_ID repository variable to the 32-character account ID.'
+            exit 1
+          fi
+          if [[ -z "$CF_STATUS_TOKEN" ]]; then
+            echo '::error::Set the CLOUDFLARE_STATUS_TOKEN repository secret.'
+            exit 1
+          fi
+          http_status=$(curl --silent --show-error --max-time 25 --output "$RUNNER_TEMP/deployment.json" --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CF_STATUS_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/workers/scripts/banpadeng-school-db/deployments?per_page=1")
+          if [[ "$http_status" != 200 ]]; then
+            echo "::error::Cloudflare deployment lookup returned HTTP $http_status. Check the token's Workers Scripts Read permission and account scope."
+            exit 1
+          fi
+          python3 - "$RUNNER_TEMP/deployment.json" <<'PY'
+          import json
+          import os
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as file:
+              response = json.load(file)
+          deployments = response.get("result", {}).get("deployments", [])
+          if response.get("success") is not True or not deployments:
+              print("::error::Cloudflare returned no active Worker deployment.")
+              sys.exit(1)
+          active = deployments[0]
+          versions = active.get("versions") or []
+          lines = [
+              "## Cloudflare Worker deployment",
+              "",
+              f"- Worker: `banpadeng-school-db`",
+              f"- Active deployment: `{active.get('id', 'unknown')}`",
+              f"- Deployed at (UTC): `{active.get('created_on', 'unknown')}`",
+              f"- Version: `{versions[0].get('version_id', 'unknown') if versions else 'unknown'}`",
+              f"- GitHub commit that ran this check: `{os.environ.get('GITHUB_SHA', 'unknown')}`",
+              "",
+              "The GitHub commit shown above is the check trigger; this API response does not prove that commit is the deployed version.",
+          ]
+          report = "\n".join(lines) + "\n"
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(report)
+          print(report)
+          PY
