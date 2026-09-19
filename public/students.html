@@ -503,7 +503,7 @@
           <div class="student-grade student-cell-muted"><span class="student-mobile-label">ระดับชั้น: </span>${escapeStudentText(s.grade_level || "-")}</div>
           <div class="student-classroom student-cell-muted"><span class="student-mobile-label">ห้อง: </span>${escapeStudentText(s.classroom || "-")}</div>
           <div class="student-status"><span class="status-chip ${s.status === "enrolled" ? "status-enrolled" : "status-other"}">${escapeStudentText(STATUS_LABEL[s.status] || s.status || "ไม่ระบุ")}</span></div>
-          <div class="student-actions"><button type="button" class="btn btn-ghost student-detail-btn" data-details-id="${Number(s.id)}">ดูข้อมูลทั้งหมด<span class="detail-count">มีข้อมูล ${studentCompleteness(s)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง</span></button></div>
+          <div class="student-actions"><button type="button" class="btn btn-ghost student-detail-btn" data-details-id="${Number(s.id)}">ดูข้อมูลทั้งหมด</button></div>
         </div>`
       )
       .join("")}`;

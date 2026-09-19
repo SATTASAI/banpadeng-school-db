@@ -894,22 +894,21 @@ async function handleListStudents(request, env) {
 
   const url = new URL(request.url);
   const termId = Number(url.searchParams.get("academic_term_id"));
-  await ensureStudentDetailsSchema(env);
-  const detailColumns = STUDENT_DETAIL_FIELDS.map((field) => `d.${field}`).join(", ");
+  // รายการสำหรับค้นหาและกรองเท่านั้น; ข้อมูลสุขภาพ ครอบครัว และเลขบัตรประชาชน
+  // จะถูกอ่านผ่าน /api/students/:id เมื่อเปิดข้อมูลรายคน
   let results;
   if (Number.isInteger(termId) && termId > 0) {
     ({ results } = await env.DB.prepare(
-      `SELECT s.*, ${detailColumns}, e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
+      `SELECT s.id, s.student_code, s.full_name,
+              e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
               e.academic_year_id, e.academic_term_id
        FROM student_enrollments e JOIN students s ON s.id = e.student_id
-       LEFT JOIN student_details d ON d.student_id = s.id
        WHERE e.academic_term_id = ? ORDER BY e.classroom, s.full_name`
     ).bind(termId).all());
   } else {
     ({ results } = await env.DB.prepare(
-      `SELECT s.*, ${detailColumns} FROM students s
-       LEFT JOIN student_details d ON d.student_id = s.id
-       ORDER BY s.classroom, s.full_name`
+      `SELECT s.id, s.student_code, s.full_name, s.grade_level, s.classroom, s.status
+       FROM students s ORDER BY s.classroom, s.full_name`
     ).all());
   }
 
@@ -1170,11 +1169,9 @@ async function handleListStaff(request, env) {
   await ensurePersonnelData(env);
 
   const { results } = await env.DB.prepare(
-    `SELECT p.id, p.user_id, p.prefix, p.first_name, p.last_name, p.full_name,
-            COALESCE(p.email, u.email) AS email, u.role,
+    `SELECT p.id, p.user_id, p.full_name, u.role,
             p.position, p.subjects, p.phone, p.homeroom_classroom,
-            p.license_issue_date, p.license_expiry_date,
-            p.source_file, p.source_sheet, p.source_row
+            p.license_issue_date, p.license_expiry_date
      FROM personnel_records p
      LEFT JOIN users u ON u.id = p.user_id
      WHERE p.status = 'active'
