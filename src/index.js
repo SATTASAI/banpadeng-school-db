@@ -184,6 +184,7 @@ async function ensureMaintenanceSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_assigned ON maintenance_requests(assigned_to, status)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_updates_request ON maintenance_updates(request_id, created_at DESC)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_request ON maintenance_notifications(request_id, created_at DESC)"),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_maintenance_notifications_dedup ON maintenance_notifications(request_id, event_type, delivery_status, created_at DESC)"),
   ]);
   try {
     await env.DB.prepare("ALTER TABLE maintenance_requests ADD COLUMN custom_location TEXT").run();
@@ -2400,7 +2401,39 @@ async function getSelectedLineTarget(env) {
     FROM line_targets WHERE is_default=1 AND status='active' ORDER BY selected_at DESC,id DESC LIMIT 1`).first();
   if (selected) return selected;
   const legacyTarget = cleanText(env.LINE_TARGET_ID, 255);
-  return legacyTarget ? { id: null, target_type: "legacy", target_id: legacyTarget, display_name: "ปลายทางจาก Environment" } : null;
+  const inferredType = legacyTarget?.startsWith("C") ? "group" : legacyTarget?.startsWith("R") ? "room" : "user";
+  return legacyTarget ? { id: null, target_type: inferredType, target_id: legacyTarget, display_name: "ปลายทางจาก Environment" } : null;
+}
+
+async function fetchLineApiJson(env, path) {
+  if (!env.LINE_CHANNEL_ACCESS_TOKEN) return null;
+  const response = await fetch(`https://api.line.me${path}`, {
+    headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
+  });
+  if (!response.ok) return null;
+  return response.json().catch(() => null);
+}
+
+async function getLineDeliveryMetrics(env, target) {
+  if (!target) return { recipient_count: null, monthly_usage: null, monthly_limit:null, remaining:null };
+  let recipientCount = target.target_type === "user" ? 1 : null;
+  if (target.target_type === "group" || target.target_type === "room") {
+    const scope = target.target_type === "group" ? "group" : "room";
+    const memberData = await fetchLineApiJson(env, `/v2/bot/${scope}/${encodeURIComponent(target.target_id)}/members/count`);
+    if (Number.isFinite(Number(memberData?.count))) recipientCount = Number(memberData.count);
+  }
+  const [usageData,quotaData] = await Promise.all([
+    fetchLineApiJson(env, "/v2/bot/message/quota/consumption"),
+    fetchLineApiJson(env, "/v2/bot/message/quota"),
+  ]);
+  const monthlyUsage = Number.isFinite(Number(usageData?.totalUsage)) ? Number(usageData.totalUsage) : null;
+  const monthlyLimit = quotaData?.type === "limited" && Number.isFinite(Number(quotaData?.value)) ? Number(quotaData.value) : null;
+  return {
+    recipient_count: recipientCount,
+    monthly_usage: monthlyUsage,
+    monthly_limit: monthlyLimit,
+    remaining: monthlyLimit !== null && monthlyUsage !== null ? Math.max(0,monthlyLimit-monthlyUsage) : null,
+  };
 }
 
 async function pushLineMessages(env, targetId, messages) {
@@ -2639,11 +2672,14 @@ async function handleMaintenanceSummary(request, env) {
       COALESCE(SUM(CASE WHEN strftime('%Y-%m',completed_at)=strftime('%Y-%m','now') THEN actual_cost ELSE 0 END),0) AS month_cost
     FROM maintenance_requests m WHERE ${visibility.sql}`).bind(...visibility.binds).first();
   const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
+  const lineMetrics = lineTarget ? await getLineDeliveryMetrics(env,lineTarget) : { recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null };
   return jsonResponse({
     total_count:Number(row?.total_count||0), open_count:Number(row?.open_count||0), in_progress_count:Number(row?.in_progress_count||0),
     waiting_parts_count:Number(row?.waiting_parts_count||0), awaiting_verification_count:Number(row?.awaiting_verification_count||0),
     overdue_count:Number(row?.overdue_count||0), urgent_count:Number(row?.urgent_count||0), month_cost:Number(row?.month_cost||0),
     can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget),
+    line_recipient_count:lineMetrics.recipient_count, line_monthly_usage:lineMetrics.monthly_usage,
+    line_monthly_limit:lineMetrics.monthly_limit, line_remaining:lineMetrics.remaining,
   });
 }
 
@@ -2771,8 +2807,13 @@ async function handleUpdateMaintenanceRequest(request, env, requestId) {
       VALUES (?,?,?,?,?,?)`).bind(requestId,item.status,nextStatus,comment || (assignedTo!==item.assigned_to?"มอบหมายผู้รับผิดชอบ":"อัปเดตใบแจ้งซ่อม"),actualCost,user.id).run();
   }
   await writeAuditLog(env,user,"update","maintenance_request",requestId,{ previous_status:item.status,new_status:nextStatus,assigned_to:assignedTo,actual_cost:actualCost },request);
-  if (statusChanged || assignedTo!==item.assigned_to) await sendMaintenanceLineNotification(request,env,requestId,statusChanged?nextStatus:"assigned").catch(()=>{});
-  return jsonResponse({ ok:true });
+  const notificationEvent = assignedTo!==item.assigned_to ? "assigned" : statusChanged ? nextStatus : null;
+  const automaticEvents = new Set(["reported","assigned","completed"]);
+  const shouldNotify = notificationEvent && (automaticEvents.has(notificationEvent) || body.notify_line === true);
+  const lineNotification = shouldNotify
+    ? await sendMaintenanceLineNotification(request,env,requestId,notificationEvent).catch((error)=>({delivery_status:"failed",error:cleanText(error?.message||error,500)}))
+    : notificationEvent ? { delivery_status:"not_requested" } : null;
+  return jsonResponse({ ok:true, line_notification:lineNotification });
 }
 
 function bytesToHex(bytes) {
@@ -2786,9 +2827,33 @@ async function maintenanceImageSignature(env, attachmentId, expires) {
 
 async function sendMaintenanceLineNotification(request, env, requestId, eventType) {
   let deliveryStatus = "not_configured", errorMessage = null;
+  const recentDuplicate = await env.DB.prepare(`SELECT id FROM maintenance_notifications
+    WHERE request_id=? AND event_type=? AND delivery_status='sent'
+      AND datetime(created_at)>=datetime('now','-10 minutes')
+    ORDER BY id DESC LIMIT 1`).bind(requestId,eventType).first();
+  if (recentDuplicate) {
+    deliveryStatus="skipped_duplicate";
+    errorMessage="ป้องกันการส่งเหตุการณ์เดิมซ้ำภายใน 10 นาที";
+    await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
+      .bind(requestId,eventType,deliveryStatus,errorMessage).run();
+    return { delivery_status:deliveryStatus,error:errorMessage };
+  }
   const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
   if (env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget) {
     try {
+      const lineMetrics = await getLineDeliveryMetrics(env,lineTarget);
+      if (lineMetrics.remaining !== null && lineMetrics.remaining <= 0) {
+        deliveryStatus="quota_exhausted";
+        errorMessage="โควตา LINE ประจำเดือนหมดแล้ว";
+      } else if (lineMetrics.remaining !== null && lineMetrics.recipient_count !== null && lineMetrics.recipient_count > lineMetrics.remaining) {
+        deliveryStatus="quota_exhausted";
+        errorMessage=`โควตา LINE คงเหลือ ${lineMetrics.remaining} ข้อความ ไม่พอสำหรับผู้รับประมาณ ${lineMetrics.recipient_count} คน`;
+      }
+      if (deliveryStatus === "quota_exhausted") {
+        await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
+          .bind(requestId,eventType,deliveryStatus,errorMessage).run();
+        return { delivery_status:deliveryStatus,error:errorMessage };
+      }
       const item = await getMaintenanceRequest(env,requestId);
       if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
       const origin = new URL(request.url).origin;
