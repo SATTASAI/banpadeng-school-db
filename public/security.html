@@ -1,1 +1,71 @@
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ความปลอดภัยและสำรองข้อมูล</title><link rel="stylesheet" href="/css/style.css"></head><body><main class="app-main"><a href="/dashboard.html">← กลับแดชบอร์ด</a><h2>ความปลอดภัยและสถานะฐานข้อมูล</h2><p>ตรวจสอบจำนวนข้อมูลและประวัติการดำเนินการล่าสุด</p><div class="overview-grid" id="counts"></div><h3>Audit log ล่าสุด</h3><div class="panel" id="logs">กำลังโหลด...</div></main><script src="/js/api.js"></script><script>(async()=>{const d=await apiRequest('/api/security/overview');counts.innerHTML=Object.entries(d.counts).map(([k,v])=>`<div class="overview-card"><div class="overview-number">${v}</div><div class="overview-label">${k}</div></div>`).join('');logs.innerHTML=d.logs.length?'<table><tr><th>วันเวลา</th><th>ผู้ใช้</th><th>การดำเนินการ</th><th>รายการ</th></tr>'+d.logs.map(x=>`<tr><td>${x.created_at}</td><td>${x.full_name||'-'}</td><td>${x.action}</td><td>${x.resource}</td></tr>`).join('')+'</table>':'ยังไม่มีประวัติ'})().catch(e=>{document.body.innerHTML+='<p>'+e.message+'</p>'})</script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ความปลอดภัยและสำรองข้อมูล — โรงเรียนบ้านป่าเด็ง</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .security-page{max-width:1150px}.security-head{margin:10px 0 20px}.security-head h1{font-size:27px;margin:8px 0}.security-head p,.muted{color:#61758b}
+    .security-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:16px 0 24px}
+    .security-card,.security-panel{border:1px solid #dce7f1;background:#fff;border-radius:18px;padding:18px;box-shadow:0 9px 28px rgba(41,80,120,.05)}
+    .security-card strong{display:block;color:#155e97;font-size:23px}.security-card span{font-size:12px;color:#61758b}.security-panel{margin:16px 0}.security-panel h2{font-size:19px;margin:0 0 8px}.security-panel p{margin:7px 0}
+    .backup-action{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:18px 0}.backup-action button{border:0;border-radius:12px;padding:11px 18px;background:#1676bb;color:#fff;font:inherit;font-weight:650;cursor:pointer}.backup-action button:disabled{opacity:.55;cursor:wait}
+    .backup-state{font-size:13px;color:#41617b}.notice{background:#eef7ff;border:1px solid #cde5f8;border-radius:12px;padding:12px 15px;color:#315b79}.notice.error{background:#fff0f0;border-color:#ffd7d7;color:#a32630}
+    .security-table{overflow:auto}.security-table table{width:100%;border-collapse:collapse;font-size:13px}.security-table th,.security-table td{text-align:left;padding:10px;border-bottom:1px solid #e8eff5}.security-table th{white-space:nowrap;color:#526b82}.security-table td{word-break:break-word}
+    @media(max-width:600px){.security-panel{padding:14px}.security-head h1{font-size:23px}}
+  </style>
+</head>
+<body>
+  <main class="app-main security-page">
+    <a href="/dashboard.html">← กลับแดชบอร์ด</a>
+    <header class="security-head"><h1>ความปลอดภัยและสำรองข้อมูล</h1><p>ตรวจสอบข้อมูล ประวัติการทำงาน และส่งออกสำเนาฐานข้อมูล</p></header>
+    <section class="security-panel" aria-labelledby="backupTitle">
+      <h2 id="backupTitle">สำรองฐานข้อมูล Cloudflare D1</h2>
+      <p class="muted">ส่งออกโครงสร้างและข้อมูลทั้งหมดเป็นไฟล์ SQL เพื่อเก็บสำเนาไว้ในสถานที่ที่โรงเรียนกำหนด</p>
+      <div id="backupConfig" class="notice">กำลังตรวจสอบการตั้งค่า...</div>
+      <div id="backupControls" class="backup-action" hidden><button id="backupBtn" type="button">ส่งออกและดาวน์โหลดฐานข้อมูล</button><span id="backupState" class="backup-state" role="status"></span></div>
+      <p class="muted">ไฟล์นี้มีข้อมูลส่วนบุคคลของโรงเรียน โปรดเก็บในพื้นที่ที่จำกัดสิทธิ์ ไฟล์เอกสารและรูปภาพใน Google Drive ต้องสำรองแยกต่างหาก</p>
+      <h3>ประวัติการดาวน์โหลด</h3><div id="backupHistory" class="security-table">กำลังโหลด...</div>
+    </section>
+    <section class="security-panel"><h2>จำนวนข้อมูลในระบบ</h2><div class="security-grid" id="counts">กำลังโหลด...</div></section>
+    <section class="security-panel"><h2>ประวัติการใช้งานล่าสุด</h2><div class="security-table" id="logs">กำลังโหลด...</div></section>
+  </main>
+  <script src="/js/api.js"></script>
+  <script>
+    const el=id=>document.getElementById(id);
+    const escapeHtml=value=>String(value??"-").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+    const date=value=>value?new Date(value.replace(" ","T")+"Z").toLocaleString("th-TH"):"-";
+    const nap=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    async function load(){
+      const data=await apiRequest("/api/security/overview");
+      el("counts").innerHTML=Object.entries(data.counts).map(([name,count])=>`<div class="security-card"><strong>${Number(count).toLocaleString("th-TH")}</strong><span>${escapeHtml(name)}</span></div>`).join("");
+      el("logs").innerHTML=data.logs.length?`<table><thead><tr><th>วันเวลา</th><th>ผู้ใช้</th><th>การดำเนินการ</th><th>รายการ</th></tr></thead><tbody>${data.logs.map(row=>`<tr><td>${escapeHtml(row.created_at)}</td><td>${escapeHtml(row.full_name)}</td><td>${escapeHtml(row.action)}</td><td>${escapeHtml(row.resource)}</td></tr>`).join("")}</tbody></table>`:"ยังไม่มีประวัติ";
+      const backup=data.backup;
+      if(!backup){el("backupConfig").textContent="การส่งออกฐานข้อมูลให้สิทธิ์เฉพาะผู้ดูแลระบบ";el("backupHistory").textContent="เฉพาะผู้ดูแลระบบ";return}
+      el("backupConfig").textContent=backup.configured?"พร้อมส่งออกฐานข้อมูล":"ยังไม่ได้ตั้งค่า CLOUDFLARE_ACCOUNT_ID และ CLOUDFLARE_D1_BACKUP_TOKEN ใน Worker";
+      el("backupControls").hidden=!backup.configured;
+      el("backupHistory").innerHTML=backup.history.length?`<table><thead><tr><th>วันเวลา</th><th>ไฟล์</th><th>ผู้ดำเนินการ</th></tr></thead><tbody>${backup.history.map(row=>`<tr><td>${escapeHtml(date(row.created_at))}</td><td>${escapeHtml(row.file_name)}</td><td>${escapeHtml(row.created_by)}</td></tr>`).join("")}</tbody></table>`:"ยังไม่มีประวัติการดาวน์โหลด";
+    }
+    async function downloadBackup(){
+      const button=el("backupBtn"),state=el("backupState");button.disabled=true;state.textContent="กำลังเริ่มส่งออก...";
+      try{
+        let job=await apiRequest("/api/security/backup/start",{method:"POST",body:{}});
+        for(let tries=0;job.status!=="complete"&&tries<90;tries++){
+          state.textContent=`Cloudflare กำลังส่งออกข้อมูล... (${tries+1})`;
+          await nap(2000);
+          job=await apiRequest("/api/security/backup/poll",{method:"POST",body:{ticket:job.ticket}});
+        }
+        if(job.status!=="complete")throw new Error("การส่งออกใช้เวลานาน กรุณาลองใหม่ในภายหลัง");
+        state.textContent="กำลังดาวน์โหลดไฟล์...";
+        const response=await fetch("/api/security/backup/download",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({ticket:job.ticket})});
+        if(!response.ok){const error=await response.json().catch(()=>({}));throw new Error(error.error||"ดาวน์โหลดไม่สำเร็จ")}
+        const blob=await response.blob(),url=URL.createObjectURL(blob),link=document.createElement("a");
+        link.href=url;link.download=`banpadeng-d1-${new Date().toISOString().slice(0,10)}.sql`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+        state.textContent="ดาวน์โหลดสำเร็จ โปรดตรวจสอบว่าไฟล์อยู่ในเครื่อง";await load();
+      }catch(error){state.textContent=error.message}finally{button.disabled=false}
+    }
+    el("backupBtn").addEventListener("click",downloadBackup);
+    load().catch(error=>{el("backupConfig").classList.add("error");el("backupConfig").textContent=error.message});
+  </script>
+</body>
+</html>

@@ -16,6 +16,7 @@ import {
   resolveAcademicCenterKey,
 } from "./lib/academic-registry.js";
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
+import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -3571,7 +3572,7 @@ async function handleSecurityOverview(request, env) {
   const counts = {};
   for (const table of tables) counts[table] = (await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first()).count;
   const { results: logs } = await env.DB.prepare(`SELECT a.*, u.full_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 50`).all();
-  return jsonResponse({ counts, logs });
+  return jsonResponse({ counts, logs, backup: user.role === "superadmin" ? await getBackupOverview(env) : null }, 200, { "Cache-Control": "private, no-store" });
 }
 
 // ---------- /api/overview (GET) — ภาพรวมสำหรับหน้าแดชบอร์ด ----------
@@ -3926,6 +3927,15 @@ export default {
         if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
         if (!isAdmin(user)) return Response.redirect(new URL("/dashboard.html", url.origin), 302);
       }
+
+      if ((pathname === "/security.html" || pathname === "/security") && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
+        if (!isAdmin(user)) return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+      }
+
+      // การส่งออก D1 จะพักคำสั่ง SQL อื่นชั่วคราว จึงให้การ poll ใช้ตั๋วอายุสั้นแทนการอ่าน D1
+      if (pathname.startsWith("/api/security/backup/")) return await handleBackupExport(request, env, pathname);
 
       if (pathname === "/api/system/status" && method === "GET") {
         const user = await getCurrentUser(request, env);
