@@ -209,6 +209,7 @@
       <div class="nav-label admin-only" style="display:none;">บริหารระบบ</div>
       <a href="/modules.html?module=users" data-page="users" class="admin-only" style="display:none;"><span class="nav-number">11</span>ผู้ใช้งานและสิทธิ์</a>
       <a href="/modules.html?module=security" data-page="security" class="admin-only" style="display:none;"><span class="nav-number">12</span>สำรองข้อมูลและความปลอดภัย</a>
+      <a href="/system-status.html" data-page="system-status" class="admin-only" style="display:none;"><span class="nav-number">SYS</span>สถานะระบบ</a>
       <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่าการแจ้งเตือน LINE</a>
     </nav>
     <div class="sidebar-footer">
@@ -336,6 +337,7 @@
     reports: "/modules.html?module=reports",
     users: "/modules.html?module=users",
     security: "/modules.html?module=security",
+    "system-status": "/system-status.html",
     "line-settings": "/line-settings.html",
   };
 
@@ -438,6 +440,9 @@
       { label:"การยืนยันตัวตนและรหัสผ่าน", url:"/security.html?section=authentication" },
       { label:"ป้องกันข้อมูลส่วนบุคคลและล็อกข้อมูล", url:"/security.html?section=privacy" },
       { label:"ตรวจสอบและแจ้งเตือนความผิดปกติ", url:"/security.html?section=alerts" },
+    ],
+    "system-status": [
+      { label:"ตรวจสอบสถานะบริการและโควตา", url:"/system-status.html" },
     ],
     "line-settings": pageEntries("/line-settings.html", [
       "สถานะการเชื่อมต่อ", "กลุ่ม LINE ปลายทาง", "ทดสอบการแจ้งเตือน",
@@ -556,6 +561,7 @@
     {title:"ระบบการลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
     {title:"ผู้ใช้งานและสิทธิ์",subtitle:"กำหนดบทบาทผู้ใช้",page_key:"users",url:"/admin-users.html",keywords:"user role ผู้ใช้ สิทธิ์",admin_only:true},
     {title:"สำรองข้อมูลและความปลอดภัย",subtitle:"Audit log และการสำรองข้อมูล",page_key:"security",url:"/security.html",keywords:"backup log ความปลอดภัย",admin_only:true},
+    {title:"สถานะระบบ",subtitle:"Cloudflare D1, Drive, R2 และ LINE",page_key:"system-status",url:"/system-status.html",keywords:"quota usage โควตา cloudflare drive r2 line",admin_only:true},
     {title:"ตั้งค่าการแจ้งเตือน LINE",subtitle:"เชื่อมต่อ LINE Official Account และกลุ่มปลายทาง",page_key:"line-settings",url:"/line-settings.html",keywords:"line webhook token target แจ้งเตือน",superadmin_only:true},
   ];
   let dashboardUser=null,globalSearchItems=[],globalSearchActive=-1,globalSearchTimer=null,globalSearchVersion=0;

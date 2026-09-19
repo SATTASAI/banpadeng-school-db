@@ -3273,6 +3273,184 @@ async function handleStorageStatus(request, env) {
   });
 }
 
+// ---------- สถานะระบบสำหรับผู้บริหาร/ผู้ดูแลระบบ ----------
+const DEFAULT_D1_DATABASE_LIMIT_BYTES = 500 * 1024 * 1024;
+const DEFAULT_R2_FREE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024;
+
+function numericEnv(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function usagePercent(used, limit) {
+  if (used == null || limit == null) return null;
+  if (!Number.isFinite(Number(used)) || !Number.isFinite(Number(limit)) || Number(limit) <= 0) return null;
+  return Math.max(0, Math.min(100, (Number(used) / Number(limit)) * 100));
+}
+
+function usageLevel(percent) {
+  if (!Number.isFinite(percent)) return "unknown";
+  if (percent >= 95) return "critical";
+  if (percent >= 85) return "danger";
+  if (percent >= 70) return "warning";
+  return "healthy";
+}
+
+async function inspectGoogleDrive(env) {
+  const configError = requireDriveConfig(env);
+  if (configError) {
+    return {
+      configured: false,
+      reachable: false,
+      status: "critical",
+      missing: configError.replace("ยังไม่ได้ตั้งค่า Google Drive: ", "").split(", "),
+    };
+  }
+  try {
+    const accessToken = await getGoogleDriveAccessToken(env);
+    const folder = await googleDriveRequest(accessToken, `/files/${encodeURIComponent(String(env.GOOGLE_DRIVE_FOLDER_ID))}?fields=id,name,trashed`)
+      .then((response) => response.json());
+    // OAuth แบบ drive.file บางชุดอ่านโควตารวมไม่ได้ แต่ยังอัปโหลด/เปิดไฟล์ในโฟลเดอร์ที่อนุญาตได้
+    const about = await googleDriveRequest(accessToken, "/about?fields=storageQuota,user(displayName,emailAddress)")
+      .then((response) => response.json()).catch(() => null);
+    const used = about?.storageQuota?.usage == null ? null : Number(about.storageQuota.usage);
+    const limit = about?.storageQuota?.limit == null ? null : Number(about.storageQuota.limit);
+    const percent = usagePercent(used, limit);
+    return {
+      configured: true,
+      reachable: !folder?.trashed,
+      status: folder?.trashed ? "critical" : usageLevel(percent) === "unknown" ? "healthy" : usageLevel(percent),
+      account: about?.user?.emailAddress || "bbdschool2016@gmail.com",
+      folder_name: folder?.name || null,
+      folder_trashed: !!folder?.trashed,
+      used_bytes: Number.isFinite(used) ? used : null,
+      limit_bytes: Number.isFinite(limit) && limit > 0 ? limit : null,
+      percent,
+      quota_available: !!about?.storageQuota,
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      reachable: false,
+      status: "critical",
+      error: cleanText(error?.message || error, 300) || "ตรวจสอบ Google Drive ไม่สำเร็จ",
+    };
+  }
+}
+
+async function handleSystemStatus(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงสถานะระบบ" }, 403);
+
+  const startedAt = Date.now();
+  await ensureLineSchema(env);
+  const d1Limit = numericEnv(env.D1_DATABASE_LIMIT_BYTES, DEFAULT_D1_DATABASE_LIMIT_BYTES);
+  const r2Limit = numericEnv(env.R2_STORAGE_LIMIT_BYTES, DEFAULT_R2_FREE_LIMIT_BYTES);
+
+  const [d1Probe, countsResult, attachmentResult, selectedTarget, lineDeliveryResult, googleDrive] = await Promise.all([
+    env.DB.prepare("SELECT datetime('now') AS database_time").all(),
+    env.DB.prepare(`SELECT
+      (SELECT COUNT(*) FROM users) AS users,
+      (SELECT COUNT(*) FROM students) AS students,
+      (SELECT COUNT(*) FROM projects) AS projects,
+      (SELECT COUNT(*) FROM documents) AS documents,
+      (SELECT COUNT(*) FROM audit_logs) AS audit_logs`).first(),
+    env.DB.prepare(`SELECT
+      COUNT(*) AS total_files,
+      COALESCE(SUM(file_size),0) AS total_bytes,
+      COALESCE(SUM(CASE WHEN storage_provider='drive' THEN 1 ELSE 0 END),0) AS drive_files,
+      COALESCE(SUM(CASE WHEN storage_provider='drive' THEN file_size ELSE 0 END),0) AS drive_bytes,
+      COALESCE(SUM(CASE WHEN COALESCE(storage_provider,'r2')='r2' THEN 1 ELSE 0 END),0) AS r2_files,
+      COALESCE(SUM(CASE WHEN COALESCE(storage_provider,'r2')='r2' THEN file_size ELSE 0 END),0) AS r2_bytes
+      FROM file_attachments`).first(),
+    getSelectedLineTarget(env),
+    env.DB.prepare(`SELECT
+      COALESCE(SUM(CASE WHEN delivery_status='sent' THEN 1 ELSE 0 END),0) AS sent,
+      COALESCE(SUM(CASE WHEN delivery_status IN ('failed','quota_exhausted') THEN 1 ELSE 0 END),0) AS failed,
+      MAX(CASE WHEN delivery_status IN ('failed','quota_exhausted') THEN created_at END) AS last_failed_at
+      FROM maintenance_notifications WHERE created_at >= datetime('now','-30 days')`).first(),
+    inspectGoogleDrive(env),
+  ]);
+
+  const d1BytesRaw = d1Probe?.meta?.size_after == null ? null : Number(d1Probe.meta.size_after);
+  const d1Bytes = Number.isFinite(d1BytesRaw) && d1BytesRaw >= 0 ? d1BytesRaw : null;
+  const d1Percent = usagePercent(d1Bytes, d1Limit);
+  const r2Bytes = Number(attachmentResult?.r2_bytes || 0);
+  const r2Percent = usagePercent(r2Bytes, r2Limit);
+  const lineConfigured = !!(env.LINE_CHANNEL_SECRET && env.LINE_CHANNEL_ACCESS_TOKEN && selectedTarget);
+  const lineMetrics = lineConfigured
+    ? await getLineDeliveryMetrics(env, selectedTarget).catch(() => ({ recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null }))
+    : { recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null };
+  const linePercent = usagePercent(lineMetrics.monthly_usage, lineMetrics.monthly_limit);
+
+  const services = {
+    worker: {
+      status: "healthy",
+      reachable: true,
+      request_usage_available: false,
+      request_daily_limit: numericEnv(env.WORKERS_DAILY_REQUEST_LIMIT, 100000),
+      note: "จำนวน Request และข้อผิดพลาดจริงตรวจสอบจาก Cloudflare Dashboard",
+    },
+    d1: {
+      status: usageLevel(d1Percent) === "unknown" ? "healthy" : usageLevel(d1Percent),
+      reachable: true,
+      database_time: d1Probe?.results?.[0]?.database_time || null,
+      used_bytes: d1Bytes,
+      limit_bytes: d1Limit,
+      percent: d1Percent,
+      usage_available: d1Bytes !== null,
+      counts: countsResult || {},
+    },
+    storage: {
+      provider: getFileStorageProvider(env),
+      total_files: Number(attachmentResult?.total_files || 0),
+      total_bytes: Number(attachmentResult?.total_bytes || 0),
+    },
+    drive: {
+      ...googleDrive,
+      registered_files: Number(attachmentResult?.drive_files || 0),
+      registered_bytes: Number(attachmentResult?.drive_bytes || 0),
+    },
+    r2: {
+      configured: !!env.FILES,
+      reachable: !!env.FILES,
+      status: "unknown",
+      registered_files: Number(attachmentResult?.r2_files || 0),
+      registered_bytes: r2Bytes,
+      limit_bytes: r2Limit,
+      percent: r2Percent,
+      note: "ยอดใช้เป็นขนาดไฟล์ในทะเบียนเท่านั้น ตรวจปริมาณจริงและจำนวนคำขอจาก Cloudflare Dashboard",
+    },
+    line: {
+      configured: lineConfigured,
+      reachable: lineConfigured && lineMetrics.monthly_usage !== null,
+      status: !lineConfigured ? "critical" : usageLevel(linePercent) === "unknown" ? "warning" : usageLevel(linePercent),
+      target_name: selectedTarget?.display_name || null,
+      target_type: selectedTarget?.target_type || null,
+      recipient_count: lineMetrics.recipient_count,
+      monthly_usage: lineMetrics.monthly_usage,
+      monthly_limit: lineMetrics.monthly_limit,
+      remaining: lineMetrics.remaining,
+      percent: linePercent,
+      sent_30d: Number(lineDeliveryResult?.sent || 0),
+      failed_30d: Number(lineDeliveryResult?.failed || 0),
+      last_failed_at: lineDeliveryResult?.last_failed_at || null,
+    },
+  };
+
+  const states = [services.d1.status, services.drive.status, services.line.status];
+  const overall = states.includes("critical") ? "critical"
+    : states.some((state) => state === "danger" || state === "warning") ? "warning" : "healthy";
+
+  return jsonResponse({
+    generated_at: new Date().toISOString(),
+    response_time_ms: Date.now() - startedAt,
+    overall,
+    thresholds: { warning: 70, danger: 85, critical: 95 },
+    services,
+  }, 200, { "Cache-Control": "no-store" });
+}
+
 // ---------- เอกสารและการสำรองข้อมูล (ทะเบียนเมทาดาทา/ส่งออกข้อมูล) ----------
 async function findDocumentDuplicates(env, user, { title, department, documentType, excludeId = 0 }) {
   const normalizedTitle = cleanText(title, 200);
@@ -3741,6 +3919,20 @@ export default {
         const user = await getCurrentUser(request, env);
         if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
         if (user.role !== "superadmin") return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+      }
+
+      if ((pathname === "/system-status.html" || pathname === "/system-status") && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
+        if (!isAdmin(user)) return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+      }
+
+      if (pathname === "/api/system/status" && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!isAdmin(user)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงสถานะระบบ" }, 403);
+        await ensureAcademicData(env);
+        await ensureExtendedSchema(env);
+        return await handleSystemStatus(request, env);
       }
 
       // ติดตั้ง/อัปเกรดโครงสร้างปีการศึกษาก่อนใช้ API ภายในระบบ
