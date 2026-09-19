@@ -19,6 +19,7 @@ import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js";
 import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
+import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -3955,6 +3956,8 @@ export default {
 
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
+      const learnerAnalysisResponse = await handleLearnerAnalysisRoute(request, env, pathname, method);
+      if (learnerAnalysisResponse) return learnerAnalysisResponse;
 
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);

@@ -68,6 +68,27 @@ CREATE TABLE IF NOT EXISTS guardians (
 CREATE INDEX IF NOT EXISTS idx_guardians_student ON guardians(student_id);
 CREATE INDEX IF NOT EXISTS idx_students_classroom ON students(classroom);
 
+-- งานวิเคราะห์ผู้เรียนรายบุคคล: ครูหนึ่งคนบันทึกหนึ่งฉบับต่อคนต่อภาคเรียน
+-- สำหรับฐานข้อมูลเดิม route จะสร้างตารางนี้เมื่อเริ่มใช้งาน
+CREATE TABLE IF NOT EXISTS learner_analyses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year_id INTEGER NOT NULL REFERENCES academic_years(id),
+  academic_term_id INTEGER NOT NULL REFERENCES academic_terms(id),
+  teacher_user_id INTEGER NOT NULL REFERENCES users(id),
+  assessment_date TEXT,
+  reading_result TEXT, reading_evidence TEXT,
+  writing_result TEXT, writing_evidence TEXT,
+  thinking_result TEXT, thinking_evidence TEXT,
+  participation_result TEXT, participation_evidence TEXT,
+  strengths TEXT, needs TEXT, support_plan TEXT,
+  followup_date TEXT, followup_result TEXT, followup_next TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE(student_id,academic_term_id,teacher_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_learner_analyses_period_teacher ON learner_analyses(academic_term_id,teacher_user_id,student_id);
+
 -- ข้อมูลนักเรียนเพิ่มเติมจาก DMC แยกตารางเพื่ออัปเดตระบบเดิมได้โดยไม่กระทบทะเบียนหลัก
 CREATE TABLE IF NOT EXISTS student_details (
   student_id             INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
