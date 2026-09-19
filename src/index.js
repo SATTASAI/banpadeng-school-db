@@ -17,6 +17,7 @@ import {
 } from "./lib/academic-registry.js";
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
 import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js";
+import { handleDriveAudit } from "./routes/drive-audit.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -4087,6 +4088,7 @@ export default {
       const documentMatch = pathname.match(/^\/api\/documents\/(\d+)$/);
       if (documentMatch && method === "PATCH") return await handleUpdateDocumentWorkflow(request, env, Number(documentMatch[1]));
       if (pathname === "/api/security/overview" && method === "GET") return await handleSecurityOverview(request, env);
+      if (pathname === "/api/security/drive-audit" && method === "GET") return await handleDriveAudit(request, env, getGoogleDriveAccessToken);
 
       if (pathname === "/api/overview" && method === "GET") return await handleOverview(request, env);
 

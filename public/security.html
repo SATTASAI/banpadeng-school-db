@@ -27,6 +27,13 @@
       <p class="muted">ไฟล์นี้มีข้อมูลส่วนบุคคลของโรงเรียน โปรดเก็บในพื้นที่ที่จำกัดสิทธิ์ ไฟล์เอกสารและรูปภาพใน Google Drive ต้องสำรองแยกต่างหาก</p>
       <h3>ประวัติการดาวน์โหลด</h3><div id="backupHistory" class="security-table">กำลังโหลด...</div>
     </section>
+    <section class="security-panel" aria-labelledby="driveAuditTitle">
+      <h2 id="driveAuditTitle">ตรวจไฟล์ Google Drive</h2>
+      <p class="muted">ตรวจว่าไฟล์ที่ลงทะเบียนในระบบยังอยู่และเข้าถึงได้ ตรวจครั้งละ 10 ไฟล์ เฉพาะผู้ดูแลระบบ</p>
+      <div id="driveAuditControls" class="backup-action" hidden><button id="driveAuditBtn" type="button">เริ่มตรวจไฟล์</button><span id="driveAuditState" class="backup-state" role="status"></span></div>
+      <div id="driveAuditResults" class="security-table" aria-live="polite"></div>
+      <p class="muted">รายการนี้ไม่ตรวจไฟล์ที่อยู่ใน Drive แต่ไม่เคยลงทะเบียนในระบบ และไม่ใช่สำเนาสำรองของไฟล์</p>
+    </section>
     <section class="security-panel"><h2>จำนวนข้อมูลในระบบ</h2><div class="security-grid" id="counts">กำลังโหลด...</div></section>
     <section class="security-panel"><h2>ประวัติการใช้งานล่าสุด</h2><div class="security-table" id="logs">กำลังโหลด...</div></section>
   </main>
@@ -42,6 +49,7 @@
       el("logs").innerHTML=data.logs.length?`<table><thead><tr><th>วันเวลา</th><th>ผู้ใช้</th><th>การดำเนินการ</th><th>รายการ</th></tr></thead><tbody>${data.logs.map(row=>`<tr><td>${escapeHtml(row.created_at)}</td><td>${escapeHtml(row.full_name)}</td><td>${escapeHtml(row.action)}</td><td>${escapeHtml(row.resource)}</td></tr>`).join("")}</tbody></table>`:"ยังไม่มีประวัติ";
       const backup=data.backup;
       if(!backup){el("backupConfig").textContent="การส่งออกฐานข้อมูลให้สิทธิ์เฉพาะผู้ดูแลระบบ";el("backupHistory").textContent="เฉพาะผู้ดูแลระบบ";return}
+      el("driveAuditControls").hidden=false;
       el("backupConfig").textContent=backup.configured?"พร้อมส่งออกฐานข้อมูล":"ยังไม่ได้ตั้งค่า CLOUDFLARE_ACCOUNT_ID และ CLOUDFLARE_D1_BACKUP_TOKEN ใน Worker";
       el("backupControls").hidden=!backup.configured;
       el("backupHistory").innerHTML=backup.history.length?`<table><thead><tr><th>วันเวลา</th><th>ไฟล์</th><th>ผู้ดำเนินการ</th></tr></thead><tbody>${backup.history.map(row=>`<tr><td>${escapeHtml(date(row.created_at))}</td><td>${escapeHtml(row.file_name)}</td><td>${escapeHtml(row.created_by)}</td></tr>`).join("")}</tbody></table>`:"ยังไม่มีประวัติการดาวน์โหลด";
@@ -69,6 +77,25 @@
       }catch(error){state.textContent=error.message}finally{button.disabled=false}
     }
     el("backupBtn").addEventListener("click",downloadBackup);
+    async function auditDrive(){
+      const button=el("driveAuditBtn"),state=el("driveAuditState"),results=el("driveAuditResults");
+      button.disabled=true;results.textContent="";
+      let offset=0,passed=0,issues=[];
+      try{
+        do{
+          state.textContent=`ตรวจแล้ว ${offset.toLocaleString("th-TH")} ไฟล์...`;
+          const page=await apiRequest(`/api/security/drive-audit?offset=${offset}`);
+          for(const file of page.checked){if(file.status==="ok")passed++;else issues.push(file)}
+          offset=page.next_offset;
+          state.textContent=`ตรวจแล้ว ${(passed+issues.length).toLocaleString("th-TH")}/${Number(page.total).toLocaleString("th-TH")} ไฟล์`;
+        }while(offset!==null);
+        results.innerHTML=`<p>เข้าถึงได้ ${passed.toLocaleString("th-TH")} · ต้องตรวจสอบ ${issues.length.toLocaleString("th-TH")}</p>`+
+          (issues.length?`<table><thead><tr><th>รหัสไฟล์</th><th>ชื่อ</th><th>ผลตรวจ</th></tr></thead><tbody>${issues.map(file=>`<tr><td>${Number(file.id)}</td><td>${escapeHtml(file.file_name)}</td><td>${escapeHtml(file.status)}</td></tr>`).join("")}</tbody></table>`:"");
+      }catch(error){state.textContent=`ตรวจไม่ครบ (${passed+issues.length} ไฟล์): ${error.message}`;
+        results.textContent="ผลตรวจบางส่วนไม่ใช่ผลตรวจครบทุกไฟล์ กรุณาลองใหม่"}
+      finally{button.disabled=false}
+    }
+    el("driveAuditBtn").addEventListener("click",auditDrive);
     load().catch(error=>{el("backupConfig").classList.add("error");el("backupConfig").textContent=error.message});
   </script>
 </body>
