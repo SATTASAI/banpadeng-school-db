@@ -80,3 +80,31 @@ test("download proxies SQL without exposing signed URL and records audit", async
     assert.ok(!JSON.stringify(env.queries).includes("download.example"));
   } finally { globalThis.fetch = originalFetch; }
 });
+
+test("Cloudflare failure returns HTTP and error code without leaking credentials", async () => {
+  const env = environment();
+  const token = await signJWT({ sub: 1 }, secret);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    success: false, errors: [{ code: 10000, message: "invalid token-test" }],
+  }, { status: 403 });
+  try {
+    const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
+    const result = await response.json();
+    assert.equal(response.status, 502);
+    assert.deepEqual(result.diagnostic, { stage: "cloudflare_export", http_status: 403, cloudflare_code: 10000 });
+    assert.ok(!JSON.stringify(result).includes("token-test"));
+    assert.ok(!JSON.stringify(result).includes("invalid"));
+  } finally { globalThis.fetch = originalFetch; }
+});
+
+test("Cloudflare response that is not JSON is identified separately", async () => {
+  const env = environment();
+  const token = await signJWT({ sub: 1 }, secret);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("<html>unavailable</html>", { status: 503 });
+  try {
+    const response = await handleBackupExport(await request("start", token), env, "/api/security/backup/start");
+    assert.equal((await response.json()).diagnostic.stage, "cloudflare_response");
+  } finally { globalThis.fetch = originalFetch; }
+});

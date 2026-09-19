@@ -4,6 +4,15 @@ import { signJWT, verifyJWT } from "../lib/crypto.js";
 const NO_STORE = { "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" };
 const DATABASE_ID = "870fa9ec-122f-4161-a1ca-cc9979dcfa30";
 
+class ExportFailure extends Error {
+  constructor(stage, httpStatus = null, cloudflareCode = null) {
+    super("D1 export failed");
+    this.stage = stage;
+    this.httpStatus = httpStatus;
+    this.cloudflareCode = cloudflareCode;
+  }
+}
+
 function backupConfig(env) {
   return Boolean(env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_D1_BACKUP_TOKEN);
 }
@@ -12,15 +21,23 @@ async function callExport(env, bookmark) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${encodeURIComponent(env.CLOUDFLARE_ACCOUNT_ID)}/d1/database/${DATABASE_ID}/export`;
   const body = { output_format: "polling" };
   if (bookmark) body.current_bookmark = bookmark;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.CLOUDFLARE_D1_BACKUP_TOKEN}` },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json();
-  if (!response.ok || !payload.success || payload.result?.status === "error" || payload.result?.success === false) {
-    throw new Error(payload.result?.error || payload.errors?.[0]?.message || "Cloudflare ไม่สามารถส่งออกฐานข้อมูลได้");
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${env.CLOUDFLARE_D1_BACKUP_TOKEN.trim()}` },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ExportFailure("cloudflare_connection");
   }
+  const payload = await response.json().catch(() => null);
+  if (!payload) throw new ExportFailure("cloudflare_response", response.status);
+  if (!response.ok || !payload.success || payload.result?.status === "error" || payload.result?.success === false) {
+    const code = payload.errors?.[0]?.code;
+    throw new ExportFailure("cloudflare_export", response.status, Number.isInteger(code) ? code : null);
+  }
+  if (!payload.result) throw new ExportFailure("cloudflare_response", response.status);
   return payload.result;
 }
 
@@ -52,7 +69,7 @@ export async function handleBackupExport(request, env, pathname) {
   try {
     const result = await callExport(env, bookmark);
     bookmark = result.at_bookmark || bookmark;
-    if (typeof bookmark !== "string" || !bookmark || bookmark.length > 512) throw new Error("Cloudflare ไม่ส่งรหัสงานส่งออกกลับมา");
+    if (typeof bookmark !== "string" || !bookmark || bookmark.length > 512) throw new ExportFailure("missing_bookmark");
     if (action !== "download") {
       const ticket = action === "start" ? await signJWT({ purpose: "d1_backup_export", sub: user.id, bookmark }, env.JWT_SECRET, 600) : body.ticket;
       return jsonResponse({ status: result.status === "complete" ? "complete" : "pending", ticket }, 200, NO_STORE);
@@ -60,10 +77,14 @@ export async function handleBackupExport(request, env, pathname) {
     if (result.status !== "complete" || !result.result?.signed_url) return jsonResponse({ error: "งานส่งออกยังไม่เสร็จ กรุณารอสักครู่" }, 409, NO_STORE);
 
     // URL ชั่วคราวอยู่เฉพาะฝั่งเซิร์ฟเวอร์ ไม่ส่งต่อไปยังเบราว์เซอร์หรือบันทึกลงฐานข้อมูล
-    const signedUrl = new URL(result.result.signed_url);
-    if (signedUrl.protocol !== "https:") throw new Error("ลิงก์ดาวน์โหลดไม่ปลอดภัย");
-    const download = await fetch(signedUrl.toString());
-    if (!download.ok || !download.body) throw new Error("ดาวน์โหลดไฟล์สำรองจาก Cloudflare ไม่สำเร็จ");
+    let signedUrl;
+    try { signedUrl = new URL(result.result.signed_url); }
+    catch { throw new ExportFailure("invalid_download_url"); }
+    if (signedUrl.protocol !== "https:") throw new ExportFailure("invalid_download_url");
+    let download;
+    try { download = await fetch(signedUrl.toString()); }
+    catch { throw new ExportFailure("download_connection"); }
+    if (!download.ok || !download.body) throw new ExportFailure("download_response", download.status);
     const filename = `banpadeng-d1-${new Date().toISOString().slice(0, 10)}.sql`;
     await env.DB.prepare("INSERT INTO backup_registry (backup_type, file_name, created_by) VALUES ('d1_sql_download', ?, ?)")
       .bind(filename, user.id).run();
@@ -73,7 +94,14 @@ export async function handleBackupExport(request, env, pathname) {
       headers: { ...NO_STORE, "Content-Type": "application/sql; charset=utf-8", "Content-Disposition": `attachment; filename="${filename}"` },
     });
   } catch (error) {
-    return jsonResponse({ error: "การส่งออกไม่สำเร็จ กรุณาตรวจสอบสิทธิ์ API และลองใหม่" }, 502, NO_STORE);
+    const stage = error instanceof ExportFailure ? error.stage : "download_or_log";
+    const diagnostic = error instanceof ExportFailure
+      ? { stage, http_status: error.httpStatus, cloudflare_code: error.cloudflareCode }
+      : { stage };
+    // รายงานเฉพาะรหัสและขั้นตอน ไม่ส่งข้อความดิบซึ่งอาจมี URL ชั่วคราวหรือข้อมูลลับ
+    const code = diagnostic.cloudflare_code == null ? "" : `, code ${diagnostic.cloudflare_code}`;
+    const status = diagnostic.http_status == null ? "" : ` HTTP ${diagnostic.http_status}${code}`;
+    return jsonResponse({ error: `ส่งออกฐานข้อมูลไม่สำเร็จ (${stage}${status})`, diagnostic }, 502, NO_STORE);
   }
 }
 
