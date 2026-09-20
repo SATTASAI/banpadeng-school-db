@@ -22,6 +22,7 @@
   .analysis-row { display:grid; grid-template-columns:1fr 1.2fr; gap:10px; }
   .analysis-actions { display:flex; flex-wrap:wrap; gap:9px; margin:14px 0; }
   .analysis-actions button { width:auto; }
+  .analysis-actions .btn { width:auto; }
   .analysis-actions button:disabled { opacity:.5; cursor:not-allowed; }
   .analysis-status { font-size:13px; color:#547087; min-height:1.5em; }
   .analysis-status.error { color:#b33636; }
@@ -85,21 +86,30 @@
       <div class="analysis-field"><label for="classroom">ห้องเรียน</label><select id="classroom"></select></div>
       <p class="analysis-hint" id="roomCount"></p>
       <div class="analysis-actions"><button class="btn btn-ghost" id="printRoom" type="button" disabled>พิมพ์ทั้งห้อง</button></div>
+      <p class="analysis-hint">ต้องมีทะเบียนนักเรียนและปีการศึกษาก่อนเริ่มงาน <a href="/import-center.html?template=students&amp;download=1">ดาวน์โหลดแม่แบบนำเข้านักเรียน</a> · <a href="/academic-years.html">จัดการปีการศึกษา</a></p>
       <h2>รายชื่อนักเรียน</h2><div class="analysis-roster" id="roster"><p class="analysis-hint" style="padding:12px;">เลือกปี ภาคเรียน และห้องเรียน</p></div>
     </aside>
     <section class="analysis-panel" id="editor"><h2 id="editorTitle">เลือกนักเรียนเพื่อเริ่มบันทึก</h2>
       <p class="analysis-hint">ข้อมูลทะเบียนจะถูกดึงจากระบบ ส่วนผลการประเมินให้ครูกรอกตามหลักฐานจริง</p>
       <form id="form" hidden>
         <div class="analysis-row"><div class="analysis-field"><label for="assessment_date">วันที่วิเคราะห์</label><input type="date" id="assessment_date"></div><div class="analysis-field"><label>ชั้น/ห้อง</label><input id="studentClass" readonly></div></div>
-        <div class="analysis-section"><h3>2. ความพร้อมและทักษะการเรียนรู้</h3><div id="assessmentFields"></div></div>
-        <div class="analysis-section"><h3>3. จุดเด่น ความสนใจ และสิ่งที่ควรพัฒนา</h3>
+        <div class="analysis-section"><h3>1. ข้อมูลจากนักเรียนและครอบครัว</h3>
+          <p class="analysis-hint">ถามนักเรียนตามความเหมาะสมและบันทึกเฉพาะข้อมูลที่จำเป็นต่อการจัดการเรียนรู้</p>
+          <div class="analysis-field"><label for="family_context">บริบทครอบครัวที่เกี่ยวข้องกับการเรียน</label><textarea id="family_context"></textarea></div>
+          <div class="analysis-row"><div class="analysis-field"><label for="learner_interests">วิชาหรือกิจกรรมที่สนใจและความถนัด</label><textarea id="learner_interests"></textarea></div><div class="analysis-field"><label for="learner_learning_style">วิธีเรียนรู้ที่นักเรียนชอบ</label><textarea id="learner_learning_style"></textarea></div></div>
+          <div class="analysis-row"><div class="analysis-field"><label for="learner_expectations">สิ่งที่คาดหวังในการเรียน</label><textarea id="learner_expectations"></textarea></div><div class="analysis-field"><label for="learner_message">สิ่งที่อยากบอกครู</label><textarea id="learner_message"></textarea></div></div>
+        </div>
+        <div class="analysis-section"><h3>2. ผลประเมินความพร้อม 5 ด้าน</h3><p class="analysis-hint">ครูประเมินจากหลักฐานจริง เลือกระดับเฉพาะด้านที่ได้ประเมินแล้ว</p><div id="domainFields"></div></div>
+        <div class="analysis-section"><h3>3. ทักษะการอ่าน เขียน คิด และร่วมกิจกรรม</h3><div id="assessmentFields"></div></div>
+        <div class="analysis-section"><h3>4. สรุปผลและแนวทางพัฒนา</h3>
+          <div class="analysis-field"><label for="learner_group">กลุ่มเพื่อวางแผนจัดการเรียนรู้</label><select id="learner_group"><option value="">ยังไม่จัดกลุ่ม</option><option>ก้าวหน้า</option><option>ตามเกณฑ์</option><option>ควรส่งเสริม</option><option>ต้องการการสนับสนุนเฉพาะ</option></select></div>
           <div class="analysis-field"><label for="strengths">จุดเด่น/ความสนใจ</label><textarea id="strengths"></textarea></div>
           <div class="analysis-field"><label for="needs">สิ่งที่ควรพัฒนา</label><textarea id="needs"></textarea></div>
         </div>
-        <div class="analysis-section"><h3>4. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล</h3>
+        <div class="analysis-section"><h3>5. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล</h3>
           <div class="analysis-field"><label for="support_plan">แผนการสอน/ช่วยเหลือ</label><textarea id="support_plan"></textarea></div>
         </div>
-        <div class="analysis-section"><h3>5. การติดตามผล</h3>
+        <div class="analysis-section"><h3>6. การติดตามผล</h3>
           <div class="analysis-field"><label for="followup_date">วันที่ติดตาม</label><input type="date" id="followup_date"></div>
           <div class="analysis-field"><label for="followup_result">ผลที่พบ</label><textarea id="followup_result"></textarea></div>
           <div class="analysis-field"><label for="followup_next">แนวทางต่อไป</label><textarea id="followup_next"></textarea></div>
@@ -125,7 +135,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const categories = [["reading","การอ่าน"],["writing","การเขียน"],["thinking","การคิดและการสื่อสาร"],["participation","พฤติกรรมการเรียน"]];
-  const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","followup_date","followup_result","followup_next"];
+  const domains = [["knowledge","ความรู้ ความสามารถ และประสบการณ์"],["intellectual","การคิดและการเรียนรู้"],["behavior","พฤติกรรมและการควบคุมตนเอง"],["physical","ร่างกายและสุขภาวะ"],["social","การอยู่ร่วมกับผู้อื่น"]];
+  const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","followup_date","followup_result","followup_next","learner_interests","learner_learning_style","learner_expectations","learner_message","family_context","learner_group",...domains.flatMap(([key])=>[`${key}_result`,`${key}_evidence`])];
   let years=[],roster=[],selected=null,dirty=false,loading=false,viewer=null,rosterVersion=0,assignmentVersion=0;
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
   const plain = value => value === null || value === undefined || String(value).trim() === "" ? "–" : String(value).trim();
@@ -159,6 +170,7 @@
     }catch(e){showStatus(e.message,true);}finally{$("assignTeacher").disabled=false;}
   };
   $("assessmentFields").innerHTML = categories.map(([key,label])=>`<div class="analysis-row"><div class="analysis-field"><label for="${key}_result">${label} — ผลที่พบ</label><input id="${key}_result" maxlength="4000"></div><div class="analysis-field"><label for="${key}_evidence">หลักฐาน/ข้อสังเกต</label><input id="${key}_evidence" maxlength="4000"></div></div>`).join("");
+  $("domainFields").innerHTML = domains.map(([key,label])=>`<div class="analysis-row"><div class="analysis-field"><label for="${key}_result">${label}</label><select id="${key}_result"><option value="">ยังไม่ประเมิน</option><option>ดี</option><option>ปานกลาง</option><option>ควรส่งเสริม</option></select></div><div class="analysis-field"><label for="${key}_evidence">หลักฐานหรือข้อสังเกต</label><input id="${key}_evidence" maxlength="4000"></div></div>`).join("");
   const currentYear = () => years.find(x=>x.id===Number($("year").value));
   const studentLabel = s => `${s.full_name} · ${s.student_code}`;
   function resetSelected() { selected=null; dirty=false; $("form").hidden=true; $("editorTitle").textContent="เลือกนักเรียนเพื่อเริ่มบันทึก"; showStatus(""); }
@@ -228,14 +240,16 @@
     const year=currentYear();const teacher=viewer?.full_name||"–";
     const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
     const health=[s.health_conditions,s.allergies].filter(Boolean).join("; ");
-    const personal=`<div class="paper-columns">${paperLine("ผู้ปกครอง",guardian)}${paperLine("ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback)}${paperLine("ข้อมูลสุขภาพที่ควรทราบ",health)}${paperLine("ข้อมูลสนับสนุนอื่น",s.disadvantage)}</div>`;
+    const personal=`<div class="paper-columns">${paperLine("ผู้ปกครอง",guardian)}${paperLine("ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback)}${paperLine("ข้อมูลสุขภาพที่ควรทราบ",health)}${paperLine("ข้อมูลสนับสนุนอื่น",s.disadvantage)}</div>${paperParagraph("บริบทครอบครัวที่เกี่ยวข้องกับการเรียน",s.family_context)}${paperParagraph("ความสนใจและความถนัด",s.learner_interests)}${paperParagraph("วิธีเรียนรู้ที่ชอบ",s.learner_learning_style)}${paperParagraph("สิ่งที่คาดหวัง",s.learner_expectations)}${paperParagraph("สิ่งที่อยากบอกครู",s.learner_message)}`;
+    const domainResults=domains.map(([key,label])=>`<div class="paper-assessment-entry"><h3>${escapeHtml(label)}</h3>${paperParagraph("ระดับ",s[`${key}_result`])}${paperParagraph("หลักฐานหรือข้อสังเกต",s[`${key}_evidence`])}</div>`).join("");
     const assessment=categories.map(([key,label])=>`<div class="paper-assessment-entry"><h3>${escapeHtml(label)}</h3><p><strong>ผลที่พบ:</strong> ${escapeHtml(plain(s[`${key}_result`]))}</p><p><strong>หลักฐาน/ข้อสังเกต:</strong> ${escapeHtml(plain(s[`${key}_evidence`]))}</p></div>`).join("");
     return `<article class="analysis-sheet"><header class="paper-heading"><img src="/logo.jpg" alt="ตราโรงเรียน"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>โรงเรียนบ้านป่าเด็ง</p><p>ปีการศึกษา ${escapeHtml(plain(year?.year_be))} · ${escapeHtml(plain($("term").selectedOptions[0]?.text))}</p></div></header>
       <div class="paper-meta">${paperLine("ชื่อ–นามสกุล",s.full_name,true)}${paperLine("เลขประจำตัว",s.student_code)}${paperLine("ชั้น/ห้อง",[s.grade_level,s.classroom].filter(Boolean).join(" / "))}${paperLine("ครูผู้วิเคราะห์",teacher)}${paperLine("วันที่วิเคราะห์",dateThai(s.assessment_date))}</div>
-      ${paperSection("1. ข้อมูลพื้นฐานที่เกี่ยวข้อง",personal)}${paperSection("2. ความพร้อมและทักษะการเรียนรู้",assessment)}
-      ${paperSection("3. จุดเด่น ความสนใจ และสิ่งที่ควรพัฒนา",paperParagraph("จุดเด่น/ความสนใจ",s.strengths)+paperParagraph("สิ่งที่ควรพัฒนา",s.needs))}
-      ${paperSection("4. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล",`<div class="paper-box">${escapeHtml(plain(s.support_plan))}</div>`)}
-      ${paperSection("5. การติดตามผล",paperLine("วันที่ติดตาม",dateThai(s.followup_date))+paperParagraph("ผลที่พบ",s.followup_result)+paperParagraph("แนวทางต่อไป",s.followup_next))}
+      ${paperSection("1. ข้อมูลพื้นฐานและเสียงของนักเรียน",personal)}${paperSection("2. ผลประเมินความพร้อม 5 ด้าน",domainResults)}
+      ${paperSection("3. ทักษะการเรียนรู้เพิ่มเติม",assessment)}
+      ${paperSection("4. สรุปผลและแนวทางพัฒนา",paperParagraph("กลุ่มเพื่อวางแผนจัดการเรียนรู้",s.learner_group)+paperParagraph("จุดเด่น",s.strengths)+paperParagraph("สิ่งที่ควรพัฒนา",s.needs))}
+      ${paperSection("5. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล",`<div class="paper-box">${escapeHtml(plain(s.support_plan))}</div>`)}
+      ${paperSection("6. การติดตามผล",paperLine("วันที่ติดตาม",dateThai(s.followup_date))+paperParagraph("ผลที่พบ",s.followup_result)+paperParagraph("แนวทางต่อไป",s.followup_next))}
       <footer class="paper-sign"><div><span></span><small>ลงชื่อครูผู้วิเคราะห์</small></div><div><span></span><small>ลงชื่อผู้ตรวจ/ผู้รับทราบ (ถ้ามี)</small></div></footer><div class="paper-count">ลำดับนักเรียน ${number}/${total}</div>
     </article>`;
   }
@@ -254,7 +268,7 @@
           if(!regular.length||!bold.length) throw new Error("โหลดฟอนต์ไม่สำเร็จ");
         } catch { showStatus("ไม่สามารถโหลดฟอนต์ TH SarabunPSK ได้ กรุณาลองพิมพ์ใหม่เมื่อเชื่อมต่ออินเทอร์เน็ต",true);return; }
       }
-      showStatus(`เตรียมเอกสาร ${students.length} หน้าแล้ว`);window.print();
+      showStatus(`เตรียมแบบวิเคราะห์ ${students.length} คนแล้ว`);window.print();
     }catch(e){showStatus(e.message,true);}
   }
   $("form").addEventListener("submit",async event=>{event.preventDefault();await saveRecord();});

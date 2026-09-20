@@ -83,6 +83,13 @@ CREATE TABLE IF NOT EXISTS learner_analyses (
   participation_result TEXT, participation_evidence TEXT,
   strengths TEXT, needs TEXT, support_plan TEXT,
   followup_date TEXT, followup_result TEXT, followup_next TEXT,
+  learner_interests TEXT, learner_learning_style TEXT, learner_expectations TEXT,
+  learner_message TEXT, family_context TEXT, learner_group TEXT,
+  knowledge_result TEXT, knowledge_evidence TEXT,
+  intellectual_result TEXT, intellectual_evidence TEXT,
+  behavior_result TEXT, behavior_evidence TEXT,
+  physical_result TEXT, physical_evidence TEXT,
+  social_result TEXT, social_evidence TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(student_id,academic_term_id,teacher_user_id)

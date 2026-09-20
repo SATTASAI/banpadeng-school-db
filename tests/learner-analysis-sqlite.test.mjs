@@ -5,7 +5,7 @@ import { signJWT } from "../src/lib/crypto.js";
 import { handleLearnerAnalysisRoute } from "../src/routes/learner-analysis.js";
 
 const secret="learner-analysis-sqlite-test";
-function environment(){
+function environment({legacy=false}={}){
   const db=new DatabaseSync(":memory:");
   db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,full_name TEXT,role TEXT,status TEXT,created_at TEXT);
     CREATE TABLE academic_years(id INTEGER PRIMARY KEY,year_be INTEGER);
@@ -25,6 +25,14 @@ function environment(){
     INSERT INTO students VALUES (9,'S09','นักเรียน ก','แพ้อาหาร','ถั่ว'),(10,'S10','นักเรียน ข',NULL,NULL),(11,'S11','อีกห้อง',NULL,NULL),(12,'S12','คนละระดับ',NULL,NULL);
     INSERT INTO student_enrollments VALUES (9,4,'1','ป.4','enrolled'),(10,4,'1','ป.4','enrolled'),(11,4,'2','ป.4','enrolled'),(12,4,'1','ป.5','enrolled'),(9,5,'1','ป.5','enrolled');
     INSERT INTO student_details VALUES (9,NULL,NULL,'ผู้ปกครอง','ตัวอย่าง','มารดา');`);
+  if(legacy) db.exec(`CREATE TABLE learner_analyses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,student_id INTEGER NOT NULL,
+    academic_year_id INTEGER NOT NULL,academic_term_id INTEGER NOT NULL,teacher_user_id INTEGER NOT NULL,
+    assessment_date TEXT,reading_result TEXT,reading_evidence TEXT,writing_result TEXT,writing_evidence TEXT,
+    thinking_result TEXT,thinking_evidence TEXT,participation_result TEXT,participation_evidence TEXT,
+    strengths TEXT,needs TEXT,support_plan TEXT,followup_date TEXT,followup_result TEXT,followup_next TEXT,
+    created_at TEXT DEFAULT (datetime('now')),updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(student_id,academic_term_id,teacher_user_id));`);
   return {JWT_SECRET:secret,DB:{prepare(sql){let values=[];const stmt=db.prepare(sql);
     return {bind(...args){values=args;return this;},async first(){return stmt.get(...values)||null;},
       async all(){return {results:stmt.all(...values)};},async run(){const r=stmt.run(...values);return {meta:{changes:r.changes,last_row_id:r.lastInsertRowid}};}};
@@ -70,6 +78,23 @@ test("real SQLite: room printing uses period enrollment, blanks for missing anal
   assert.deepEqual(classrooms.classrooms.map(row=>[row.classroom,row.student_count]),[["1",2],["2",1]]);
   const anotherClassrooms=await api(env,7,"classrooms?term_id=4&grade_level="+encodeURIComponent("ป.5"));
   assert.deepEqual(anotherClassrooms.classrooms.map(row=>row.classroom),["1"]);
+});
+
+test("legacy learner table gains five domain ratings and preserves saved observations",async()=>{
+  const env=environment({legacy:true});
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  await api(env,7,"records/9","PUT",{
+    term_id:4,learner_interests:"ชอบวาดภาพ",learner_expectations:"อยากอ่านคล่อง",
+    knowledge_result:"ปานกลาง",knowledge_evidence:"แบบทดสอบก่อนเรียน",
+    physical_result:"ควรส่งเสริม",physical_evidence:"บันทึกการสังเกต",
+    learner_group:"ต้องการการสนับสนุนเฉพาะ",support_plan:"ฝึกอ่านร่วมกับครู",
+  });
+  const record=await api(env,7,"records/9?term_id=4");
+  assert.equal(record.analysis.learner_interests,"ชอบวาดภาพ");
+  assert.equal(record.analysis.knowledge_result,"ปานกลาง");
+  assert.equal(record.analysis.learner_group,"ต้องการการสนับสนุนเฉพาะ");
+  const room=await api(env,7,"roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1");
+  assert.equal(room.students[0].physical_evidence,"บันทึกการสังเกต");
 });
 
 test("unassigned users cannot list, read, save or print students; revocation takes effect immediately",async()=>{

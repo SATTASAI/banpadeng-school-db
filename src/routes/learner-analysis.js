@@ -4,7 +4,16 @@ const FIELDS = [
   "assessment_date", "reading_result", "reading_evidence", "writing_result", "writing_evidence",
   "thinking_result", "thinking_evidence", "participation_result", "participation_evidence",
   "strengths", "needs", "support_plan", "followup_date", "followup_result", "followup_next",
+  "learner_interests", "learner_learning_style", "learner_expectations", "learner_message",
+  "family_context", "learner_group",
+  "knowledge_result", "knowledge_evidence", "intellectual_result", "intellectual_evidence",
+  "behavior_result", "behavior_evidence", "physical_result", "physical_evidence",
+  "social_result", "social_evidence",
 ];
+const NEW_FIELDS = FIELDS.slice(15);
+const RATINGS = new Set(["ดี", "ปานกลาง", "ควรส่งเสริม"]);
+const GROUPS = new Set(["ก้าวหน้า", "ตามเกณฑ์", "ควรส่งเสริม", "ต้องการการสนับสนุนเฉพาะ"]);
+const RATING_FIELDS = new Set(["knowledge_result", "intellectual_result", "behavior_result", "physical_result", "social_result"]);
 const DATE_FIELDS = new Set(["assessment_date", "followup_date"]);
 const ROLES = new Set(["teacher", "staff", "executive", "superadmin"]);
 const schemaReady = new WeakSet();
@@ -21,10 +30,16 @@ async function ensureSchema(env) {
     writing_result TEXT, writing_evidence TEXT, thinking_result TEXT, thinking_evidence TEXT,
     participation_result TEXT, participation_evidence TEXT, strengths TEXT, needs TEXT,
     support_plan TEXT, followup_date TEXT, followup_result TEXT, followup_next TEXT,
+    ${NEW_FIELDS.map(field=>`${field} TEXT`).join(", ")},
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (student_id, academic_term_id, teacher_user_id)
   )`).run();
+  const { results: columns } = await env.DB.prepare("PRAGMA table_info(learner_analyses)").all();
+  const existing = new Set(columns.map(column=>column.name));
+  for (const field of NEW_FIELDS) {
+    if (!existing.has(field)) await env.DB.prepare(`ALTER TABLE learner_analyses ADD COLUMN ${field} TEXT`).run();
+  }
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_learner_analyses_period_teacher ON learner_analyses(academic_term_id,teacher_user_id,student_id)").run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS learner_class_assignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +66,8 @@ function normalizeField(field, raw) {
   if (raw == null || raw === "") return null;
   if (typeof raw !== "string" || raw.length > 4000) throw new Error("ข้อมูลยาวเกินกำหนดหรือรูปแบบไม่ถูกต้อง");
   const value = raw.trim();
+  if (RATING_FIELDS.has(field) && value && !RATINGS.has(value)) throw new Error("ผลประเมินต้องเป็น ดี ปานกลาง หรือควรส่งเสริม");
+  if (field === "learner_group" && value && !GROUPS.has(value)) throw new Error("กลุ่มผู้เรียนไม่ถูกต้อง");
   if (DATE_FIELDS.has(field) && value) {
     const date = new Date(`${value}T00:00:00Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(date.getTime()) || date.toISOString().slice(0,10)!==value) {
@@ -132,10 +149,7 @@ async function listClassroom(request, env, user) {
        (SELECT g.relationship FROM guardians g WHERE g.student_id=s.id
          ORDER BY g.is_emergency_contact DESC,g.id LIMIT 1) AS guardian_relationship_fallback,` : "";
   const detailJoin = includePrint ? "LEFT JOIN student_details d ON d.student_id=s.id" : "";
-  const analysisColumns = includePrint ? `a.assessment_date,a.reading_result,a.reading_evidence,
-       a.writing_result,a.writing_evidence,a.thinking_result,a.thinking_evidence,
-       a.participation_result,a.participation_evidence,a.strengths,a.needs,a.support_plan,
-       a.followup_date,a.followup_result,a.followup_next,` : "";
+  const analysisColumns = includePrint ? `${FIELDS.map(field=>`a.${field}`).join(",")},` : "";
   const { results } = await env.DB.prepare(`SELECT s.id,s.student_code,s.full_name,
        e.grade_level,e.classroom,${columns}${analysisColumns}
        a.id AS analysis_id,a.updated_at AS analysis_updated_at
