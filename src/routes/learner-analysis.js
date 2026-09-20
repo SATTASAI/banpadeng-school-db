@@ -38,7 +38,10 @@ async function ensureSchema(env) {
   const { results: columns } = await env.DB.prepare("PRAGMA table_info(learner_analyses)").all();
   const existing = new Set(columns.map(column=>column.name));
   for (const field of NEW_FIELDS) {
-    if (!existing.has(field)) await env.DB.prepare(`ALTER TABLE learner_analyses ADD COLUMN ${field} TEXT`).run();
+    if (!existing.has(field)) {
+      try { await env.DB.prepare(`ALTER TABLE learner_analyses ADD COLUMN ${field} TEXT`).run(); }
+      catch (error) { if (!/duplicate column name/i.test(String(error?.message))) throw error; }
+    }
   }
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_learner_analyses_period_teacher ON learner_analyses(academic_term_id,teacher_user_id,student_id)").run();
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS learner_class_assignments (
