@@ -20,7 +20,7 @@ function environment({ role="teacher", enrolled=true }={}) {
           if(sql.includes("FROM student_enrollments e JOIN students s"))return enrolled?{ id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",classroom:"ป.4/1" }:null;
           return null;
         },
-        async all(){calls.push({sql,values:statement.values||[]});return { results:sql.includes("SELECT e.classroom")?[{classroom:"ป.4/1",student_count:1}]:[{id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",classroom:"ป.4/1",analysis_id:null}] };},
+        async all(){calls.push({sql,values:statement.values||[]});return { results:sql.includes("SELECT e.grade_level")?[{grade_level:"ป.4",student_count:1}]:sql.includes("SELECT e.classroom")?[{classroom:"ป.4/1",student_count:1}]:[{id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",classroom:"ป.4/1",analysis_id:null}] };},
         async run(){calls.push({sql,values:statement.values||[]});return { success:true };},
       };
       return statement;
@@ -41,20 +41,21 @@ async function call(path,env,method="GET",body,authenticated=true){
 }
 
 test("unauthenticated users cannot list or print children",async()=>{
-  const env=environment();const response=await call("roster?term_id=4&classroom=ป.4%2F1&print=1",env,"GET",undefined,false);
+  const env=environment();const response=await call("roster?term_id=4&grade_level=ป.4&classroom=ป.4%2F1&print=1",env,"GET",undefined,false);
   assert.equal(response.status,401);
   assert.equal(env.calls.length,0);
 });
 
 test("room print selects only the chosen term and classroom, with the signed-in teacher's analysis",async()=>{
-  const env=environment();const response=await call("roster?term_id=4&classroom=ป.4%2F1&print=1",env);
+  const env=environment();const response=await call("roster?term_id=4&grade_level=ป.4&classroom=ป.4%2F1&print=1",env);
   assert.equal(response.status,200);
   const data=await response.json();assert.equal(data.teacher_name,"ครูตัวอย่าง");
   assert.equal(data.students.length,1);
   const select=env.calls.find(c=>c.sql.includes("LEFT JOIN learner_analyses a") && c.sql.includes("FROM student_enrollments e"));
-  assert.deepEqual(select.values,[7,4,"ป.4/1"]);
+  assert.deepEqual(select.values,[7,4,"ป.4","ป.4/1"]);
   assert.match(select.sql,/a\.teacher_user_id=\?/);
   assert.match(select.sql,/e\.status='enrolled'/);
+  assert.match(select.sql,/e\.grade_level=\?/);
   assert.match(select.sql,/s\.health_conditions/);
   assert.equal(response.headers.get("Cache-Control"),"private, no-store");
 });
