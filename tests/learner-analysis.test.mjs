@@ -16,8 +16,10 @@ function environment({ role="teacher", enrolled=true }={}) {
           calls.push({sql,values:statement.values||[]});
           if(sql.includes("FROM users WHERE id = ?"))return user;
           if(sql.includes("FROM academic_terms t"))return term;
+          if(sql.includes("FROM learner_class_assignments"))return {1:1};
+          if(sql.includes("SELECT grade_level,classroom FROM student_enrollments"))return enrolled?{grade_level:"ป.4",classroom:"ป.4/1"}:null;
           if(sql.includes("SELECT 1 FROM student_enrollments"))return enrolled?{1:1}:null;
-          if(sql.includes("FROM student_enrollments e JOIN students s"))return enrolled?{ id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",classroom:"ป.4/1" }:null;
+          if(sql.includes("FROM student_enrollments e JOIN students s"))return enrolled?{ id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",grade_level:"ป.4",classroom:"ป.4/1" }:null;
           return null;
         },
         async all(){calls.push({sql,values:statement.values||[]});return { results:sql.includes("SELECT e.grade_level")?[{grade_level:"ป.4",student_count:1}]:sql.includes("SELECT e.classroom")?[{classroom:"ป.4/1",student_count:1}]:[{id:9,student_code:"S09",full_name:"นักเรียนตัวอย่าง",classroom:"ป.4/1",analysis_id:null}] };},
@@ -56,6 +58,8 @@ test("room print selects only the chosen term and classroom, with the signed-in 
   assert.match(select.sql,/a\.teacher_user_id=\?/);
   assert.match(select.sql,/e\.status='enrolled'/);
   assert.match(select.sql,/e\.grade_level=\?/);
+  const access=env.calls.find(c=>c.sql.includes("SELECT 1 FROM learner_class_assignments"));
+  assert.deepEqual(access.values,[7,4,"ป.4","ป.4/1"]);
   assert.match(select.sql,/s\.health_conditions/);
   assert.equal(response.headers.get("Cache-Control"),"private, no-store");
 });

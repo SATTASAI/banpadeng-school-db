@@ -15,7 +15,11 @@ function environment(){
       guardian_first_name TEXT,guardian_last_name TEXT,guardian_relationship TEXT);
     CREATE TABLE guardians(id INTEGER PRIMARY KEY,student_id INTEGER,full_name TEXT,relationship TEXT,is_emergency_contact INTEGER);
     CREATE TABLE student_enrollments(student_id INTEGER,academic_term_id INTEGER,classroom TEXT,grade_level TEXT,status TEXT);
-    INSERT INTO users VALUES (7,'one@example.invalid','ครูหนึ่ง','teacher','active','2026-01-01'),(8,'two@example.invalid','ครูสอง','teacher','active','2026-01-01');
+    CREATE TABLE learner_class_assignments(
+      id INTEGER PRIMARY KEY,academic_term_id INTEGER,grade_level TEXT,classroom TEXT,
+      teacher_user_id INTEGER,assigned_by INTEGER,created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(academic_term_id,grade_level,classroom,teacher_user_id));
+    INSERT INTO users VALUES (7,'one@example.invalid','ครูหนึ่ง','teacher','active','2026-01-01'),(8,'two@example.invalid','ครูสอง','teacher','active','2026-01-01'),(20,'head@example.invalid','ผู้บริหาร','executive','active','2026-01-01');
     INSERT INTO academic_years VALUES (2,2569),(3,2570);
     INSERT INTO academic_terms VALUES (4,2,'ภาคเรียนที่ 1'),(5,3,'ภาคเรียนที่ 1');
     INSERT INTO students VALUES (9,'S09','นักเรียน ก','แพ้อาหาร','ถั่ว'),(10,'S10','นักเรียน ข',NULL,NULL),(11,'S11','อีกห้อง',NULL,NULL),(12,'S12','คนละระดับ',NULL,NULL);
@@ -38,6 +42,11 @@ async function api(env,userId,path,method="GET",body){
 
 test("real SQLite: room printing uses period enrollment, blanks for missing analysis, and teacher isolation",async()=>{
   const env=environment();
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:8});
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"2",teacher_user_id:7});
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
+  await api(env,20,"assignments","POST",{term_id:5,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
   const rosterPath="roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1";
   const before=await api(env,7,rosterPath);
   assert.deepEqual(before.students.map(s=>s.id),[9,10]);
@@ -61,6 +70,34 @@ test("real SQLite: room printing uses period enrollment, blanks for missing anal
   assert.deepEqual(classrooms.classrooms.map(row=>[row.classroom,row.student_count]),[["1",2],["2",1]]);
   const anotherClassrooms=await api(env,7,"classrooms?term_id=4&grade_level="+encodeURIComponent("ป.5"));
   assert.deepEqual(anotherClassrooms.classrooms.map(row=>row.classroom),["1"]);
+});
+
+test("unassigned users cannot list, read, save or print students; revocation takes effect immediately",async()=>{
+  const env=environment(),token=await signJWT({sub:7},secret);
+  const raw=async(path,method="GET",body)=>{
+    const request=new Request(`https://school.example/api/learner-analysis/${path}`,{
+      method,headers:{Cookie:`bpd_session=${token}`,"Content-Type":"application/json"},
+      body:body?JSON.stringify(body):undefined,
+    });
+    return handleLearnerAnalysisRoute(request,env,new URL(request.url).pathname,method);
+  };
+  const roomPath="roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1";
+  assert.deepEqual((await (await raw("grades?term_id=4")).json()).grades,[]);
+  assert.deepEqual((await (await raw("classrooms?term_id=4&grade_level="+encodeURIComponent("ป.4"))).json()).classrooms,[]);
+  assert.equal((await raw(roomPath)).status,403);
+  assert.equal((await raw("records/9?term_id=4")).status,403);
+  assert.equal((await raw("records/9","PUT",{term_id:4,reading_result:"ไม่ควรบันทึก"})).status,403);
+  assert.equal((await raw("assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7})).status,403);
+  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  assert.equal((await raw(roomPath)).status,200);
+  await api(env,7,"records/9","PUT",{term_id:4,reading_result:"อ่านได้"});
+  const { assignments }=await api(env,20,"assignments?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1");
+  assert.equal(assignments.length,1);
+  await api(env,20,`assignments/${assignments[0].id}`,"DELETE");
+  assert.equal((await raw(roomPath)).status,403);
+  assert.equal((await raw("records/9?term_id=4")).status,403);
+  assert.equal((await raw("records/9","PUT",{term_id:4,reading_result:"ห้ามแก้"})).status,403);
+  assert.equal((await raw("roster?term_id=4&grade_level="+encodeURIComponent("ป.5")+"&classroom=1&print=1")).status,403);
 });
 
 test("grade and classroom are both required for roster and classroom lookup",async()=>{

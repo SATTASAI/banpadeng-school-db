@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS learner_analyses (
 );
 CREATE INDEX IF NOT EXISTS idx_learner_analyses_period_teacher ON learner_analyses(academic_term_id,teacher_user_id,student_id);
 
+-- มอบหมายครูผู้จัดทำงานวิเคราะห์ตามภาคเรียน ระดับชั้น และห้อง (รองรับหลายคนต่อห้อง)
+CREATE TABLE IF NOT EXISTS learner_class_assignments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  academic_term_id INTEGER NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  grade_level TEXT NOT NULL,
+  classroom TEXT NOT NULL,
+  teacher_user_id INTEGER NOT NULL REFERENCES users(id),
+  assigned_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (academic_term_id, grade_level, classroom, teacher_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_learner_class_assignments_teacher
+  ON learner_class_assignments(teacher_user_id,academic_term_id,grade_level,classroom);
+
 -- ข้อมูลนักเรียนเพิ่มเติมจาก DMC แยกตารางเพื่ออัปเดตระบบเดิมได้โดยไม่กระทบทะเบียนหลัก
 CREATE TABLE IF NOT EXISTS student_details (
   student_id             INTEGER PRIMARY KEY REFERENCES students(id) ON DELETE CASCADE,
