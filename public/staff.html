@@ -14,7 +14,7 @@
   .staff-name { font-weight:600; }
   .staff-sub { font-size:13px; color:var(--color-text-muted); margin-top:2px; }
   .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
-  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:440px; }
+  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:440px; max-height:calc(100vh - 40px); overflow-y:auto; }
   .modal-actions { display:flex; gap:10px; margin-top:20px; }
   select.plain { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--color-border); font-family:var(--font-body); background:var(--color-bg); }
   .import-modal { max-width:640px; }
@@ -40,7 +40,10 @@
         <h2 style="margin-bottom:2px;">ข้อมูลครู/บุคลากร</h2>
         <p style="color:var(--color-text-muted); margin:0;">ทะเบียนครูและบุคลากร ตำแหน่ง วิชาที่สอน และครูประจำชั้น</p>
       </div>
-      <button class="btn btn-ghost" style="width:auto; display:none;" id="importBtn">นำเข้าจาก Excel/CSV</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-ghost" style="width:auto; display:none;" id="templateBtn" href="/templates/teacher-import.xlsx" download="template_teacher_import_banpadeng.xlsx">ดาวน์โหลดแม่แบบข้อมูลครู</a>
+        <button class="btn btn-ghost" style="width:auto; display:none;" id="importBtn">นำเข้าจาก Excel/CSV</button>
+      </div>
     </div>
 
     <div class="error-box" id="errorBox"></div>
@@ -68,6 +71,9 @@
       <label>ครูประจำชั้น/ที่ปรึกษาห้อง</label>
       <input type="text" id="fHomeroom" placeholder="เช่น ป.4/1 (เว้นว่างถ้าไม่ได้เป็น)" />
     </div>
+    <div class="field"><label>ฝ่ายงาน</label><input type="text" id="fDepartments" placeholder="วิชาการ; บุคคล" /></div>
+    <div class="field"><label>โครงการที่รับผิดชอบ</label><input type="text" id="fProjects" placeholder="โครงการอ่านออกเขียนได้; โครงการห้องสมุด" /></div>
+    <div class="field"><label>จำนวนคาบสอนต่อสัปดาห์</label><input type="number" id="fPeriods" min="0" max="100" step="1" /></div>
     <div class="field">
       <label>วันที่ออกใบประกอบวิชาชีพ</label>
       <input type="date" id="fLicenseIssue" />
@@ -89,7 +95,8 @@
     <div class="error-box" id="importErrorBox"></div>
 
     <div id="importStep1">
-      <p style="color:var(--color-text-muted); font-size:14px;">ระบบจะจับคู่บุคลากรด้วย "อีเมล" ที่ตรงกับบัญชีที่มีอยู่ในระบบเท่านั้น (แถวที่หาอีเมลไม่เจอจะถูกข้าม)</p>
+      <p style="color:var(--color-text-muted); font-size:14px;">กรอกชื่อครูและอีเมลเพื่อเพิ่มหรืออัปเดตทะเบียนบุคลากร การนำเข้านี้ไม่สร้างบัญชีเข้าสู่ระบบให้ครู</p>
+      <p><a href="/templates/teacher-import.xlsx" download="template_teacher_import_banpadeng.xlsx">ดาวน์โหลดแม่แบบ Excel สำหรับกรอกข้อมูลครู</a></p>
       <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" />
       <div class="field" id="headerRowField" style="display:none; margin-top:14px;">
         <label>แถวไหนคือหัวตาราง?</label>
@@ -130,6 +137,7 @@
 <script>
   let currentUser = null;
   let editingId = null;
+  const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const requestedStaffId = Number(new URLSearchParams(window.location.search).get("staff"));
 
   function renderStaff(staff) {
@@ -142,6 +150,9 @@
           s.subjects,
           s.phone,
           s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
+          s.departments ? `ฝ่ายงาน ${s.departments}` : null,
+          s.responsible_projects ? `โครงการ ${s.responsible_projects}` : null,
+          s.teaching_periods !== null ? `${s.teaching_periods} คาบ/สัปดาห์` : null,
           s.license_issue_date ? `ออกใบประกอบ ${s.license_issue_date}` : null,
           s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
         ]
@@ -150,8 +161,8 @@
         return `
           <div class="staff-row" data-staff-id="${s.id}">
             <div>
-              <div class="staff-name">${s.full_name} ${s.role ? `<span class="role-chip">${ROLE_LABELS[s.role] || s.role}</span>` : ""}</div>
-              <div class="staff-sub">${details || "ยังไม่มีข้อมูลเพิ่มเติม"}</div>
+              <div class="staff-name">${esc(s.full_name)} ${s.role ? `<span class="role-chip">${esc(ROLE_LABELS[s.role] || s.role)}</span>` : ""}</div>
+              <div class="staff-sub">${esc(details || "ยังไม่มีข้อมูลเพิ่มเติม")}</div>
             </div>
             ${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
           </div>`;
@@ -194,6 +205,9 @@
     document.getElementById("fSubjects").value = staffMember.subjects || "";
     document.getElementById("fPhone").value = staffMember.phone || "";
     document.getElementById("fHomeroom").value = staffMember.homeroom_classroom || "";
+    document.getElementById("fDepartments").value = staffMember.departments || "";
+    document.getElementById("fProjects").value = staffMember.responsible_projects || "";
+    document.getElementById("fPeriods").value = staffMember.teaching_periods ?? "";
     document.getElementById("fLicenseIssue").value = staffMember.license_issue_date || "";
     document.getElementById("fLicenseExpiry").value = staffMember.license_expiry_date || "";
     document.getElementById("staffModal").style.display = "flex";
@@ -212,6 +226,9 @@
           subjects: document.getElementById("fSubjects").value.trim(),
           phone: document.getElementById("fPhone").value.trim(),
           homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
+          departments: document.getElementById("fDepartments").value.trim(),
+          responsible_projects: document.getElementById("fProjects").value.trim(),
+          teaching_periods: document.getElementById("fPeriods").value.trim(),
           license_issue_date: document.getElementById("fLicenseIssue").value || "",
           license_expiry_date: document.getElementById("fLicenseExpiry").value || "",
         },
@@ -230,17 +247,22 @@
     currentUser = user;
     if (user.is_admin) {
       document.getElementById("importBtn").style.display = "inline-flex";
+      document.getElementById("templateBtn").style.display = "inline-flex";
     }
     await loadStaff();
   })();
 
   // ---------- นำเข้าจาก Excel/CSV ----------
   const STAFF_IMPORT_FIELDS = [
+    { key: "full_name", label: "ชื่อ-นามสกุลครู", synonyms: ["ชื่อ-นามสกุลครู", "ชื่อครู", "ชื่อ-นามสกุล", "full_name"] },
     { key: "email", label: "อีเมล", synonyms: ["อีเมล", "email", "e-mail"] },
     { key: "position", label: "ตำแหน่ง", synonyms: ["ตำแหน่ง", "position"] },
     { key: "subjects", label: "วิชาที่สอน", synonyms: ["วิชาที่สอน", "วิชา", "subject", "subjects"] },
     { key: "phone", label: "เบอร์ติดต่อ", synonyms: ["เบอร์ติดต่อ", "เบอร์โทร", "โทรศัพท์", "phone", "tel"] },
     { key: "homeroom_classroom", label: "ครูประจำชั้น", synonyms: ["ครูประจำชั้น", "ประจำชั้น", "homeroom"] },
+    { key: "departments", label: "ฝ่ายงาน", synonyms: ["ฝ่ายงาน", "ฝ่าย", "departments"] },
+    { key: "responsible_projects", label: "โครงการที่รับผิดชอบ", synonyms: ["โครงการที่รับผิดชอบ", "โครงการ", "responsible_projects"] },
+    { key: "teaching_periods", label: "จำนวนคาบสอนต่อสัปดาห์", synonyms: ["จำนวนคาบสอนต่อสัปดาห์", "จำนวนคาบ", "teaching_periods"] },
     { key: "license_expiry_date", label: "วันหมดอายุใบประกอบวิชาชีพ", synonyms: ["วันหมดอายุใบประกอบวิชาชีพ", "ใบประกอบวิชาชีพ", "license", "licenseexpiry"] },
   ];
 
@@ -273,10 +295,10 @@
     const container = document.getElementById("mappingContainer");
     container.innerHTML = STAFF_IMPORT_FIELDS.map((field) => {
       const options = importParsed.headers
-        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${columnOptionLabel(h, i, importParsed.rows)}</option>`)
+        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${esc(columnOptionLabel(h, i, importParsed.rows))}</option>`)
         .join("");
       return `<div class="mapping-row">
-        <label>${field.label}${field.key === "email" ? " *" : ""}</label>
+        <label>${esc(field.label)}${["email", "full_name"].includes(field.key) ? " *" : ""}</label>
         <select class="plain" data-field="${field.key}">
           <option value="">— ไม่นำเข้า —</option>
           ${options}
@@ -297,9 +319,9 @@
   function renderPreview() {
     const table = document.getElementById("previewTable");
     const sampleRows = buildImportRows(importParsed.rows.slice(0, 3), importMapping, STAFF_IMPORT_FIELDS);
-    const headRow = `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<th>${f.label}</th>`).join("")}</tr>`;
+    const headRow = `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<th>${esc(f.label)}</th>`).join("")}</tr>`;
     const bodyRows = sampleRows
-      .map((r) => `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<td>${r[f.key] || ""}</td>`).join("")}</tr>`)
+      .map((r) => `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<td>${esc(r[f.key] || "")}</td>`).join("")}</tr>`)
       .join("");
     table.innerHTML = `<thead>${headRow}</thead><tbody>${bodyRows}</tbody>`;
   }
@@ -310,7 +332,7 @@
     const opts = [];
     for (let i = 0; i < scanCount; i++) {
       const preview = (importRaw[i] || []).filter((c) => String(c || "").trim() !== "").slice(0, 3).join(", ");
-      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${preview || "(ว่าง)"}</option>`);
+      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${esc(preview || "(ว่าง)")}</option>`);
     }
     select.innerHTML = opts.join("");
     document.getElementById("headerRowField").style.display = "block";
@@ -350,8 +372,8 @@
 
   document.getElementById("confirmImportBtn").addEventListener("click", async () => {
     if (!importParsed) return;
-    if (importMapping.email === null) {
-      alert("กรุณาจับคู่คอลัมน์อีเมลอย่างน้อย");
+    if (importMapping.email === null || importMapping.full_name === null) {
+      alert("กรุณาจับคู่คอลัมน์ชื่อครูและอีเมล");
       return;
     }
     const rows = buildImportRows(importParsed.rows, importMapping, STAFF_IMPORT_FIELDS);
@@ -363,8 +385,8 @@
       const summary = document.getElementById("importSummary");
       summary.style.display = "block";
       summary.innerHTML = `
-        <p>นำเข้าสำเร็จ: อัปเดต ${result.updated} คน${result.skipped.length ? `, ข้าม ${result.skipped.length} แถว` : ""}</p>
-        ${result.skipped.map((s) => `<div class="skip-item">แถวที่ ${s.row}: ${s.reason}</div>`).join("")}
+        <p>นำเข้าสำเร็จ: เพิ่ม ${Number(result.created || 0)} คน อัปเดต ${Number(result.updated || 0)} คน${result.skipped.length ? `, ข้าม ${result.skipped.length} แถว` : ""}</p>
+        ${result.skipped.map((s) => `<div class="skip-item">แถวที่ ${Number(s.row) + importHeaderRowIndex + 1}: ${esc(s.reason)}</div>`).join("")}
       `;
       document.getElementById("importStep1").style.display = "none";
       document.getElementById("importStep2").style.display = "none";

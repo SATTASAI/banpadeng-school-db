@@ -8,6 +8,7 @@ import {
 } from "./lib/crypto.js";
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
 import { ensurePersonnelData } from "./lib/personnel-data.js";
+import { importStaffRows } from "./lib/staff-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
 import {
   ACADEMIC_CENTERS,
@@ -1172,6 +1173,7 @@ async function handleListStaff(request, env) {
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.user_id, p.full_name, u.role,
             p.position, p.subjects, p.phone, p.homeroom_classroom,
+            p.email, p.departments, p.responsible_projects, p.teaching_periods,
             p.license_issue_date, p.license_expiry_date
      FROM personnel_records p
      LEFT JOIN users u ON u.id = p.user_id
@@ -1209,16 +1211,25 @@ async function handleUpdateStaff(request, env, targetId) {
   const subjects = body.subjects || null;
   const phone = body.phone || null;
   const homeroom_classroom = body.homeroom_classroom || null;
+  const departments = body.departments || null;
+  const responsible_projects = body.responsible_projects || null;
+  const rawPeriods = String(body.teaching_periods ?? "").trim();
+  const teaching_periods = rawPeriods === "" ? null : Number(rawPeriods);
+  if (rawPeriods && (!Number.isInteger(teaching_periods) || teaching_periods < 0 || teaching_periods > 100)) {
+    return jsonResponse({ error: "จำนวนคาบต้องเป็นจำนวนเต็ม 0–100" }, 400);
+  }
   const license_issue_date = body.license_issue_date || null;
   const license_expiry_date = body.license_expiry_date || null;
 
   await env.DB.prepare(
     `UPDATE personnel_records SET
        position = ?, subjects = ?, phone = ?, homeroom_classroom = ?,
+       departments = ?, responsible_projects = ?, teaching_periods = ?,
        license_issue_date = ?, license_expiry_date = ?, updated_at = datetime('now')
      WHERE id = ?`
   )
-    .bind(position, subjects, phone, homeroom_classroom, license_issue_date, license_expiry_date, targetId)
+    .bind(position, subjects, phone, homeroom_classroom, departments, responsible_projects,
+      teaching_periods, license_issue_date, license_expiry_date, targetId)
     .run();
 
   return jsonResponse({ ok: true });
@@ -3850,52 +3861,11 @@ async function handleImportStaff(request, env) {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
 
-  const rows = Array.isArray(body.rows) ? body.rows : [];
-  let updated = 0;
-  const skipped = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    const email = (row.email || "").toString().trim().toLowerCase();
-
-    if (!email) {
-      skipped.push({ row: i + 1, reason: "ไม่มีอีเมล" });
-      continue;
-    }
-
-    const target = await env.DB.prepare(
-      "SELECT id FROM users WHERE email = ? AND status = 'active' AND role IS NOT NULL"
-    )
-      .bind(email)
-      .first();
-
-    if (!target) {
-      skipped.push({ row: i + 1, reason: `ไม่พบผู้ใช้งานอีเมล ${email} ในระบบ` });
-      continue;
-    }
-
-    const position = row.position ? String(row.position).trim() : null;
-    const subjects = row.subjects ? String(row.subjects).trim() : null;
-    const phone = row.phone ? String(row.phone).trim() : null;
-    const homeroom_classroom = row.homeroom_classroom ? String(row.homeroom_classroom).trim() : null;
-    const license_expiry_date = row.license_expiry_date ? String(row.license_expiry_date).trim() : null;
-
-    await env.DB.prepare(
-      `INSERT INTO staff_profiles (user_id, position, subjects, phone, homeroom_classroom, license_expiry_date)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET
-         position = excluded.position,
-         subjects = excluded.subjects,
-         phone = excluded.phone,
-         homeroom_classroom = excluded.homeroom_classroom,
-         license_expiry_date = excluded.license_expiry_date`
-    )
-      .bind(target.id, position, subjects, phone, homeroom_classroom, license_expiry_date)
-      .run();
-    updated++;
+  if (!Array.isArray(body.rows) || body.rows.length > 1000) {
+    return jsonResponse({ error: "กรุณาส่งข้อมูลครูไม่เกิน 1,000 แถวต่อครั้ง" }, 400);
   }
-
-  return jsonResponse({ updated, skipped });
+  await ensurePersonnelData(env);
+  return jsonResponse(await importStaffRows(env, body.rows));
 }
 
 // ---------- Router ----------

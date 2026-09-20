@@ -1,0 +1,97 @@
+function value(value, maxLength = 500) {
+  const text = String(value ?? "").trim();
+  return text ? text.slice(0, maxLength) : null;
+}
+
+function identityName(name) {
+  return String(name || "").normalize("NFC")
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, "")
+    .replace(/^(?:ว่าที่ร้อยตรีหญิง|ว่าที่ร\.ต\.หญิง|ว่าที่ร้อยตรี|ว่าที่ร\.ต\.|นางสาว|นาง|นาย)\s*/, "")
+    .replace(/[\s.]+/g, "").toLowerCase();
+}
+
+function storedName(name) {
+  return String(name || "").normalize("NFC")
+    .replace(/[\u200b-\u200f\u2060\ufeff]/g, "")
+    .replace(/[\s.]+/g, "").toLowerCase();
+}
+
+export async function importStaffRows(env, rows) {
+  let created = 0;
+  let updated = 0;
+  const skipped = [];
+  const seenEmails = new Set();
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] || {};
+    const email = String(row.email || "").trim().toLowerCase();
+    const fullName = value(row.full_name, 200);
+    const skip = (reason) => skipped.push({ row: i + 1, reason });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { skip("อีเมลไม่ถูกต้อง"); continue; }
+    if (seenEmails.has(email)) { skip("อีเมลซ้ำในไฟล์เดียวกัน"); continue; }
+    seenEmails.add(email);
+
+    const rawPeriods = String(row.teaching_periods ?? "").trim();
+    const periods = rawPeriods === "" ? null : Number(rawPeriods);
+    if (rawPeriods && (!Number.isInteger(periods) || periods < 0 || periods > 100)) {
+      skip("จำนวนคาบต้องเป็นจำนวนเต็ม 0–100"); continue;
+    }
+
+    const user = await env.DB.prepare(
+      "SELECT id, full_name FROM users WHERE lower(email) = ? AND status = 'active' AND role IS NOT NULL"
+    ).bind(email).first();
+    if (user && fullName && identityName(user.full_name) !== identityName(fullName)) {
+      skip("ชื่อครูไม่ตรงกับบัญชีผู้ใช้อีเมลนี้"); continue;
+    }
+
+    let person = user ? await env.DB.prepare(
+      "SELECT id, user_id, email, full_name FROM personnel_records WHERE user_id = ? AND status = 'active'"
+    ).bind(user.id).first() : null;
+    if (!person) person = await env.DB.prepare(
+      "SELECT id, user_id, email, full_name FROM personnel_records WHERE lower(email) = ? AND status = 'active'"
+    ).bind(email).first();
+    const name = fullName || user?.full_name || person?.full_name;
+    if (!name) { skip("ไม่มีชื่อครู"); continue; }
+    if (person && (person.user_id && person.user_id !== user?.id || identityName(person.full_name) !== identityName(name))) {
+      skip("ชื่อหรือบัญชีผู้ใช้ขัดกับข้อมูลบุคลากรเดิม"); continue;
+    }
+    if (!person) person = await env.DB.prepare(
+      "SELECT id, user_id, email, full_name FROM personnel_records WHERE normalized_name = ? AND status = 'active'"
+    ).bind(storedName(name)).first();
+    if (person && (person.user_id && person.user_id !== user?.id ||
+      person.email && person.email.trim().toLowerCase() !== email)) {
+      skip("ชื่อครูตรงกับทะเบียนเดิม แต่อีเมลหรือบัญชีผู้ใช้ไม่ตรงกัน"); continue;
+    }
+
+    const fields = ["position", "subjects", "phone", "homeroom_classroom", "departments", "responsible_projects", "license_expiry_date"];
+    const values = fields.map((key) => value(row[key], key === "responsible_projects" ? 1500 : 500));
+    try {
+      if (person) {
+        await env.DB.prepare(
+          `UPDATE personnel_records SET user_id = COALESCE(user_id, ?), email = ?, full_name = ?,
+             position = COALESCE(?, position), subjects = COALESCE(?, subjects),
+             phone = COALESCE(?, phone), homeroom_classroom = COALESCE(?, homeroom_classroom),
+             departments = COALESCE(?, departments), responsible_projects = COALESCE(?, responsible_projects),
+             teaching_periods = COALESCE(?, teaching_periods),
+             license_expiry_date = COALESCE(?, license_expiry_date), updated_at = datetime('now')
+           WHERE id = ?`
+        ).bind(user?.id || null, email, name, values[0], values[1], values[2], values[3],
+          values[4], values[5], periods, values[6], person.id).run();
+        updated++;
+      } else {
+        await env.DB.prepare(
+          `INSERT INTO personnel_records
+           (user_id, full_name, normalized_name, email, position, subjects, phone,
+            homeroom_classroom, departments, responsible_projects, teaching_periods,
+            license_expiry_date, source_file)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'แบบฟอร์มนำเข้าข้อมูลครู')`
+        ).bind(user?.id || null, name, storedName(name), email,
+          values[0], values[1], values[2], values[3], values[4], values[5], periods, values[6]).run();
+        created++;
+      }
+    } catch {
+      skip("บันทึกไม่สำเร็จ กรุณาตรวจข้อมูลซ้ำในทะเบียนครู");
+    }
+  }
+  return { created, updated, skipped };
+}

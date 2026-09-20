@@ -16,6 +16,9 @@ const SCHEMA = [
     subjects TEXT,
     phone TEXT,
     homeroom_classroom TEXT,
+    departments TEXT,
+    responsible_projects TEXT,
+    teaching_periods INTEGER,
     license_issue_date TEXT,
     license_expiry_date TEXT,
     license_issue_raw TEXT,
@@ -36,6 +39,28 @@ const SCHEMA = [
   "CREATE INDEX IF NOT EXISTS idx_personnel_status ON personnel_records(status)",
   "CREATE INDEX IF NOT EXISTS idx_personnel_license_expiry ON personnel_records(license_expiry_date)",
 ];
+
+// Older D1 databases already have personnel_records; CREATE TABLE alone cannot add columns.
+const PERSONNEL_ADDITIONAL_COLUMNS = {
+  departments: "TEXT",
+  responsible_projects: "TEXT",
+  teaching_periods: "INTEGER",
+};
+
+export async function ensurePersonnelColumns(env) {
+  const { results } = await env.DB.prepare("PRAGMA table_info(personnel_records)").all();
+  const existing = new Set(results.map(({ name }) => name));
+  for (const [name, type] of Object.entries(PERSONNEL_ADDITIONAL_COLUMNS)) {
+    if (!existing.has(name)) {
+      try {
+        await env.DB.prepare(`ALTER TABLE personnel_records ADD COLUMN ${name} ${type}`).run();
+      } catch (error) {
+        // Another Worker instance may have applied the same migration concurrently.
+        if (!/duplicate column name/i.test(String(error?.message || error))) throw error;
+      }
+    }
+  }
+}
 
 function cleanName(value) {
   return String(value || "")
@@ -138,6 +163,7 @@ async function linkExistingAccounts(env) {
 
 async function initialize(env) {
   await env.DB.batch(SCHEMA.map((sql) => env.DB.prepare(sql)));
+  await ensurePersonnelColumns(env);
   await seedLicenseRows(env);
   await linkExistingAccounts(env);
 }
