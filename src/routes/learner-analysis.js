@@ -7,10 +7,10 @@ const FIELDS = [
 ];
 const DATE_FIELDS = new Set(["assessment_date", "followup_date"]);
 const ROLES = new Set(["teacher", "staff", "executive", "superadmin"]);
-let schemaReady = false;
+const schemaReady = new WeakSet();
 
 async function ensureSchema(env) {
-  if (schemaReady) return;
+  if (schemaReady.has(env.DB)) return;
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS learner_analyses (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
@@ -26,7 +26,18 @@ async function ensureSchema(env) {
     UNIQUE (student_id, academic_term_id, teacher_user_id)
   )`).run();
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_learner_analyses_period_teacher ON learner_analyses(academic_term_id,teacher_user_id,student_id)").run();
-  schemaReady = true;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS learner_class_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    academic_term_id INTEGER NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+    grade_level TEXT NOT NULL,
+    classroom TEXT NOT NULL,
+    teacher_user_id INTEGER NOT NULL REFERENCES users(id),
+    assigned_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (academic_term_id, grade_level, classroom, teacher_user_id)
+  )`).run();
+  await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_learner_class_assignments_teacher ON learner_class_assignments(teacher_user_id,academic_term_id,grade_level,classroom)").run();
+  schemaReady.add(env.DB);
 }
 
 async function findTerm(env, termId) {
@@ -49,6 +60,59 @@ function normalizeField(field, raw) {
   return value || null;
 }
 
+async function canAccessRoom(env, user, termId, gradeLevel, classroom) {
+  if (isAdmin(user)) return true;
+  if (!gradeLevel || !classroom) return false;
+  const assigned = await env.DB.prepare(`SELECT 1 FROM learner_class_assignments
+    WHERE teacher_user_id=? AND academic_term_id=? AND grade_level=? AND classroom=?`)
+    .bind(user.id, termId, gradeLevel, classroom).first();
+  return !!assigned;
+}
+
+async function listAssignments(request, env) {
+  const url = new URL(request.url);
+  const term = await findTerm(env, Number(url.searchParams.get("term_id")));
+  if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
+  const gradeLevel = (url.searchParams.get("grade_level") || "").trim();
+  const classroom = (url.searchParams.get("classroom") || "").trim();
+  if (!gradeLevel || !classroom || gradeLevel.length > 80 || classroom.length > 80)
+    return jsonResponse({ error:"กรุณาเลือกระดับชั้นและห้องเรียน" },400);
+  const { results } = await env.DB.prepare(`SELECT a.id,a.teacher_user_id,u.full_name,u.role
+    FROM learner_class_assignments a JOIN users u ON u.id=a.teacher_user_id
+    WHERE a.academic_term_id=? AND a.grade_level=? AND a.classroom=?
+    ORDER BY u.full_name,u.id`).bind(term.id,gradeLevel,classroom).all();
+  return jsonResponse({ assignments:results },200,{ "Cache-Control":"private, no-store" });
+}
+
+async function addAssignment(request, env, user) {
+  const body = await request.json().catch(() => null);
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({ error:"ข้อมูลไม่ถูกต้อง" },400);
+  const term = await findTerm(env, Number(body.term_id));
+  if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
+  const gradeLevel = typeof body.grade_level === "string" ? body.grade_level.trim() : "";
+  const classroom = typeof body.classroom === "string" ? body.classroom.trim() : "";
+  const teacherId = Number(body.teacher_user_id);
+  if (!gradeLevel || !classroom || gradeLevel.length > 80 || classroom.length > 80 ||
+      !Number.isSafeInteger(teacherId) || teacherId <= 0) return jsonResponse({ error:"ข้อมูลห้องหรือครูไม่ถูกต้อง" },400);
+  const room = await env.DB.prepare(`SELECT 1 FROM student_enrollments WHERE academic_term_id=?
+    AND grade_level=? AND classroom=? AND status='enrolled' LIMIT 1`)
+    .bind(term.id,gradeLevel,classroom).first();
+  if (!room) return jsonResponse({ error:"ไม่พบห้องเรียนในภาคเรียนที่เลือก" },404);
+  const teacher = await env.DB.prepare(`SELECT id FROM users
+    WHERE id=? AND status='active' AND role IN ('teacher','staff')`).bind(teacherId).first();
+  if (!teacher) return jsonResponse({ error:"กรุณาเลือกครูหรือบุคลากรที่ใช้งานอยู่" },400);
+  await env.DB.prepare(`INSERT OR IGNORE INTO learner_class_assignments
+    (academic_term_id,grade_level,classroom,teacher_user_id,assigned_by) VALUES (?,?,?,?,?)`)
+    .bind(term.id,gradeLevel,classroom,teacherId,user.id).run();
+  return jsonResponse({ ok:true },200,{ "Cache-Control":"private, no-store" });
+}
+
+async function removeAssignment(env, id) {
+  if (!Number.isSafeInteger(id) || id <= 0) return jsonResponse({ error:"รายการไม่ถูกต้อง" },400);
+  await env.DB.prepare("DELETE FROM learner_class_assignments WHERE id=?").bind(id).run();
+  return jsonResponse({ ok:true },200,{ "Cache-Control":"private, no-store" });
+}
+
 async function listClassroom(request, env, user) {
   const url = new URL(request.url);
   const term = await findTerm(env, Number(url.searchParams.get("term_id")));
@@ -58,6 +122,8 @@ async function listClassroom(request, env, user) {
   if (!gradeLevel || gradeLevel.length > 80) return jsonResponse({ error:"กรุณาเลือกระดับชั้น" },400);
   if (!classroom || classroom.length > 80) return jsonResponse({ error:"กรุณาเลือกห้องเรียน" },400);
   await ensureSchema(env);
+  if (!await canAccessRoom(env,user,term.id,gradeLevel,classroom))
+    return jsonResponse({ error:"ไม่มีสิทธิ์เข้าถึงห้องนี้ กรุณาให้ผู้ดูแลมอบหมายครูประจำห้องก่อน" },403);
   const includePrint = url.searchParams.get("print") === "1";
   const columns = includePrint ? `s.health_conditions,s.allergies,d.disadvantage,
        d.guardian_prefix,d.guardian_first_name,d.guardian_last_name,d.guardian_relationship,
@@ -82,26 +148,38 @@ async function listClassroom(request, env, user) {
     { "Cache-Control":"private, no-store" });
 }
 
-async function listGrades(request, env) {
+async function listGrades(request, env, user) {
   const term = await findTerm(env, Number(new URL(request.url).searchParams.get("term_id")));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
+  await ensureSchema(env);
+  const filter = isAdmin(user) ? "" : `AND EXISTS (SELECT 1 FROM learner_class_assignments a
+    WHERE a.academic_term_id=e.academic_term_id AND a.grade_level=e.grade_level
+      AND a.classroom=e.classroom AND a.teacher_user_id=?)`;
   const { results } = await env.DB.prepare(`SELECT e.grade_level,COUNT(*) AS student_count
     FROM student_enrollments e WHERE e.academic_term_id=? AND e.status='enrolled'
       AND e.grade_level IS NOT NULL AND TRIM(e.grade_level)<>''
-    GROUP BY e.grade_level ORDER BY e.grade_level`).bind(term.id).all();
+      ${filter}
+    GROUP BY e.grade_level ORDER BY e.grade_level`)
+    .bind(...(isAdmin(user) ? [term.id] : [term.id,user.id])).all();
   return jsonResponse({ term, grades:results },200,{ "Cache-Control":"private, no-store" });
 }
 
-async function listClassrooms(request, env) {
+async function listClassrooms(request, env, user) {
   const url = new URL(request.url);
   const term = await findTerm(env, Number(url.searchParams.get("term_id")));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
   const gradeLevel = (url.searchParams.get("grade_level") || "").trim();
   if (!gradeLevel || gradeLevel.length > 80) return jsonResponse({ error:"กรุณาเลือกระดับชั้น" },400);
+  await ensureSchema(env);
+  const filter = isAdmin(user) ? "" : `AND EXISTS (SELECT 1 FROM learner_class_assignments a
+    WHERE a.academic_term_id=e.academic_term_id AND a.grade_level=e.grade_level
+      AND a.classroom=e.classroom AND a.teacher_user_id=?)`;
   const { results } = await env.DB.prepare(`SELECT e.classroom,COUNT(*) AS student_count
     FROM student_enrollments e WHERE e.academic_term_id=? AND e.grade_level=? AND e.status='enrolled'
       AND e.classroom IS NOT NULL AND TRIM(e.classroom)<>''
-    GROUP BY e.classroom ORDER BY e.classroom`).bind(term.id,gradeLevel).all();
+      ${filter}
+    GROUP BY e.classroom ORDER BY e.classroom`)
+    .bind(...(isAdmin(user) ? [term.id,gradeLevel] : [term.id,gradeLevel,user.id])).all();
   return jsonResponse({ term, grade_level:gradeLevel, classrooms:results },200,{ "Cache-Control":"private, no-store" });
 }
 
@@ -114,6 +192,8 @@ async function readRecord(request, env, user, studentId) {
     WHERE e.academic_term_id=? AND e.student_id=? AND e.status='enrolled'`)
     .bind(term.id,studentId).first();
   if (!student) return jsonResponse({ error:"ไม่พบนักเรียนในภาคเรียนที่เลือก" },404);
+  if (!await canAccessRoom(env,user,term.id,student.grade_level,student.classroom))
+    return jsonResponse({ error:"ไม่มีสิทธิ์เข้าถึงห้องของนักเรียนรายนี้" },403);
   const analysis = await env.DB.prepare(`SELECT ${FIELDS.join(",")},updated_at FROM learner_analyses
     WHERE student_id=? AND academic_term_id=? AND teacher_user_id=?`)
     .bind(studentId,term.id,user.id).first();
@@ -125,9 +205,12 @@ async function saveRecord(request, env, user, studentId) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({ error:"ข้อมูลไม่ถูกต้อง" },400);
   const term = await findTerm(env, Number(body.term_id));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
-  const enrolled = await env.DB.prepare(`SELECT 1 FROM student_enrollments
+  await ensureSchema(env);
+  const enrolled = await env.DB.prepare(`SELECT grade_level,classroom FROM student_enrollments
     WHERE academic_term_id=? AND student_id=? AND status='enrolled'`).bind(term.id,studentId).first();
   if (!enrolled) return jsonResponse({ error:"ไม่พบนักเรียนในภาคเรียนที่เลือก" },404);
+  if (!await canAccessRoom(env,user,term.id,enrolled.grade_level,enrolled.classroom))
+    return jsonResponse({ error:"ไม่มีสิทธิ์บันทึกข้อมูลนักเรียนรายนี้" },403);
   let values;
   try { values = FIELDS.map((field) => normalizeField(field,body[field])); }
   catch(error) { return jsonResponse({ error:error.message },400); }
@@ -147,8 +230,17 @@ export async function handleLearnerAnalysisRoute(request, env, pathname, method)
   const user = await getCurrentUser(request,env);
   if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
   if (!ROLES.has(user.role) && !isAdmin(user)) return jsonResponse({ error:"ไม่มีสิทธิ์เข้าถึง" },403);
-  if (pathname === "/api/learner-analysis/grades" && method === "GET") return listGrades(request,env);
-  if (pathname === "/api/learner-analysis/classrooms" && method === "GET") return listClassrooms(request,env);
+  if (pathname.startsWith("/api/learner-analysis/assignments")) {
+    if (!isAdmin(user)) return jsonResponse({ error:"เฉพาะผู้บริหารหรือผู้ดูแลระบบ" },403);
+    await ensureSchema(env);
+    if (pathname === "/api/learner-analysis/assignments" && method === "GET") return listAssignments(request,env);
+    if (pathname === "/api/learner-analysis/assignments" && method === "POST") return addAssignment(request,env,user);
+    const match = pathname.match(/^\/api\/learner-analysis\/assignments\/(\d+)$/);
+    if (match && method === "DELETE") return removeAssignment(env,Number(match[1]));
+    return jsonResponse({ error:"ไม่พบ endpoint นี้" },404);
+  }
+  if (pathname === "/api/learner-analysis/grades" && method === "GET") return listGrades(request,env,user);
+  if (pathname === "/api/learner-analysis/classrooms" && method === "GET") return listClassrooms(request,env,user);
   if (pathname === "/api/learner-analysis/roster" && method === "GET") return listClassroom(request,env,user);
   const match = pathname.match(/^\/api\/learner-analysis\/records\/(\d+)$/);
   if (match && method === "GET") return readRecord(request,env,user,Number(match[1]));
