@@ -144,7 +144,7 @@
   const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","support_goal","support_owner","support_timeline","followup_date","followup_result","followup_next","learner_interests","learner_learning_style","learner_expectations","learner_message","family_context","learner_group",...domains.flatMap(([key])=>[`${key}_result`,`${key}_evidence`])];
   let years=[],roster=[],selected=null,dirty=false,loading=false,viewer=null,rosterVersion=0,assignmentVersion=0;
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
-  const plain = value => value === null || value === undefined || String(value).trim() === "" ? "–" : String(value).trim();
+  const plain = value => value === null || value === undefined ? "" : String(value).trim();
   const showStatus = (message,error=false) => { $("status").textContent=message; $("status").classList.toggle("error",error); };
   const option = (value,label) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
   const route = `/api/learner-analysis/`;
@@ -223,7 +223,7 @@
     const item=roster.find(s=>s.id===id);if(!item)return;
     if(dirty && !(await saveRecord()))return;
     selected=item;item.selectionYear=$("year").value;item.selectionTerm=$("term").value;item.selectionGrade=$("grade").value;item.selectionClass=$("classroom").value;
-    dirty=false;renderRoster();$("form").hidden=true;$("editorTitle").textContent=`${item.full_name} · ${item.grade_level||"–"}/${item.classroom||"–"}`;
+    dirty=false;renderRoster();$("form").hidden=true;$("editorTitle").textContent=[item.full_name,[item.grade_level,item.classroom].filter(Boolean).join("/")].filter(Boolean).join(" · ");
     showStatus("กำลังโหลดข้อมูล...");
     try {const data=await apiRequest(`${route}records/${id}?term_id=${encodeURIComponent(item.selectionTerm)}`);
       if(selected!==item)return;fields.forEach(field=>$(field).value=data.analysis?.[field]||"");
@@ -231,7 +231,7 @@
       const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
       const registry=[["เลขประจำตัว",s.student_code],["ผู้ปกครอง",guardian],["ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback],["ข้อมูลสุขภาพที่ควรทราบ",[s.health_conditions,s.allergies].filter(Boolean).join("; ")],["ข้อมูลสนับสนุนอื่น",s.disadvantage]];
       $("registryPreview").innerHTML=registry.map(([label,value])=>`<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(plain(value))}</div>`).join("");
-      $("studentClass").value=[item.grade_level,item.classroom].filter(Boolean).join(" / ") || "–";
+      $("studentClass").value=[item.grade_level,item.classroom].filter(Boolean).join(" / ");
       $("form").hidden=false;showStatus(data.analysis?"มีข้อมูลที่บันทึกไว้แล้ว":"ยังไม่มีผลวิเคราะห์ที่บันทึกไว้");
     }catch(e){showStatus(e.message,true);}
   }
@@ -241,13 +241,13 @@
     }catch(e){showStatus(e.message,true);return false;}
     finally{loading=false;$("save").disabled=false;}
   }
-  const dateThai = value => {if(!value)return "–";const d=new Date(`${value}T12:00:00+07:00`);return Number.isNaN(d.getTime()) ? "–" : new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"}).format(d);};
+  const dateThai = value => {if(!value)return "";const d=new Date(`${value}T12:00:00+07:00`);return Number.isNaN(d.getTime()) ? "" : new Intl.DateTimeFormat("th-TH",{day:"numeric",month:"long",year:"numeric",timeZone:"Asia/Bangkok"}).format(d);};
   function paperLine(label,value,wide=false) {return `<div class="paper-line${wide?" wide":""}"><label>${escapeHtml(label)}</label><span>${escapeHtml(plain(value))}</span></div>`;}
   function paperParagraph(label,value){return `<p class="paper-paragraph"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(plain(value))}</p>`;}
   function paperSection(title,content) {return `<section class="paper-section"><h2>${escapeHtml(title)}</h2>${content}</section>`;}
   function paperTable(headings,rows,widths){return `<table class="paper-table"><colgroup>${widths.map(width=>`<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${headings.map(x=>`<th scope="col">${escapeHtml(x)}</th>`).join("")}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(x=>`<td>${escapeHtml(plain(x))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;}
   function buildPaper(s,number,total) {
-    const year=currentYear();const teacher=viewer?.full_name||"–";
+    const year=currentYear();const teacher=viewer?.full_name||"";
     const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
     const health=[s.health_conditions,s.allergies].filter(Boolean).join("; ");
     const domainsTable=paperTable(["ด้านที่ประเมิน","ระดับ","หลักฐานหรือข้อสังเกต"],domains.map(([key,label])=>[label,s[`${key}_result`],s[`${key}_evidence`]]),[35,17,48]);
