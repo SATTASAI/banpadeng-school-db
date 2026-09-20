@@ -53,7 +53,9 @@ async function listClassroom(request, env, user) {
   const url = new URL(request.url);
   const term = await findTerm(env, Number(url.searchParams.get("term_id")));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
+  const gradeLevel = (url.searchParams.get("grade_level") || "").trim();
   const classroom = (url.searchParams.get("classroom") || "").trim();
+  if (!gradeLevel || gradeLevel.length > 80) return jsonResponse({ error:"กรุณาเลือกระดับชั้น" },400);
   if (!classroom || classroom.length > 80) return jsonResponse({ error:"กรุณาเลือกห้องเรียน" },400);
   await ensureSchema(env);
   const includePrint = url.searchParams.get("print") === "1";
@@ -74,20 +76,33 @@ async function listClassroom(request, env, user) {
      FROM student_enrollments e JOIN students s ON s.id=e.student_id
      ${detailJoin}
      LEFT JOIN learner_analyses a ON a.student_id=s.id AND a.academic_term_id=e.academic_term_id AND a.teacher_user_id=?
-     WHERE e.academic_term_id=? AND e.classroom=? AND e.status='enrolled'
-     ORDER BY s.full_name,s.id`).bind(user.id,term.id,classroom).all();
-  return jsonResponse({ term, classroom, teacher_name:user.full_name, students:results },200,
+     WHERE e.academic_term_id=? AND e.grade_level=? AND e.classroom=? AND e.status='enrolled'
+     ORDER BY s.full_name,s.id`).bind(user.id,term.id,gradeLevel,classroom).all();
+  return jsonResponse({ term, grade_level:gradeLevel, classroom, teacher_name:user.full_name, students:results },200,
     { "Cache-Control":"private, no-store" });
 }
 
-async function listClassrooms(request, env, user) {
+async function listGrades(request, env) {
   const term = await findTerm(env, Number(new URL(request.url).searchParams.get("term_id")));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
-  const { results } = await env.DB.prepare(`SELECT e.classroom,COUNT(*) AS student_count
+  const { results } = await env.DB.prepare(`SELECT e.grade_level,COUNT(*) AS student_count
     FROM student_enrollments e WHERE e.academic_term_id=? AND e.status='enrolled'
+      AND e.grade_level IS NOT NULL AND TRIM(e.grade_level)<>''
+    GROUP BY e.grade_level ORDER BY e.grade_level`).bind(term.id).all();
+  return jsonResponse({ term, grades:results },200,{ "Cache-Control":"private, no-store" });
+}
+
+async function listClassrooms(request, env) {
+  const url = new URL(request.url);
+  const term = await findTerm(env, Number(url.searchParams.get("term_id")));
+  if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
+  const gradeLevel = (url.searchParams.get("grade_level") || "").trim();
+  if (!gradeLevel || gradeLevel.length > 80) return jsonResponse({ error:"กรุณาเลือกระดับชั้น" },400);
+  const { results } = await env.DB.prepare(`SELECT e.classroom,COUNT(*) AS student_count
+    FROM student_enrollments e WHERE e.academic_term_id=? AND e.grade_level=? AND e.status='enrolled'
       AND e.classroom IS NOT NULL AND TRIM(e.classroom)<>''
-    GROUP BY e.classroom ORDER BY e.classroom`).bind(term.id).all();
-  return jsonResponse({ term, classrooms:results },200,{ "Cache-Control":"private, no-store" });
+    GROUP BY e.classroom ORDER BY e.classroom`).bind(term.id,gradeLevel).all();
+  return jsonResponse({ term, grade_level:gradeLevel, classrooms:results },200,{ "Cache-Control":"private, no-store" });
 }
 
 async function readRecord(request, env, user, studentId) {
@@ -132,7 +147,8 @@ export async function handleLearnerAnalysisRoute(request, env, pathname, method)
   const user = await getCurrentUser(request,env);
   if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
   if (!ROLES.has(user.role) && !isAdmin(user)) return jsonResponse({ error:"ไม่มีสิทธิ์เข้าถึง" },403);
-  if (pathname === "/api/learner-analysis/classrooms" && method === "GET") return listClassrooms(request,env,user);
+  if (pathname === "/api/learner-analysis/grades" && method === "GET") return listGrades(request,env);
+  if (pathname === "/api/learner-analysis/classrooms" && method === "GET") return listClassrooms(request,env);
   if (pathname === "/api/learner-analysis/roster" && method === "GET") return listClassroom(request,env,user);
   const match = pathname.match(/^\/api\/learner-analysis\/records\/(\d+)$/);
   if (match && method === "GET") return readRecord(request,env,user,Number(match[1]));
