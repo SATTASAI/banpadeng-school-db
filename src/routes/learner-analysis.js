@@ -9,6 +9,7 @@ const FIELDS = [
   "knowledge_result", "knowledge_evidence", "intellectual_result", "intellectual_evidence",
   "behavior_result", "behavior_evidence", "physical_result", "physical_evidence",
   "social_result", "social_evidence",
+  "support_goal", "support_owner", "support_timeline",
 ];
 const NEW_FIELDS = FIELDS.slice(15);
 const RATINGS = new Set(["ดี", "ปานกลาง", "ควรส่งเสริม"]);
@@ -204,8 +205,15 @@ async function readRecord(request, env, user, studentId) {
   const term = await findTerm(env, Number(new URL(request.url).searchParams.get("term_id")));
   if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
   await ensureSchema(env);
-  const student = await env.DB.prepare(`SELECT s.id,s.student_code,s.full_name,e.grade_level,e.classroom
+  const student = await env.DB.prepare(`SELECT s.id,s.student_code,s.full_name,s.health_conditions,s.allergies,
+    e.grade_level,e.classroom,d.disadvantage,d.guardian_prefix,d.guardian_first_name,
+    d.guardian_last_name,d.guardian_relationship,
+    (SELECT g.full_name FROM guardians g WHERE g.student_id=s.id
+      ORDER BY g.is_emergency_contact DESC,g.id LIMIT 1) AS guardian_name_fallback,
+    (SELECT g.relationship FROM guardians g WHERE g.student_id=s.id
+      ORDER BY g.is_emergency_contact DESC,g.id LIMIT 1) AS guardian_relationship_fallback
     FROM student_enrollments e JOIN students s ON s.id=e.student_id
+    LEFT JOIN student_details d ON d.student_id=s.id
     WHERE e.academic_term_id=? AND e.student_id=? AND e.status='enrolled'`)
     .bind(term.id,studentId).first();
   if (!student) return jsonResponse({ error:"ไม่พบนักเรียนในภาคเรียนที่เลือก" },404);

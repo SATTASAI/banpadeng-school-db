@@ -87,14 +87,20 @@ test("legacy learner table gains five domain ratings and preserves saved observa
     term_id:4,learner_interests:"ชอบวาดภาพ",learner_expectations:"อยากอ่านคล่อง",
     knowledge_result:"ปานกลาง",knowledge_evidence:"แบบทดสอบก่อนเรียน",
     physical_result:"ควรส่งเสริม",physical_evidence:"บันทึกการสังเกต",
-    learner_group:"ต้องการการสนับสนุนเฉพาะ",support_plan:"ฝึกอ่านร่วมกับครู",
+    learner_group:"ต้องการการสนับสนุนเฉพาะ",support_goal:"อ่านออกเสียงได้คล่อง",
+    support_plan:"ฝึกอ่านร่วมกับครู",support_owner:"ครูหนึ่ง",support_timeline:"4 สัปดาห์",
   });
   const record=await api(env,7,"records/9?term_id=4");
   assert.equal(record.analysis.learner_interests,"ชอบวาดภาพ");
   assert.equal(record.analysis.knowledge_result,"ปานกลาง");
   assert.equal(record.analysis.learner_group,"ต้องการการสนับสนุนเฉพาะ");
+  assert.equal(record.analysis.support_goal,"อ่านออกเสียงได้คล่อง");
+  assert.equal(record.analysis.support_owner,"ครูหนึ่ง");
+  assert.equal(record.student.guardian_first_name,"ผู้ปกครอง");
+  assert.equal(record.student.health_conditions,"แพ้อาหาร");
   const room=await api(env,7,"roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1");
   assert.equal(room.students[0].physical_evidence,"บันทึกการสังเกต");
+  assert.equal(room.students[0].support_timeline,"4 สัปดาห์");
 });
 
 test("unassigned users cannot list, read, save or print students; revocation takes effect immediately",async()=>{

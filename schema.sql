@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS learner_analyses (
   behavior_result TEXT, behavior_evidence TEXT,
   physical_result TEXT, physical_evidence TEXT,
   social_result TEXT, social_evidence TEXT,
+  support_goal TEXT, support_owner TEXT, support_timeline TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(student_id,academic_term_id,teacher_user_id)

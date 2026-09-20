@@ -35,41 +35,43 @@
   .analysis-section { margin-top:20px; padding-top:14px; border-top:1px solid #e3ebf2; }
   .analysis-section h3 { margin:0 0 12px; font-size:16px; color:#194a75; }
   .analysis-hint { margin:0 0 12px; font-size:13px; color:#647c93; }
+  .registry-preview { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; margin:10px 0 14px; padding:12px; border:1px solid #dce6ee; border-radius:10px; background:#f7fafc; }
+  .registry-preview div { min-width:0; overflow-wrap:anywhere; }
+  .registry-preview strong { color:#36536f; }
   .assignment-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .assignment-chip { display:inline-flex; align-items:center; gap:8px; border:1px solid #cfe0ef; border-radius:10px; padding:7px 10px; background:#f4f9fd; }
   .assignment-chip button { border:0; background:none; color:#ad3535; cursor:pointer; font:inherit; }
   .analysis-print { display:none; }
   @media(max-width:780px) { .analysis-grid { grid-template-columns:1fr; } .analysis-app { padding:14px; } .analysis-row { grid-template-columns:1fr; } }
 
-  @page { size:A4 portrait; margin:16mm 17mm 14mm; }
+  @page { size:A4 portrait; margin:14mm 15mm; }
   @media print {
     html,body { margin:0; padding:0; background:white; }
     .analysis-app,.app-topbar { display:none!important; }
     .analysis-print { display:block; }
-    .analysis-sheet { position:relative; width:auto; min-height:267mm; padding:0; break-after:page; page-break-after:always; color:#172a3c; background:#fff;
-      font-family:"TH SarabunPSK","TH Sarabun New",serif; font-size:16pt; line-height:1.22; }
+    .analysis-sheet { position:relative; width:auto; break-after:page; page-break-after:always; color:#172a3c; background:#fff;
+      font-family:"TH SarabunPSK"; font-size:16pt; line-height:1.08; }
+    .analysis-sheet * { box-sizing:border-box; font-family:"TH SarabunPSK"; font-size:16pt; line-height:1.08; }
     .analysis-sheet:last-child { break-after:auto; page-break-after:auto; }
-    .paper-heading { position:relative; min-height:31mm; padding:0 0 8mm; display:flex; align-items:center; justify-content:center; text-align:center; border-bottom:2px solid #225b93; }
-    .paper-heading img { position:absolute; left:0; top:0; width:20mm; height:25mm; object-fit:contain; }
-    .paper-heading h1 { margin:0 0 1mm; font-size:20pt; color:#143d68; line-height:1.13; }
+    .paper-heading { position:relative; min-height:20mm; padding:0 0 2mm; display:flex; align-items:center; justify-content:center; text-align:center; border-bottom:1px solid #225b93; }
+    .paper-heading img { position:absolute; left:0; top:0; width:15mm; height:18mm; object-fit:contain; }
+    .paper-heading h1 { margin:0 0 1mm; color:#143d68; }
     .paper-heading p { margin:0; }
-    .paper-meta { display:grid; grid-template-columns:1fr 1fr; gap:1.5mm 10mm; margin:5mm 0 4mm; }
+    .paper-meta { display:grid; grid-template-columns:1fr 1fr; gap:1mm 6mm; margin:2mm 0; }
     .paper-line { display:flex; gap:3mm; align-items:baseline; min-width:0; }
     .paper-line.wide { grid-column:1/-1; }
     .paper-line label { white-space:nowrap; }
-    .paper-line span { flex:1; padding:0 2mm; min-height:6.5mm; border-bottom:1px dotted #8a9baaa0; overflow-wrap:anywhere; white-space:pre-wrap; }
-    .paper-section { margin:3.8mm 0 0; break-inside:auto; }
-    .paper-section h2 { margin:0 0 2mm; padding:1.2mm 2.3mm; border-left:3px solid #225b93; background:#f0f6fb; color:#173d65; font-size:16pt; break-after:avoid; page-break-after:avoid; }
-    .paper-columns { display:grid; grid-template-columns:1fr 1fr; gap:1.5mm 9mm; }
-    .paper-assessment-entry { margin:0 0 2mm; border-top:1px solid #ccd8e3; }
-    .paper-assessment-entry h3 { margin:1mm 0; color:#173d65; font-size:16pt; break-after:avoid; page-break-after:avoid; }
-    .paper-assessment-entry p { margin:1mm 0; white-space:pre-wrap; overflow-wrap:anywhere; }
-    .paper-paragraph { margin:1mm 0 2mm; white-space:pre-wrap; overflow-wrap:anywhere; }
-    .paper-box { min-height:13mm; padding:1mm 2mm; white-space:pre-wrap; overflow-wrap:anywhere; }
-    .paper-sign { display:grid; grid-template-columns:1fr 1fr; gap:12mm; text-align:center; margin-top:5mm; break-inside:avoid; page-break-inside:avoid; }
-    .paper-sign span { display:block; border-bottom:1px dotted #879aaa; height:13mm; }
-    .paper-sign small { font-size:13pt; color:#62758a; }
-    .paper-count { text-align:right; margin-top:4mm; font-size:11pt; color:#789; }
+    .paper-line span { flex:1; padding:0 1mm; min-height:5.5mm; border-bottom:1px dotted #8a9baa; overflow-wrap:anywhere; white-space:pre-wrap; }
+    .paper-section { margin:2mm 0 0; }
+    .paper-section h2 { margin:0 0 1mm; padding:.7mm 2mm; border-left:2px solid #225b93; background:#f0f6fb; color:#173d65; break-after:avoid; page-break-after:avoid; }
+    .paper-columns { display:grid; grid-template-columns:1fr 1fr; gap:1mm 6mm; }
+    .paper-paragraph { margin:.6mm 0; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .paper-table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    .paper-table th,.paper-table td { padding:.8mm 1.5mm; border:1px solid #bdcedc; vertical-align:top; text-align:left; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .paper-table th { color:#173d65; background:#edf4f9; }
+    .paper-table tr { break-inside:avoid; page-break-inside:avoid; }
+    .paper-sign { text-align:right; margin-top:4mm; break-inside:avoid; page-break-inside:avoid; }
+    .paper-count { text-align:right; margin-top:2mm; color:#62758a; }
     .paper-section,.paper-heading { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
   }
 </style>
@@ -92,6 +94,7 @@
     <section class="analysis-panel" id="editor"><h2 id="editorTitle">เลือกนักเรียนเพื่อเริ่มบันทึก</h2>
       <p class="analysis-hint">ข้อมูลทะเบียนจะถูกดึงจากระบบ ส่วนผลการประเมินให้ครูกรอกตามหลักฐานจริง</p>
       <form id="form" hidden>
+        <div class="registry-preview" id="registryPreview" aria-label="ข้อมูลผู้เรียนจากทะเบียน"></div>
         <div class="analysis-row"><div class="analysis-field"><label for="assessment_date">วันที่วิเคราะห์</label><input type="date" id="assessment_date"></div><div class="analysis-field"><label>ชั้น/ห้อง</label><input id="studentClass" readonly></div></div>
         <div class="analysis-section"><h3>1. ข้อมูลจากนักเรียนและครอบครัว</h3>
           <p class="analysis-hint">ถามนักเรียนตามความเหมาะสมและบันทึกเฉพาะข้อมูลที่จำเป็นต่อการจัดการเรียนรู้</p>
@@ -107,7 +110,9 @@
           <div class="analysis-field"><label for="needs">สิ่งที่ควรพัฒนา</label><textarea id="needs"></textarea></div>
         </div>
         <div class="analysis-section"><h3>5. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล</h3>
-          <div class="analysis-field"><label for="support_plan">แผนการสอน/ช่วยเหลือ</label><textarea id="support_plan"></textarea></div>
+          <div class="analysis-field"><label for="support_goal">เป้าหมาย</label><textarea id="support_goal"></textarea></div>
+          <div class="analysis-field"><label for="support_plan">กิจกรรมหรือวิธีช่วยเหลือ</label><textarea id="support_plan"></textarea></div>
+          <div class="analysis-row"><div class="analysis-field"><label for="support_owner">ผู้รับผิดชอบ</label><input id="support_owner" maxlength="4000"></div><div class="analysis-field"><label for="support_timeline">ช่วงเวลาดำเนินการ</label><input id="support_timeline" maxlength="4000"></div></div>
         </div>
         <div class="analysis-section"><h3>6. การติดตามผล</h3>
           <div class="analysis-field"><label for="followup_date">วันที่ติดตาม</label><input type="date" id="followup_date"></div>
@@ -136,7 +141,7 @@
   const $ = id => document.getElementById(id);
   const categories = [["reading","การอ่าน"],["writing","การเขียน"],["thinking","การคิดและการสื่อสาร"],["participation","พฤติกรรมการเรียน"]];
   const domains = [["knowledge","ความรู้ ความสามารถ และประสบการณ์"],["intellectual","การคิดและการเรียนรู้"],["behavior","พฤติกรรมและการควบคุมตนเอง"],["physical","ร่างกายและสุขภาวะ"],["social","การอยู่ร่วมกับผู้อื่น"]];
-  const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","followup_date","followup_result","followup_next","learner_interests","learner_learning_style","learner_expectations","learner_message","family_context","learner_group",...domains.flatMap(([key])=>[`${key}_result`,`${key}_evidence`])];
+  const fields = ["assessment_date","reading_result","reading_evidence","writing_result","writing_evidence","thinking_result","thinking_evidence","participation_result","participation_evidence","strengths","needs","support_plan","support_goal","support_owner","support_timeline","followup_date","followup_result","followup_next","learner_interests","learner_learning_style","learner_expectations","learner_message","family_context","learner_group",...domains.flatMap(([key])=>[`${key}_result`,`${key}_evidence`])];
   let years=[],roster=[],selected=null,dirty=false,loading=false,viewer=null,rosterVersion=0,assignmentVersion=0;
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, char=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
   const plain = value => value === null || value === undefined || String(value).trim() === "" ? "–" : String(value).trim();
@@ -222,6 +227,10 @@
     showStatus("กำลังโหลดข้อมูล...");
     try {const data=await apiRequest(`${route}records/${id}?term_id=${encodeURIComponent(item.selectionTerm)}`);
       if(selected!==item)return;fields.forEach(field=>$(field).value=data.analysis?.[field]||"");
+      const s=data.student;
+      const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
+      const registry=[["เลขประจำตัว",s.student_code],["ผู้ปกครอง",guardian],["ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback],["ข้อมูลสุขภาพที่ควรทราบ",[s.health_conditions,s.allergies].filter(Boolean).join("; ")],["ข้อมูลสนับสนุนอื่น",s.disadvantage]];
+      $("registryPreview").innerHTML=registry.map(([label,value])=>`<div><strong>${escapeHtml(label)}:</strong> ${escapeHtml(plain(value))}</div>`).join("");
       $("studentClass").value=[item.grade_level,item.classroom].filter(Boolean).join(" / ") || "–";
       $("form").hidden=false;showStatus(data.analysis?"มีข้อมูลที่บันทึกไว้แล้ว":"ยังไม่มีผลวิเคราะห์ที่บันทึกไว้");
     }catch(e){showStatus(e.message,true);}
@@ -236,22 +245,24 @@
   function paperLine(label,value,wide=false) {return `<div class="paper-line${wide?" wide":""}"><label>${escapeHtml(label)}</label><span>${escapeHtml(plain(value))}</span></div>`;}
   function paperParagraph(label,value){return `<p class="paper-paragraph"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(plain(value))}</p>`;}
   function paperSection(title,content) {return `<section class="paper-section"><h2>${escapeHtml(title)}</h2>${content}</section>`;}
+  function paperTable(headings,rows,widths){return `<table class="paper-table"><colgroup>${widths.map(width=>`<col style="width:${width}%">`).join("")}</colgroup><thead><tr>${headings.map(x=>`<th scope="col">${escapeHtml(x)}</th>`).join("")}</tr></thead><tbody>${rows.map(row=>`<tr>${row.map(x=>`<td>${escapeHtml(plain(x))}</td>`).join("")}</tr>`).join("")}</tbody></table>`;}
   function buildPaper(s,number,total) {
     const year=currentYear();const teacher=viewer?.full_name||"–";
     const guardian=[s.guardian_prefix,s.guardian_first_name,s.guardian_last_name].filter(Boolean).join(" ") || s.guardian_name_fallback;
     const health=[s.health_conditions,s.allergies].filter(Boolean).join("; ");
-    const personal=`<div class="paper-columns">${paperLine("ผู้ปกครอง",guardian)}${paperLine("ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback)}${paperLine("ข้อมูลสุขภาพที่ควรทราบ",health)}${paperLine("ข้อมูลสนับสนุนอื่น",s.disadvantage)}</div>${paperParagraph("บริบทครอบครัวที่เกี่ยวข้องกับการเรียน",s.family_context)}${paperParagraph("ความสนใจและความถนัด",s.learner_interests)}${paperParagraph("วิธีเรียนรู้ที่ชอบ",s.learner_learning_style)}${paperParagraph("สิ่งที่คาดหวัง",s.learner_expectations)}${paperParagraph("สิ่งที่อยากบอกครู",s.learner_message)}`;
-    const domainResults=domains.map(([key,label])=>`<div class="paper-assessment-entry"><h3>${escapeHtml(label)}</h3>${paperParagraph("ระดับ",s[`${key}_result`])}${paperParagraph("หลักฐานหรือข้อสังเกต",s[`${key}_evidence`])}</div>`).join("");
-    const assessment=categories.map(([key,label])=>`<div class="paper-assessment-entry"><h3>${escapeHtml(label)}</h3><p><strong>ผลที่พบ:</strong> ${escapeHtml(plain(s[`${key}_result`]))}</p><p><strong>หลักฐาน/ข้อสังเกต:</strong> ${escapeHtml(plain(s[`${key}_evidence`]))}</p></div>`).join("");
-    return `<article class="analysis-sheet"><header class="paper-heading"><img src="/logo.jpg" alt="ตราโรงเรียน"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>โรงเรียนบ้านป่าเด็ง</p><p>ปีการศึกษา ${escapeHtml(plain(year?.year_be))} · ${escapeHtml(plain($("term").selectedOptions[0]?.text))}</p></div></header>
-      <div class="paper-meta">${paperLine("ชื่อ–นามสกุล",s.full_name,true)}${paperLine("เลขประจำตัว",s.student_code)}${paperLine("ชั้น/ห้อง",[s.grade_level,s.classroom].filter(Boolean).join(" / "))}${paperLine("ครูผู้วิเคราะห์",teacher)}${paperLine("วันที่วิเคราะห์",dateThai(s.assessment_date))}</div>
-      ${paperSection("1. ข้อมูลพื้นฐานและเสียงของนักเรียน",personal)}${paperSection("2. ผลประเมินความพร้อม 5 ด้าน",domainResults)}
-      ${paperSection("3. ทักษะการเรียนรู้เพิ่มเติม",assessment)}
-      ${paperSection("4. สรุปผลและแนวทางพัฒนา",paperParagraph("กลุ่มเพื่อวางแผนจัดการเรียนรู้",s.learner_group)+paperParagraph("จุดเด่น",s.strengths)+paperParagraph("สิ่งที่ควรพัฒนา",s.needs))}
-      ${paperSection("5. แนวทางจัดการเรียนรู้และช่วยเหลือรายบุคคล",`<div class="paper-box">${escapeHtml(plain(s.support_plan))}</div>`)}
-      ${paperSection("6. การติดตามผล",paperLine("วันที่ติดตาม",dateThai(s.followup_date))+paperParagraph("ผลที่พบ",s.followup_result)+paperParagraph("แนวทางต่อไป",s.followup_next))}
-      <footer class="paper-sign"><div><span></span><small>ลงชื่อครูผู้วิเคราะห์</small></div><div><span></span><small>ลงชื่อผู้ตรวจ/ผู้รับทราบ (ถ้ามี)</small></div></footer><div class="paper-count">ลำดับนักเรียน ${number}/${total}</div>
-    </article>`;
+    const domainsTable=paperTable(["ด้านที่ประเมิน","ระดับ","หลักฐานหรือข้อสังเกต"],domains.map(([key,label])=>[label,s[`${key}_result`],s[`${key}_evidence`]]),[35,17,48]);
+    const skillsTable=paperTable(["ทักษะการเรียนรู้","ผลที่พบ","หลักฐานหรือข้อสังเกต"],categories.map(([key,label])=>[label,s[`${key}_result`],s[`${key}_evidence`]]),[26,31,43]);
+    const room=[s.grade_level,s.classroom].filter(Boolean).join(" / ");
+    const first=`<article class="analysis-sheet"><header class="paper-heading"><img src="/logo.jpg" alt="ตราโรงเรียน"><div><h1>แบบวิเคราะห์ผู้เรียนรายบุคคล</h1><p>โรงเรียนบ้านป่าเด็ง</p></div></header>
+      ${paperSection("ข้อมูลผู้เรียนจากทะเบียน",`<div class="paper-meta">${paperLine("ปีการศึกษา",year?.year_be)}${paperLine("ภาคเรียน",$("term").selectedOptions[0]?.text)}${paperLine("ชื่อ–นามสกุล",s.full_name)}${paperLine("เลขประจำตัว",s.student_code)}${paperLine("ชั้น/ห้อง",room)}${paperLine("ครูผู้วิเคราะห์",teacher)}${paperLine("ผู้ปกครอง",guardian)}${paperLine("ความเกี่ยวข้อง",s.guardian_relationship||s.guardian_relationship_fallback)}${paperLine("วันที่วิเคราะห์",dateThai(s.assessment_date))}${paperLine("ข้อมูลสุขภาพที่ควรทราบ",health,true)}</div>${s.disadvantage?paperParagraph("ข้อมูลสนับสนุนอื่น",s.disadvantage):""}`)}
+      ${paperSection("ข้อมูลจากนักเรียน",paperParagraph("ความสนใจหรือสิ่งที่ถนัด",s.learner_interests)+paperParagraph("วิธีเรียนรู้ที่ชอบ",s.learner_learning_style)+paperParagraph("สิ่งที่คาดหวัง",s.learner_expectations)+paperParagraph("สิ่งที่อยากบอกครู",s.learner_message)+(s.family_context?paperParagraph("บริบทครอบครัวที่เกี่ยวข้องกับการเรียน",s.family_context):""))}
+      ${paperSection("ผลประเมินความพร้อม 5 ด้าน",domainsTable)}<div class="paper-count">ลำดับนักเรียน ${number}/${total} · หน้า 1/2</div></article>`;
+    const second=`<article class="analysis-sheet">${paperSection("ผลวิเคราะห์และแผนช่วยเหลือรายบุคคล",`<div class="paper-meta">${paperLine("ชื่อ–นามสกุล",s.full_name)}${paperLine("ชั้น/ห้อง",room)}</div>${skillsTable}`)}
+      ${paperSection("สรุปจุดเด่นและสิ่งที่ควรพัฒนา",paperParagraph("จุดเด่น/ความสนใจ",s.strengths)+paperParagraph("สิ่งที่ควรพัฒนา",s.needs)+paperParagraph("กลุ่มเพื่อวางแผนการสอน",s.learner_group))}
+      ${paperSection("แนวทางจัดการเรียนรู้หรือช่วยเหลือ",paperParagraph("เป้าหมาย",s.support_goal)+paperParagraph("กิจกรรม/วิธีช่วยเหลือ",s.support_plan)+`<div class="paper-columns">${paperLine("ผู้รับผิดชอบ",s.support_owner)}${paperLine("ระยะเวลา",s.support_timeline)}</div>`)}
+      ${paperSection("ติดตามผล",paperLine("วันที่ติดตาม",dateThai(s.followup_date))+paperParagraph("ผลที่พบ",s.followup_result)+paperParagraph("แนวทางต่อไป",s.followup_next))}
+      <footer class="paper-sign">ลงชื่อ ........................................................ ครูผู้วิเคราะห์</footer><div class="paper-count">ลำดับนักเรียน ${number}/${total} · หน้า 2/2</div></article>`;
+    return first+second;
   }
   async function printRecords(onlyId){if(!$("term").value||!$("grade").value||!$("classroom").value)return;
     if(dirty && !(await saveRecord()))return;
