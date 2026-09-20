@@ -18,8 +18,8 @@ function environment(){
     INSERT INTO users VALUES (7,'one@example.invalid','ครูหนึ่ง','teacher','active','2026-01-01'),(8,'two@example.invalid','ครูสอง','teacher','active','2026-01-01');
     INSERT INTO academic_years VALUES (2,2569),(3,2570);
     INSERT INTO academic_terms VALUES (4,2,'ภาคเรียนที่ 1'),(5,3,'ภาคเรียนที่ 1');
-    INSERT INTO students VALUES (9,'S09','นักเรียน ก','แพ้อาหาร','ถั่ว'),(10,'S10','นักเรียน ข',NULL,NULL),(11,'S11','อีกห้อง',NULL,NULL);
-    INSERT INTO student_enrollments VALUES (9,4,'ป.4/1','ป.4','enrolled'),(10,4,'ป.4/1','ป.4','enrolled'),(11,4,'ป.4/2','ป.4','enrolled'),(9,5,'ป.5/1','ป.5','enrolled');
+    INSERT INTO students VALUES (9,'S09','นักเรียน ก','แพ้อาหาร','ถั่ว'),(10,'S10','นักเรียน ข',NULL,NULL),(11,'S11','อีกห้อง',NULL,NULL),(12,'S12','คนละระดับ',NULL,NULL);
+    INSERT INTO student_enrollments VALUES (9,4,'1','ป.4','enrolled'),(10,4,'1','ป.4','enrolled'),(11,4,'2','ป.4','enrolled'),(12,4,'1','ป.5','enrolled'),(9,5,'1','ป.5','enrolled');
     INSERT INTO student_details VALUES (9,NULL,NULL,'ผู้ปกครอง','ตัวอย่าง','มารดา');`);
   return {JWT_SECRET:secret,DB:{prepare(sql){let values=[];const stmt=db.prepare(sql);
     return {bind(...args){values=args;return this;},async first(){return stmt.get(...values)||null;},
@@ -38,7 +38,7 @@ async function api(env,userId,path,method="GET",body){
 
 test("real SQLite: room printing uses period enrollment, blanks for missing analysis, and teacher isolation",async()=>{
   const env=environment();
-  const rosterPath="roster?term_id=4&classroom="+encodeURIComponent("ป.4/1")+"&print=1";
+  const rosterPath="roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1";
   const before=await api(env,7,rosterPath);
   assert.deepEqual(before.students.map(s=>s.id),[9,10]);
   assert.equal(before.students[0].analysis_id,null);
@@ -50,9 +50,24 @@ test("real SQLite: room printing uses period enrollment, blanks for missing anal
   assert.equal(mine.students[1].reading_result,null);
   const other=await api(env,8,rosterPath);
   assert.equal(other.students[0].reading_result,null);
-  const nextYear=await api(env,7,"roster?term_id=5&classroom="+encodeURIComponent("ป.5/1")+"&print=1");
+  const otherGrade=await api(env,7,"roster?term_id=4&grade_level="+encodeURIComponent("ป.5")+"&classroom=1&print=1");
+  assert.deepEqual(otherGrade.students.map(s=>s.id),[12]);
+  const nextYear=await api(env,7,"roster?term_id=5&grade_level="+encodeURIComponent("ป.5")+"&classroom=1&print=1");
   assert.equal(nextYear.students[0].grade_level,"ป.5");
   assert.equal(nextYear.students[0].reading_result,null);
-  const classrooms=await api(env,7,"classrooms?term_id=4");
-  assert.deepEqual(classrooms.classrooms.map(row=>row.classroom),["ป.4/1","ป.4/2"]);
+  const grades=await api(env,7,"grades?term_id=4");
+  assert.deepEqual(grades.grades.map(row=>[row.grade_level,row.student_count]),[["ป.4",3],["ป.5",1]]);
+  const classrooms=await api(env,7,"classrooms?term_id=4&grade_level="+encodeURIComponent("ป.4"));
+  assert.deepEqual(classrooms.classrooms.map(row=>[row.classroom,row.student_count]),[["1",2],["2",1]]);
+  const anotherClassrooms=await api(env,7,"classrooms?term_id=4&grade_level="+encodeURIComponent("ป.5"));
+  assert.deepEqual(anotherClassrooms.classrooms.map(row=>row.classroom),["1"]);
+});
+
+test("grade and classroom are both required for roster and classroom lookup",async()=>{
+  const env=environment();const token=await signJWT({sub:7},secret);
+  for(const path of ["roster?term_id=4&classroom=1&print=1","classrooms?term_id=4"]){
+    const request=new Request(`https://school.example/api/learner-analysis/${path}`,{headers:{Cookie:`bpd_session=${token}`}});
+    const response=await handleLearnerAnalysisRoute(request,env,new URL(request.url).pathname,"GET");
+    assert.equal(response.status,400);
+  }
 });

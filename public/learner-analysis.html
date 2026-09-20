@@ -72,11 +72,12 @@
 <body>
 <div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div></div>
 <main class="analysis-app">
-  <div class="analysis-head"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>เลือกปีการศึกษา ภาคเรียน และห้องเรียน เพื่อบันทึกหรือพิมพ์งานทั้งห้อง</p></div></div>
+  <div class="analysis-head"><div><h1>งานวิเคราะห์ผู้เรียนรายบุคคล</h1><p>เลือกปีการศึกษา ภาคเรียน ระดับชั้น และห้องเรียน เพื่อบันทึกหรือพิมพ์งานทั้งห้อง</p></div></div>
   <div class="analysis-grid">
     <aside class="analysis-panel"><h2>เลือกข้อมูลสำหรับจัดทำ</h2>
       <div class="analysis-field"><label for="year">ปีการศึกษา</label><select id="year"></select></div>
       <div class="analysis-field"><label for="term">ภาคเรียน</label><select id="term"></select></div>
+      <div class="analysis-field"><label for="grade">ระดับชั้น</label><select id="grade"></select></div>
       <div class="analysis-field"><label for="classroom">ห้องเรียน</label><select id="classroom"></select></div>
       <p class="analysis-hint" id="roomCount"></p>
       <div class="analysis-actions"><button class="btn btn-ghost" id="printRoom" type="button" disabled>พิมพ์ทั้งห้อง</button></div>
@@ -131,30 +132,39 @@
   async function loadRoster() {
     const version=++rosterVersion;
     resetSelected(); roster=[]; $("printRoom").disabled=true;
-    const term=$("term").value,classroom=$("classroom").value;
-    if(!term||!classroom){$("roomCount").textContent="";$("roster").textContent="เลือกภาคเรียนและห้องเรียน";return;}
-    try { const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent(term)}&classroom=${encodeURIComponent(classroom)}`); if(version!==rosterVersion)return;roster=data.students;renderRoster(); }
+    const term=$("term").value,grade=$("grade").value,classroom=$("classroom").value;
+    if(!term||!grade||!classroom){$("roomCount").textContent="";$("roster").textContent="เลือกภาคเรียน ระดับชั้น และห้องเรียน";return;}
+    try { const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent(term)}&grade_level=${encodeURIComponent(grade)}&classroom=${encodeURIComponent(classroom)}`); if(version!==rosterVersion)return;roster=data.students;renderRoster(); }
     catch(e) {if(version===rosterVersion)showStatus(e.message,true);}
   }
   async function loadClassrooms() {
-    ++rosterVersion;
-    const expectedTerm=$("term").value;
-    resetSelected(); roster=[]; $("printRoom").disabled=true; $("roster").textContent="กำลังโหลดห้องเรียน...";
-    const term=$("term").value;
-    if(!term){$("classroom").innerHTML=option("","ไม่มีภาคเรียน");return;}
-    try { const data=await apiRequest(`${route}classrooms?term_id=${encodeURIComponent(term)}`);if($("term").value!==expectedTerm)return;
-      const old=$("classroom").value; $("classroom").innerHTML=option("","เลือกห้องเรียน")+data.classrooms.map(item=>option(item.classroom,`${item.classroom} (${item.student_count} คน)`)).join("");
-      if(data.classrooms.some(item=>item.classroom===old)) $("classroom").value=old;
-      else if(data.classrooms.length===1) $("classroom").value=data.classrooms[0].classroom;
+    const version=++rosterVersion;
+    const expectedTerm=$("term").value,expectedGrade=$("grade").value;
+    resetSelected(); roster=[]; $("printRoom").disabled=true; $("roomCount").textContent=""; $("roster").textContent="กำลังโหลดห้องเรียน...";
+    $("classroom").innerHTML=option("","เลือกห้องเรียน");
+    if(!expectedTerm||!expectedGrade){$("roster").textContent="เลือกระดับชั้นก่อน";return;}
+    try { const data=await apiRequest(`${route}classrooms?term_id=${encodeURIComponent(expectedTerm)}&grade_level=${encodeURIComponent(expectedGrade)}`);if(version!==rosterVersion||$("term").value!==expectedTerm||$("grade").value!==expectedGrade)return;
+      $("classroom").innerHTML=option("","เลือกห้องเรียน")+data.classrooms.map(item=>option(item.classroom,`${item.classroom} (${item.student_count} คน)`)).join("");
+      if(data.classrooms.length===1) $("classroom").value=data.classrooms[0].classroom;
       await loadRoster();
     } catch(e){showStatus(e.message,true);}
   }
+  async function loadGrades(){
+    const version=++rosterVersion;resetSelected();roster=[];$("printRoom").disabled=true;$("roomCount").textContent="";$("roster").textContent="กำลังโหลดระดับชั้น...";
+    $("grade").innerHTML=option("","เลือกระดับชั้น");$("classroom").innerHTML=option("","เลือกห้องเรียน");
+    const term=$("term").value;if(!term){$("roster").textContent="เลือกภาคเรียนก่อน";return;}
+    try{const data=await apiRequest(`${route}grades?term_id=${encodeURIComponent(term)}`);if(version!==rosterVersion||$("term").value!==term)return;
+      $("grade").innerHTML=option("","เลือกระดับชั้น")+data.grades.map(item=>option(item.grade_level,`${item.grade_level} (${item.student_count} คน)`)).join("");
+      if(data.grades.length===1)$("grade").value=data.grades[0].grade_level;
+      await loadClassrooms();
+    }catch(e){showStatus(e.message,true);}
+  }
   function loadTerms(){const year=currentYear();$("term").innerHTML=option("","เลือกภาคเรียน")+(year?.terms||[]).map(term=>option(term.id,term.name)).join("");
-    const active=year?.terms.find(t=>t.status==="active") || year?.terms[0]; if(active)$("term").value=active.id;loadClassrooms();}
+    const active=year?.terms.find(t=>t.status==="active") || year?.terms[0]; if(active)$("term").value=active.id;loadGrades();}
   async function openStudent(id) {
     const item=roster.find(s=>s.id===id);if(!item)return;
     if(dirty && !(await saveRecord()))return;
-    selected=item;item.selectionYear=$("year").value;item.selectionTerm=$("term").value;item.selectionClass=$("classroom").value;
+    selected=item;item.selectionYear=$("year").value;item.selectionTerm=$("term").value;item.selectionGrade=$("grade").value;item.selectionClass=$("classroom").value;
     dirty=false;renderRoster();$("form").hidden=true;$("editorTitle").textContent=`${item.full_name} · ${item.grade_level||"–"}/${item.classroom||"–"}`;
     showStatus("กำลังโหลดข้อมูล...");
     try {const data=await apiRequest(`${route}records/${id}?term_id=${encodeURIComponent(item.selectionTerm)}`);
@@ -187,9 +197,11 @@
       <footer class="paper-sign"><div><span></span><small>ลงชื่อครูผู้วิเคราะห์</small></div><div><span></span><small>ลงชื่อผู้ตรวจ/ผู้รับทราบ (ถ้ามี)</small></div></footer><div class="paper-count">ลำดับนักเรียน ${number}/${total}</div>
     </article>`;
   }
-  async function printRecords(onlyId){if(!$("term").value||!$("classroom").value)return;
+  async function printRecords(onlyId){if(!$("term").value||!$("grade").value||!$("classroom").value)return;
     if(dirty && !(await saveRecord()))return;
-    try {showStatus("กำลังเตรียมเอกสารพิมพ์...");const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent($("term").value)}&classroom=${encodeURIComponent($("classroom").value)}&print=1`);
+    try {showStatus("กำลังเตรียมเอกสารพิมพ์...");const term=$("term").value,grade=$("grade").value,classroom=$("classroom").value;
+      const data=await apiRequest(`${route}roster?term_id=${encodeURIComponent(term)}&grade_level=${encodeURIComponent(grade)}&classroom=${encodeURIComponent(classroom)}&print=1`);
+      if($("term").value!==term||$("grade").value!==grade||$("classroom").value!==classroom)return;
       const students=onlyId?data.students.filter(s=>s.id===onlyId):data.students;
       if(!students.length){showStatus("ไม่พบนักเรียนสำหรับพิมพ์",true);return;}
       $("printArea").innerHTML=students.map((s,i)=>buildPaper(s,i+1,students.length)).join("");
@@ -209,13 +221,14 @@
   $("printRoom").onclick=()=>printRecords(null);
   async function switchSelection(next){
     if(dirty && !(await saveRecord())) {
-      $("year").value=selected.selectionYear;$("term").value=selected.selectionTerm;$("classroom").value=selected.selectionClass;
+      $("year").value=selected.selectionYear;$("term").value=selected.selectionTerm;$("grade").value=selected.selectionGrade;$("classroom").value=selected.selectionClass;
       return;
     }
     await next();
   }
   $("year").onchange=()=>switchSelection(loadTerms);
-  $("term").onchange=()=>switchSelection(loadClassrooms);
+  $("term").onchange=()=>switchSelection(loadGrades);
+  $("grade").onchange=()=>switchSelection(loadClassrooms);
   $("classroom").onchange=()=>switchSelection(loadRoster);
   window.addEventListener("afterprint",()=>{$("printArea").replaceChildren();});
   (async()=>{try{const [{user},data]=await Promise.all([apiRequest("/api/auth/me"),apiRequest("/api/academic-periods")]);
