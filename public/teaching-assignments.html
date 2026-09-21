@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ภาระสอน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    body{background:#f4f8fb}.page{max-width:1200px;margin:0 auto;padding:24px}.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}
+    .top h1{margin:0;color:#17334d}.panel{background:#fff;border:1px solid #dce6ee;border-radius:18px;padding:20px;margin-bottom:16px;box-shadow:0 8px 24px rgba(22,64,96,.06)}
+    .controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.field{min-width:180px}.field label{display:block;font-size:13px;font-weight:700;margin-bottom:5px}
+    input,select{width:100%;padding:10px 12px;border:1px solid #cbd9e4;border-radius:10px;background:#fff}.btn{width:auto}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.card{background:#f4f9fd;border-radius:14px;padding:14px}.card strong{display:block;font-size:25px;color:#176fa7}.card span{font-size:13px;color:#5f7485}
+    .notice{display:none;padding:12px 14px;border-radius:10px;margin-bottom:14px}.notice.show{display:block}.notice.error{background:#fff0f0;color:#9e2525}.notice.success{background:#eaf8f1;color:#176640}
+    .warning{background:#fff8e6;border:1px solid #f1d790;border-radius:12px;padding:14px;margin-top:14px}.warning h3{margin:0 0 8px;font-size:16px}.duplicate-row{display:grid;grid-template-columns:1fr 260px;gap:12px;align-items:center;margin-top:8px}
+    .table-wrap{overflow:auto;max-height:540px;border:1px solid #dce6ee;border-radius:12px}table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:9px 10px;border-bottom:1px solid #edf1f4;text-align:left;white-space:nowrap}th{position:sticky;top:0;background:#173d5b;color:#fff}
+    .actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap}.muted{color:#657b8c;font-size:13px}.check{display:flex;align-items:center;gap:8px}.check input{width:auto}
+    @media(max-width:640px){.page{padding:14px}.top{align-items:flex-start;flex-direction:column}.duplicate-row{grid-template-columns:1fr}.actions{justify-content:stretch}.actions .btn{flex:1}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <div class="top"><div><h1>ภาระสอนครู</h1><div class="muted">ครู · ห้อง · วิชา · จำนวนคาบต่อสัปดาห์</div></div><a class="btn btn-ghost" href="/dashboard.html">กลับแดชบอร์ด</a></div>
+  <div id="notice" class="notice"></div>
+  <section class="panel">
+    <div class="controls">
+      <div class="field"><label for="termKey">ปีการศึกษา–ภาคเรียน</label><input id="termKey" value="2569-1" /></div>
+      <button class="btn btn-ghost" id="previewButton">ตรวจสอบข้อมูลจากตารางสอน</button>
+    </div>
+    <p class="muted">ชุดข้อมูล: ตารางสอนใหญ่.xlsx · ชื่อวิชาและห้องถูกปรับเป็นมาตรฐานก่อนตรวจสอบ</p>
+  </section>
+  <section class="panel" id="resultPanel" hidden>
+    <div class="cards">
+      <div class="card"><strong id="sourceRows">0</strong><span>รายการจากไฟล์</span></div>
+      <div class="card"><strong id="readyRows">0</strong><span>ภาระสอนพร้อมนำเข้า</span></div>
+      <div class="card"><strong id="matchedTeachers">0</strong><span>ครูที่จับคู่ได้</span></div>
+      <div class="card"><strong id="blockers">0</strong><span>รายการต้องตรวจสอบ</span></div>
+    </div>
+    <div id="duplicateBox" class="warning" hidden><h3>ตารางครูซ้ำ</h3><div id="duplicateList"></div></div>
+    <div id="unmatchedBox" class="warning" hidden><h3>ชื่อครูที่ยังจับคู่ไม่ได้</h3><div id="unmatchedList"></div></div>
+    <div class="actions" style="margin-top:16px">
+      <label class="check"><input type="checkbox" id="replaceExisting" checked /> แทนที่ภาระสอนเดิมของครูที่จับคู่ได้</label>
+      <label class="check"><input type="checkbox" id="allowPartial" /> อนุญาตนำเข้าเฉพาะรายการที่พร้อม</label>
+      <button class="btn btn-primary" id="importButton">นำเข้าฐานข้อมูล</button>
+    </div>
+  </section>
+  <section class="panel" id="tablePanel" hidden>
+    <h2 style="margin-top:0">รายการที่พร้อมนำเข้า</h2>
+    <div class="table-wrap"><table><thead><tr><th>ครู</th><th>ห้อง</th><th>วิชา</th><th>คาบ/สัปดาห์</th><th>สูงสุด/วัน</th></tr></thead><tbody id="assignmentBody"></tbody></table></div>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+const state={data:null,preview:null,preferences:{}};
+const escapeHtml=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+function notice(message,type="success"){const box=document.getElementById("notice");box.textContent=message;box.className="notice show "+type;window.scrollTo({top:0,behavior:"smooth"});}
+async function sourceData(){if(!state.data)state.data=await fetch("/data/timetable-2569-1.json",{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error("โหลดชุดข้อมูลตารางสอนไม่สำเร็จ");return r.json();});return state.data;}
+function payload(mode="preview"){return {...state.data,term_key:document.getElementById("termKey").value.trim(),mode,
+  duplicate_preferences:state.preferences,replace_existing:document.getElementById("replaceExisting").checked,
+  allow_partial:document.getElementById("allowPartial").checked};}
+function render(result){
+  state.preview=result;document.getElementById("resultPanel").hidden=false;document.getElementById("tablePanel").hidden=false;
+  document.getElementById("sourceRows").textContent=result.summary.source_rows;
+  document.getElementById("readyRows").textContent=result.summary.ready_assignments;
+  document.getElementById("matchedTeachers").textContent=result.summary.matched_teachers;
+  document.getElementById("blockers").textContent=result.summary.blockers;
+  const duplicates=result.unresolved_duplicates||[],db=document.getElementById("duplicateBox");
+  db.hidden=!duplicates.length;document.getElementById("duplicateList").innerHTML=duplicates.map(item=>`<div class="duplicate-row"><span>พบตารางเดียวกัน: ${item.teachers.map(escapeHtml).join(" / ")}</span><select data-group="${escapeHtml(item.group)}"><option value="">เลือกครูที่ใช้ตารางนี้</option>${item.matched_teachers.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}</select></div>`).join("");
+  document.querySelectorAll("[data-group]").forEach(select=>select.addEventListener("change",async()=>{state.preferences[select.dataset.group]=select.value;await preview();}));
+  const unmatched=[...(result.unmatched_teachers||[]),...(result.ambiguous_teachers||[])],ub=document.getElementById("unmatchedBox");
+  ub.hidden=!unmatched.length;document.getElementById("unmatchedList").innerHTML=unmatched.map(x=>`<div>${escapeHtml(x.teacher)}${x.row_count?` · ${x.row_count} รายการ`:" · พบหลายชื่อในระบบ"}</div>`).join("");
+  document.getElementById("assignmentBody").innerHTML=result.rows.map(row=>`<tr><td>${escapeHtml(row.teacher)}</td><td>${escapeHtml(row.classroom)}</td><td>${escapeHtml(row.subject_name)}</td><td>${row.periods_per_week}</td><td>${row.max_per_day}</td></tr>`).join("");
+}
+async function preview(){try{await sourceData();const result=await apiRequest("/api/academic/teaching-assignments/import",{method:"POST",body:JSON.stringify(payload())});render(result);notice("ตรวจสอบข้อมูลแล้ว");}catch(error){notice(error.message,"error");}}
+document.getElementById("previewButton").addEventListener("click",preview);
+document.getElementById("importButton").addEventListener("click",async()=>{
+  if(!state.preview)return;
+  if(!confirm(`ยืนยันนำเข้าภาระสอน ${state.preview.summary.ready_assignments} รายการลงฐานข้อมูลปี/ภาคเรียนที่เลือก?`))return;
+  try{const result=await apiRequest("/api/academic/teaching-assignments/import",{method:"POST",body:JSON.stringify(payload("commit"))});render(result);notice(`นำเข้าสำเร็จ ${result.imported_assignments} รายการ`);}
+  catch(error){notice(error.message,"error");}
+});
+(async()=>{try{const {user}=await apiRequest("/api/auth/me");if(!user)return location.href="/login.html";if(!["superadmin","executive"].includes(user.role))notice("หน้านี้ให้ผู้บริหารหรือผู้ดูแลระบบจัดการข้อมูล","error");await sourceData();await preview();}catch(error){notice(error.message,"error");}})();
+</script>
+</body>
+</html>
