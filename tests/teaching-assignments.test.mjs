@@ -38,3 +38,17 @@ test("requires a preference when both duplicate teachers exist",()=>{
   assert.equal(chosen.unresolved_duplicates.length,0);
   assert.equal(chosen.rows[0].teacher,"นางสาวปณัฏฐา ตัวอย่าง");
 });
+
+
+test("reports rows that would otherwise be dropped",()=>{
+  const people=[{id:4,full_name:"นางสาวไม่มี ห้องประจำชั้น",homeroom_classroom:""}];
+  const result=prepareTeachingImport({rows:[
+    {teacher:"ไม่มี",classroom:null,subject:"การป้องกันการทุจริต",periods_per_week:1,infer_homeroom:true}
+  ],slots:[
+    {teacher:"ไม่มี",day:1,period:6,classroom:null,subject:"การป้องกันการทุจริต",infer_homeroom:true}
+  ]},people);
+  assert.equal(result.rows.length,0);
+  assert.equal(result.slots.length,0);
+  assert.deepEqual(result.invalid_rows.map(x=>x.kind),["assignment","slot"]);
+  assert.ok(result.invalid_rows.every(x=>x.reason==="ไม่พบระดับชั้น"));
+});
