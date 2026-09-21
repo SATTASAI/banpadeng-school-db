@@ -2018,5 +2018,4695 @@
       "periods_per_week": 1,
       "infer_homeroom": true
     }
+  ],
+  "slots": [
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "เตือนจิตร์",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 1,
+      "period": 2,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 1,
+      "period": 3,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 1,
+      "period": 4,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 1,
+      "period": 5,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 1,
+      "period": 6,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 2,
+      "period": 2,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 2,
+      "period": 4,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 2,
+      "period": 5,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 3,
+      "period": 1,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 3,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 3,
+      "period": 4,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 3,
+      "period": 5,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 4,
+      "period": 2,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 4,
+      "period": 3,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 4,
+      "period": 4,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 4,
+      "period": 5,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 5,
+      "period": 1,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 5,
+      "period": 3,
+      "subject": "มวยไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 5,
+      "period": 4,
+      "subject": "มวยไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ภูมิ",
+      "day": 5,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 1,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "อนุบาล"
+    },
+    {
+      "teacher": "สายฝน",
+      "day": 5,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 1,
+      "period": 1,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 1,
+      "period": 2,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 1,
+      "period": 3,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 1,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 2,
+      "period": 2,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 2,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 2,
+      "period": 4,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 2,
+      "period": 5,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 3,
+      "period": 1,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 3,
+      "period": 2,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 3,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 3,
+      "period": 5,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 4,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 4,
+      "period": 4,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 4,
+      "period": 5,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 5,
+      "period": 1,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 5,
+      "period": 2,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 5,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "พงศ์พล",
+      "day": 5,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 1,
+      "period": 1,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 1,
+      "period": 2,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 2,
+      "period": 4,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 2,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 3,
+      "period": 4,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 4,
+      "period": 2,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 5,
+      "period": 3,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วรรณมาศ",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 1,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 1,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 1,
+      "period": 3,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 1,
+      "period": 4,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 1,
+      "period": 6,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 2,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 2,
+      "period": 3,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 2,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 3,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 3,
+      "period": 3,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 3,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 4,
+      "period": 1,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 4,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 4,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 4,
+      "period": 5,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 5,
+      "period": 1,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 5,
+      "period": 2,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ภาณุวัฒน์",
+      "day": 5,
+      "period": 4,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 1,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 1,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 1,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 1,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 1,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 2,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 2,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 2,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 2,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 3,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 3,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 3,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 4,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 4,
+      "period": 2,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 4,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 5,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 5,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "เกรียงไกร",
+      "day": 5,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 1,
+      "period": 3,
+      "subject": "คณิตศาสตร์เสริม",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 1,
+      "period": 4,
+      "subject": "คณิตศาสตร์เสริม",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 2,
+      "period": 1,
+      "subject": "คณิตศาสตร์เสริม",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 2,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 2,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 3,
+      "period": 1,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 3,
+      "period": 2,
+      "subject": "คณิตศาสตร์เสริม",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 3,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 3,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 4,
+      "period": 1,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 4,
+      "period": 2,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 4,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 4,
+      "period": 5,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 5,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 5,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นาวี",
+      "day": 5,
+      "period": 4,
+      "subject": "ศิลปะ",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 1,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 1,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 2,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 2,
+      "period": 4,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 2,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 3,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 3,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 4,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 4,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ปรียา",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 1,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 2,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 2,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 2,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 3,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 3,
+      "period": 5,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 4,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 4,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 4,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "พรรณราย",
+      "day": 5,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 1,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 1,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 1,
+      "period": 4,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 2,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 2,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 2,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 3,
+      "period": 5,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 4,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 4,
+      "period": 4,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ราชาวดี",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 1,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 1,
+      "period": 3,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 1,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 1,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 2,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 2,
+      "period": 4,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 2,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 3,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 3,
+      "period": 2,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 3,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 3,
+      "period": 5,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 4,
+      "period": 1,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 4,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 4,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 4,
+      "period": 5,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 5,
+      "period": 1,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 5,
+      "period": 2,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ณัฐดนัย",
+      "day": 5,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ณัฐกาญจน์",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 1,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 1,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 2,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 2,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 3,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 4,
+      "period": 3,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 4,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 4,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 5,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "วิไลพร",
+      "day": 5,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 2,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 2,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 3,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 4,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 4,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "รพีภรณ์",
+      "day": 5,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 1,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 2,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 3,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 4,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 4,
+      "period": 3,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 5,
+      "period": 4,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ปิยมล",
+      "day": 5,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 1,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 1,
+      "period": 6,
+      "subject": "ป้้องกันทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 2,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 3,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 4,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 4,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พนิตสุภา",
+      "day": 5,
+      "period": 5,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 5,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "ปิยลักษณ์",
+      "day": 5,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 2,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 2,
+      "period": 3,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 2,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 4,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 4,
+      "period": 5,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "สิริกานต์",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 1,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 1,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 1,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 2,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 2,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 2,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 2,
+      "period": 4,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 3,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 3,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 3,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 4,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 4,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 4,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 4,
+      "period": 5,
+      "subject": "สุขภาพดี",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 5,
+      "period": 1,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 5,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ธีรภัทร",
+      "day": 5,
+      "period": 4,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 1,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 1,
+      "period": 4,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 1,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 2,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 2,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 2,
+      "period": 4,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 2,
+      "period": 5,
+      "subject": "สุนทรียภาพ",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 3,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.1/4"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 3,
+      "period": 3,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.1/1"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 3,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.1/2"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 3,
+      "period": 5,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.1/3"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 4,
+      "period": 3,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 4,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 4,
+      "period": 5,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 5,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 5,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 5,
+      "period": 3,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "พรทิพย์",
+      "day": 5,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "สุดารัตน์",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 1,
+      "period": 6,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": null,
+      "infer_homeroom": true
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "วัลยา",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 1,
+      "period": 1,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 1,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 1,
+      "period": 4,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 1,
+      "period": 6,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 2,
+      "period": 2,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 2,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 2,
+      "period": 5,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 3,
+      "period": 1,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 3,
+      "period": 2,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 3,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 4,
+      "period": 1,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 4,
+      "period": 4,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 4,
+      "period": 5,
+      "subject": "ศิลปะ",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 5,
+      "period": 2,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 5,
+      "period": 3,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ณัฐกิจ",
+      "day": 5,
+      "period": 5,
+      "subject": "ศิลปะ",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 1,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 1,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 1,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 1,
+      "period": 6,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 2,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 2,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 2,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 3,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 3,
+      "period": 3,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 3,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 4,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 4,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 5,
+      "period": 2,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 5,
+      "period": 3,
+      "subject": "คณิตศาสตร์เสริม",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 5,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ปภาวรินท์",
+      "day": 5,
+      "period": 5,
+      "subject": "การคิดคำนวณ",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 1,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 1,
+      "period": 6,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 3,
+      "period": 2,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ศตวรรต",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 1,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 1,
+      "period": 6,
+      "subject": "ภาษาไทยเสริม",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาไทยเสริม",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทยเสริม",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.3/1"
+    },
+    {
+      "teacher": "กมลวรรณ",
+      "day": 5,
+      "period": 4,
+      "subject": "ภาษาไทยเสริม",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 1,
+      "period": 1,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 1,
+      "period": 2,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 1,
+      "period": 3,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 1,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 2,
+      "period": 1,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 2,
+      "period": 3,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 2,
+      "period": 4,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 2,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 3,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 3,
+      "period": 3,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 3,
+      "period": 4,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 3,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 4,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 4,
+      "period": 3,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 5,
+      "period": 1,
+      "subject": "พลศึกษา",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 5,
+      "period": 2,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 5,
+      "period": 4,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ว่าที่ร้อยตรีชรินทร์",
+      "day": 5,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 1,
+      "period": 6,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 2,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 3,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 4,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ฐิติมา",
+      "day": 5,
+      "period": 3,
+      "subject": "ภาษาไทย",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 1,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 1,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 1,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 1,
+      "period": 5,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 2,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 2,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 3,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 3,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 3,
+      "period": 3,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 4,
+      "period": 1,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 4,
+      "period": 2,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 4,
+      "period": 4,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 4,
+      "period": 5,
+      "subject": "การป้องกันการทุจริต",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 5,
+      "period": 3,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 5,
+      "period": 4,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "สุภาพร",
+      "day": 5,
+      "period": 5,
+      "subject": "โครงงานวิทยาศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 1,
+      "period": 3,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 1,
+      "period": 4,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 1,
+      "period": 5,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 2,
+      "period": 1,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 2,
+      "period": 2,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 2,
+      "period": 3,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 2,
+      "period": 5,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 3,
+      "period": 1,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 3,
+      "period": 2,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 3,
+      "period": 3,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 3,
+      "period": 4,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 4,
+      "period": 2,
+      "subject": "หนูน้อยพอเพียง",
+      "classroom": "ป.3/2"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 4,
+      "period": 3,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 4,
+      "period": 4,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 5,
+      "period": 3,
+      "subject": "การงานอาชีพ",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 5,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "ศิรินิษฐา",
+      "day": 5,
+      "period": 5,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 1,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 1,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 1,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 1,
+      "period": 5,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 2,
+      "period": 1,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 2,
+      "period": 2,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 2,
+      "period": 3,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 3,
+      "period": 2,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 3,
+      "period": 3,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 3,
+      "period": 4,
+      "subject": "วิทยาศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 4,
+      "period": 3,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 4,
+      "period": 4,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/1"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 4,
+      "period": 5,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 5,
+      "period": 1,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/4"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 5,
+      "period": 2,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/3"
+    },
+    {
+      "teacher": "วิภูสิต",
+      "day": 5,
+      "period": 3,
+      "subject": "วิทยาศาสตร์รอบตัว",
+      "classroom": "ป.2/2"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 1,
+      "period": 1,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 1,
+      "period": 2,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 1,
+      "period": 4,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 1,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 1,
+      "period": 6,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 2,
+      "period": 1,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 2,
+      "period": 2,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 2,
+      "period": 3,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 2,
+      "period": 5,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 3,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 3,
+      "period": 2,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 3,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 3,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 4,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 4,
+      "period": 2,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 5,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 5,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ชำนาญ",
+      "day": 5,
+      "period": 5,
+      "subject": "พลศึกษา",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 1,
+      "period": 1,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 1,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 1,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 1,
+      "period": 6,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 2,
+      "period": 1,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 2,
+      "period": 2,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 2,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 3,
+      "period": 2,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/2"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 3,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 3,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/4"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 3,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.4/3"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 4,
+      "period": 2,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 4,
+      "period": 3,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 4,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/1"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 5,
+      "period": 2,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 5,
+      "period": 3,
+      "subject": "ประวัติศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 5,
+      "period": 4,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "ประทุม",
+      "day": 5,
+      "period": 5,
+      "subject": "สังคมศึกษา",
+      "classroom": "ป.5/2"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 1,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 1,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 1,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 1,
+      "period": 6,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 2,
+      "period": 2,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 2,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 2,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 2,
+      "period": 5,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 3,
+      "period": 1,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 3,
+      "period": 4,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 3,
+      "period": 5,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 4,
+      "period": 1,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.5/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 4,
+      "period": 3,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 4,
+      "period": 4,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 4,
+      "period": 5,
+      "subject": "ภาษาอังกฤษ",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 5,
+      "period": 1,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.5/4"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 5,
+      "period": 2,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "นิรชา",
+      "day": 5,
+      "period": 5,
+      "subject": "ภาษาอังกฤษเพิ่มเติม",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 1,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 1,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 1,
+      "period": 6,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 2,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 2,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 2,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 3,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 3,
+      "period": 2,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 3,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 4,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 4,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 4,
+      "period": 4,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/1"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 4,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 5,
+      "period": 1,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/3"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 5,
+      "period": 3,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/2"
+    },
+    {
+      "teacher": "จิราภา",
+      "day": 5,
+      "period": 5,
+      "subject": "คณิตศาสตร์",
+      "classroom": "ป.6/4"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 1,
+      "period": 1,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 1,
+      "period": 2,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 1,
+      "period": 3,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 1,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 2,
+      "period": 2,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 2,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 2,
+      "period": 4,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 2,
+      "period": 5,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.4/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 3,
+      "period": 1,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 3,
+      "period": 2,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 3,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 3,
+      "period": 5,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.3/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 4,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/3",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 4,
+      "period": 4,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 4,
+      "period": 5,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.6/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 5,
+      "period": 1,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/1",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 5,
+      "period": 2,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/4",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 5,
+      "period": 3,
+      "subject": "วิทยาการคำนวณ",
+      "classroom": "ป.5/2",
+      "duplicate_group": "duplicate-1"
+    },
+    {
+      "teacher": "ปณัฏฐา",
+      "day": 5,
+      "period": 4,
+      "subject": "คอมพิวเตอร์เสริม",
+      "classroom": "ป.1/2",
+      "duplicate_group": "duplicate-1"
+    }
   ]
 }
