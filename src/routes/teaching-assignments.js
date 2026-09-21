@@ -70,7 +70,7 @@ export function prepareTeachingImport(payload,personnel){
     if(matched.length===1)preferences[group]=matched[0];
     else if(!matched.includes(normalized(preferences[group])))unresolvedDuplicates.push({group,teachers:[...names],matched_teachers:matched});
   }
-  const unmatched=new Map(),ambiguous=new Map(),inferred=[];
+  const unmatched=new Map(),ambiguous=new Map(),inferred=[],invalidRows=[];
   const prepared=new Map();
   for(let index=0;index<rows.length;index++){
     const row=rows[index]||{},sourceTeacher=normalized(row.teacher),group=normalized(row.duplicate_group);
@@ -86,7 +86,11 @@ export function prepareTeachingImport(payload,personnel){
       if(classroom)inferred.push({teacher:sourceTeacher,full_name:person.full_name,classroom,subject});
     }
     const periods=boundedInt(row.periods_per_week,1,60);
-    if(!classroom||!subject||!periods)continue;
+    if(!classroom||!subject||!periods){
+      invalidRows.push({kind:"assignment",row:index+1,teacher:sourceTeacher,
+        reason:!classroom?"ไม่พบระดับชั้น":!subject?"ไม่พบชื่อวิชา":"จำนวนคาบไม่ถูกต้อง"});
+      continue;
+    }
     const key=[person.id,classroom,subject].join("|");
     if(!prepared.has(key))prepared.set(key,{personnel_id:Number(person.id),teacher:person.full_name,classroom,subject_name:subject,periods_per_week:0,max_per_day:1});
     const item=prepared.get(key);
@@ -94,7 +98,9 @@ export function prepareTeachingImport(payload,personnel){
     item.max_per_day=Math.min(2,item.periods_per_week);
   }
   const preparedSlots=[];
-  for(const row of (Array.isArray(payload.slots)?payload.slots:[])){
+  const slots=Array.isArray(payload.slots)?payload.slots:[];
+  for(let index=0;index<slots.length;index++){
+    const row=slots[index]||{};
     const sourceTeacher=normalized(row.teacher),group=normalized(row.duplicate_group);
     if(!sourceTeacher||excluded.has(sourceTeacher))continue;
     if(group&&normalized(preferences[group])!==sourceTeacher)continue;
@@ -105,7 +111,11 @@ export function prepareTeachingImport(payload,personnel){
     let classroom=normalized(row.classroom);
     if(!classroom&&row.infer_homeroom)classroom=normalized(person.homeroom_classroom);
     const day=boundedInt(row.day,1,7),period=boundedInt(row.period,1,12);
-    if(!classroom||!subject||!day||!period)continue;
+    if(!classroom||!subject||!day||!period){
+      invalidRows.push({kind:"slot",row:index+1,teacher:sourceTeacher,
+        reason:!classroom?"ไม่พบระดับชั้น":!subject?"ไม่พบชื่อวิชา":!day?"วันไม่ถูกต้อง":"คาบไม่ถูกต้อง"});
+      continue;
+    }
     preparedSlots.push({personnel_id:Number(person.id),teacher:person.full_name,day_number:day,period_number:period,classroom,subject_name:subject});
   }
   return {
@@ -114,6 +124,7 @@ export function prepareTeachingImport(payload,personnel){
     unmatched_teachers:[...unmatched].map(([teacher,row_count])=>({teacher,row_count})),
     ambiguous_teachers:[...ambiguous].map(([teacher,matches])=>({teacher,matches})),
     unresolved_duplicates:unresolvedDuplicates,
+    invalid_rows:invalidRows,
     inferred_homerooms:inferred
   };
 }
@@ -165,8 +176,11 @@ export async function handleTeachingAssignmentsRoute(request,env,pathname,method
     try{payload=await request.json();}catch{return jsonResponse({error:"รูปแบบข้อมูลไม่ถูกต้อง"},400);}
     const termKey=normalized(payload.term_key),term=await resolveTerm(env,termKey);
     if(!term)return jsonResponse({error:`ไม่พบปี/ภาคเรียน ${termKey}`},404);
-    const prepared=prepareTeachingImport(payload,await getPersonnel(env));
-    const blockers=prepared.unmatched_teachers.length+prepared.ambiguous_teachers.length+prepared.unresolved_duplicates.length;
+    let prepared;
+    try{prepared=prepareTeachingImport(payload,await getPersonnel(env));}
+    catch(error){return jsonResponse({error:error.message||"ข้อมูลนำเข้าไม่ถูกต้อง"},400);}
+    const blockers=prepared.unmatched_teachers.length+prepared.ambiguous_teachers.length+
+      prepared.unresolved_duplicates.length+prepared.invalid_rows.length;
     const preview={term,summary:{source_rows:payload.rows.length,source_slots:Array.isArray(payload.slots)?payload.slots.length:0,
       ready_assignments:prepared.rows.length,ready_slots:prepared.slots.length,
       matched_teachers:new Set([...prepared.rows,...prepared.slots].map(x=>x.personnel_id)).size,blockers},
