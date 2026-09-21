@@ -740,3 +740,19 @@ CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_teaching_assignments_term
   ON academic_teaching_assignments(academic_term_id, classroom);
+
+-- ตารางคาบจริงจากตารางสอนที่ประกาศใช้ รองรับวัน/คาบไม่เท่ากันในแต่ละวัน
+CREATE TABLE IF NOT EXISTS academic_timetable_slots (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  academic_term_id  INTEGER NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  personnel_id      INTEGER NOT NULL REFERENCES personnel_records(id),
+  day_number        INTEGER NOT NULL CHECK (day_number BETWEEN 1 AND 7),
+  period_number     INTEGER NOT NULL CHECK (period_number BETWEEN 1 AND 12),
+  classroom         TEXT NOT NULL,
+  subject_name      TEXT NOT NULL,
+  source_label      TEXT,
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (academic_term_id, personnel_id, day_number, period_number)
+);
+CREATE INDEX IF NOT EXISTS idx_timetable_slots_class
+  ON academic_timetable_slots(academic_term_id, classroom, day_number, period_number);
