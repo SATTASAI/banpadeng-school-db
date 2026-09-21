@@ -39,6 +39,7 @@
     </div>
     <div id="duplicateBox" class="warning" hidden><h3>ตารางครูซ้ำ</h3><div id="duplicateList"></div></div>
     <div id="unmatchedBox" class="warning" hidden><h3>ชื่อครูที่ยังจับคู่ไม่ได้</h3><div id="unmatchedList"></div></div>
+    <div id="invalidBox" class="warning" hidden><h3>ข้อมูลที่ยังนำเข้าไม่ได้</h3><div id="invalidList"></div></div>
     <div class="actions" style="margin-top:16px">
       <label class="check"><input type="checkbox" id="replaceExisting" checked /> แทนที่ภาระสอนเดิมของครูที่จับคู่ได้</label>
       <label class="check"><input type="checkbox" id="allowPartial" /> อนุญาตนำเข้าเฉพาะรายการที่พร้อม</label>
@@ -71,6 +72,8 @@ function render(result){
   document.querySelectorAll("[data-group]").forEach(select=>select.addEventListener("change",async()=>{state.preferences[select.dataset.group]=select.value;await preview();}));
   const unmatched=[...(result.unmatched_teachers||[]),...(result.ambiguous_teachers||[])],ub=document.getElementById("unmatchedBox");
   ub.hidden=!unmatched.length;document.getElementById("unmatchedList").innerHTML=unmatched.map(x=>`<div>${escapeHtml(x.teacher)}${x.row_count?` · ${x.row_count} รายการ`:" · พบหลายชื่อในระบบ"}</div>`).join("");
+  const invalid=result.invalid_rows||[],ib=document.getElementById("invalidBox");
+  ib.hidden=!invalid.length;document.getElementById("invalidList").innerHTML=invalid.slice(0,50).map(x=>`<div>${x.kind==="slot"?"คาบจริง":"ภาระสอน"} #${x.row} · ${escapeHtml(x.teacher)} · ${escapeHtml(x.reason)}</div>`).join("")+(invalid.length>50?`<div>และอีก ${invalid.length-50} รายการ</div>`:"");
   document.getElementById("assignmentBody").innerHTML=result.rows.map(row=>`<tr><td>${escapeHtml(row.teacher)}</td><td>${escapeHtml(row.classroom)}</td><td>${escapeHtml(row.subject_name)}</td><td>${row.periods_per_week}</td><td>${row.max_per_day}</td></tr>`).join("");
 }
 async function preview(){try{await sourceData();const result=await apiRequest("/api/academic/teaching-assignments/import",{method:"POST",body:JSON.stringify(payload())});render(result);notice("ตรวจสอบข้อมูลแล้ว");}catch(error){notice(error.message,"error");}}
