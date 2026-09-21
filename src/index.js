@@ -21,6 +21,7 @@ import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js
 import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
 import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
+import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -3923,6 +3924,9 @@ export default {
 
       const publicMaintenanceImageMatch = pathname.match(/^\/api\/public\/maintenance-image\/(\d+)$/);
       if (publicMaintenanceImageMatch && method === "GET") return await handlePublicMaintenanceImage(request,env,Number(publicMaintenanceImageMatch[1]));
+
+      const timetableSyncResponse = await handleTimetableSyncRoute(request, env, pathname, method);
+      if (timetableSyncResponse) return timetableSyncResponse;
 
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
