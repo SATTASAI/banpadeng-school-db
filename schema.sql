@@ -724,3 +724,19 @@ CREATE TABLE IF NOT EXISTS backup_registry (
 
 -- ฐานข้อมูลเดิมจะเพิ่ม 2 คอลัมน์นี้ด้วย runtime migration ใน src/lib/academic-data.js
 -- เพื่อให้รันซ้ำได้อย่างปลอดภัย: tasks, projects, work_topics และ leave_requests
+
+
+-- ภาระสอนแบบมีโครงสร้างสำหรับเชื่อมระบบ BPD Timetable
+CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  academic_term_id  INTEGER NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  personnel_id      INTEGER NOT NULL REFERENCES personnel_records(id),
+  classroom         TEXT NOT NULL,
+  subject_name      TEXT NOT NULL,
+  periods_per_week  INTEGER NOT NULL CHECK (periods_per_week BETWEEN 1 AND 60),
+  max_per_day       INTEGER CHECK (max_per_day BETWEEN 1 AND 12),
+  updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (academic_term_id, personnel_id, classroom, subject_name)
+);
+CREATE INDEX IF NOT EXISTS idx_teaching_assignments_term
+  ON academic_teaching_assignments(academic_term_id, classroom);
