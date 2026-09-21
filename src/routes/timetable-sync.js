@@ -1,6 +1,4 @@
 import {jsonResponse} from '../lib/auth.js';
-import {ensurePersonnelData} from '../lib/personnel-data.js';
-
 const TERM_RE=/^(\d{4})-([12])$/;
 const SCHEMA=[
   `CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
@@ -47,7 +45,7 @@ export async function handleTimetableSyncRoute(request,env,pathname,method){
   const match=termKey.match(TERM_RE);
   if(!match)return jsonResponse({error:'ภาคเรียนต้องอยู่ในรูป 2569-1'},400);
 
-  await ensurePersonnelData(env);await ensureSchema(env);
+  await ensureSchema(env);
   const period=await env.DB.prepare(
     `SELECT y.id AS academic_year_id,y.year_be,y.label AS year_label,y.status AS year_status,
             t.id AS academic_term_id,t.term_number,t.name AS term_name,t.status AS term_status
