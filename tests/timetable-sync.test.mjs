@@ -9,13 +9,13 @@ function envFixture(){
   const classes=[{classroom:'ป.4/1'}];
   const assignments=[{id:31,personnel_id:7,classroom:'ป.4/1',subject_name:'ภาษาไทย',periods_per_week:5,max_per_day:2,full_name:'ครู ก'}];
   return {SCHOOL_SYNC_TOKEN:'school-sync-token-at-least-24-characters',DB:{
-    prepare(sql){return {bind(){return {
+    prepare(sql){const statement={
       async first(){return sql.includes('FROM academic_years')?period:null;},
       async all(){if(sql.includes('SELECT p.id,p.full_name'))return {results:teachers};
         if(sql.includes('SELECT classroom FROM student_enrollments'))return {results:classes};
         if(sql.includes('SELECT a.id,a.personnel_id'))return {results:assignments};return {results:[]};},
       async run(){return {meta:{changes:1}}}
-    };},async run(){return {meta:{changes:1}}}};},
+    };return {...statement,bind(){return statement;}};},
     async batch(){return [];}
   }};
 }
