@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {prepareTeachingImport} from "./teaching-assignments.js";
+import {prepareTeachingImport} from "../src/routes/teaching-assignments.js";
 
 const personnel=[
   {id:1,full_name:"นางสาววรรณมาศ จันทร์ชัง",homeroom_classroom:"ป.4/1"},
