@@ -21,7 +21,7 @@ import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js
 import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
 import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
-import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
+import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";\nimport { handleTeachingAssignmentsRoute } from "./routes/teaching-assignments.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -3927,6 +3927,9 @@ export default {
 
       const timetableSyncResponse = await handleTimetableSyncRoute(request, env, pathname, method);
       if (timetableSyncResponse) return timetableSyncResponse;
+
+      const teachingAssignmentsResponse = await handleTeachingAssignmentsRoute(request, env, pathname, method);
+      if (teachingAssignmentsResponse) return teachingAssignmentsResponse;
 
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
