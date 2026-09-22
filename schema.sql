@@ -212,6 +212,15 @@ CREATE TABLE IF NOT EXISTS project_expenses (
   payment_no    TEXT,
   payment_method TEXT,
   payment_date  TEXT,
+  request_purpose TEXT,
+  necessity      TEXT,
+  source_type    TEXT,
+  payment_preference TEXT,
+  needed_date    TEXT,
+  current_step   TEXT,
+  workflow_started_at TEXT,
+  workflow_completed_at TEXT,
+  returned_at    TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -249,6 +258,52 @@ CREATE TABLE IF NOT EXISTS budget_income (
 );
 CREATE TABLE IF NOT EXISTS budget_counters(fiscal_year INTEGER PRIMARY KEY,last_number INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_budget_income_year ON budget_income(fiscal_year,received_date DESC);
+
+-- ผู้อนุมัติใน workflow: หัวหน้าฝ่าย/รองผู้อำนวยการแยกตามฝ่าย
+-- ส่วนฝ่ายการเงินและผู้อำนวยการใช้ department เป็นค่าว่าง
+CREATE TABLE IF NOT EXISTS budget_role_assignments (
+  role_key TEXT NOT NULL,
+  department TEXT NOT NULL DEFAULT '',
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  assigned_by INTEGER REFERENCES users(id),
+  assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (role_key, department)
+);
+
+CREATE TABLE IF NOT EXISTS budget_request_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
+  line_no INTEGER NOT NULL,
+  category TEXT NOT NULL DEFAULT 'other',
+  description TEXT NOT NULL,
+  quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit TEXT,
+  unit_price REAL NOT NULL CHECK (unit_price >= 0),
+  amount REAL NOT NULL CHECK (amount >= 0),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (expense_id, line_no)
+);
+
+CREATE TABLE IF NOT EXISTS budget_request_approvals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
+  step_key TEXT NOT NULL,
+  step_label TEXT NOT NULL,
+  step_order INTEGER NOT NULL,
+  assigned_user_id INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'waiting',
+  note TEXT,
+  signed_name TEXT,
+  signed_at TEXT,
+  acted_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (expense_id, step_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_budget_items_expense ON budget_request_items(expense_id,line_no);
+CREATE INDEX IF NOT EXISTS idx_budget_approvals_expense ON budget_request_approvals(expense_id,step_order);
+CREATE INDEX IF NOT EXISTS idx_budget_approvals_assignee ON budget_request_approvals(assigned_user_id,status);
 
 CREATE TRIGGER IF NOT EXISTS trg_project_expenses_insert
 AFTER INSERT ON project_expenses
