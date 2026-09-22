@@ -88,6 +88,26 @@ jobs:
             echo "Cloudflare build: $outcome (ครั้งที่ $attempt)"
             if [[ "$outcome" == "success" ]]; then break; fi
             if [[ "$outcome" =~ ^(fail|cancelled|terminated|skipped)$ ]]; then
+              curl --fail-with-body --silent --show-error \
+                --header "$auth" "$api/builds/builds/$build_id/logs" > "$RUNNER_TEMP/build-logs.json" || true
+              python3 - "$RUNNER_TEMP/build-logs.json" <<'PY' || true
+          import json, re, sys
+          try:
+              data=json.load(open(sys.argv[1],encoding="utf-8"))
+          except Exception:
+              raise SystemExit(0)
+          result=data.get("result") or {}
+          lines=result.get("lines") or []
+          output=[]
+          for item in lines:
+              if isinstance(item,str): message=item
+              elif isinstance(item,dict): message=str(item.get("message") or item.get("line") or item.get("text") or item)
+              else: message=str(item)
+              message=re.sub(r'(?i)(authorization|token|secret|password)(\s*[:=]\s*)\S+',r'\1\2[REDACTED]',message)
+              output.append(message[:1000])
+          print("--- Cloudflare build log (ท้ายรายการ) ---")
+          print("\n".join(output[-120:]))
+          PY
               echo "::error::Cloudflare build จบด้วยสถานะ $outcome"
               exit 1
             fi
