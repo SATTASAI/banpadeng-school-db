@@ -21,7 +21,8 @@ import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js
 import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
 import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
-import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";\nimport { handleTeachingAssignmentsRoute } from "./routes/teaching-assignments.js";
+import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
+import { handleTeachingAssignmentsRoute } from "./routes/teaching-assignments.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
