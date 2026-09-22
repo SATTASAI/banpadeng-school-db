@@ -132,11 +132,29 @@ test("digital budget request follows every assigned signature before printing an
   assert.match(document.body, /หัวหน้าวิชาการ/);
   assert.match(document.body, /ผู้อำนวยการ/);
 
+  assert.equal((await call(env, 6, `requests/${id}/payment-document`)).status, 409);
+  assert.equal((await call(env, 6, `requests/${id}/action`, "POST", {
+    action: "pay", payment_no: "PAY-BAD", payment_date: "2026-10-03", payment_method: "transfer",
+    payment_recipient: "ร้านตัวอย่าง",
+  })).status, 400);
+
   const paid = await call(env, 6, `requests/${id}/action`, "POST", {
     action: "pay", payment_no: "PAY-1", payment_date: "2026-10-03", payment_method: "transfer",
+    payment_recipient: "ร้านตัวอย่าง", payment_reference: "TXN-123", withholding_tax: 9,
+    payment_note: "จ่ายตามใบแจ้งหนี้",
   });
   assert.equal(paid.status, 200);
   assert.equal(env.raw.prepare("SELECT spent_amount FROM projects WHERE id=10").get().spent_amount, 900);
+  const payment = env.raw.prepare("SELECT net_paid,withholding_tax,payment_reference,payment_recipient FROM project_expenses WHERE id=?").get(id);
+  assert.equal(payment.net_paid, 891);
+  assert.equal(payment.withholding_tax, 9);
+  assert.equal(payment.payment_reference, "TXN-123");
+  assert.equal(payment.payment_recipient, "ร้านตัวอย่าง");
+  const voucher = await call(env, 6, `requests/${id}/payment-document`);
+  assert.equal(voucher.status, 200);
+  assert.match(voucher.body, /ใบสำคัญจ่าย/);
+  assert.match(voucher.body, /TXN-123/);
+  assert.match(voucher.body, /891\.00/);
 
   const second = await call(env, 2, "requests", "POST", requestPayload(200));
   assert.equal(second.status, 201);

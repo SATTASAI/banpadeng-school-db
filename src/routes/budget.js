@@ -78,7 +78,9 @@ export async function ensureBudgetSchema(env) {
     ["payment_date", "TEXT"], ["request_purpose", "TEXT"], ["necessity", "TEXT"],
     ["source_type", "TEXT"], ["payment_preference", "TEXT"], ["needed_date", "TEXT"],
     ["current_step", "TEXT"], ["workflow_started_at", "TEXT"], ["workflow_completed_at", "TEXT"],
-    ["returned_at", "TEXT"],
+    ["returned_at", "TEXT"], ["payment_reference", "TEXT"], ["payment_recipient", "TEXT"],
+    ["payment_note", "TEXT"], ["withholding_tax", "REAL NOT NULL DEFAULT 0"],
+    ["net_paid", "REAL"], ["payment_recorded_by", "INTEGER REFERENCES users(id)"],
   ];
   for (const [name, definition] of columns) await addColumn(env, "project_expenses", name, definition);
 
@@ -187,10 +189,11 @@ async function overview(request, env) {
       LEFT JOIN project_owners po ON po.project_id=p.id LEFT JOIN users u ON u.id=po.user_id
       WHERE p.status<>'cancelled' AND p.fiscal_year=? GROUP BY p.id ORDER BY p.department,p.name`).bind(year, year, user.id, year).all(),
     env.DB.prepare(`SELECT e.*,p.name project_name,p.department,creator.full_name requester_name,approver.full_name approver_name,
+      payer.full_name payment_recorder_name,
       (SELECT a.id FROM file_attachments a WHERE a.entity_type='project_expense' AND a.entity_id=e.id ORDER BY a.id DESC LIMIT 1) attachment_id,
       (SELECT a.file_name FROM file_attachments a WHERE a.entity_type='project_expense' AND a.entity_id=e.id ORDER BY a.id DESC LIMIT 1) attachment_name
       FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users creator ON creator.id=e.created_by
-      LEFT JOIN users approver ON approver.id=e.approved_by WHERE e.fiscal_year=?
+      LEFT JOIN users approver ON approver.id=e.approved_by LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE e.fiscal_year=?
       ORDER BY CASE e.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,e.created_at DESC,e.id DESC`).bind(year).all(),
     env.DB.prepare("SELECT status,COUNT(*) item_count,COALESCE(SUM(amount),0) total_amount FROM project_expenses WHERE fiscal_year=? GROUP BY status").bind(year).all(),
     env.DB.prepare(`SELECT a.*,u.full_name user_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id WHERE a.resource='budget_request' ORDER BY a.created_at DESC LIMIT 100`).all(),
@@ -349,9 +352,16 @@ async function workflowAction(request, env, id) {
     if (!finance || Number(finance.user_id) !== Number(user.id)) return jsonResponse({ error: "เฉพาะผู้รับผิดชอบฝ่ายการเงินเท่านั้น" }, 403);
     if (row.status !== "approved" || row.current_step !== "finance_completion") return jsonResponse({ error: "คำขอยังผ่านการลงนามไม่ครบ" }, 409);
     const paymentNo = clean(body.payment_no, 100), paymentDate = String(body.payment_date || ""), method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null;
-    if (!paymentNo || !validDate(paymentDate) || !method) return jsonResponse({ error: "กรุณาระบุเลขที่จ่าย วันที่ และวิธีจ่าย" }, 400);
-    await env.DB.prepare("UPDATE project_expenses SET status='paid',current_step='completed',payment_no=?,payment_date=?,payment_method=?,paid_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(paymentNo, paymentDate, method, id).run();
-    await audit(env, user, "pay", id, { payment_no: paymentNo }, request);
+    const recipient = clean(body.payment_recipient, 250) || clean(row.payee, 250), reference = clean(body.payment_reference, 150);
+    const withholdingTax = Number(body.withholding_tax || 0), note = clean(body.payment_note, 1000);
+    if (!paymentNo || !validDate(paymentDate) || !method || !recipient) return jsonResponse({ error: "กรุณาระบุเลขที่ใบสำคัญ วันที่ วิธีจ่าย และผู้รับเงิน" }, 400);
+    if (["transfer", "cheque"].includes(method) && !reference) return jsonResponse({ error: "กรุณาระบุเลขอ้างอิงการโอนหรือเลขที่เช็ค" }, 400);
+    if (!Number.isFinite(withholdingTax) || withholdingTax < 0 || withholdingTax > Number(row.amount)) return jsonResponse({ error: "ภาษีหัก ณ ที่จ่ายต้องไม่เกินยอดอนุมัติ" }, 400);
+    const netPaid = Math.round((Number(row.amount) - withholdingTax) * 100) / 100;
+    await env.DB.prepare(`UPDATE project_expenses SET status='paid',current_step='completed',payment_no=?,payment_date=?,payment_method=?,
+      payment_reference=?,payment_recipient=?,payment_note=?,withholding_tax=?,net_paid=?,payment_recorded_by=?,paid_at=datetime('now'),updated_at=datetime('now') WHERE id=?`)
+      .bind(paymentNo, paymentDate, method, reference, recipient, note, withholdingTax, netPaid, user.id, id).run();
+    await audit(env, user, "pay", id, { payment_no: paymentNo, payment_method: method, payment_reference: reference, withholding_tax: withholdingTax, net_paid: netPaid }, request);
     return jsonResponse({ ok: true });
   }
   return jsonResponse({ error: "คำสั่งไม่ถูกต้อง" }, 400);
@@ -408,6 +418,20 @@ async function printableDocument(request, env, id) {
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }
 
+async function paymentDocument(request, env, id) {
+  const user = await currentUser(request, env);
+  if (!user) return new Response("กรุณาเข้าสู่ระบบ", { status: 401 });
+  const row = await env.DB.prepare(`SELECT e.*,p.name project_name,p.department,requester.full_name requester_name,payer.full_name payer_name
+    FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users requester ON requester.id=e.created_by
+    LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE e.id=?`).bind(id).first();
+  if (!row) return new Response("ไม่พบรายการเบิกจ่าย", { status: 404 });
+  if (row.status !== "paid") return new Response("ใบสำคัญจ่ายจะสร้างได้เมื่อฝ่ายการเงินยืนยันการจ่ายแล้ว", { status: 409 });
+  const methods = { transfer: "โอนเงิน", cash: "เงินสด", cheque: "เช็ค", other: "อื่น ๆ" };
+  const departments = { academic: "ฝ่ายบริหารงานวิชาการ", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
+  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ใบสำคัญจ่าย ${escapeHtml(row.payment_no)}</title><style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:"TH Sarabun New","Sarabun",sans-serif;font-size:16pt;line-height:1.3;color:#111;margin:0}h1,h2{text-align:center;margin:0}h1{font-size:22pt}h2{font-size:17pt;margin-bottom:18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.line{padding:5px;border-bottom:1px dotted #555}.amount{margin:20px 0;border:1px solid #555}.amount div{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #aaa}.amount div:last-child{border:0;font-weight:bold;font-size:18pt}.box{border:1px solid #777;min-height:60px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:70px;text-align:center}.sign div{border-top:1px solid #555;padding-top:6px}.actions{position:fixed;right:16px;top:12px}@media print{.actions{display:none}}button{font:14px sans-serif;padding:8px 14px;border:0;border-radius:8px;background:#0879e5;color:#fff}</style></head><body><div class="actions"><button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button></div><h1>ใบสำคัญจ่าย</h1><h2>โรงเรียนบ้านป่าเด็ง</h2><div class="grid"><div class="line"><strong>เลขที่ใบสำคัญ:</strong> ${escapeHtml(row.payment_no)}</div><div class="line"><strong>วันที่จ่าย:</strong> ${thaiDate(row.payment_date)}</div><div class="line"><strong>เลขคำขอ:</strong> ${escapeHtml(row.request_no)}</div><div class="line"><strong>ฝ่ายงาน:</strong> ${escapeHtml(departments[row.department])}</div><div class="line"><strong>โครงการ:</strong> ${escapeHtml(row.project_name)}</div><div class="line"><strong>ผู้ขอ:</strong> ${escapeHtml(row.requester_name)}</div><div class="line"><strong>ผู้รับเงิน:</strong> ${escapeHtml(row.payment_recipient)}</div><div class="line"><strong>วิธีจ่าย:</strong> ${escapeHtml(methods[row.payment_method] || row.payment_method)}</div><div class="line"><strong>เลขอ้างอิง:</strong> ${escapeHtml(row.payment_reference || "")}</div><div class="line"><strong>ผู้บันทึกจ่าย:</strong> ${escapeHtml(row.payer_name)}</div></div><div class="amount"><div><span>ยอดที่ได้รับอนุมัติ</span><strong>${money(row.amount)} บาท</strong></div><div><span>ภาษีหัก ณ ที่จ่าย</span><strong>${money(row.withholding_tax)} บาท</strong></div><div><span>ยอดจ่ายสุทธิ</span><strong>${money(row.net_paid ?? row.amount)} บาท</strong></div></div><strong>รายละเอียด/หมายเหตุการจ่าย</strong><div class="box">${escapeHtml(row.payment_note || row.request_purpose || row.description)}</div><div class="sign"><div>ผู้รับเงิน<br>(${escapeHtml(row.payment_recipient)})</div><div>เจ้าหน้าที่การเงิน<br>(${escapeHtml(row.payer_name)})</div></div></body></html>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 export async function handleBudgetRoute(request, env, pathname, method) {
   if (!pathname.startsWith("/api/budget")) return null;
   await ensureBudgetSchema(env);
@@ -417,6 +441,8 @@ export async function handleBudgetRoute(request, env, pathname, method) {
   if (pathname === "/api/budget/roles" && method === "PUT") return saveRoleAssignment(request, env);
   let match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/document$/);
   if (match && method === "GET") return printableDocument(request, env, Number(match[1]));
+  match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/payment-document$/);
+  if (match && method === "GET") return paymentDocument(request, env, Number(match[1]));
   match = pathname.match(/^\/api\/budget\/requests\/(\d+)$/);
   if (match && method === "PATCH") return updateRequest(request, env, Number(match[1]));
   match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/action$/);

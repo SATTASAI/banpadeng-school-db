@@ -221,6 +221,12 @@ CREATE TABLE IF NOT EXISTS project_expenses (
   workflow_started_at TEXT,
   workflow_completed_at TEXT,
   returned_at    TEXT,
+  payment_reference TEXT,
+  payment_recipient TEXT,
+  payment_note   TEXT,
+  withholding_tax REAL NOT NULL DEFAULT 0,
+  net_paid       REAL,
+  payment_recorded_by INTEGER REFERENCES users(id),
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
