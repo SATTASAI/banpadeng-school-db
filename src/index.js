@@ -22,6 +22,9 @@ import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
 import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
 import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
+import { handleTimetableRoute } from "./routes/timetable.js";
+import { handleSchoolBankRoute } from "./routes/school-bank.js";
+import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -301,6 +304,7 @@ async function ensureExtendedSchema(env) {
       table_count INTEGER, row_count INTEGER, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
   await ensureProjectExpenseSchema(env);
+  await ensureBudgetSchema(env);
   await ensureInventorySchema(env);
   await ensureAttachmentStorageSchema(env);
   await ensureDocumentWorkflowSchema(env);
@@ -1354,12 +1358,16 @@ async function handleCreateProject(request, env, department) {
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
     return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
   }
+  const now = new Date();
+  const defaultFiscalYear = now.getUTCFullYear() + (now.getUTCMonth() + 1 >= 10 ? 544 : 543);
+  const fiscalYear = body.fiscal_year === "" || body.fiscal_year == null ? defaultFiscalYear : Number(body.fiscal_year);
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
 
   const result = await env.DB.prepare(
-    `INSERT INTO projects (department, name, budget_amount, spent_amount, description, created_by)
-     VALUES (?, ?, ?, 0, ?, ?)`
+    `INSERT INTO projects (department, name, budget_amount, spent_amount, fiscal_year, description, created_by)
+     VALUES (?, ?, ?, 0, ?, ?, ?)`
   )
-    .bind(department, name, budgetAmount, body.description || null, user.id)
+    .bind(department, name, budgetAmount, fiscalYear, body.description || null, user.id)
     .run();
 
   const projectId = result.meta.last_row_id;
@@ -1400,6 +1408,11 @@ async function handleUpdateProject(request, env, projectId) {
     if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
     updates.push("budget_amount = ?");
     values.push(amount);
+  }
+  if (body.fiscal_year !== undefined) {
+    const fiscalYear = Number(body.fiscal_year);
+    if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
+    updates.push("fiscal_year = ?"); values.push(fiscalYear);
   }
   if (body.progress_percent !== undefined) {
     const p = Number(body.progress_percent);
@@ -2936,7 +2949,7 @@ async function validateManagedFile(file, entityType = "") {
   const extension = Object.keys(OFFICE_FILE_MIMES).find((ext) => fileName.endsWith(ext));
   const declaredMime = String(file.type || "").toLowerCase();
   const mimeType = OFFICE_FILE_MIMES[extension] || declaredMime;
-  const officeAllowed = ["document", "work_record", "inventory_transaction", "inventory_inspection"].includes(entityType);
+  const officeAllowed = ["document", "work_record", "inventory_transaction", "inventory_inspection", "project_expense"].includes(entityType);
   if (extension && !officeAllowed) return { error: "หัวข้อนี้ไม่รองรับไฟล์เอกสาร Office" };
   const limit = MANAGED_FILE_LIMITS[mimeType];
   if (!limit) return { error: "รองรับ PDF, JPG, PNG, WEBP, GIF และไฟล์ DOCX/XLSX/PPTX ในหัวข้องานเอกสาร" };
@@ -3045,6 +3058,10 @@ async function getDriveFolderSegments(env, entityType, entityId) {
     return ["เอกสารและคลังไฟล์", String(row?.year_be || "ไม่ระบุปีการศึกษา"), departmentDriveLabel(row?.department)];
   }
   if (entityType.startsWith("inventory_")) return ["พัสดุและครุภัณฑ์", entityType === "inventory_transaction" ? "รายการเคลื่อนไหว" : "การตรวจสอบ"];
+  if (entityType === "project_expense") {
+    const row = await env.DB.prepare(`SELECT e.fiscal_year,p.name FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(entityId).first();
+    return ["งบประมาณ", String(row?.fiscal_year || "ไม่ระบุปีงบประมาณ"), row?.name || "ไม่ระบุโครงการ"];
+  }
   if (entityType.startsWith("maintenance_")) return ["อาคารสถานที่และแจ้งซ่อม", entityType.replace("maintenance_", "")];
   if (entityType === "work_record") {
     const row = await env.DB.prepare("SELECT area,topic_label FROM work_records WHERE id=?").bind(entityId).first();
@@ -3107,6 +3124,7 @@ const ATTACHMENT_ENTITY_TABLES = {
   maintenance_after: { table: "maintenance_requests", owner: "reported_by" },
   maintenance_update: { table: "maintenance_updates", owner: "created_by" },
   work_record: { table: "work_records", owner: "created_by" },
+  project_expense: { table: "project_expenses", owner: "created_by" },
 };
 
 async function handleUploadAttachment(request, env, entityType, entityId) {
@@ -3932,6 +3950,12 @@ export default {
       if (academicPeriodResponse) return academicPeriodResponse;
       const learnerAnalysisResponse = await handleLearnerAnalysisRoute(request, env, pathname, method);
       if (learnerAnalysisResponse) return learnerAnalysisResponse;
+      const timetableResponse = await handleTimetableRoute(request, env, pathname, method);
+      if (timetableResponse) return timetableResponse;
+      const schoolBankResponse = await handleSchoolBankRoute(request, env, pathname, method);
+      if (schoolBankResponse) return schoolBankResponse;
+      const budgetResponse = await handleBudgetRoute(request, env, pathname, method);
+      if (budgetResponse) return budgetResponse;
 
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);
@@ -4051,7 +4075,7 @@ export default {
       if (maintenanceRequestMatch && method === "GET") return await handleGetMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
       if (maintenanceRequestMatch && method === "PATCH") return await handleUpdateMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
 
-      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_before|maintenance_after|maintenance_update|work_record)\/(\d+)$/);
+      const uploadAttachmentMatch = pathname.match(/^\/api\/attachments\/(document|inventory_transaction|inventory_inspection|maintenance_request|maintenance_before|maintenance_after|maintenance_update|work_record|project_expense)\/(\d+)$/);
       if (uploadAttachmentMatch && method === "POST") return await handleUploadAttachment(request, env, uploadAttachmentMatch[1], Number(uploadAttachmentMatch[2]));
       const downloadAttachmentMatch = pathname.match(/^\/api\/attachments\/(\d+)$/);
       if (downloadAttachmentMatch && method === "GET") return await handleDownloadAttachment(request, env, Number(downloadAttachmentMatch[1]));

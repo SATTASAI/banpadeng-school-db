@@ -114,7 +114,9 @@
       number: 4,
       title: "ฝ่ายบริหารงานวิชาการ",
       description: "บริหารหลักสูตร การเรียนการสอน ตารางเรียน การวัดผล นิเทศ และประกันคุณภาพการศึกษา",
-      actions: [{ label: "เปิดงานและโครงการวิชาการ", href: "/department.html?dept=academic" }],
+      actions: [{ label: "เปิดงานและโครงการวิชาการ", href: "/department.html?dept=academic" },
+        { label: "จัดตารางสอน", href: "/timetable.html", secondary: true },
+        { label: "จัดครูสอนแทน", href: "/substitutes.html", secondary: true }],
       ready: [1],
       items: [
         "หลักสูตรสถานศึกษา",
@@ -140,8 +142,10 @@
       title: "ฝ่ายบริหารงานงบประมาณ",
       description: "วางแผนงบประมาณ รับ–จ่าย อนุมัติเบิกจ่าย พัสดุ ครุภัณฑ์ และรายงานการเงิน",
       actions: [
-        { label: "เปิดงานและโครงการงบประมาณ", href: "/department.html?dept=budget" },
-        { label: "เปิดระบบพัสดุและครุภัณฑ์", href: "/inventory.html", secondary: true }
+        { label: "เปิดระบบบริหารงบประมาณ", href: "/budget.html" },
+        { label: "นำเข้าแผนและคำขอ", href: "/import-center.html?template=budget_requests", secondary: true },
+        { label: "เปิดระบบพัสดุและครุภัณฑ์", href: "/inventory.html", secondary: true },
+        { label: "ธนาคารโรงเรียน", href: "/school-bank.html", secondary: true }
       ],
       ready: [0, 5, 6, 8, 9],
       items: [

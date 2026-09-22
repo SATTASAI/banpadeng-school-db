@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name              TEXT NOT NULL,
   budget_amount     REAL NOT NULL DEFAULT 0 CHECK (budget_amount >= 0),
   spent_amount      REAL NOT NULL DEFAULT 0 CHECK (spent_amount >= 0),
+  fiscal_year       INTEGER,
   progress_percent  INTEGER NOT NULL DEFAULT 0 CHECK (progress_percent BETWEEN 0 AND 100),
   status            TEXT NOT NULL DEFAULT 'ongoing' CHECK (status IN ('ongoing','completed','cancelled')),
   description       TEXT,
@@ -202,6 +203,13 @@ CREATE TABLE IF NOT EXISTS project_expenses (
   approved_by   INTEGER REFERENCES users(id),
   approved_at   TEXT,
   paid_at       TEXT,
+  request_no    TEXT UNIQUE,
+  fiscal_year   INTEGER,
+  submitted_at  TEXT,
+  review_note   TEXT,
+  payment_no    TEXT,
+  payment_method TEXT,
+  payment_date  TEXT,
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -222,6 +230,23 @@ CREATE INDEX IF NOT EXISTS idx_project_expenses_project ON project_expenses(proj
 CREATE INDEX IF NOT EXISTS idx_project_expenses_status ON project_expenses(status, expense_date DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_expenses_opening
   ON project_expenses(project_id) WHERE category = 'opening_balance';
+CREATE INDEX IF NOT EXISTS idx_project_expenses_fiscal_year ON project_expenses(fiscal_year,status,expense_date DESC);
+
+CREATE TABLE IF NOT EXISTS budget_income (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  fiscal_year INTEGER NOT NULL,
+  received_date TEXT NOT NULL,
+  document_no TEXT,
+  source_name TEXT NOT NULL,
+  source_type TEXT NOT NULL DEFAULT 'other',
+  amount REAL NOT NULL CHECK (amount > 0),
+  notes TEXT,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS budget_counters(fiscal_year INTEGER PRIMARY KEY,last_number INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS idx_budget_income_year ON budget_income(fiscal_year,received_date DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_project_expenses_insert
 AFTER INSERT ON project_expenses
@@ -504,7 +529,7 @@ CREATE TABLE IF NOT EXISTS inventory_inspections (
 -- ไฟล์แนบเก็บจริงใน Google Drive (รองรับ R2 เดิมเพื่อย้ายระบบแบบไม่สะดุด)
 CREATE TABLE IF NOT EXISTS file_attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  entity_type TEXT NOT NULL CHECK (entity_type IN ('document','inventory_transaction','inventory_inspection','maintenance_request','maintenance_update','maintenance_before','maintenance_after')),
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('document','inventory_transaction','inventory_inspection','maintenance_request','maintenance_update','maintenance_before','maintenance_after','work_record','project_expense')),
   entity_id INTEGER NOT NULL,
   object_key TEXT NOT NULL UNIQUE,
   file_name TEXT NOT NULL,
@@ -724,7 +749,6 @@ CREATE TABLE IF NOT EXISTS backup_registry (
 
 -- ฐานข้อมูลเดิมจะเพิ่ม 2 คอลัมน์นี้ด้วย runtime migration ใน src/lib/academic-data.js
 -- เพื่อให้รันซ้ำได้อย่างปลอดภัย: tasks, projects, work_topics และ leave_requests
-
 
 -- ภาระสอนแบบมีโครงสร้างสำหรับเชื่อมระบบ BPD Timetable
 CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
