@@ -97,4 +97,19 @@ test("registration requires personnel fields and creates a linked personnel reco
 
   const duplicateEmailResponse = await handleRegister(request(base), env);
   assert.equal(duplicateEmailResponse.status, 409);
+
+  env.raw.prepare(
+    "UPDATE users SET email = ?, status = 'disabled', role = NULL, deleted_at = datetime('now') WHERE id = ?"
+  ).run(`deleted-${payload.user.id}@removed.invalid`, payload.user.id);
+  const reRegisterResponse = await handleRegister(request({
+    ...base,
+    full_name: "นายครู ทดสอบ",
+  }), env);
+  assert.equal(reRegisterResponse.status, 201);
+  const reRegistered = await reRegisterResponse.json();
+  const transferredProfile = env.raw.prepare(
+    "SELECT user_id, email, full_name FROM personnel_records WHERE lower(email) = ?"
+  ).get(base.email);
+  assert.equal(transferredProfile.user_id, reRegistered.user.id);
+  assert.equal(transferredProfile.full_name, "นายครู ทดสอบ");
 });

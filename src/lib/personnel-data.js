@@ -187,7 +187,14 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
   let person = await env.DB.prepare(
     "SELECT id, user_id, email, full_name FROM personnel_records WHERE lower(email) = ? AND status = 'active'"
   ).bind(email).first();
-  if (person && comparableName(person.full_name) !== comparableName(fullName)) {
+  let linkedAccountDeleted = false;
+  if (person?.user_id && Number(person.user_id) !== Number(profile.user_id)) {
+    const linkedAccount = await env.DB.prepare(
+      "SELECT id, deleted_at FROM users WHERE id = ?"
+    ).bind(person.user_id).first();
+    linkedAccountDeleted = Boolean(linkedAccount?.deleted_at);
+  }
+  if (person && comparableName(person.full_name) !== comparableName(fullName) && !linkedAccountDeleted) {
     throw new Error("PERSONNEL_EMAIL_CONFLICT");
   }
   if (!person) {
@@ -198,7 +205,7 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     // บุคลากรคนละคนอาจมีชื่อ-นามสกุลซ้ำกันได้ จึงต้องแยกด้วยอีเมล/บัญชี
     if (sameName && !sameName.user_id && !String(sameName.email || "").trim()) person = sameName;
   }
-  if (person && person.user_id && Number(person.user_id) !== Number(profile.user_id)) {
+  if (person && person.user_id && Number(person.user_id) !== Number(profile.user_id) && !linkedAccountDeleted) {
     throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
   }
 
