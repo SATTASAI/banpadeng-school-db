@@ -177,3 +177,63 @@ export function ensurePersonnelData(env) {
   }
   return initializationPromise;
 }
+
+export async function upsertSelfRegisteredPersonnel(env, profile) {
+  await ensurePersonnelData(env);
+  const email = String(profile.email || "").trim().toLowerCase();
+  const fullName = String(profile.full_name || "").trim();
+  const normalizedName = cleanName(fullName);
+
+  let person = await env.DB.prepare(
+    "SELECT id, user_id, email, full_name FROM personnel_records WHERE lower(email) = ? AND status = 'active'"
+  ).bind(email).first();
+  if (person && comparableName(person.full_name) !== comparableName(fullName)) {
+    throw new Error("PERSONNEL_EMAIL_CONFLICT");
+  }
+  if (!person) {
+    person = await env.DB.prepare(
+      "SELECT id, user_id, email, full_name FROM personnel_records WHERE normalized_name = ? AND status = 'active'"
+    ).bind(normalizedName).first();
+  }
+  if (person && person.user_id && Number(person.user_id) !== Number(profile.user_id)) {
+    throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
+  }
+  if (person && person.email && person.email.trim().toLowerCase() !== email) {
+    throw new Error("PERSONNEL_NAME_CONFLICT");
+  }
+
+  const values = [
+    profile.position || null,
+    profile.subjects || null,
+    profile.phone || null,
+    profile.homeroom_classroom || null,
+    profile.departments || null,
+    profile.responsible_projects || null,
+    profile.teaching_periods ?? null,
+  ];
+  if (person) {
+    await env.DB.prepare(
+      `UPDATE personnel_records SET
+         user_id = ?, email = ?, full_name = ?, position = ?, subjects = COALESCE(?, subjects),
+         phone = ?, homeroom_classroom = COALESCE(?, homeroom_classroom), departments = ?,
+         responsible_projects = COALESCE(?, responsible_projects),
+         teaching_periods = COALESCE(?, teaching_periods), updated_at = datetime('now')
+       WHERE id = ?`
+    ).bind(
+      profile.user_id, email, fullName, values[0], values[1], values[2], values[3],
+      values[4], values[5], values[6], person.id
+    ).run();
+    return person.id;
+  }
+
+  const result = await env.DB.prepare(
+    `INSERT INTO personnel_records
+       (user_id, full_name, normalized_name, email, position, subjects, phone,
+        homeroom_classroom, departments, responsible_projects, teaching_periods, source_file)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'สมัครสมาชิกด้วยตนเอง')`
+  ).bind(
+    profile.user_id, fullName, normalizedName, email, values[0], values[1], values[2],
+    values[3], values[4], values[5], values[6]
+  ).run();
+  return result.meta.last_row_id;
+}

@@ -7,7 +7,7 @@ import {
   buildClearCookie,
 } from "./lib/crypto.js";
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
-import { ensurePersonnelData } from "./lib/personnel-data.js";
+import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { importStaffRows } from "./lib/staff-import.js";
 import { importProjectRows, upsertProjectRow } from "./lib/project-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
@@ -327,7 +327,7 @@ function isValidEmail(email) {
 }
 
 // ---------- /api/auth/register ----------
-async function handleRegister(request, env) {
+export async function handleRegister(request, env) {
   let body;
   try {
     body = await request.json();
@@ -338,6 +338,16 @@ async function handleRegister(request, env) {
   const email = (body.email || "").trim().toLowerCase();
   const password = body.password || "";
   const fullName = (body.full_name || "").trim();
+  const position = String(body.position || "").trim().slice(0, 200);
+  const phone = String(body.phone || "").trim().slice(0, 50);
+  const allowedDepartments = new Set(["academic", "budget", "personnel", "general"]);
+  const departments = [...new Set(Array.isArray(body.departments) ? body.departments : [])]
+    .filter((department) => allowedDepartments.has(department));
+  const subjects = String(body.subjects || "").trim().slice(0, 500) || null;
+  const homeroomClassroom = String(body.homeroom_classroom || "").trim().slice(0, 200) || null;
+  const responsibleProjects = String(body.responsible_projects || "").trim().slice(0, 1500) || null;
+  const rawTeachingPeriods = String(body.teaching_periods ?? "").trim();
+  const teachingPeriods = rawTeachingPeriods === "" ? null : Number(rawTeachingPeriods);
 
   if (!email || !isValidEmail(email)) {
     return jsonResponse({ error: "กรุณากรอกอีเมลให้ถูกต้อง" }, 400);
@@ -348,6 +358,21 @@ async function handleRegister(request, env) {
   if (!password || password.length < 8) {
     return jsonResponse({ error: "รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร" }, 400);
   }
+  if (!position) {
+    return jsonResponse({ error: "กรุณาระบุตำแหน่ง" }, 400);
+  }
+  if (!phone || !/^[0-9+()\-\s]{8,50}$/.test(phone) || phone.replace(/\D/g, "").length < 8) {
+    return jsonResponse({ error: "กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง" }, 400);
+  }
+  if (!Array.isArray(body.departments) || departments.length === 0 || departments.length !== new Set(body.departments).size) {
+    return jsonResponse({ error: "กรุณาเลือกฝ่ายงานที่รับผิดชอบอย่างน้อย 1 ฝ่าย" }, 400);
+  }
+  if (rawTeachingPeriods && (!Number.isInteger(teachingPeriods) || teachingPeriods < 0 || teachingPeriods > 100)) {
+    return jsonResponse({ error: "จำนวนคาบสอนต้องเป็นจำนวนเต็ม 0–100" }, 400);
+  }
+
+  // เตรียมทะเบียนบุคลากรก่อนสร้างบัญชี เพื่อให้บัญชีใหม่ไม่ถูกมองเป็นข้อมูลเดิมระหว่าง migration
+  await ensurePersonnelData(env);
 
   const existing = await env.DB.prepare("SELECT id FROM users WHERE email = ?")
     .bind(email)
@@ -377,6 +402,28 @@ async function handleRegister(request, env) {
     .run();
 
   const userId = result.meta.last_row_id;
+  try {
+    await upsertSelfRegisteredPersonnel(env, {
+      user_id: userId,
+      email,
+      full_name: fullName,
+      position,
+      phone,
+      departments: departments.join(","),
+      subjects,
+      homeroom_classroom: homeroomClassroom,
+      responsible_projects: responsibleProjects,
+      teaching_periods: teachingPeriods,
+    });
+  } catch (error) {
+    await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run().catch(() => null);
+    const conflict = String(error?.message || "").startsWith("PERSONNEL_");
+    return jsonResponse({
+      error: conflict
+        ? "ข้อมูลชื่อหรืออีเมลขัดกับทะเบียนบุคลากรเดิม กรุณาติดต่อผู้ดูแลระบบ"
+        : "ไม่สามารถบันทึกข้อมูลบุคลากรได้ กรุณาลองใหม่อีกครั้ง",
+    }, conflict ? 409 : 500);
+  }
   const token = await signJWT({ sub: userId }, env.JWT_SECRET);
 
   return jsonResponse(
@@ -466,7 +513,12 @@ async function handleAdminListUsers(request, env) {
   }
 
   const { results } = await env.DB.prepare(
-    "SELECT id, email, full_name, role, status, created_at, approved_at FROM users WHERE deleted_at IS NULL ORDER BY created_at DESC"
+    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.created_at, u.approved_at,
+            p.position, p.phone, p.departments
+     FROM users u
+     LEFT JOIN personnel_records p ON p.user_id = u.id AND p.status = 'active'
+     WHERE u.deleted_at IS NULL
+     ORDER BY u.created_at DESC`
   ).all();
 
   return jsonResponse({ users: results });

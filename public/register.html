@@ -5,20 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>สมัครสมาชิก — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css" />
+<style>
+  .auth-card.register-card{max-width:680px}
+  .register-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  .register-grid .span-2{grid-column:1/-1}
+  .department-options{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px;border:1px solid var(--color-border);border-radius:10px;background:#fafcfe}
+  .department-options label{display:flex;align-items:center;gap:8px;margin:0;font-weight:400;cursor:pointer}
+  .optional-profile{margin:4px 0 18px;border:1px solid var(--color-border);border-radius:10px;padding:12px}
+  .optional-profile summary{cursor:pointer;color:var(--color-forest-900);font-weight:600}
+  .optional-profile .register-grid{margin-top:14px}
+  .field-help{display:block;color:var(--color-text-muted);font-size:12px;margin-top:5px}
+  @media(max-width:620px){.register-grid{grid-template-columns:1fr}.register-grid .span-2{grid-column:auto}.department-options{grid-template-columns:1fr}}
+</style>
 </head>
 <body>
 <div class="auth-shell">
-  <div class="auth-card">
+  <div class="auth-card register-card">
     <div class="auth-mark">
       <img src="/logo.jpg" alt="ตราโรงเรียน" />
     </div>
     <h1>สมัครสมาชิก</h1>
-    <p class="auth-subtitle">สมัครแล้วเข้าใช้งานได้ทันที ผู้ดูแลระบบจะกำหนดสิทธิ์การใช้งานให้ภายหลัง</p>
+    <p class="auth-subtitle">กรอกข้อมูลบัญชีและข้อมูลบุคลากร ผู้ดูแลระบบจะตรวจสอบและกำหนดสิทธิ์การใช้งานให้ภายหลัง</p>
 
     <div class="error-box" id="errorBox"></div>
 
     <form id="registerForm">
-      <div class="field">
+      <div class="register-grid">
+      <div class="field span-2">
         <label for="fullName">ชื่อ-นามสกุล</label>
         <input type="text" id="fullName" required autocomplete="name" />
       </div>
@@ -27,6 +40,24 @@
         <input type="email" id="email" required autocomplete="email" />
       </div>
       <div class="field">
+        <label for="position">ตำแหน่ง</label>
+        <input type="text" id="position" required maxlength="200" placeholder="เช่น ครูชำนาญการ, เจ้าหน้าที่ธุรการ" />
+      </div>
+      <div class="field">
+        <label for="phone">เบอร์โทรศัพท์</label>
+        <input type="tel" id="phone" required maxlength="50" autocomplete="tel" inputmode="tel" placeholder="เช่น 0812345678" />
+      </div>
+      <fieldset class="field span-2" style="border:0;padding:0;margin-inline:0;">
+        <legend style="font-size:14px;font-weight:500;margin-bottom:6px;color:var(--color-forest-900);">ฝ่ายงานที่รับผิดชอบ</legend>
+        <div class="department-options" id="departmentOptions">
+          <label><input type="checkbox" name="departments" value="academic" /> วิชาการ</label>
+          <label><input type="checkbox" name="departments" value="budget" /> งบประมาณ</label>
+          <label><input type="checkbox" name="departments" value="personnel" /> บุคคล</label>
+          <label><input type="checkbox" name="departments" value="general" /> บริหารทั่วไป</label>
+        </div>
+        <span class="field-help">เลือกได้มากกว่า 1 ฝ่าย ข้อมูลนี้ไม่ใช่สิทธิ์อนุมัติรายการ</span>
+      </fieldset>
+      <div class="field">
         <label for="password">รหัสผ่าน</label>
         <input type="password" id="password" required minlength="8" autocomplete="new-password" />
       </div>
@@ -34,6 +65,16 @@
         <label for="confirmPassword">ยืนยันรหัสผ่าน</label>
         <input type="password" id="confirmPassword" required minlength="8" autocomplete="new-password" />
       </div>
+      </div>
+      <details class="optional-profile">
+        <summary>ข้อมูลการสอนและงานเพิ่มเติม (ถ้ามี)</summary>
+        <div class="register-grid">
+          <div class="field"><label for="homeroomClassroom">ประจำชั้น/ห้อง</label><input type="text" id="homeroomClassroom" maxlength="200" placeholder="เช่น ป.4/1" /></div>
+          <div class="field"><label for="teachingPeriods">จำนวนคาบสอนต่อสัปดาห์</label><input type="number" id="teachingPeriods" min="0" max="100" step="1" /></div>
+          <div class="field span-2"><label for="subjects">วิชาที่สอน</label><input type="text" id="subjects" maxlength="500" placeholder="เช่น ภาษาไทย, คณิตศาสตร์" /></div>
+          <div class="field span-2"><label for="responsibleProjects">โครงการที่รับผิดชอบ</label><input type="text" id="responsibleProjects" maxlength="1500" placeholder="ระบุชื่อโครงการ คั่นด้วยเครื่องหมายจุลภาค" /></div>
+        </div>
+      </details>
       <button type="submit" class="btn btn-primary" id="submitBtn">สมัครสมาชิก</button>
     </form>
 
@@ -60,6 +101,13 @@
       errorBox.classList.add("visible");
       return;
     }
+    const departments = [...document.querySelectorAll('input[name="departments"]:checked')].map((item) => item.value);
+    if (departments.length === 0) {
+      errorBox.textContent = "กรุณาเลือกฝ่ายงานที่รับผิดชอบอย่างน้อย 1 ฝ่าย";
+      errorBox.classList.add("visible");
+      document.getElementById("departmentOptions").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
 
     submitBtn.disabled = true;
     submitBtn.textContent = "กำลังสมัครสมาชิก...";
@@ -70,6 +118,13 @@
         body: {
           full_name: document.getElementById("fullName").value,
           email: document.getElementById("email").value,
+          position: document.getElementById("position").value,
+          phone: document.getElementById("phone").value,
+          departments,
+          homeroom_classroom: document.getElementById("homeroomClassroom").value,
+          teaching_periods: document.getElementById("teachingPeriods").value,
+          subjects: document.getElementById("subjects").value,
+          responsible_projects: document.getElementById("responsibleProjects").value,
           password,
         },
       });
