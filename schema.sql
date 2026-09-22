@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS users (
   status        TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   approved_at   TEXT,
-  approved_by   INTEGER REFERENCES users(id)
+  approved_by   INTEGER REFERENCES users(id),
+  deleted_at    TEXT,
+  deleted_by    INTEGER REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);

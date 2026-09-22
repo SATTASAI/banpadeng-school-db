@@ -31,6 +31,7 @@
             <th>สิทธิ์การใช้งาน</th>
             <th>สถานะ</th>
             <th>สมัครเมื่อ</th>
+            <th>จัดการ</th>
           </tr>
         </thead>
         <tbody id="userRows"></tbody>
@@ -60,6 +61,7 @@
     { value: "staff", label: "เจ้าหน้าที่ธุรการ" },
     { value: "superadmin", label: "ผู้ดูแลระบบ" },
   ];
+  let currentAdminId = null;
 
   function formatDate(iso) {
     const d = new Date(iso + "Z");
@@ -107,6 +109,32 @@
           method: "PATCH",
           body: { status: nextStatus },
         });
+        await loadUsers();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+    return btn;
+  }
+
+  function buildDeleteButton(user) {
+    const btn = document.createElement("button");
+    btn.className = "btn btn-danger";
+    btn.style.padding = "4px 12px";
+    btn.style.fontSize = "13px";
+    btn.style.width = "auto";
+    btn.textContent = "ลบผู้ใช้";
+    if (Number(user.id) === Number(currentAdminId)) {
+      btn.disabled = true;
+      btn.title = "ไม่สามารถลบบัญชีของตัวเองได้";
+      return btn;
+    }
+    btn.addEventListener("click", async () => {
+      if (!confirm(`ลบบัญชีของ ${user.full_name}?\n\nผู้ใช้นี้จะเข้าสู่ระบบไม่ได้ทันที แต่ประวัติงานและเอกสารเดิมจะยังคงอยู่`)) return;
+      btn.disabled = true;
+      try {
+        await apiRequest(`/api/admin/users/${user.id}`, { method: "DELETE" });
         await loadUsers();
       } catch (err) {
         alert(err.message);
@@ -167,6 +195,10 @@
       dateTd.textContent = formatDate(user.created_at);
       tr.appendChild(dateTd);
 
+      const actionTd = document.createElement("td");
+      actionTd.appendChild(buildDeleteButton(user));
+      tr.appendChild(actionTd);
+
       tbody.appendChild(tr);
     });
   }
@@ -181,6 +213,7 @@
       window.location.href = "/dashboard.html";
       return;
     }
+    currentAdminId = user.id;
     await loadUsers();
   })();
 </script>
