@@ -611,13 +611,12 @@
     buttons.forEach((button,index)=>button.classList.toggle("active",index===globalSearchActive));
     buttons[globalSearchActive].scrollIntoView({block:"nearest"});
   }
-  async function runGlobalSearch(){
+  async function runGlobalSearch(version=++globalSearchVersion){
     const input=document.getElementById("globalSearchInput");
-    const query=input.value.trim();const version=++globalSearchVersion;
+    const query=input.value.trim();
     if(!query){closeGlobalSearch();return}
     const normalized=query.toLocaleLowerCase("th");
     const pageItems=SEARCH_PAGES.filter(item=>(!item.admin_only||dashboardUser?.is_admin)&&(!item.superadmin_only||dashboardUser?.role==="superadmin")&&`${item.title} ${item.subtitle} ${item.keywords}`.toLocaleLowerCase("th").includes(normalized)).slice(0,6).map(item=>({...item,type:"page"}));
-    if(query.length<2){renderGlobalSearch(pageItems,pageItems.length?"":"พิมพ์อย่างน้อย 2 ตัวอักษรเพื่อค้นหาข้อมูล");return}
     renderGlobalSearch(pageItems,"กำลังค้นหา...");
     try{
       const data=await apiRequest(`/api/search?q=${encodeURIComponent(query)}`);
@@ -627,7 +626,7 @@
   }
 
   const globalSearchInput=document.getElementById("globalSearchInput");
-  globalSearchInput.addEventListener("input",()=>{clearTimeout(globalSearchTimer);globalSearchTimer=setTimeout(runGlobalSearch,220)});
+  globalSearchInput.addEventListener("input",()=>{clearTimeout(globalSearchTimer);const version=++globalSearchVersion;globalSearchTimer=setTimeout(()=>runGlobalSearch(version),120)});
   globalSearchInput.addEventListener("focus",()=>{if(globalSearchInput.value.trim())runGlobalSearch()});
   globalSearchInput.addEventListener("keydown",event=>{
     if(event.key==="ArrowDown"){event.preventDefault();updateGlobalSearchActive(globalSearchActive+1)}

@@ -640,7 +640,7 @@ async function handleGlobalSearch(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const q = cleanText(new URL(request.url).searchParams.get("q"), 100) || "";
-  if (q.length < 2) return jsonResponse({ query: q, results: [] });
+  if (!q) return jsonResponse({ query: q, results: [] });
   await ensurePersonnelData(env);
   const like = `%${escapeLikePattern(q)}%`;
   const prefix = `${escapeLikePattern(q)}%`;

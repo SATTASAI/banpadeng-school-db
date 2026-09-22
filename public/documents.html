@@ -36,7 +36,7 @@
     <div class="summary-card"><strong id="countArchive">0</strong><span>คลังรายการซ้ำ/เก็บแล้ว</span></div>
   </div>
   <div class="toolbar">
-    <input id="q" type="search" placeholder="ค้นหาชื่อเอกสารหรือคำสำคัญ" />
+    <input id="q" type="search" autocomplete="off" placeholder="ค้นหาชื่อเอกสารหรือคำสำคัญ" />
     <div class="view-tabs"><button class="tab-btn active" data-view="active">กำลังใช้งาน</button><button class="tab-btn" data-view="archive">คลังรายการ</button></div>
   </div>
   <div class="panel table-wrap" id="list">กำลังโหลด...</div>
@@ -61,6 +61,7 @@ const ACCESS={staff:"บุคลากรทุกคน",private:"ส่วน
 let currentView="active";
 let currentDocuments=[];
 let pendingArchiveId=null;
+let searchVersion=0;
 const requestedDocumentId=Number(new URLSearchParams(location.search).get("document"));
 function sizeText(n){if(!Number(n))return "";return n<1024*1024?`${Math.round(n/1024)} KB`:`${(n/1024/1024).toFixed(2)} MB`}
 function dateText(value){if(!value)return "-";const raw=String(value);const date=new Date(raw.replace(" ","T")+(/Z$|[+-]\d\d:\d\d$/.test(raw)?"":"Z"));return Number.isNaN(date.getTime())?raw:date.toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short",timeZone:"Asia/Bangkok"})}
@@ -84,8 +85,8 @@ function renderRow(x){
   const recordBadge=x.record_status==="duplicate"?`<span class="status-pill warning">รายการซ้ำกับ #${esc(x.duplicate_of_id)}</span>`:x.record_status==="archived"?`<span class="status-pill archived">เก็บเข้าคลังแล้ว</span>`:"";
   return `<tr data-document-id="${x.id}"><td><strong>${esc(x.title)}</strong><br><span class="muted">${esc(x.keywords||"")}</span>${recordBadge?`<div style="margin-top:6px">${recordBadge}</div>`:""}${x.archive_reason?`<div class="muted row-note">${esc(x.archive_reason)}</div>`:""}</td><td>${esc(DEPT[x.department]||x.department)}<br><span class="muted">${esc(x.document_type||"-")}</span></td><td class="file-cell">${fileStatus(x)}${fileLink}<div class="file-actions">${actions}</div><div class="upload-state" id="upload-state-${x.id}"></div></td><td>${esc(ACCESS[x.access_level]||x.access_level)}</td><td>${esc(x.uploader_name||"-")}<br><span class="muted">แก้ไข ${dateText(x.updated_at)}</span></td></tr>`;
 }
-async function load(){
-  const data=await apiRequest(`/api/documents?q=${encodeURIComponent($("q").value)}&view=${currentView}`);currentDocuments=data.documents||[];const counts=data.counts||{};
+async function load(version=++searchVersion){
+  const data=await apiRequest(`/api/documents?q=${encodeURIComponent($("q").value)}&view=${currentView}`);if(version!==searchVersion)return;currentDocuments=data.documents||[];const counts=data.counts||{};
   $("countActive").textContent=Number(counts.active)||0;$("countWithFile").textContent=Number(counts.with_file)||0;$("countWithoutFile").textContent=Number(counts.without_file)||0;$("countArchive").textContent=Number(counts.archive)||0;
   $("list").innerHTML=currentDocuments.length?`<table><thead><tr><th>ชื่อเอกสาร</th><th>ฝ่าย/ประเภท</th><th>สถานะไฟล์และการดำเนินการ</th><th>สิทธิ์</th><th>ผู้นำเข้า</th></tr></thead><tbody>${currentDocuments.map(renderRow).join("")}</tbody></table>`:`<div class="empty-state">${currentView==="archive"?"ยังไม่มีรายการที่เก็บเข้าคลัง":"ยังไม่มีเอกสาร"}</div>`;
   if(requestedDocumentId){const target=$("list").querySelector(`[data-document-id="${requestedDocumentId}"]`);if(target){target.classList.add("search-target");requestAnimationFrame(()=>target.scrollIntoView({behavior:"smooth",block:"center"}))}}
@@ -132,7 +133,7 @@ $("form").onsubmit=async event=>{
   }catch(error){alert(error.message)}finally{btn.disabled=false}
 };
 document.querySelectorAll("[data-view]").forEach(button=>button.onclick=async()=>{currentView=button.dataset.view;document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("active",x===button));await load()});
-let timer;$("q").oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>load().catch(error=>alert(error.message)),250)};
+let timer;$("q").oninput=()=>{clearTimeout(timer);const version=++searchVersion;$("list").setAttribute("aria-busy","true");$("list").innerHTML='<div class="empty-state">กำลังค้นหา...</div>';timer=setTimeout(()=>load(version).catch(error=>alert(error.message)).finally(()=>{if(version===searchVersion)$("list").removeAttribute("aria-busy")}),120)};
 (async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}await load()})().catch(error=>alert(error.message));
 </script>
 </body>
