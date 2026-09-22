@@ -1,0 +1,74 @@
+name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_STATUS_TOKEN }}
+      WORKER_NAME: banpadeng-school-db
+    steps:
+      - name: Trigger Cloudflare build for this commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID"
+          auth="Authorization: Bearer $CF_API_TOKEN"
+
+          curl --fail-with-body --silent --show-error \
+            --header "$auth" "$api/workers/scripts" > "$RUNNER_TEMP/scripts.json"
+          worker_tag=$(python3 - "$RUNNER_TEMP/scripts.json" "$WORKER_NAME" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          match=next((row for row in data.get("result",[]) if row.get("id")==sys.argv[2]),None)
+          if not match or not match.get("tag"):
+              raise SystemExit(f"::error::ไม่พบ Worker {sys.argv[2]} หรือ Worker ไม่มี tag")
+          print(match["tag"])
+          PY
+          )
+
+          curl --fail-with-body --silent --show-error \
+            --header "$auth" "$api/builds/workers/$worker_tag/triggers" > "$RUNNER_TEMP/triggers.json"
+          trigger_uuid=$(python3 - "$RUNNER_TEMP/triggers.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          rows=data.get("result",[])
+          production=next((row for row in rows if row.get("branch_includes") in (["main"],"main")),None)
+          selected=production or (rows[0] if rows else None)
+          value=(selected or {}).get("trigger_uuid") or (selected or {}).get("uuid")
+          if not value:
+              raise SystemExit("::error::ไม่พบ Production build trigger ของ Worker")
+          print(value)
+          PY
+          )
+
+          payload=$(python3 - "$GITHUB_SHA" <<'PY'
+          import json, sys
+          print(json.dumps({"branch":"main","commit_hash":sys.argv[1]}))
+          PY
+          )
+          curl --fail-with-body --silent --show-error --request POST \
+            --header "$auth" --header "Content-Type: application/json" \
+            --data "$payload" "$api/builds/triggers/$trigger_uuid/builds" > "$RUNNER_TEMP/build.json"
+          python3 - "$RUNNER_TEMP/build.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          result=data.get("result") or {}
+          build_id=result.get("build_uuid") or result.get("uuid")
+          if not data.get("success") or not build_id:
+              raise SystemExit("::error::Cloudflare ไม่รับคำสั่ง build")
+          print(f"สั่ง Cloudflare build สำเร็จ: {build_id}")
+          PY
