@@ -81,4 +81,20 @@ test("registration requires personnel fields and creates a linked personnel reco
   assert.equal(profile.homeroom_classroom, "ป.4/1");
   assert.equal(profile.teaching_periods, 18);
   assert.equal(profile.source_file, "สมัครสมาชิกด้วยตนเอง");
+
+  const duplicateNameResponse = await handleRegister(request({
+    ...base,
+    email: "another-teacher@example.invalid",
+    phone: "089-999-9999",
+  }), env);
+  assert.equal(duplicateNameResponse.status, 201);
+  const duplicatePayload = await duplicateNameResponse.json();
+  const duplicateProfile = env.raw.prepare("SELECT * FROM personnel_records WHERE user_id = ?")
+    .get(duplicatePayload.user.id);
+  assert.equal(duplicateProfile.full_name, base.full_name);
+  assert.equal(duplicateProfile.email, "another-teacher@example.invalid");
+  assert.match(duplicateProfile.normalized_name, /#user:\d+$/);
+
+  const duplicateEmailResponse = await handleRegister(request(base), env);
+  assert.equal(duplicateEmailResponse.status, 409);
 });

@@ -191,15 +191,15 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     throw new Error("PERSONNEL_EMAIL_CONFLICT");
   }
   if (!person) {
-    person = await env.DB.prepare(
+    const sameName = await env.DB.prepare(
       "SELECT id, user_id, email, full_name FROM personnel_records WHERE normalized_name = ? AND status = 'active'"
     ).bind(normalizedName).first();
+    // ใช้ทะเบียนเดิมเฉพาะรายการที่ยังไม่มีบัญชีและอีเมลเท่านั้น
+    // บุคลากรคนละคนอาจมีชื่อ-นามสกุลซ้ำกันได้ จึงต้องแยกด้วยอีเมล/บัญชี
+    if (sameName && !sameName.user_id && !String(sameName.email || "").trim()) person = sameName;
   }
   if (person && person.user_id && Number(person.user_id) !== Number(profile.user_id)) {
     throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
-  }
-  if (person && person.email && person.email.trim().toLowerCase() !== email) {
-    throw new Error("PERSONNEL_NAME_CONFLICT");
   }
 
   const values = [
@@ -226,13 +226,19 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     return person.id;
   }
 
+  const normalizedKeyExists = await env.DB.prepare(
+    "SELECT id FROM personnel_records WHERE normalized_name = ?"
+  ).bind(normalizedName).first();
+  const uniqueNormalizedName = normalizedKeyExists
+    ? `${normalizedName}#user:${profile.user_id}`
+    : normalizedName;
   const result = await env.DB.prepare(
     `INSERT INTO personnel_records
        (user_id, full_name, normalized_name, email, position, subjects, phone,
         homeroom_classroom, departments, responsible_projects, teaching_periods, source_file)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'สมัครสมาชิกด้วยตนเอง')`
   ).bind(
-    profile.user_id, fullName, normalizedName, email, values[0], values[1], values[2],
+    profile.user_id, fullName, uniqueNormalizedName, email, values[0], values[1], values[2],
     values[3], values[4], values[5], values[6]
   ).run();
   return result.meta.last_row_id;
