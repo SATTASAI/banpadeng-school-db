@@ -396,6 +396,88 @@ async function createIncome(request, env) {
   return jsonResponse({ id: result.meta.last_row_id }, 201);
 }
 
+function reportQuery(url) {
+  const year = Number(url.searchParams.get("fiscal_year")) || fiscalYear();
+  const department = String(url.searchParams.get("department") || "");
+  const projectId = Number(url.searchParams.get("project_id"));
+  const status = String(url.searchParams.get("status") || "");
+  const sourceType = String(url.searchParams.get("source_type") || "");
+  const category = String(url.searchParams.get("category") || "");
+  const dateFrom = String(url.searchParams.get("date_from") || "");
+  const dateTo = String(url.searchParams.get("date_to") || "");
+  const clauses = ["e.fiscal_year=?"], bindings = [year];
+  if (["academic", "budget", "personnel", "general"].includes(department)) { clauses.push("p.department=?"); bindings.push(department); }
+  if (Number.isInteger(projectId) && projectId > 0) { clauses.push("e.project_id=?"); bindings.push(projectId); }
+  if (STATUSES.includes(status)) { clauses.push("e.status=?"); bindings.push(status); }
+  if (SOURCE_TYPES.includes(sourceType)) { clauses.push("e.source_type=?"); bindings.push(sourceType); }
+  if (validDate(dateFrom)) { clauses.push("e.expense_date>=?"); bindings.push(dateFrom); }
+  if (validDate(dateTo)) { clauses.push("e.expense_date<=?"); bindings.push(dateTo); }
+  if (CATEGORIES.includes(category) && category !== "opening_balance") {
+    clauses.push(`(EXISTS(SELECT 1 FROM budget_request_items ci WHERE ci.expense_id=e.id AND ci.category=?)
+      OR (NOT EXISTS(SELECT 1 FROM budget_request_items cx WHERE cx.expense_id=e.id) AND e.category=?))`);
+    bindings.push(category, category);
+  }
+  return { year, where: clauses.join(" AND "), bindings };
+}
+
+async function reportRows(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return { response: jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401) };
+  const filters = reportQuery(new URL(request.url));
+  const { results } = await env.DB.prepare(`SELECT e.id,e.request_no,e.expense_date,e.fiscal_year,e.status,e.source_type,
+    e.request_purpose,e.description,e.amount,e.payment_no,e.payment_date,e.payment_method,e.payment_reference,
+    e.payment_recipient,e.withholding_tax,e.net_paid,e.created_by,p.name project_name,p.department,
+    requester.full_name requester_name,payer.full_name payment_recorder_name,
+    COALESCE((SELECT GROUP_CONCAT(DISTINCT category) FROM budget_request_items bi WHERE bi.expense_id=e.id),e.category) categories
+    FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users requester ON requester.id=e.created_by
+    LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE ${filters.where}
+    ORDER BY e.expense_date DESC,e.id DESC`).bind(...filters.bindings).all();
+  const summary = results.reduce((sum, row) => {
+    const amount = Number(row.amount || 0), tax = Number(row.withholding_tax || 0), net = Number(row.net_paid ?? amount);
+    sum.request_count += 1; sum.total_amount += amount;
+    if (row.status === "pending") sum.pending_amount += amount;
+    if (row.status === "approved") sum.approved_amount += amount;
+    if (row.status === "paid") { sum.paid_amount += amount; sum.withholding_tax += tax; sum.net_paid += net; }
+    return sum;
+  }, { request_count: 0, total_amount: 0, pending_amount: 0, approved_amount: 0, paid_amount: 0, withholding_tax: 0, net_paid: 0 });
+  return { user, filters, rows: results, summary };
+}
+
+async function financialReport(request, env) {
+  const report = await reportRows(request, env);
+  if (report.response) return report.response;
+  return jsonResponse({ fiscal_year: report.filters.year, summary: report.summary, rows: report.rows });
+}
+
+function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+
+async function exportFinancialReport(request, env) {
+  const report = await reportRows(request, env);
+  if (report.response) return report.response;
+  const departments = { academic: "วิชาการ", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
+  const statuses = { draft: "ร่าง", pending: "กำลังอนุมัติ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
+  const sources = { subsidy: "เงินอุดหนุน", school_income: "เงินรายได้สถานศึกษา", donation: "เงินบริจาค", other: "อื่น ๆ" };
+  const methods = { transfer: "โอนเงิน", cash: "เงินสด", cheque: "เช็ค", other: "อื่น ๆ" };
+  const header = ["เลขคำขอ","วันที่","ฝ่าย","โครงการ","ผู้ขอ","แหล่งเงิน","วัตถุประสงค์","หมวดรายจ่าย","ยอดขอ","สถานะ","เลขใบสำคัญ","วันที่จ่าย","วิธีจ่าย","เลขอ้างอิง","ผู้รับเงิน","ภาษีหัก ณ ที่จ่าย","ยอดจ่ายสุทธิ","ผู้บันทึกจ่าย"];
+  const lines = [header.map(csvCell).join(","), ...report.rows.map((row) => [row.request_no,row.expense_date,departments[row.department],row.project_name,row.requester_name,sources[row.source_type] || row.source_type,row.request_purpose || row.description,row.categories,row.amount,statuses[row.status] || row.status,row.payment_no,row.payment_date,methods[row.payment_method] || row.payment_method,row.payment_reference,row.payment_recipient,row.withholding_tax,row.net_paid,row.payment_recorder_name].map(csvCell).join(","))];
+  return new Response(`\uFEFF${lines.join("\r\n")}`, { headers: {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="budget-report-${report.filters.year}.csv"`,
+    "Cache-Control": "no-store",
+  } });
+}
+
+async function printableFinancialReport(request, env) {
+  const report = await reportRows(request, env);
+  if (report.response) return report.response;
+  const departments = { academic: "วิชาการ", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
+  const statuses = { draft: "ร่าง", pending: "กำลังอนุมัติ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
+  const rows = report.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.request_no || "")}</td><td>${thaiDate(row.expense_date)}</td><td>${escapeHtml(departments[row.department])}</td><td>${escapeHtml(row.project_name)}</td><td>${escapeHtml(row.request_purpose || row.description)}</td><td class="num">${money(row.amount)}</td><td>${escapeHtml(statuses[row.status] || row.status)}</td><td>${escapeHtml(row.payment_no || "")}</td></tr>`).join("");
+  const s = report.summary;
+  const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>รายงานการเงิน ${report.filters.year}</title><style>@page{size:A4 landscape;margin:12mm}*{box-sizing:border-box}body{font-family:"TH Sarabun New","Sarabun",sans-serif;font-size:14pt;color:#111;margin:0}h1,h2{text-align:center;margin:0}h1{font-size:20pt}h2{font-size:16pt;margin-bottom:12px}.summary{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:10px 0}.card{border:1px solid #777;padding:7px}.card span,.card strong{display:block}.card strong{font-size:16pt}table{width:100%;border-collapse:collapse;font-size:11pt}th,td{border:1px solid #666;padding:4px;vertical-align:top}th{background:#edf2f6}.num{text-align:right;white-space:nowrap}.actions{position:fixed;right:12px;top:10px}@media print{.actions{display:none}}button{padding:8px 13px;border:0;border-radius:8px;background:#0879e5;color:#fff}</style></head><body><div class="actions"><button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button></div><h1>รายงานการใช้จ่ายงบประมาณ</h1><h2>โรงเรียนบ้านป่าเด็ง · ปีงบประมาณ ${report.filters.year}</h2><div class="summary"><div class="card"><span>จำนวนรายการ</span><strong>${s.request_count}</strong></div><div class="card"><span>ยอดคำขอ</span><strong>${money(s.total_amount)}</strong></div><div class="card"><span>อนุมัติรอจ่าย</span><strong>${money(s.approved_amount)}</strong></div><div class="card"><span>จ่ายจริง</span><strong>${money(s.paid_amount)}</strong></div><div class="card"><span>ยอดจ่ายสุทธิ</span><strong>${money(s.net_paid)}</strong></div></div><table><thead><tr><th>#</th><th>เลขคำขอ</th><th>วันที่</th><th>ฝ่าย</th><th>โครงการ</th><th>วัตถุประสงค์</th><th>ยอดเงิน</th><th>สถานะ</th><th>ใบสำคัญ</th></tr></thead><tbody>${rows || '<tr><td colspan="9" style="text-align:center">ไม่พบข้อมูลตามตัวกรอง</td></tr>'}</tbody></table></body></html>`;
+  return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+}
+
 const money = (value) => Number(value || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const thaiDate = (value) => value ? new Date(String(value).includes("T") ? value : `${value}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" }) : "";
 
@@ -439,6 +521,9 @@ export async function handleBudgetRoute(request, env, pathname, method) {
   if (pathname === "/api/budget/requests" && method === "POST") return createRequest(request, env);
   if (pathname === "/api/budget/income" && method === "POST") return createIncome(request, env);
   if (pathname === "/api/budget/roles" && method === "PUT") return saveRoleAssignment(request, env);
+  if (pathname === "/api/budget/reports" && method === "GET") return financialReport(request, env);
+  if (pathname === "/api/budget/reports/export" && method === "GET") return exportFinancialReport(request, env);
+  if (pathname === "/api/budget/reports/print" && method === "GET") return printableFinancialReport(request, env);
   let match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/document$/);
   if (match && method === "GET") return printableDocument(request, env, Number(match[1]));
   match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/payment-document$/);

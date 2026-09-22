@@ -156,6 +156,20 @@ test("digital budget request follows every assigned signature before printing an
   assert.match(voucher.body, /TXN-123/);
   assert.match(voucher.body, /891\.00/);
 
+  const report = await call(env, 6, "reports?fiscal_year=2570&department=academic&category=materials");
+  assert.equal(report.status, 200);
+  assert.equal(report.body.summary.request_count, 1);
+  assert.equal(report.body.summary.paid_amount, 900);
+  assert.equal(report.body.summary.withholding_tax, 9);
+  assert.equal(report.body.rows[0].payment_reference, "TXN-123");
+  const csv = await call(env, 6, "reports/export?fiscal_year=2570&status=paid");
+  assert.equal(csv.status, 200);
+  assert.match(csv.body, /PAY-1/);
+  assert.match(csv.body, /ยอดจ่ายสุทธิ/);
+  const printableReport = await call(env, 6, "reports/print?fiscal_year=2570&status=paid");
+  assert.equal(printableReport.status, 200);
+  assert.match(printableReport.body, /รายงานการใช้จ่ายงบประมาณ/);
+
   const second = await call(env, 2, "requests", "POST", requestPayload(200));
   assert.equal(second.status, 201);
   for (const userId of [4, 5, 6]) assert.equal((await call(env, userId, `requests/${second.body.id}/action`, "POST", { action: "sign" })).status, 200);
