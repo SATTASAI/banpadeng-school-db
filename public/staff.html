@@ -14,7 +14,10 @@
   .staff-name { font-weight:600; }
   .staff-sub { font-size:13px; color:var(--color-text-muted); margin-top:2px; }
   .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
-  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:440px; max-height:calc(100vh - 40px); overflow-y:auto; }
+  .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:760px; max-height:calc(100vh - 40px); overflow-y:auto; }
+  .profile-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 14px; }
+  .profile-section { grid-column:1/-1; margin:14px 0 8px; padding-top:12px; border-top:1px solid var(--color-border); color:var(--color-forest-900); font-size:14px; font-weight:700; }
+  @media(max-width:640px){.profile-grid{grid-template-columns:1fr}}
   .modal-actions { display:flex; gap:10px; margin-top:20px; }
   select.plain { width:100%; padding:10px 12px; border-radius:10px; border:1px solid var(--color-border); font-family:var(--font-body); background:var(--color-bg); }
   .import-modal { max-width:640px; }
@@ -41,6 +44,7 @@
         <p style="color:var(--color-text-muted); margin:0;">ทะเบียนครูและบุคลากร ตำแหน่ง วิชาที่สอน และครูประจำชั้น</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-ghost" style="width:auto;" href="/personnel.html">ศูนย์บริหารงานบุคคล</a>
         <a class="btn btn-ghost" style="width:auto; display:none;" id="templateBtn" href="/templates/teacher-import.xlsx" download="template_teacher_import_banpadeng.xlsx">ดาวน์โหลดแม่แบบข้อมูลครู</a>
         <button class="btn btn-ghost" style="width:auto; display:none;" id="importBtn">นำเข้าจาก Excel/CSV</button>
       </div>
@@ -55,10 +59,23 @@
 <div class="modal-backdrop" id="staffModal" style="display:none;">
   <div class="modal">
     <h2 style="margin-bottom:16px;">แก้ไขข้อมูลบุคลากร</h2>
+    <div class="profile-grid">
+    <div class="profile-section">ข้อมูลตำแหน่งและสถานะ</div>
+    <div class="field"><label>ประเภทบุคลากร</label><select class="plain" id="fPersonnelType"><option value="">— เลือกประเภท —</option><option value="executive">ผู้บริหาร</option><option value="teacher">ข้าราชการครู</option><option value="education_staff">บุคลากรทางการศึกษา</option><option value="employee">ลูกจ้าง/พนักงาน</option><option value="contractor">ครูอัตราจ้าง</option><option value="other">อื่น ๆ</option></select></div>
+    <div class="field"><label>เลขที่ตำแหน่ง</label><input type="text" id="fPositionNumber" /></div>
     <div class="field">
       <label>ตำแหน่ง</label>
       <input type="text" id="fPosition" placeholder="เช่น ครูผู้สอน, ผู้อำนวยการ" />
     </div>
+    <div class="field"><label>วิทยฐานะ/ระดับ</label><input type="text" id="fAcademicRank" placeholder="เช่น ครูชำนาญการพิเศษ" /></div>
+    <div class="field"><label>สถานะการปฏิบัติงาน</label><select class="plain" id="fEmploymentStatus"><option value="working">ปฏิบัติงาน</option><option value="leave">ลาระยะยาว</option><option value="transferred">ย้าย</option><option value="retired">เกษียณ</option><option value="resigned">ลาออก</option></select></div>
+    <div class="field"><label>วันที่บรรจุ/แต่งตั้ง</label><input type="date" id="fAppointmentDate" /></div>
+    <div class="field"><label>วันที่เริ่มรับราชการ/เริ่มงาน</label><input type="date" id="fServiceStartDate" /></div>
+    <div class="field"><label>วันเกษียณ</label><input type="date" id="fRetirementDate" /></div>
+    <div class="profile-section">ข้อมูลการศึกษาและงานสอน</div>
+    <div class="field"><label>วุฒิการศึกษาสูงสุด</label><input type="text" id="fEducationLevel" placeholder="เช่น ปริญญาโท" /></div>
+    <div class="field"><label>วิชาเอก</label><input type="text" id="fMajor" /></div>
+    <div class="field"><label>สถาบันการศึกษา</label><input type="text" id="fInstitution" /></div>
     <div class="field">
       <label>วิชาที่สอน</label>
       <input type="text" id="fSubjects" placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์" />
@@ -81,6 +98,7 @@
     <div class="field">
       <label>วันหมดอายุใบประกอบวิชาชีพ</label>
       <input type="date" id="fLicenseExpiry" />
+    </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
@@ -137,6 +155,8 @@
 <script>
   let currentUser = null;
   let editingId = null;
+  const PERSONNEL_TYPE_LABELS = {executive:"ผู้บริหาร",teacher:"ข้าราชการครู",education_staff:"บุคลากรทางการศึกษา",employee:"ลูกจ้าง/พนักงาน",contractor:"ครูอัตราจ้าง",other:"อื่น ๆ"};
+  const EMPLOYMENT_STATUS_LABELS = {working:"ปฏิบัติงาน",leave:"ลาระยะยาว",transferred:"ย้าย",retired:"เกษียณ",resigned:"ลาออก"};
   const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const requestedStaffId = Number(new URLSearchParams(window.location.search).get("staff"));
 
@@ -146,13 +166,18 @@
       .map((s) => {
         const canEdit = currentUser.is_admin || currentUser.id === s.user_id;
         const details = [
+          s.personnel_type ? `ประเภท ${PERSONNEL_TYPE_LABELS[s.personnel_type] || s.personnel_type}` : null,
           s.position,
+          s.academic_rank,
+          s.employment_status && s.employment_status !== "working" ? `สถานะ ${EMPLOYMENT_STATUS_LABELS[s.employment_status] || s.employment_status}` : null,
           s.subjects,
           s.phone,
           s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
           s.departments ? `ฝ่ายงาน ${s.departments}` : null,
           s.responsible_projects ? `โครงการ ${s.responsible_projects}` : null,
           s.teaching_periods !== null ? `${s.teaching_periods} คาบ/สัปดาห์` : null,
+          s.education_level ? `${s.education_level}${s.major ? ` · ${s.major}` : ""}` : null,
+          s.service_start_date ? `เริ่มงาน ${s.service_start_date}` : null,
           s.license_issue_date ? `ออกใบประกอบ ${s.license_issue_date}` : null,
           s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
         ]
@@ -201,7 +226,17 @@
 
   function openModal(staffMember) {
     editingId = staffMember.id;
+    document.getElementById("fPersonnelType").value = staffMember.personnel_type || "";
+    document.getElementById("fPositionNumber").value = staffMember.position_number || "";
     document.getElementById("fPosition").value = staffMember.position || "";
+    document.getElementById("fAcademicRank").value = staffMember.academic_rank || "";
+    document.getElementById("fEmploymentStatus").value = staffMember.employment_status || "working";
+    document.getElementById("fAppointmentDate").value = staffMember.appointment_date || "";
+    document.getElementById("fServiceStartDate").value = staffMember.service_start_date || "";
+    document.getElementById("fRetirementDate").value = staffMember.retirement_date || "";
+    document.getElementById("fEducationLevel").value = staffMember.education_level || "";
+    document.getElementById("fMajor").value = staffMember.major || "";
+    document.getElementById("fInstitution").value = staffMember.institution || "";
     document.getElementById("fSubjects").value = staffMember.subjects || "";
     document.getElementById("fPhone").value = staffMember.phone || "";
     document.getElementById("fHomeroom").value = staffMember.homeroom_classroom || "";
@@ -222,7 +257,17 @@
       await apiRequest(`/api/staff/${editingId}`, {
         method: "PATCH",
         body: {
+          personnel_type: document.getElementById("fPersonnelType").value,
+          position_number: document.getElementById("fPositionNumber").value.trim(),
           position: document.getElementById("fPosition").value.trim(),
+          academic_rank: document.getElementById("fAcademicRank").value.trim(),
+          employment_status: document.getElementById("fEmploymentStatus").value,
+          appointment_date: document.getElementById("fAppointmentDate").value,
+          service_start_date: document.getElementById("fServiceStartDate").value,
+          retirement_date: document.getElementById("fRetirementDate").value,
+          education_level: document.getElementById("fEducationLevel").value.trim(),
+          major: document.getElementById("fMajor").value.trim(),
+          institution: document.getElementById("fInstitution").value.trim(),
           subjects: document.getElementById("fSubjects").value.trim(),
           phone: document.getElementById("fPhone").value.trim(),
           homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
@@ -256,13 +301,24 @@
   const STAFF_IMPORT_FIELDS = [
     { key: "full_name", label: "ชื่อ-นามสกุลครู", synonyms: ["ชื่อ-นามสกุลครู", "ชื่อครู", "ชื่อ-นามสกุล", "full_name"] },
     { key: "email", label: "อีเมล", synonyms: ["อีเมล", "email", "e-mail"] },
+    { key: "personnel_type", label: "ประเภทบุคลากร", synonyms: ["ประเภทบุคลากร", "ประเภท", "personnel_type"] },
+    { key: "position_number", label: "เลขที่ตำแหน่ง", synonyms: ["เลขที่ตำแหน่ง", "position_number"] },
     { key: "position", label: "ตำแหน่ง", synonyms: ["ตำแหน่ง", "position"] },
+    { key: "academic_rank", label: "วิทยฐานะ/ระดับ", synonyms: ["วิทยฐานะ/ระดับ", "วิทยฐานะ", "ระดับ", "academic_rank"] },
     { key: "subjects", label: "วิชาที่สอน", synonyms: ["วิชาที่สอน", "วิชา", "subject", "subjects"] },
     { key: "phone", label: "เบอร์ติดต่อ", synonyms: ["เบอร์ติดต่อ", "เบอร์โทร", "โทรศัพท์", "phone", "tel"] },
     { key: "homeroom_classroom", label: "ครูประจำชั้น", synonyms: ["ครูประจำชั้น", "ประจำชั้น", "homeroom"] },
     { key: "departments", label: "ฝ่ายงาน", synonyms: ["ฝ่ายงาน", "ฝ่าย", "departments"] },
     { key: "responsible_projects", label: "โครงการที่รับผิดชอบ", synonyms: ["โครงการที่รับผิดชอบ", "โครงการ", "responsible_projects"] },
     { key: "teaching_periods", label: "จำนวนคาบสอนต่อสัปดาห์", synonyms: ["จำนวนคาบสอนต่อสัปดาห์", "จำนวนคาบ", "teaching_periods"] },
+    { key: "appointment_date", label: "วันที่บรรจุ/แต่งตั้ง", synonyms: ["วันที่บรรจุ/แต่งตั้ง", "วันที่บรรจุ", "appointment_date"] },
+    { key: "service_start_date", label: "วันที่เริ่มรับราชการ/เริ่มงาน", synonyms: ["วันที่เริ่มรับราชการ/เริ่มงาน", "วันที่เริ่มงาน", "service_start_date"] },
+    { key: "education_level", label: "วุฒิการศึกษาสูงสุด", synonyms: ["วุฒิการศึกษาสูงสุด", "วุฒิการศึกษา", "education_level"] },
+    { key: "major", label: "วิชาเอก", synonyms: ["วิชาเอก", "major"] },
+    { key: "institution", label: "สถาบันการศึกษา", synonyms: ["สถาบันการศึกษา", "institution"] },
+    { key: "employment_status", label: "สถานะการปฏิบัติงาน", synonyms: ["สถานะการปฏิบัติงาน", "สถานะบุคลากร", "employment_status"] },
+    { key: "retirement_date", label: "วันเกษียณ", synonyms: ["วันเกษียณ", "retirement_date"] },
+    { key: "license_issue_date", label: "วันที่ออกใบประกอบวิชาชีพ", synonyms: ["วันที่ออกใบประกอบวิชาชีพ", "license_issue_date"] },
     { key: "license_expiry_date", label: "วันหมดอายุใบประกอบวิชาชีพ", synonyms: ["วันหมดอายุใบประกอบวิชาชีพ", "ใบประกอบวิชาชีพ", "license", "licenseexpiry"] },
   ];
 

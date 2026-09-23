@@ -29,17 +29,26 @@ class DirectoryQueriesTest(unittest.TestCase):
                 academic_year_id INTEGER, grade_level TEXT, classroom TEXT, status TEXT);
             CREATE TABLE users (id INTEGER, email TEXT, role TEXT);
             CREATE TABLE personnel_records (id INTEGER, user_id INTEGER, full_name TEXT, first_name TEXT,
-                position TEXT, subjects TEXT, phone TEXT, homeroom_classroom TEXT,
+                personnel_type TEXT, position_number TEXT, position TEXT, academic_rank TEXT,
+                subjects TEXT, phone TEXT, homeroom_classroom TEXT,
                 departments TEXT, responsible_projects TEXT, teaching_periods INTEGER,
+                appointment_date TEXT, service_start_date TEXT, education_level TEXT, major TEXT,
+                institution TEXT, employment_status TEXT, retirement_date TEXT,
                 license_issue_date TEXT, license_expiry_date TEXT, status TEXT,
                 email TEXT, source_file TEXT, source_sheet TEXT, source_row INTEGER);
             INSERT INTO students VALUES (1, 'S01', 'ตัวอย่าง นักเรียน', 'ป.1', '1/1',
                 'enrolled', '0000000000000', 'ข้อมูลสุขภาพ', 'แพ้อาหาร');
             INSERT INTO student_enrollments VALUES (1, 5, 3, 'ป.2', '2/1', 'enrolled');
             INSERT INTO users VALUES (2, 'private@example.invalid', 'teacher');
-            INSERT INTO personnel_records VALUES (1, 2, 'ตัวอย่าง บุคลากร', 'ตัวอย่าง', 'ครู',
-                'ภาษาไทย', '0000000000', '2/1', 'วิชาการ', 'โครงการอ่านออกเขียนได้', 18, '2020-01-01', '2030-01-01',
-                'active', 'private@example.invalid', 'import.xlsx', 'sheet', 12);
+            INSERT INTO personnel_records
+              (id,user_id,full_name,first_name,personnel_type,position_number,position,academic_rank,subjects,
+               phone,homeroom_classroom,departments,responsible_projects,teaching_periods,appointment_date,
+               service_start_date,education_level,major,institution,employment_status,retirement_date,
+               license_issue_date,license_expiry_date,status,email,source_file,source_sheet,source_row)
+            VALUES (1,2,'ตัวอย่าง บุคลากร','ตัวอย่าง','teacher','123','ครู','ครูชำนาญการ','ภาษาไทย',
+              '0000000000','2/1','วิชาการ','โครงการอ่านออกเขียนได้',18,'2019-01-01','2019-01-01',
+              'ปริญญาตรี','ภาษาไทย','มหาวิทยาลัยตัวอย่าง','working',NULL,'2020-01-01','2030-01-01',
+              'active','private@example.invalid','import.xlsx','sheet',12);
         """)
 
     def test_student_directory_returns_only_navigation_fields(self):
@@ -63,8 +72,11 @@ class DirectoryQueriesTest(unittest.TestCase):
         query = query_between('async function handleListStaff(request, env)', '\n  ).all();')
         row = self.db.execute(query).fetchone()
         self.assertEqual(set(row.keys()), {
-            "id", "user_id", "full_name", "role", "position", "subjects", "phone", "email",
-            "homeroom_classroom", "departments", "responsible_projects", "teaching_periods", "license_issue_date", "license_expiry_date"
+            "id", "user_id", "full_name", "role", "personnel_type", "position_number", "position",
+            "academic_rank", "subjects", "phone", "email", "homeroom_classroom", "departments",
+            "responsible_projects", "teaching_periods", "appointment_date", "service_start_date",
+            "education_level", "major", "institution", "employment_status", "retirement_date",
+            "license_issue_date", "license_expiry_date"
         })
 
 

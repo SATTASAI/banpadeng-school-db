@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ศูนย์บริหารงานบุคคล — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.page{max-width:1240px;margin:auto;padding:24px}.hero{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px}.hero h1{margin:0;color:var(--color-forest-900)}.hero p{margin:5px 0 0;color:var(--color-text-muted)}.actions{display:flex;gap:8px;flex-wrap:wrap}.actions .btn{width:auto}.summary{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin-bottom:18px}.metric{padding:15px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.8);box-shadow:0 12px 28px rgba(46,79,112,.07);backdrop-filter:blur(18px)}.metric span{display:block;color:var(--color-text-muted);font-size:11px}.metric strong{display:block;margin-top:5px;font-size:22px;color:var(--color-forest-900)}.metric.warn strong{color:#b56708}.metric.danger strong{color:#bb3030}.layout{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr);gap:16px}.panel{padding:0;overflow:hidden;border-radius:18px}.panel-head{display:flex;justify-content:space-between;align-items:center;padding:17px 18px;border-bottom:1px solid var(--color-border)}.panel-head h2{font-size:17px;margin:0}.panel-head a{font-size:12px}.work-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:14px}.work-card{display:block;text-decoration:none;color:inherit;border:1px solid var(--color-border);border-radius:14px;padding:14px;background:rgba(255,255,255,.72)}.work-card:hover{box-shadow:0 10px 24px rgba(57,91,128,.1)}.work-card h3{font-size:14px;margin:0 0 8px;color:var(--color-forest-900)}.work-stat{display:flex;gap:14px;font-size:12px;color:var(--color-text-muted)}.work-stat strong{color:var(--color-text)}.list{padding:8px 16px 14px}.leave{display:grid;grid-template-columns:1fr auto;gap:6px;padding:11px 2px;border-bottom:1px solid var(--color-border)}.leave:last-child{border:0}.leave small{color:var(--color-text-muted)}.pill{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:11px;background:#edf3f8}.pill.pending{background:#fff1d8;color:#965600}.pill.approved{background:#e8f6ed;color:#197244}.pill.rejected{background:#fdeaea;color:#a42d2d}.profile-table{overflow:auto}.profile-table table{min-width:760px}.progress{height:7px;border-radius:999px;background:#e8edf2;overflow:hidden;margin-top:5px}.progress i{display:block;height:100%;background:#3284cc;border-radius:inherit}.progress i.complete{background:#35a165}.missing{max-width:380px;color:var(--color-text-muted);font-size:12px}.position-list{padding:10px 18px 16px}.position-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--color-border);font-size:13px}.position-row:last-child{border:0}.empty{padding:24px;text-align:center;color:var(--color-text-muted)}@media(max-width:980px){.summary{grid-template-columns:repeat(3,1fr)}.layout{grid-template-columns:1fr}}@media(max-width:600px){.page{padding:15px}.hero{display:block}.actions{margin-top:12px}.summary{grid-template-columns:repeat(2,1fr)}.work-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="hero">
+    <div><h1>ศูนย์บริหารงานบุคคล</h1><p>ข้อมูลกลางบุคลากร การลา คำสั่ง เวร การประเมิน และการพัฒนาตนเอง</p></div>
+    <div class="actions"><a class="btn btn-ghost" href="/staff.html">ทะเบียนบุคลากร</a><a class="btn btn-ghost" href="/templates/teacher-import.xlsx" download>ดาวน์โหลด Template</a><a class="btn btn-primary" href="/leave.html">ยื่น/ตรวจสอบการลา</a></div>
+  </header>
+  <div class="error-box" id="error"></div>
+  <section class="summary">
+    <article class="metric"><span>บุคลากรในทะเบียน</span><strong id="staffCount">0</strong></article>
+    <article class="metric warn"><span>ประวัติยังไม่ครบ</span><strong id="incompleteCount">0</strong></article>
+    <article class="metric warn"><span>คำขอลารออนุมัติ</span><strong id="pendingLeave">0</strong></article>
+    <article class="metric"><span>ลาวันนี้</span><strong id="absentToday">0</strong></article>
+    <article class="metric danger"><span>งานเลยกำหนด</span><strong id="overdueTasks">0</strong></article>
+    <article class="metric warn"><span>ใบประกอบต้องติดตาม</span><strong id="licenseAttention">0</strong></article>
+  </section>
+
+  <section class="layout">
+    <div>
+      <section class="panel">
+        <div class="panel-head"><h2>ภาพรวมงานฝ่ายบุคคล</h2><a href="/tasks.html">เปิดงานมอบหมาย</a></div>
+        <div class="work-grid" id="workGrid"></div>
+      </section>
+      <section class="panel" style="margin-top:16px">
+        <div class="panel-head"><h2>ความพร้อมของทะเบียนบุคลากร</h2><a href="/staff.html">แก้ไขทะเบียน</a></div>
+        <div class="profile-table" id="profileTable"><div class="empty">กำลังตรวจสอบข้อมูล...</div></div>
+      </section>
+    </div>
+    <aside>
+      <section class="panel">
+        <div class="panel-head"><h2>คำขอลาล่าสุด</h2><a href="/leave.html">ดูทั้งหมด</a></div>
+        <div class="list" id="leaveList"></div>
+      </section>
+      <section class="panel" style="margin-top:16px">
+        <div class="panel-head"><h2>บุคลากรตามตำแหน่ง</h2></div>
+        <div class="position-list" id="positionList"></div>
+      </section>
+    </aside>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id),esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+const LEAVE={sick:"ลาป่วย",personal:"ลากิจ",maternity:"ลาคลอด",other:"ลาอื่น ๆ"},STATUS={pending:"รออนุมัติ",approved:"อนุมัติแล้ว",rejected:"ไม่อนุมัติ"};
+const WORK=[
+  {key:"1",title:"คำสั่งปฏิบัติหน้าที่",url:"/work-center.html?area=personnel&topic=1"},
+  {key:"3",title:"เวรประจำวัน",url:"/work-center.html?area=personnel&topic=3"},
+  {key:"5",title:"การประเมิน PA",url:"/work-center.html?area=personnel&topic=5"},
+  {key:"6",title:"อบรมและพัฒนาบุคลากร",url:"/work-center.html?area=personnel&topic=6"},
+  {key:"7",title:"แฟ้มผลงานและรางวัล",url:"/work-center.html?area=personnel&topic=7"},
+  {key:"project",title:"โครงการฝ่ายบุคคล",url:"/department.html?dept=personnel"},
+];
+const date=v=>v?new Date(v+"T00:00:00").toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"numeric"}):"";
+function render(data){const s=data.summary;for(const [id,key] of [["staffCount","staff_count"],["incompleteCount","incomplete_profiles"],["pendingLeave","pending_leave"],["absentToday","absent_today"],["overdueTasks","overdue_tasks"],["licenseAttention","license_attention"]])$(id).textContent=Number(s[key]||0).toLocaleString("th-TH");
+  $("workGrid").innerHTML=WORK.map(item=>{const x=data.work_by_topic[item.key]||{total:0,completed:0,overdue:0};return `<a class="work-card" href="${item.url}"><h3>${item.title}</h3><div class="work-stat"><span>ทั้งหมด <strong>${x.total}</strong></span><span>เสร็จ <strong>${x.completed}</strong></span><span>เกินกำหนด <strong>${x.overdue}</strong></span></div></a>`}).join("");
+  $("profileTable").innerHTML=data.people.length?`<table><thead><tr><th>บุคลากร</th><th>ตำแหน่ง/วิทยฐานะ</th><th>สถานะข้อมูล</th><th>ข้อมูลที่ควรเพิ่ม</th></tr></thead><tbody>${data.people.map(p=>`<tr><td><a href="/staff.html?staff=${p.id}"><strong>${esc(p.full_name)}</strong></a><br><small>${esc(p.homeroom_classroom?`ประจำชั้น ${p.homeroom_classroom}`:"")}</small></td><td>${esc([p.position,p.academic_rank].filter(Boolean).join(" · "))}</td><td><strong>${p.completeness.percent}%</strong><div class="progress"><i class="${p.completeness.percent===100?"complete":""}" style="width:${p.completeness.percent}%"></i></div></td><td class="missing">${esc(p.completeness.missing.join(", "))}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">ยังไม่มีทะเบียนบุคลากร</div>';
+  $("leaveList").innerHTML=data.recent_leaves.length?data.recent_leaves.map(r=>`<div class="leave"><div><strong>${esc(r.full_name)}</strong><br><small>${esc(LEAVE[r.leave_type]||r.leave_type)} · ${date(r.start_date)}${r.end_date!==r.start_date?` ถึง ${date(r.end_date)}`:""}</small></div><span class="pill ${esc(r.status)}">${esc(STATUS[r.status]||r.status)}</span></div>`).join(""):'<div class="empty">ยังไม่มีคำขอลา</div>';
+  $("positionList").innerHTML=data.positions.map(r=>`<div class="position-row"><span>${esc(r.label)}</span><strong>${r.count} คน</strong></div>`).join("")||'<div class="empty">ยังไม่มีข้อมูลตำแหน่ง</div>';
+}
+(async()=>{try{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}if(!me.user.role){location="/pending.html";return}render(await apiRequest("/api/personnel/overview"))}catch(e){$("error").textContent=e.message;$("error").classList.add("visible")}})();
+</script>
+</body>
+</html>

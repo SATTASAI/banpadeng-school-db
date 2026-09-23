@@ -16,6 +16,15 @@ function storedName(name) {
     .replace(/[\s.]+/g, "").toLowerCase();
 }
 
+const PERSONNEL_TYPES = new Set(["executive", "teacher", "education_staff", "employee", "contractor", "other"]);
+const EMPLOYMENT_STATUSES = new Set(["working", "leave", "transferred", "retired", "resigned"]);
+const DATE_FIELDS = ["appointment_date", "service_start_date", "retirement_date", "license_issue_date", "license_expiry_date"];
+
+function dateValue(row, field) {
+  const result = value(row[field], 10);
+  return !result || /^\d{4}-\d{2}-\d{2}$/.test(result) ? result : undefined;
+}
+
 export async function importStaffRows(env, rows) {
   let created = 0;
   let updated = 0;
@@ -35,6 +44,18 @@ export async function importStaffRows(env, rows) {
     const periods = rawPeriods === "" ? null : Number(rawPeriods);
     if (rawPeriods && (!Number.isInteger(periods) || periods < 0 || periods > 100)) {
       skip("จำนวนคาบต้องเป็นจำนวนเต็ม 0–100"); continue;
+    }
+    const personnelType = value(row.personnel_type, 50);
+    if (personnelType && !PERSONNEL_TYPES.has(personnelType)) {
+      skip("ประเภทบุคลากรไม่ถูกต้อง"); continue;
+    }
+    const employmentStatus = value(row.employment_status, 50) || "working";
+    if (!EMPLOYMENT_STATUSES.has(employmentStatus)) {
+      skip("สถานะการปฏิบัติงานไม่ถูกต้อง"); continue;
+    }
+    const dates = Object.fromEntries(DATE_FIELDS.map((field) => [field, dateValue(row, field)]));
+    if (Object.values(dates).some((item) => item === undefined)) {
+      skip("วันที่ต้องอยู่ในรูปแบบ YYYY-MM-DD"); continue;
     }
 
     const user = await env.DB.prepare(
@@ -63,30 +84,41 @@ export async function importStaffRows(env, rows) {
       skip("ชื่อครูตรงกับทะเบียนเดิม แต่อีเมลหรือบัญชีผู้ใช้ไม่ตรงกัน"); continue;
     }
 
-    const fields = ["position", "subjects", "phone", "homeroom_classroom", "departments", "responsible_projects", "license_expiry_date"];
+    const fields = ["position_number", "position", "academic_rank", "subjects", "phone", "homeroom_classroom", "departments", "responsible_projects", "education_level", "major", "institution"];
     const values = fields.map((key) => value(row[key], key === "responsible_projects" ? 1500 : 500));
     try {
       if (person) {
         await env.DB.prepare(
           `UPDATE personnel_records SET user_id = COALESCE(user_id, ?), email = ?, full_name = ?,
-             position = COALESCE(?, position), subjects = COALESCE(?, subjects),
-             phone = COALESCE(?, phone), homeroom_classroom = COALESCE(?, homeroom_classroom),
-             departments = COALESCE(?, departments), responsible_projects = COALESCE(?, responsible_projects),
+             personnel_type = COALESCE(?, personnel_type), position_number = COALESCE(?, position_number),
+             position = COALESCE(?, position), academic_rank = COALESCE(?, academic_rank),
+             subjects = COALESCE(?, subjects), phone = COALESCE(?, phone),
+             homeroom_classroom = COALESCE(?, homeroom_classroom), departments = COALESCE(?, departments),
+             responsible_projects = COALESCE(?, responsible_projects),
              teaching_periods = COALESCE(?, teaching_periods),
+             appointment_date = COALESCE(?, appointment_date), service_start_date = COALESCE(?, service_start_date),
+             education_level = COALESCE(?, education_level), major = COALESCE(?, major),
+             institution = COALESCE(?, institution), employment_status = COALESCE(?, employment_status),
+             retirement_date = COALESCE(?, retirement_date), license_issue_date = COALESCE(?, license_issue_date),
              license_expiry_date = COALESCE(?, license_expiry_date), updated_at = datetime('now')
            WHERE id = ?`
-        ).bind(user?.id || null, email, name, values[0], values[1], values[2], values[3],
-          values[4], values[5], periods, values[6], person.id).run();
+        ).bind(user?.id || null, email, name, personnelType, values[0], values[1], values[2], values[3], values[4],
+          values[5], values[6], values[7], periods, dates.appointment_date, dates.service_start_date,
+          values[8], values[9], values[10], employmentStatus, dates.retirement_date,
+          dates.license_issue_date, dates.license_expiry_date, person.id).run();
         updated++;
       } else {
         await env.DB.prepare(
           `INSERT INTO personnel_records
-           (user_id, full_name, normalized_name, email, position, subjects, phone,
-            homeroom_classroom, departments, responsible_projects, teaching_periods,
-            license_expiry_date, source_file)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'แบบฟอร์มนำเข้าข้อมูลครู')`
+           (user_id, full_name, normalized_name, email, personnel_type, position_number, position, academic_rank,
+            subjects, phone, homeroom_classroom, departments, responsible_projects, teaching_periods,
+            appointment_date, service_start_date, education_level, major, institution, employment_status,
+            retirement_date, license_issue_date, license_expiry_date, source_file)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'แบบฟอร์มนำเข้าข้อมูลครู')`
         ).bind(user?.id || null, name, storedName(name), email,
-          values[0], values[1], values[2], values[3], values[4], values[5], periods, values[6]).run();
+          personnelType, values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7], periods,
+          dates.appointment_date, dates.service_start_date, values[8], values[9], values[10], employmentStatus,
+          dates.retirement_date, dates.license_issue_date, dates.license_expiry_date).run();
         created++;
       }
     } catch {

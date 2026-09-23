@@ -26,6 +26,7 @@ import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
 import { handleTimetableRoute } from "./routes/timetable.js";
 import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
+import { handlePersonnelRoute } from "./routes/personnel.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -1279,8 +1280,11 @@ async function handleListStaff(request, env) {
 
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.user_id, p.full_name, u.role,
-            p.position, p.subjects, p.phone, p.homeroom_classroom,
+            p.personnel_type, p.position_number, p.position, p.academic_rank,
+            p.subjects, p.phone, p.homeroom_classroom,
             p.email, p.departments, p.responsible_projects, p.teaching_periods,
+            p.appointment_date, p.service_start_date, p.education_level, p.major, p.institution,
+            p.employment_status, p.retirement_date,
             p.license_issue_date, p.license_expiry_date
      FROM personnel_records p
      LEFT JOIN users u ON u.id = p.user_id
@@ -1315,6 +1319,9 @@ async function handleUpdateStaff(request, env, targetId) {
   }
 
   const position = body.position || null;
+  const personnel_type = body.personnel_type || null;
+  const position_number = body.position_number || null;
+  const academic_rank = body.academic_rank || null;
   const subjects = body.subjects || null;
   const phone = body.phone || null;
   const homeroom_classroom = body.homeroom_classroom || null;
@@ -1327,16 +1334,38 @@ async function handleUpdateStaff(request, env, targetId) {
   }
   const license_issue_date = body.license_issue_date || null;
   const license_expiry_date = body.license_expiry_date || null;
+  const appointment_date = body.appointment_date || null;
+  const service_start_date = body.service_start_date || null;
+  const education_level = body.education_level || null;
+  const major = body.major || null;
+  const institution = body.institution || null;
+  const employment_status = ["working", "leave", "transferred", "retired", "resigned"].includes(body.employment_status) ? body.employment_status : "working";
+  const retirement_date = body.retirement_date || null;
+
+  for (const [label, dateValue] of [
+    ["วันที่บรรจุ/แต่งตั้ง", appointment_date], ["วันที่เริ่มงาน", service_start_date],
+    ["วันเกษียณ", retirement_date], ["วันที่ออกใบประกอบวิชาชีพ", license_issue_date],
+    ["วันหมดอายุใบประกอบวิชาชีพ", license_expiry_date],
+  ]) {
+    if (dateValue && !/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue))) {
+      return jsonResponse({ error: `${label} ต้องอยู่ในรูปแบบ YYYY-MM-DD` }, 400);
+    }
+  }
 
   await env.DB.prepare(
     `UPDATE personnel_records SET
-       position = ?, subjects = ?, phone = ?, homeroom_classroom = ?,
+       personnel_type = ?, position_number = ?, position = ?, academic_rank = ?,
+       subjects = ?, phone = ?, homeroom_classroom = ?,
        departments = ?, responsible_projects = ?, teaching_periods = ?,
+       appointment_date = ?, service_start_date = ?, education_level = ?, major = ?, institution = ?,
+       employment_status = ?, retirement_date = ?,
        license_issue_date = ?, license_expiry_date = ?, updated_at = datetime('now')
      WHERE id = ?`
   )
-    .bind(position, subjects, phone, homeroom_classroom, departments, responsible_projects,
-      teaching_periods, license_issue_date, license_expiry_date, targetId)
+    .bind(personnel_type, position_number, position, academic_rank, subjects, phone, homeroom_classroom,
+      departments, responsible_projects, teaching_periods, appointment_date, service_start_date,
+      education_level, major, institution, employment_status, retirement_date,
+      license_issue_date, license_expiry_date, targetId)
     .run();
 
   return jsonResponse({ ok: true });
@@ -4068,6 +4097,8 @@ export default {
       if (schoolBankResponse) return schoolBankResponse;
       const budgetResponse = await handleBudgetRoute(request, env, pathname, method);
       if (budgetResponse) return budgetResponse;
+      const personnelResponse = await handlePersonnelRoute(request, env, pathname, method);
+      if (personnelResponse) return personnelResponse;
 
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);

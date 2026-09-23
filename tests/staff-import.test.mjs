@@ -29,7 +29,7 @@ function makeDb() {
   return { sqlite, DB };
 }
 
-test('migrates existing personnel table and imports the eight template fields', async () => {
+test('migrates existing personnel table and imports the expanded personnel template', async () => {
   const { sqlite, DB } = makeDb();
   await ensurePersonnelColumns({ DB });
   await ensurePersonnelColumns({ DB });
@@ -42,7 +42,10 @@ test('migrates existing personnel table and imports the eight template fields', 
     full_name: 'นางสาว วรรณมาศ จันทร์ชัง', email: 'Teacher@example.ac.th',
     phone: '0812345678', homeroom_classroom: 'ป.4/1', departments: 'วิชาการ; บุคคล',
     responsible_projects: 'โครงการอ่านออกเขียนได้; โครงการห้องสมุด',
-    teaching_periods: '18', subjects: 'ภาษาไทย; สังคมศึกษา',
+    teaching_periods: '18', subjects: 'ภาษาไทย; สังคมศึกษา', personnel_type: 'teacher',
+    position_number: '12345', academic_rank: 'ครูชำนาญการ', appointment_date: '2018-05-01',
+    service_start_date: '2018-05-01', education_level: 'ปริญญาโท', major: 'ภาษาไทย',
+    institution: 'มหาวิทยาลัยตัวอย่าง', employment_status: 'working', license_issue_date: '2022-05-10',
   };
   assert.deepEqual(await importStaffRows({ DB }, [row]), { created: 0, updated: 1, skipped: [] });
   const stored = sqlite.prepare('SELECT * FROM personnel_records WHERE user_id = 1').get();
@@ -53,6 +56,11 @@ test('migrates existing personnel table and imports the eight template fields', 
   assert.equal(stored.responsible_projects, 'โครงการอ่านออกเขียนได้; โครงการห้องสมุด');
   assert.equal(stored.teaching_periods, 18);
   assert.equal(stored.subjects, 'ภาษาไทย; สังคมศึกษา');
+  assert.equal(stored.personnel_type, 'teacher');
+  assert.equal(stored.position_number, '12345');
+  assert.equal(stored.academic_rank, 'ครูชำนาญการ');
+  assert.equal(stored.education_level, 'ปริญญาโท');
+  assert.equal(stored.license_issue_date, '2022-05-10');
   assert.equal(stored.license_expiry_date, '2027-05-09');
 
   const again = await importStaffRows({ DB }, [row]);

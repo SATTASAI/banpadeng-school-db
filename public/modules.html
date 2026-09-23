@@ -183,11 +183,13 @@
       title: "ฝ่ายบริหารงานบุคคล",
       description: "โครงการ คำสั่ง เวร การลา การประเมิน และการพัฒนาบุคลากรอย่างเป็นระบบ",
       actions: [
-        { label: "เปิดงานและโครงการบุคคล", href: "/department.html?dept=personnel" },
+        { label: "เปิดศูนย์บริหารงานบุคคล", href: "/personnel.html" },
+        { label: "เปิดทะเบียนบุคลากร", href: "/staff.html", secondary: true },
+        { label: "เปิดงานและโครงการบุคคล", href: "/department.html?dept=personnel", secondary: true },
         { label: "เปิดระบบการลา", href: "/leave.html", secondary: true },
         { label: "เปิดระบบมอบหมายงาน", href: "/tasks.html", secondary: true }
       ],
-      ready: [0, 2, 4],
+      ready: [0, 1, 2, 3, 4, 6, 7],
       items: [
         "โครงการและแผนงานฝ่ายบุคคล",
         "คำสั่งปฏิบัติหน้าที่",
