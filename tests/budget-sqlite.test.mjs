@@ -190,3 +190,19 @@ test("a signer can return a request for editing and the owner can resubmit it", 
   assert.equal((await call(env, 2, `requests/${created.body.id}`, "PATCH", { ...requestPayload(850), save_as_draft: false })).status, 200);
   assert.equal(env.raw.prepare("SELECT status FROM project_expenses WHERE id=?").get(created.body.id).status, "pending");
 });
+
+test("kindergarten projects use their own approval assignments", async () => {
+  const env = fixture();
+  await call(env, 1, "overview?fiscal_year=2570"); // applies compatibility columns
+  env.raw.prepare(`INSERT INTO projects(id,department,management_area,name,budget_amount,spent_amount,status,description,created_by,created_at,fiscal_year)
+    VALUES(11,'academic','early_childhood','โครงการอนุบาล',2000,0,'ongoing','',1,'2026-10-01',2570)`).run();
+  env.raw.prepare("INSERT INTO project_owners VALUES(11,2)").run();
+  await assign(env, "department_head", "early_childhood", 4);
+  await assign(env, "deputy_director", "early_childhood", 5);
+  await assign(env, "finance_review", "", 6);
+  await assign(env, "director_approval", "", 7);
+  const created = await call(env, 2, "requests", "POST", { ...requestPayload(), project_id: 11 });
+  assert.equal(created.status, 201);
+  const overview = await call(env, 2, "overview?fiscal_year=2570");
+  assert.equal(overview.body.projects.find((project) => project.id === 11).department, "early_childhood");
+});

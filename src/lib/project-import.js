@@ -1,4 +1,6 @@
-const DEPARTMENTS = new Set(["academic", "budget", "personnel", "general"]);
+const DEPARTMENTS = new Set(["academic", "early_childhood", "budget", "personnel", "general"]);
+const storedDepartment = (department) => department === "early_childhood" ? "academic" : department;
+const managementArea = (department) => department === "early_childhood" ? "early_childhood" : null;
 
 function text(value, maxLength = 1000) {
   const cleaned = String(value ?? "").trim();
@@ -60,7 +62,7 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
     : [...new Set(explicitOwnerIds.map(Number).filter(Number.isInteger))];
   const { results: matches } = await env.DB.prepare(
     `SELECT id FROM projects
-     WHERE department = ? AND fiscal_year = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+     WHERE COALESCE(management_area,department) = ? AND fiscal_year = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
      ORDER BY id ASC`
   ).bind(department, fiscalYear, name).all();
 
@@ -71,14 +73,14 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
     projectId = Number(matches[0].id);
     created = false;
     await env.DB.prepare(
-      `UPDATE projects SET name = ?, budget_amount = ?, description = ? WHERE id = ?`
-    ).bind(name, budgetAmount, text(rawRow.description, 3000), projectId).run();
+      `UPDATE projects SET department = ?, management_area = ?, name = ?, budget_amount = ?, description = ? WHERE id = ?`
+    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, text(rawRow.description, 3000), projectId).run();
     duplicatesRemoved = await removeEmptyDuplicateProjects(env, projectId, matches.slice(1).map((row) => Number(row.id)));
   } else {
     const result = await env.DB.prepare(
-      `INSERT INTO projects (department, name, budget_amount, spent_amount, fiscal_year, description, created_by)
-       VALUES (?, ?, ?, 0, ?, ?, ?)`
-    ).bind(department, name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy).run();
+      `INSERT INTO projects (department, management_area, name, budget_amount, spent_amount, fiscal_year, description, created_by)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
+    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy).run();
     projectId = Number(result.meta.last_row_id);
     created = true;
   }

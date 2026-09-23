@@ -19,7 +19,7 @@
     <form id="form">
       <div class="doc-grid">
         <div class="field span-2"><label>ชื่อเอกสาร *</label><input id="title" required /></div>
-        <div class="field"><label>ฝ่ายงาน *</label><select id="department"><option value="academic">วิชาการ</option><option value="budget">งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option><option value="student-support">ดูแลช่วยเหลือ</option><option value="admin">ผู้ดูแลระบบ</option></select></div>
+        <div class="field"><label>ฝ่ายงาน *</label><select id="department"><option value="academic">วิชาการ</option><option value="early_childhood">ปฐมวัย (งานอนุบาล)</option><option value="budget">งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option><option value="student-support">ดูแลช่วยเหลือ</option><option value="admin">ผู้ดูแลระบบ</option></select></div>
         <div class="field"><label>ประเภทเอกสาร</label><input id="documentType" placeholder="เช่น หนังสือราชการ/ใบเสร็จ" /></div>
         <div class="field"><label>คำสำคัญ</label><input id="keywords" /></div>
         <div class="field"><label>สิทธิ์เข้าถึง</label><select id="accessLevel"><option value="staff">บุคลากรทุกคน</option><option value="private">ส่วนตัว/เจ้าของไฟล์</option><option value="admin">ผู้บริหารเท่านั้น</option></select></div>
@@ -56,7 +56,7 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
-const DEPT={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป","student-support":"ดูแลช่วยเหลือ",admin:"ผู้ดูแลระบบ"};
+const DEPT={academic:"วิชาการ",early_childhood:"ปฐมวัย (งานอนุบาล)",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป","student-support":"ดูแลช่วยเหลือ",admin:"ผู้ดูแลระบบ"};
 const ACCESS={staff:"บุคลากรทุกคน",private:"ส่วนตัว",admin:"ผู้บริหาร"};
 let currentView="active";
 let currentDocuments=[];

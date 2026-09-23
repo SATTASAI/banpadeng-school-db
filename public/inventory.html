@@ -31,7 +31,7 @@
     <div class="toolbar">
       <input type="search" id="searchInput" autocomplete="off" placeholder="ค้นหารหัส ชื่อ หมวด หรือ Serial Number" />
       <select id="typeFilter"><option value="">ทุกประเภท</option><option value="material">วัสดุ</option><option value="equipment">ครุภัณฑ์</option></select>
-      <select id="departmentFilter"><option value="">ทุกฝ่าย</option><option value="academic">วิชาการ</option><option value="budget">งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select>
+      <select id="departmentFilter"><option value="">ทุกฝ่าย</option><option value="academic">วิชาการ</option><option value="early_childhood">ปฐมวัย (งานอนุบาล)</option><option value="budget">งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select>
       <select id="statusFilter"><option value="">ทุกสถานะ</option><option value="active">ใช้งาน</option><option value="repair">อยู่ระหว่างซ่อม</option><option value="disposed">จำหน่ายแล้ว</option><option value="lost">สูญหาย</option></select>
     </div>
     <div class="table-wrap" id="itemList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
@@ -46,7 +46,7 @@
     <div class="field"><label>ประเภท *</label><select id="iType"><option value="material">วัสดุ</option><option value="equipment">ครุภัณฑ์</option></select></div>
     <div class="field"><label>หมวด</label><input id="iCategory" placeholder="เช่น วัสดุสำนักงาน" /></div>
     <div class="field"><label>หน่วยนับ</label><input id="iUnit" value="ชิ้น" /></div>
-    <div class="field"><label>ฝ่ายงาน</label><select id="iDepartment"><option value="academic">วิชาการ</option><option value="budget" selected>งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select></div>
+    <div class="field"><label>ฝ่ายงาน</label><select id="iDepartment"><option value="academic">วิชาการ</option><option value="early_childhood">ปฐมวัย (งานอนุบาล)</option><option value="budget" selected>งบประมาณ</option><option value="personnel">บุคคล</option><option value="general">บริหารทั่วไป</option></select></div>
     <div class="field"><label>สถานที่จัดเก็บ/ใช้งาน</label><input id="iLocation" /></div>
     <div class="field"><label>ผู้รับผิดชอบ</label><input id="iCustodian" /></div>
     <div class="field"><label>ยอดยกมา</label><input type="number" min="0" step="0.01" id="iOpening" value="0" /></div>
@@ -111,7 +111,7 @@
 <script src="/js/file-upload.js"></script>
 <script>
 const TYPE_LABEL={material:"วัสดุ",equipment:"ครุภัณฑ์"};
-const DEPT_LABEL={academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป"};
+const DEPT_LABEL={academic:"วิชาการ",early_childhood:"ปฐมวัย (งานอนุบาล)",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป"};
 const STATUS_LABEL={active:"ใช้งาน",repair:"อยู่ระหว่างซ่อม",disposed:"จำหน่ายแล้ว",lost:"สูญหาย"};
 const CONDITION_LABEL={good:"ดี",fair:"พอใช้",damaged:"ชำรุด",lost:"สูญหาย"};
 const TX_LABEL={opening:"ยอดยกมา",receive:"รับเข้า",issue:"เบิกจ่าย",borrow:"ยืม",return:"คืน",transfer:"โอนย้าย",adjust_in:"ปรับเพิ่ม",adjust_out:"ปรับลด",repair:"ส่งซ่อม",dispose:"จำหน่าย"};

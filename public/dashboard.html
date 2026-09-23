@@ -195,8 +195,9 @@
       <a href="/modules.html?module=students" data-page="students"><span class="nav-number">02</span>ข้อมูลนักเรียน</a>
       <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
       <a href="/academic-years.html" data-page="academic-periods"><span class="nav-number">ปี</span>ปีการศึกษา/ภาคเรียน</a>
-      <div class="nav-label">4 ฝ่ายงาน</div>
+      <div class="nav-label">5 ฝ่ายงาน</div>
       <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
+      <a href="/modules.html?module=early_childhood" data-page="early_childhood"><span class="nav-number">ปฐ.</span>ฝ่ายปฐมวัย (งานอนุบาล)</a>
       <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
       <a href="/modules.html?module=personnel" data-page="personnel"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล</a>
       <a href="/modules.html?module=general" data-page="general"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป</a>
@@ -328,6 +329,7 @@
     "academic-periods": "/academic-years.html",
     leave: "/leave.html",
     academic: "/modules.html?module=academic",
+    early_childhood: "/modules.html?module=early_childhood",
     budget: "/modules.html?module=budget",
     personnel: "/modules.html?module=personnel",
     general: "/modules.html?module=general",
@@ -381,6 +383,15 @@
       { label:"นิเทศ ติดตาม และประกันคุณภาพ", url:"/work-center.html?area=academic&topic=7" },
       { label: "Q-Info ระบบฐานข้อมูล", url: "https://qinfo.co/", external: true },
       { label: "Q-Info Dashboard", url: "https://qinfo.co/dashboard/index.html?information", external: true },
+    ],
+    early_childhood: [
+      { label:"โครงการและแผนงานปฐมวัย", url:"/department.html?dept=early_childhood" },
+      { label:"หลักสูตรและแผนจัดประสบการณ์", url:"/work-center.html?area=early_childhood&topic=0,1" },
+      { label:"ประเมินพัฒนาการเด็ก", url:"/work-center.html?area=early_childhood&topic=2" },
+      { label:"กิจกรรมระดับอนุบาล", url:"/work-center.html?area=early_childhood&topic=3" },
+      { label:"สื่อ สุขภาวะ และความปลอดภัย", url:"/work-center.html?area=early_childhood&topic=4,5" },
+      { label:"ผู้ปกครองและประกันคุณภาพ", url:"/work-center.html?area=early_childhood&topic=6,7" },
+      { label:"Template โครงการปฐมวัย", url:"/import-center.html?template=projects" },
     ],
     budget: [
       { label:"ระบบบริหารงบประมาณ", url:"/budget.html" },
@@ -553,6 +564,7 @@
     {title:"ข้อมูลครูและบุคลากร",subtitle:"ทะเบียนบุคลากรและใบประกอบวิชาชีพ",page_key:"staff",url:"/staff.html",keywords:"ครู บุคลากร ใบประกอบ"},
     {title:"ปีการศึกษาและภาคเรียน",subtitle:"กำหนดช่วงเวลาการดำเนินงาน",page_key:"academic-periods",url:"/academic-years.html",keywords:"ปี ภาคเรียน เทอม"},
     {title:"ฝ่ายบริหารงานวิชาการ",subtitle:"โครงการและงานวิชาการ",page_key:"academic",url:"/modules.html?module=academic",keywords:"หลักสูตร ตารางเรียน วิชาการ"},
+    {title:"ฝ่ายปฐมวัย (งานอนุบาล)",subtitle:"หลักสูตร พัฒนาการ และโครงการอนุบาล",page_key:"early_childhood",url:"/modules.html?module=early_childhood",keywords:"ปฐมวัย อนุบาล เด็กเล็ก พัฒนาการ"},
     {title:"Q-Info ระบบฐานข้อมูล",subtitle:"ระบบฐานข้อมูลสารสนเทศเพื่อการจัดการศึกษาอย่างมีคุณภาพ",page_key:"academic",url:"https://qinfo.co/",keywords:"qinfo q-info คิวอินโฟ นักเรียน ผลการเรียน การมาเรียน",external:true},
     {title:"Q-Info Dashboard",subtitle:"เปิดแดชบอร์ดสารสนเทศ Q-Info",page_key:"academic",url:"https://qinfo.co/dashboard/index.html?information",keywords:"qinfo q-info dashboard แดชบอร์ด สารสนเทศ",external:true},
     {title:"ฝ่ายบริหารงานงบประมาณ",subtitle:"โครงการ งบประมาณ และการเงิน",page_key:"budget",url:"/modules.html?module=budget",keywords:"เงิน รายรับ รายจ่าย งบ"},
@@ -683,6 +695,7 @@
 
   const DEPARTMENT_LABELS = {
     academic: "วิชาการ",
+    early_childhood: "ปฐมวัย (งานอนุบาล)",
     budget: "งบประมาณ",
     personnel: "บุคคล",
     general: "บริหารทั่วไป",

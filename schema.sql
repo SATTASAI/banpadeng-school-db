@@ -163,12 +163,13 @@ CREATE TABLE IF NOT EXISTS staff_profiles (
   homeroom_classroom  TEXT
 );
 
--- Schema: โมดูล 4 ฝ่ายงาน (โครงการ + งบประมาณ + หัวข้องาน)
--- ฝ่าย: academic (วิชาการ), budget (งบประมาณ), personnel (บุคคล), general (บริหารทั่วไป)
+-- Schema: โมดูล 5 ฝ่ายงาน (โครงการ + งบประมาณ + หัวข้องาน)
+-- ฝ่าย: academic (วิชาการ), early_childhood (ปฐมวัย/อนุบาล), budget (งบประมาณ), personnel (บุคคล), general (บริหารทั่วไป)
 
 CREATE TABLE IF NOT EXISTS projects (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
-  department        TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general')),
+  department        TEXT NOT NULL CHECK (department IN ('academic','early_childhood','budget','personnel','general')),
+  management_area   TEXT,
   name              TEXT NOT NULL,
   budget_amount     REAL NOT NULL DEFAULT 0 CHECK (budget_amount >= 0),
   spent_amount      REAL NOT NULL DEFAULT 0 CHECK (spent_amount >= 0),
@@ -233,7 +234,8 @@ CREATE TABLE IF NOT EXISTS project_expenses (
 
 CREATE TABLE IF NOT EXISTS work_topics (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  department    TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general')),
+  department    TEXT NOT NULL CHECK (department IN ('academic','early_childhood','budget','personnel','general')),
+  management_area TEXT,
   title         TEXT NOT NULL,
   description   TEXT,
   created_by    INTEGER NOT NULL REFERENCES users(id),
@@ -495,7 +497,8 @@ CREATE INDEX IF NOT EXISTS idx_support_status ON student_support_cases(status, r
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   title TEXT NOT NULL,
-  department TEXT NOT NULL CHECK (department IN ('academic','budget','personnel','general','student-support','admin')),
+  department TEXT NOT NULL CHECK (department IN ('academic','early_childhood','budget','personnel','general','student-support','admin')),
+  management_area TEXT,
   academic_year_id INTEGER REFERENCES academic_years(id),
   project_id INTEGER REFERENCES projects(id),
   document_type TEXT,
@@ -531,7 +534,8 @@ CREATE TABLE IF NOT EXISTS inventory_items (
   category TEXT,
   unit TEXT NOT NULL DEFAULT 'ชิ้น',
   department TEXT NOT NULL DEFAULT 'budget'
-    CHECK (department IN ('academic','budget','personnel','general')),
+    CHECK (department IN ('academic','early_childhood','budget','personnel','general')),
+  management_area TEXT,
   location TEXT,
   custodian TEXT,
   current_quantity REAL NOT NULL DEFAULT 0 CHECK (current_quantity >= 0),

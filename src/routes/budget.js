@@ -72,6 +72,7 @@ export async function ensureBudgetSchema(env) {
   ]);
 
   await addColumn(env, "projects", "fiscal_year", "INTEGER");
+  await addColumn(env, "projects", "management_area", "TEXT");
   const columns = [
     ["request_no", "TEXT"], ["fiscal_year", "INTEGER"], ["submitted_at", "TEXT"],
     ["review_note", "TEXT"], ["payment_no", "TEXT"], ["payment_method", "TEXT"],
@@ -181,14 +182,14 @@ async function overview(request, env) {
       COALESCE((SELECT SUM(amount) FROM project_expenses WHERE fiscal_year=? AND status='paid'),0) paid_amount,
       COALESCE((SELECT SUM(amount) FROM budget_income WHERE fiscal_year=?),0) income_amount`).bind(year, year, year, year, year).first(),
     env.DB.prepare(`SELECT i.*,u.full_name creator_name FROM budget_income i LEFT JOIN users u ON u.id=i.created_by WHERE i.fiscal_year=? ORDER BY i.received_date DESC,i.id DESC`).bind(year).all(),
-    env.DB.prepare(`SELECT p.id,p.department,p.name,p.budget_amount,p.spent_amount,p.status,p.description,
+    env.DB.prepare(`SELECT p.id,COALESCE(p.management_area,p.department) AS department,p.name,p.budget_amount,p.spent_amount,p.status,p.description,
       COALESCE(SUM(CASE WHEN e.fiscal_year=? AND e.status='pending' THEN e.amount ELSE 0 END),0) pending_amount,
       COALESCE(SUM(CASE WHEN e.fiscal_year=? AND e.status='approved' THEN e.amount ELSE 0 END),0) approved_amount,
       GROUP_CONCAT(DISTINCT u.full_name) owner_names,MAX(CASE WHEN po.user_id=? THEN 1 ELSE 0 END) can_request
       FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id
       LEFT JOIN project_owners po ON po.project_id=p.id LEFT JOIN users u ON u.id=po.user_id
-      WHERE p.status<>'cancelled' AND p.fiscal_year=? GROUP BY p.id ORDER BY p.department,p.name`).bind(year, year, user.id, year).all(),
-    env.DB.prepare(`SELECT e.*,p.name project_name,p.department,creator.full_name requester_name,approver.full_name approver_name,
+      WHERE p.status<>'cancelled' AND p.fiscal_year=? GROUP BY p.id ORDER BY COALESCE(p.management_area,p.department),p.name`).bind(year, year, user.id, year).all(),
+    env.DB.prepare(`SELECT e.*,p.name project_name,COALESCE(p.management_area,p.department) AS department,creator.full_name requester_name,approver.full_name approver_name,
       payer.full_name payment_recorder_name,
       (SELECT a.id FROM file_attachments a WHERE a.entity_type='project_expense' AND a.entity_id=e.id ORDER BY a.id DESC LIMIT 1) attachment_id,
       (SELECT a.file_name FROM file_attachments a WHERE a.entity_type='project_expense' AND a.entity_id=e.id ORDER BY a.id DESC LIMIT 1) attachment_name
@@ -236,7 +237,7 @@ async function createRequest(request, env) {
   const body = await request.json().catch(() => null);
   if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   const projectId = Number(body.project_id);
-  const project = await env.DB.prepare("SELECT id,department,budget_amount,fiscal_year FROM projects WHERE id=? AND status<>'cancelled'").bind(projectId).first();
+  const project = await env.DB.prepare("SELECT id,COALESCE(management_area,department) AS department,budget_amount,fiscal_year FROM projects WHERE id=? AND status<>'cancelled'").bind(projectId).first();
   if (!project) return jsonResponse({ error: "ไม่พบโครงการที่เลือก" }, 404);
   if (!(await owner(env, user, projectId))) return jsonResponse({ error: "คุณไม่ได้เป็นผู้รับผิดชอบโครงการนี้" }, 403);
   const date = String(body.expense_date || ""), purpose = clean(body.request_purpose || body.description, 1000), necessity = clean(body.necessity, 1500);
@@ -269,7 +270,7 @@ async function createRequest(request, env) {
 async function updateRequest(request, env, id) {
   const user = await currentUser(request, env);
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  const row = await env.DB.prepare(`SELECT e.*,p.department FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
+  const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
   if (Number(row.created_by) !== Number(user.id)) return jsonResponse({ error: "เฉพาะผู้จัดทำคำขอเท่านั้นที่แก้ไขได้" }, 403);
   if (row.status !== "draft") return jsonResponse({ error: "คำขอที่ส่งเข้ากระบวนการแล้วแก้ไขไม่ได้ เว้นแต่ถูกส่งกลับ" }, 409);
@@ -299,7 +300,7 @@ async function workflowAction(request, env, id) {
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const body = await request.json().catch(() => null);
   if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  const row = await env.DB.prepare(`SELECT e.*,p.department,p.budget_amount FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
+  const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department,p.budget_amount FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
   if (body.action === "submit") {
     if (Number(row.created_by) !== Number(user.id) || row.status !== "draft") return jsonResponse({ error: "ส่งได้เฉพาะคำขอร่างของตนเอง" }, 409);
@@ -373,7 +374,7 @@ async function saveRoleAssignment(request, env) {
   const body = await request.json().catch(() => null), roleKey = String(body?.role_key || ""), department = String(body?.department || ""), userId = Number(body?.user_id);
   const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey);
   if (!definition || !ROLE_KEYS.includes(roleKey)) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
-  if (definition.scoped && !["academic", "budget", "personnel", "general"].includes(department)) return jsonResponse({ error: "กรุณาเลือกฝ่ายงาน" }, 400);
+  if (definition.scoped && !["academic", "early_childhood", "budget", "personnel", "general"].includes(department)) return jsonResponse({ error: "กรุณาเลือกฝ่ายงาน" }, 400);
   if (!definition.scoped && department) return jsonResponse({ error: "หน้าที่นี้ไม่ต้องระบุฝ่าย" }, 400);
   const target = await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL AND deleted_at IS NULL").bind(userId).first();
   if (!target) return jsonResponse({ error: "ไม่พบบัญชีผู้ใช้งานที่เลือก" }, 404);
@@ -406,7 +407,7 @@ function reportQuery(url) {
   const dateFrom = String(url.searchParams.get("date_from") || "");
   const dateTo = String(url.searchParams.get("date_to") || "");
   const clauses = ["e.fiscal_year=?"], bindings = [year];
-  if (["academic", "budget", "personnel", "general"].includes(department)) { clauses.push("p.department=?"); bindings.push(department); }
+  if (["academic", "early_childhood", "budget", "personnel", "general"].includes(department)) { clauses.push("COALESCE(p.management_area,p.department)=?"); bindings.push(department); }
   if (Number.isInteger(projectId) && projectId > 0) { clauses.push("e.project_id=?"); bindings.push(projectId); }
   if (STATUSES.includes(status)) { clauses.push("e.status=?"); bindings.push(status); }
   if (SOURCE_TYPES.includes(sourceType)) { clauses.push("e.source_type=?"); bindings.push(sourceType); }
@@ -426,7 +427,7 @@ async function reportRows(request, env) {
   const filters = reportQuery(new URL(request.url));
   const { results } = await env.DB.prepare(`SELECT e.id,e.request_no,e.expense_date,e.fiscal_year,e.status,e.source_type,
     e.request_purpose,e.description,e.amount,e.payment_no,e.payment_date,e.payment_method,e.payment_reference,
-    e.payment_recipient,e.withholding_tax,e.net_paid,e.created_by,p.name project_name,p.department,
+    e.payment_recipient,e.withholding_tax,e.net_paid,e.created_by,p.name project_name,COALESCE(p.management_area,p.department) AS department,
     requester.full_name requester_name,payer.full_name payment_recorder_name,
     COALESCE((SELECT GROUP_CONCAT(DISTINCT category) FROM budget_request_items bi WHERE bi.expense_id=e.id),e.category) categories
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users requester ON requester.id=e.created_by
@@ -454,7 +455,7 @@ function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"
 async function exportFinancialReport(request, env) {
   const report = await reportRows(request, env);
   if (report.response) return report.response;
-  const departments = { academic: "วิชาการ", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
+  const departments = { academic: "วิชาการ", early_childhood: "ปฐมวัย (งานอนุบาล)", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
   const statuses = { draft: "ร่าง", pending: "กำลังอนุมัติ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
   const sources = { subsidy: "เงินอุดหนุน", school_income: "เงินรายได้สถานศึกษา", donation: "เงินบริจาค", other: "อื่น ๆ" };
   const methods = { transfer: "โอนเงิน", cash: "เงินสด", cheque: "เช็ค", other: "อื่น ๆ" };
@@ -470,7 +471,7 @@ async function exportFinancialReport(request, env) {
 async function printableFinancialReport(request, env) {
   const report = await reportRows(request, env);
   if (report.response) return report.response;
-  const departments = { academic: "วิชาการ", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
+  const departments = { academic: "วิชาการ", early_childhood: "ปฐมวัย (งานอนุบาล)", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
   const statuses = { draft: "ร่าง", pending: "กำลังอนุมัติ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
   const rows = report.rows.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.request_no || "")}</td><td>${thaiDate(row.expense_date)}</td><td>${escapeHtml(departments[row.department])}</td><td>${escapeHtml(row.project_name)}</td><td>${escapeHtml(row.request_purpose || row.description)}</td><td class="num">${money(row.amount)}</td><td>${escapeHtml(statuses[row.status] || row.status)}</td><td>${escapeHtml(row.payment_no || "")}</td></tr>`).join("");
   const s = report.summary;
@@ -484,7 +485,7 @@ const thaiDate = (value) => value ? new Date(String(value).includes("T") ? value
 async function printableDocument(request, env, id) {
   const user = await currentUser(request, env);
   if (!user) return new Response("กรุณาเข้าสู่ระบบ", { status: 401 });
-  const row = await env.DB.prepare(`SELECT e.*,p.name project_name,p.department,u.full_name requester_name FROM project_expenses e
+  const row = await env.DB.prepare(`SELECT e.*,p.name project_name,COALESCE(p.management_area,p.department) AS department,u.full_name requester_name FROM project_expenses e
     JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by WHERE e.id=?`).bind(id).first();
   if (!row) return new Response("ไม่พบคำขอ", { status: 404 });
   if (!row.workflow_completed_at || !["approved", "paid"].includes(row.status)) return new Response("เอกสารจะสร้างได้หลังลงนามครบทุกขั้น", { status: 409 });
@@ -492,7 +493,7 @@ async function printableDocument(request, env, id) {
     env.DB.prepare("SELECT * FROM budget_request_items WHERE expense_id=? ORDER BY line_no").bind(id).all(),
     env.DB.prepare("SELECT a.*,u.full_name assigned_name FROM budget_request_approvals a LEFT JOIN users u ON u.id=a.assigned_user_id WHERE a.expense_id=? ORDER BY a.step_order").bind(id).all(),
   ]);
-  const departments = { academic: "ฝ่ายบริหารงานวิชาการ", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
+  const departments = { academic: "ฝ่ายบริหารงานวิชาการ", early_childhood: "ฝ่ายปฐมวัย (งานอนุบาล)", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
   const categories = { materials: "วัสดุ", equipment: "ครุภัณฑ์", services: "ค่าใช้สอย/จ้างบริการ", compensation: "ค่าตอบแทน", utilities: "สาธารณูปโภค", travel: "ค่าเดินทาง", food: "อาหาร/อาหารว่าง", other: "อื่น ๆ" };
   const itemHtml = items.length ? items.map((item) => `<tr><td>${item.line_no}</td><td>${escapeHtml(categories[item.category] || item.category)}</td><td>${escapeHtml(item.description)}</td><td class="num">${money(item.quantity)} ${escapeHtml(item.unit || "")}</td><td class="num">${money(item.unit_price)}</td><td class="num">${money(item.amount)}</td></tr>`).join("") : `<tr><td>1</td><td>${escapeHtml(categories[row.category] || row.category)}</td><td>${escapeHtml(row.description)}</td><td class="num">1</td><td class="num">${money(row.amount)}</td><td class="num">${money(row.amount)}</td></tr>`;
   const signatureHtml = approvals.map((step) => `<div class="signature"><div class="signed">ลงนามอิเล็กทรอนิกส์แล้ว</div><strong>${escapeHtml(step.signed_name || step.assigned_name)}</strong><span>${escapeHtml(step.step_label)}</span><small>${thaiDate(step.signed_at)}</small></div>`).join("");
@@ -503,13 +504,13 @@ async function printableDocument(request, env, id) {
 async function paymentDocument(request, env, id) {
   const user = await currentUser(request, env);
   if (!user) return new Response("กรุณาเข้าสู่ระบบ", { status: 401 });
-  const row = await env.DB.prepare(`SELECT e.*,p.name project_name,p.department,requester.full_name requester_name,payer.full_name payer_name
+  const row = await env.DB.prepare(`SELECT e.*,p.name project_name,COALESCE(p.management_area,p.department) AS department,requester.full_name requester_name,payer.full_name payer_name
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users requester ON requester.id=e.created_by
     LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE e.id=?`).bind(id).first();
   if (!row) return new Response("ไม่พบรายการเบิกจ่าย", { status: 404 });
   if (row.status !== "paid") return new Response("ใบสำคัญจ่ายจะสร้างได้เมื่อฝ่ายการเงินยืนยันการจ่ายแล้ว", { status: 409 });
   const methods = { transfer: "โอนเงิน", cash: "เงินสด", cheque: "เช็ค", other: "อื่น ๆ" };
-  const departments = { academic: "ฝ่ายบริหารงานวิชาการ", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
+  const departments = { academic: "ฝ่ายบริหารงานวิชาการ", early_childhood: "ฝ่ายปฐมวัย (งานอนุบาล)", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
   const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>ใบสำคัญจ่าย ${escapeHtml(row.payment_no)}</title><style>@page{size:A4;margin:16mm}*{box-sizing:border-box}body{font-family:"TH Sarabun New","Sarabun",sans-serif;font-size:16pt;line-height:1.3;color:#111;margin:0}h1,h2{text-align:center;margin:0}h1{font-size:22pt}h2{font-size:17pt;margin-bottom:18px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}.line{padding:5px;border-bottom:1px dotted #555}.amount{margin:20px 0;border:1px solid #555}.amount div{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #aaa}.amount div:last-child{border:0;font-weight:bold;font-size:18pt}.box{border:1px solid #777;min-height:60px;padding:8px}.sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:70px;text-align:center}.sign div{border-top:1px solid #555;padding-top:6px}.actions{position:fixed;right:16px;top:12px}@media print{.actions{display:none}}button{font:14px sans-serif;padding:8px 14px;border:0;border-radius:8px;background:#0879e5;color:#fff}</style></head><body><div class="actions"><button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button></div><h1>ใบสำคัญจ่าย</h1><h2>โรงเรียนบ้านป่าเด็ง</h2><div class="grid"><div class="line"><strong>เลขที่ใบสำคัญ:</strong> ${escapeHtml(row.payment_no)}</div><div class="line"><strong>วันที่จ่าย:</strong> ${thaiDate(row.payment_date)}</div><div class="line"><strong>เลขคำขอ:</strong> ${escapeHtml(row.request_no)}</div><div class="line"><strong>ฝ่ายงาน:</strong> ${escapeHtml(departments[row.department])}</div><div class="line"><strong>โครงการ:</strong> ${escapeHtml(row.project_name)}</div><div class="line"><strong>ผู้ขอ:</strong> ${escapeHtml(row.requester_name)}</div><div class="line"><strong>ผู้รับเงิน:</strong> ${escapeHtml(row.payment_recipient)}</div><div class="line"><strong>วิธีจ่าย:</strong> ${escapeHtml(methods[row.payment_method] || row.payment_method)}</div><div class="line"><strong>เลขอ้างอิง:</strong> ${escapeHtml(row.payment_reference || "")}</div><div class="line"><strong>ผู้บันทึกจ่าย:</strong> ${escapeHtml(row.payer_name)}</div></div><div class="amount"><div><span>ยอดที่ได้รับอนุมัติ</span><strong>${money(row.amount)} บาท</strong></div><div><span>ภาษีหัก ณ ที่จ่าย</span><strong>${money(row.withholding_tax)} บาท</strong></div><div><span>ยอดจ่ายสุทธิ</span><strong>${money(row.net_paid ?? row.amount)} บาท</strong></div></div><strong>รายละเอียด/หมายเหตุการจ่าย</strong><div class="box">${escapeHtml(row.payment_note || row.request_purpose || row.description)}</div><div class="sign"><div>ผู้รับเงิน<br>(${escapeHtml(row.payment_recipient)})</div><div>เจ้าหน้าที่การเงิน<br>(${escapeHtml(row.payer_name)})</div></div></body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
 }

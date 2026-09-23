@@ -125,6 +125,11 @@ async function ensureInventorySchema(env) {
       unit_price = CASE WHEN NEW.unit_price IS NOT NULL AND NEW.unit_price >= 0 THEN NEW.unit_price ELSE unit_price END,
       updated_at = datetime('now') WHERE id = NEW.item_id; END`),
   ]);
+  try {
+    await env.DB.prepare("ALTER TABLE inventory_items ADD COLUMN management_area TEXT").run();
+  } catch (error) {
+    if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+  }
 }
 
 // เพิ่มข้อมูลผู้ให้บริการจัดเก็บไฟล์โดยไม่ทำลายรายการแนบไฟล์ R2 เดิม
@@ -311,6 +316,15 @@ async function ensureExtendedSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, backup_type TEXT NOT NULL DEFAULT 'export', file_name TEXT NOT NULL,
       table_count INTEGER, row_count INTEGER, created_by INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
+  // Preserve the deployed four-department CHECK constraints while exposing
+  // kindergarten as its own management area.
+  for (const table of ["projects", "work_topics", "documents"]) {
+    try {
+      await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN management_area TEXT`).run();
+    } catch (error) {
+      if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
   await ensureProjectExpenseSchema(env);
   await ensureBudgetSchema(env);
   await ensureInventorySchema(env);
@@ -340,7 +354,7 @@ export async function handleRegister(request, env) {
   const fullName = (body.full_name || "").trim();
   const position = String(body.position || "").trim().slice(0, 200);
   const phone = String(body.phone || "").trim().slice(0, 50);
-  const allowedDepartments = new Set(["academic", "budget", "personnel", "general"]);
+  const allowedDepartments = new Set(["academic", "early_childhood", "budget", "personnel", "general"]);
   const departments = [...new Set(Array.isArray(body.departments) ? body.departments : [])]
     .filter((department) => allowedDepartments.has(department));
   const subjects = String(body.subjects || "").trim().slice(0, 500) || null;
@@ -664,10 +678,10 @@ async function handleGlobalSearch(request, env) {
       FROM personnel_records WHERE status='active'
         AND (full_name LIKE ? ESCAPE '\\' OR COALESCE(position,'') LIKE ? ESCAPE '\\' OR COALESCE(homeroom_classroom,'') LIKE ? ESCAPE '\\')
       ORDER BY CASE WHEN full_name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,full_name LIMIT 5`).bind(like,like,like,prefix),
-    env.DB.prepare(`SELECT id,name,department,status FROM projects
+    env.DB.prepare(`SELECT id,name,COALESCE(management_area,department) AS department,status FROM projects
       WHERE name LIKE ? ESCAPE '\\' OR COALESCE(description,'') LIKE ? ESCAPE '\\'
       ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,created_at DESC LIMIT 5`).bind(like,like,prefix),
-    env.DB.prepare(`SELECT id,title,department,document_type FROM documents
+    env.DB.prepare(`SELECT id,title,COALESCE(management_area,department) AS department,document_type FROM documents
       WHERE COALESCE(record_status,'active')='active'
         AND (title LIKE ? ESCAPE '\\' OR COALESCE(keywords,'') LIKE ? ESCAPE '\\')
         AND (access_level='staff' OR uploaded_by=? OR (?=1 AND access_level IN ('private','admin')))
@@ -691,7 +705,7 @@ async function handleGlobalSearch(request, env) {
       .bind(like,like,like,like,prefix),
   ];
   const [students,staff,projects,documents,inventory,maintenance,tasks,workRecords] = await env.DB.batch(statements);
-  const departmentLabels = { academic:"วิชาการ",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป" };
+  const departmentLabels = { academic:"วิชาการ",early_childhood:"ปฐมวัย (งานอนุบาล)",budget:"งบประมาณ",personnel:"บุคคล",general:"บริหารทั่วไป" };
   const results = [
     ...students.results.map((row) => ({ type:"student",title:row.full_name,subtitle:[row.student_code,row.classroom||row.grade_level].filter(Boolean).join(" · "),page_key:"students",url:`/students.html?student=${row.id}` })),
     ...staff.results.map((row) => ({ type:"staff",title:row.full_name,subtitle:[row.position,row.homeroom_classroom].filter(Boolean).join(" · ")||"ข้อมูลบุคลากร",page_key:"staff",url:`/staff.html?staff=${row.id}` })),
@@ -1379,8 +1393,10 @@ async function handleReportsSummary(request, env) {
   });
 }
 
-// ---------- 4 ฝ่ายงาน ----------
-const DEPARTMENTS = ["academic", "budget", "personnel", "general"];
+// ---------- 5 ฝ่ายงาน ----------
+const DEPARTMENTS = ["academic", "early_childhood", "budget", "personnel", "general"];
+const storedDepartment = (department) => department === "early_childhood" ? "academic" : department;
+const managementArea = (department) => department === "early_childhood" ? "early_childhood" : null;
 
 async function isProjectOwner(env, user, projectId) {
   if (isAdmin(user)) return true;
@@ -1397,7 +1413,7 @@ async function handleListProjects(request, env, department) {
   if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
 
   const { results: projects } = await env.DB.prepare(
-    "SELECT * FROM projects WHERE department = ? ORDER BY status ASC, created_at DESC"
+    "SELECT *, COALESCE(management_area,department) AS effective_department FROM projects WHERE COALESCE(management_area,department) = ? ORDER BY status ASC, created_at DESC"
   )
     .bind(department)
     .all();
@@ -1420,7 +1436,7 @@ async function handleListProjects(request, env, department) {
     ownersByProject[row.project_id].push({ user_id: row.user_id, full_name: row.full_name });
   }
 
-  const enriched = projects.map((p) => ({ ...p, owners: ownersByProject[p.id] || [] }));
+  const enriched = projects.map((p) => ({ ...p, department: p.effective_department, owners: ownersByProject[p.id] || [] }));
   return jsonResponse({ projects: enriched });
 }
 
@@ -1577,7 +1593,7 @@ function normalizeHttpUrl(value) {
 
 async function getProjectExpense(env, expenseId) {
   return env.DB.prepare(
-    `SELECT e.*, p.department, p.name AS project_name
+    `SELECT e.*, COALESCE(p.management_area,p.department) AS department, p.name AS project_name
      FROM project_expenses e JOIN projects p ON p.id = e.project_id
      WHERE e.id = ?`
   ).bind(expenseId).first();
@@ -1601,7 +1617,7 @@ async function handleListProjectExpenses(request, env, projectId) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const project = await env.DB.prepare(
-    `SELECT id, department, name, budget_amount, spent_amount, progress_percent, status,
+    `SELECT id, COALESCE(management_area,department) AS department, name, budget_amount, spent_amount, progress_percent, status,
             COALESCE(budget_amount, 0) - COALESCE(spent_amount, 0) AS remaining_amount
      FROM projects WHERE id = ?`
   ).bind(projectId).first();
@@ -1761,12 +1777,12 @@ async function handleListTopics(request, env, department) {
   if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
 
   const { results } = await env.DB.prepare(
-    "SELECT * FROM work_topics WHERE department = ? ORDER BY title"
+    "SELECT *, COALESCE(management_area,department) AS effective_department FROM work_topics WHERE COALESCE(management_area,department) = ? ORDER BY title"
   )
     .bind(department)
     .all();
 
-  return jsonResponse({ topics: results });
+  return jsonResponse({ topics: results.map((topic) => ({ ...topic, department: topic.effective_department })) });
 }
 
 // ---------- /api/departments/:dept/topics (POST) ----------
@@ -1787,9 +1803,9 @@ async function handleCreateTopic(request, env, department) {
   if (!title) return jsonResponse({ error: "กรุณากรอกชื่อหัวข้องาน" }, 400);
 
   const result = await env.DB.prepare(
-    "INSERT INTO work_topics (department, title, description, created_by) VALUES (?, ?, ?, ?)"
+    "INSERT INTO work_topics (department, management_area, title, description, created_by) VALUES (?, ?, ?, ?, ?)"
   )
-    .bind(department, title, body.description || null, user.id)
+    .bind(storedDepartment(department), managementArea(department), title, body.description || null, user.id)
     .run();
 
   return jsonResponse({ id: result.meta.last_row_id }, 201);
@@ -2014,7 +2030,7 @@ function cleanText(value, maxLength = 500) {
 }
 
 // ---------- ศูนย์ปฏิบัติงานของหัวข้อที่ยังไม่มีระบบเฉพาะ ----------
-const WORK_RECORD_AREAS = new Set(["staff", "academic", "budget", "personnel", "general"]);
+const WORK_RECORD_AREAS = new Set(["staff", "academic", "early_childhood", "budget", "personnel", "general"]);
 const WORK_RECORD_STATUSES = ["planned", "in_progress", "waiting", "completed", "cancelled"];
 const WORK_RECORD_PRIORITIES = ["low", "normal", "high", "urgent"];
 
@@ -2210,18 +2226,18 @@ async function handleListInventoryItems(request, env) {
   const status = INVENTORY_STATUSES.includes(params.get("status")) ? params.get("status") : "";
   const department = DEPARTMENTS.includes(params.get("department")) ? params.get("department") : "";
   const lowStock = params.get("low_stock") === "1" ? 1 : 0;
-  const { results } = await env.DB.prepare(`SELECT i.*,
+  const { results } = await env.DB.prepare(`SELECT i.*, COALESCE(i.management_area,i.department) AS effective_department,
       (i.current_quantity * i.unit_price) AS total_value,
       (SELECT MAX(inspection_date) FROM inventory_inspections x WHERE x.item_id=i.id) AS last_inspection_date,
       (SELECT next_inspection_date FROM inventory_inspections x WHERE x.item_id=i.id ORDER BY inspection_date DESC, id DESC LIMIT 1) AS next_inspection_date
     FROM inventory_items i
     WHERE (?='' OR i.item_code LIKE '%'||?||'%' OR i.name LIKE '%'||?||'%' OR i.category LIKE '%'||?||'%' OR i.serial_number LIKE '%'||?||'%')
-      AND (?='' OR i.item_type=?) AND (?='' OR i.status=?) AND (?='' OR i.department=?)
+      AND (?='' OR i.item_type=?) AND (?='' OR i.status=?) AND (?='' OR COALESCE(i.management_area,i.department)=?)
       AND (?=0 OR (i.minimum_quantity > 0 AND i.current_quantity <= i.minimum_quantity))
     ORDER BY CASE i.status WHEN 'active' THEN 1 WHEN 'repair' THEN 2 ELSE 3 END, i.name, i.item_code`)
     .bind(q, q, q, q, q, itemType, itemType, status, status, department, department, lowStock).all();
   return jsonResponse({ items: results.map((row) => ({
-    ...row,
+    ...row, department: row.effective_department,
     current_quantity: Number(row.current_quantity || 0), minimum_quantity: Number(row.minimum_quantity || 0),
     unit_price: Number(row.unit_price || 0), total_value: Number(row.total_value || 0),
   })), can_manage: canManageInventory(user) });
@@ -2249,11 +2265,11 @@ async function handleCreateInventoryItem(request, env) {
   }
   try {
     const result = await env.DB.prepare(`INSERT INTO inventory_items
-      (item_code,name,item_type,category,unit,department,location,custodian,minimum_quantity,unit_price,brand_model,serial_number,
+      (item_code,name,item_type,category,unit,department,management_area,location,custodian,minimum_quantity,unit_price,brand_model,serial_number,
        purchase_date,fiscal_year,budget_source,vendor,warranty_expiry,item_condition,status,notes,created_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
-        itemCode, name, body.item_type, cleanText(body.category, 120), cleanText(body.unit, 40) || "ชิ้น", department,
-        cleanText(body.location, 160), cleanText(body.custodian, 160), minimumQuantity, unitPrice,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
+        itemCode, name, body.item_type, cleanText(body.category, 120), cleanText(body.unit, 40) || "ชิ้น", storedDepartment(department),
+        managementArea(department), cleanText(body.location, 160), cleanText(body.custodian, 160), minimumQuantity, unitPrice,
         cleanText(body.brand_model, 160), cleanText(body.serial_number, 120), body.purchase_date || null,
         cleanText(body.fiscal_year, 20), cleanText(body.budget_source, 160), cleanText(body.vendor, 160), body.warranty_expiry || null,
         INVENTORY_CONDITIONS.includes(body.item_condition) ? body.item_condition : "good",
@@ -2277,7 +2293,7 @@ async function handleCreateInventoryItem(request, env) {
 async function handleGetInventoryItem(request, env, itemId) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  const item = await env.DB.prepare("SELECT *, current_quantity * unit_price AS total_value FROM inventory_items WHERE id=?").bind(itemId).first();
+  const item = await env.DB.prepare("SELECT *, COALESCE(management_area,department) AS effective_department, current_quantity * unit_price AS total_value FROM inventory_items WHERE id=?").bind(itemId).first();
   if (!item) return jsonResponse({ error: "ไม่พบรายการพัสดุ" }, 404);
   const { results: transactions } = await env.DB.prepare(`SELECT t.*, u.full_name AS creator_name, a.id AS attachment_id, a.file_name AS attachment_name,
       COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r WHERE r.transaction_type='return' AND r.related_transaction_id=t.id),0) AS returned_quantity
@@ -2289,7 +2305,7 @@ async function handleGetInventoryItem(request, env, itemId) {
     LEFT JOIN file_attachments a ON a.entity_type='inventory_inspection' AND a.entity_id=i.id
     WHERE i.item_id=? ORDER BY i.inspection_date DESC,i.id DESC`).bind(itemId).all();
   return jsonResponse({
-    item: { ...item, current_quantity: Number(item.current_quantity || 0), minimum_quantity: Number(item.minimum_quantity || 0), unit_price: Number(item.unit_price || 0), total_value: Number(item.total_value || 0) },
+    item: { ...item, department: item.effective_department, current_quantity: Number(item.current_quantity || 0), minimum_quantity: Number(item.minimum_quantity || 0), unit_price: Number(item.unit_price || 0), total_value: Number(item.total_value || 0) },
     transactions: transactions.map((row) => ({ ...row, quantity: Number(row.quantity || 0), quantity_change: Number(row.quantity_change || 0), returned_quantity: Number(row.returned_quantity || 0) })),
     inspections: inspections.map((row) => ({ ...row, quantity_found: Number(row.quantity_found || 0) })),
     can_manage: canManageInventory(user),
@@ -2312,7 +2328,11 @@ async function handleUpdateInventoryItem(request, env, itemId) {
     if (!Number.isFinite(value) || value < 0) return jsonResponse({ error: "จำนวนและมูลค่าต้องไม่น้อยกว่า 0" }, 400);
     updates.push(`${field}=?`); values.push(value);
   }
-  if (body.department !== undefined) { if (!DEPARTMENTS.includes(body.department)) return jsonResponse({ error: "ฝ่ายงานไม่ถูกต้อง" }, 400); updates.push("department=?"); values.push(body.department); }
+  if (body.department !== undefined) {
+    if (!DEPARTMENTS.includes(body.department)) return jsonResponse({ error: "ฝ่ายงานไม่ถูกต้อง" }, 400);
+    updates.push("department=?", "management_area=?");
+    values.push(storedDepartment(body.department), managementArea(body.department));
+  }
   if (body.item_condition !== undefined) { if (!INVENTORY_CONDITIONS.includes(body.item_condition)) return jsonResponse({ error: "สภาพพัสดุไม่ถูกต้อง" }, 400); updates.push("item_condition=?"); values.push(body.item_condition); }
   if (body.status !== undefined) { if (!INVENTORY_STATUSES.includes(body.status)) return jsonResponse({ error: "สถานะพัสดุไม่ถูกต้อง" }, 400); updates.push("status=?"); values.push(body.status); }
   for (const field of ["purchase_date","warranty_expiry"]) if (body[field] !== undefined) {
@@ -3133,6 +3153,7 @@ async function findOrCreateDriveFolder(accessToken, parentId, name) {
 function departmentDriveLabel(department) {
   return {
     academic: "ฝ่ายวิชาการ",
+    early_childhood: "ฝ่ายปฐมวัย (งานอนุบาล)",
     budget: "ฝ่ายงบประมาณ",
     personnel: "ฝ่ายบุคคล",
     general: "ฝ่ายบริหารทั่วไป",
@@ -3143,7 +3164,7 @@ function departmentDriveLabel(department) {
 
 async function getDriveFolderSegments(env, entityType, entityId) {
   if (entityType === "document") {
-    const row = await env.DB.prepare(`SELECT d.department, y.year_be
+    const row = await env.DB.prepare(`SELECT COALESCE(d.management_area,d.department) AS department, y.year_be
       FROM documents d LEFT JOIN academic_years y ON y.id = d.academic_year_id WHERE d.id = ?`).bind(entityId).first();
     return ["เอกสารและคลังไฟล์", String(row?.year_be || "ไม่ระบุปีการศึกษา"), departmentDriveLabel(row?.department)];
   }
@@ -3576,9 +3597,9 @@ async function handleSystemStatus(request, env) {
 async function findDocumentDuplicates(env, user, { title, department, documentType, excludeId = 0 }) {
   const normalizedTitle = cleanText(title, 200);
   if (!normalizedTitle || !department) return [];
-  const { results } = await env.DB.prepare(`SELECT d.id,d.title,d.department,d.document_type,d.file_name,d.updated_at,u.full_name AS uploader_name
+  const { results } = await env.DB.prepare(`SELECT d.id,d.title,COALESCE(d.management_area,d.department) AS department,d.document_type,d.file_name,d.updated_at,u.full_name AS uploader_name
     FROM documents d LEFT JOIN users u ON u.id=d.uploaded_by
-    WHERE d.id<>? AND lower(trim(d.title))=lower(trim(?)) AND d.department=?
+    WHERE d.id<>? AND lower(trim(d.title))=lower(trim(?)) AND COALESCE(d.management_area,d.department)=?
       AND lower(trim(COALESCE(d.document_type,'')))=lower(trim(COALESCE(?,'')))
       AND COALESCE(d.record_status,'active')='active'
       AND (d.access_level='staff' OR d.uploaded_by=? OR (?=1 AND d.access_level IN ('private','admin')))
@@ -3607,10 +3628,11 @@ async function handleListDocuments(request, env) {
   const params = new URL(request.url).searchParams;
   const q = cleanText(params.get("q"),100) || "";
   const view = params.get("view") === "archive" ? "archive" : "active";
-  const { results } = await env.DB.prepare(`SELECT d.*,u.full_name AS uploader_name,
+  const { results } = await env.DB.prepare(`SELECT d.*,COALESCE(d.management_area,d.department) AS effective_department,u.full_name AS uploader_name,
       a.id AS attachment_id,a.storage_provider,a.created_at AS attachment_created_at,a.storage_error,a.file_hash,
       (SELECT d2.id FROM documents d2
-       WHERE d2.id<d.id AND lower(trim(d2.title))=lower(trim(d.title)) AND d2.department=d.department
+       WHERE d2.id<d.id AND lower(trim(d2.title))=lower(trim(d.title))
+         AND COALESCE(d2.management_area,d2.department)=COALESCE(d.management_area,d.department)
          AND lower(trim(COALESCE(d2.document_type,'')))=lower(trim(COALESCE(d.document_type,'')))
          AND COALESCE(d2.record_status,'active')='active' ORDER BY d2.id LIMIT 1) AS duplicate_candidate_id
     FROM documents d
@@ -3623,7 +3645,7 @@ async function handleListDocuments(request, env) {
     ORDER BY d.updated_at DESC`).bind(q,q,q,user.id,isAdmin(user) ? 1 : 0,view,view).all();
   const canArchive = isAdmin(user) || user.role === "staff";
   const documents = results.map((row) => ({
-    ...row,
+    ...row, department: row.effective_department,
     can_manage_file: row.uploaded_by === user.id || isAdmin(user) || user.role === "staff",
     can_archive: canArchive,
   }));
@@ -3651,8 +3673,8 @@ async function handleCreateDocument(request, env) {
     return jsonResponse({ error:"พบทะเบียนเอกสารที่มีชื่อ ฝ่ายงาน และประเภทเดียวกัน",code:"duplicate_document",duplicates },409);
   }
   const result = await env.DB.prepare(`INSERT INTO documents
-    (title, department, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by,record_status,upload_status)
-    VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?,'active','none')`).bind(cleanText(body.title, 200), body.department, body.academic_year_id || null, body.project_id || null,
+    (title, department, management_area, academic_year_id, project_id, document_type, keywords, file_name, file_url, mime_type, file_size, access_level, uploaded_by,record_status,upload_status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, ?,'active','none')`).bind(cleanText(body.title, 200), storedDepartment(body.department), managementArea(body.department), body.academic_year_id || null, body.project_id || null,
       cleanText(body.document_type, 120), cleanText(body.keywords, 500), accessLevel, user.id).run();
   await writeAuditLog(env,user,"create","document",result.meta.last_row_id,{ title:cleanText(body.title,200),department:body.department,duplicate_warning_acknowledged:duplicates.length>0 },request);
   return jsonResponse({ id: result.meta.last_row_id, duplicate_warning_acknowledged:duplicates.length>0 }, 201);
@@ -3732,17 +3754,17 @@ async function handleOverview(request, env) {
       AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
         WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`).first();
   const { results: departmentRows } = await env.DB.prepare(
-    `SELECT department,
+    `SELECT COALESCE(management_area,department) AS department,
             COUNT(*) AS project_count,
             ROUND(AVG(progress_percent), 0) AS average_progress,
             COALESCE(SUM(budget_amount), 0) AS total_budget,
             COALESCE(SUM(spent_amount), 0) AS spent_budget
      FROM projects
-     GROUP BY department`
+     GROUP BY COALESCE(management_area,department)`
   ).all();
 
   const { results: projectBudgetRows } = await env.DB.prepare(
-    `SELECT p.id, p.department, p.name, p.status, p.progress_percent,
+    `SELECT p.id, COALESCE(p.management_area,p.department) AS department, p.name, p.status, p.progress_percent,
             COALESCE(p.budget_amount, 0) AS budget_amount,
             COALESCE(p.spent_amount, 0) AS spent_amount,
             COALESCE(p.budget_amount, 0) - COALESCE(p.spent_amount, 0) AS remaining_amount,
@@ -3753,9 +3775,9 @@ async function handleOverview(request, env) {
      LEFT JOIN project_owners po ON po.project_id = p.id
      LEFT JOIN users u ON u.id = po.user_id
      GROUP BY p.id
-     ORDER BY CASE p.department
-                WHEN 'academic' THEN 1 WHEN 'budget' THEN 2
-                WHEN 'personnel' THEN 3 WHEN 'general' THEN 4 ELSE 5 END,
+     ORDER BY CASE COALESCE(p.management_area,p.department)
+                WHEN 'academic' THEN 1 WHEN 'early_childhood' THEN 2 WHEN 'budget' THEN 3
+                WHEN 'personnel' THEN 4 WHEN 'general' THEN 5 ELSE 6 END,
               CASE p.status WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
               p.name`
   ).all();
@@ -4108,7 +4130,7 @@ export default {
 
       if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
 
-      const deptProjectsMatch = pathname.match(/^\/api\/departments\/([a-z]+)\/projects$/);
+      const deptProjectsMatch = pathname.match(/^\/api\/departments\/([a-z_]+)\/projects$/);
       if (deptProjectsMatch && method === "GET") return await handleListProjects(request, env, deptProjectsMatch[1]);
       if (deptProjectsMatch && method === "POST") return await handleCreateProject(request, env, deptProjectsMatch[1]);
 
@@ -4124,7 +4146,7 @@ export default {
       if (projectMatch && method === "PATCH") return await handleUpdateProject(request, env, Number(projectMatch[1]));
       if (projectMatch && method === "DELETE") return await handleDeleteProject(request, env, Number(projectMatch[1]));
 
-      const deptTopicsMatch = pathname.match(/^\/api\/departments\/([a-z]+)\/topics$/);
+      const deptTopicsMatch = pathname.match(/^\/api\/departments\/([a-z_]+)\/topics$/);
       if (deptTopicsMatch && method === "GET") return await handleListTopics(request, env, deptTopicsMatch[1]);
       if (deptTopicsMatch && method === "POST") return await handleCreateTopic(request, env, deptTopicsMatch[1]);
 

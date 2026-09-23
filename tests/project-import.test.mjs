@@ -7,7 +7,7 @@ function environment() {
   const db = new DatabaseSync(":memory:");
   db.exec(`
     CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,full_name TEXT,role TEXT,status TEXT);
-    CREATE TABLE projects(id INTEGER PRIMARY KEY AUTOINCREMENT,department TEXT,name TEXT,budget_amount REAL,
+    CREATE TABLE projects(id INTEGER PRIMARY KEY AUTOINCREMENT,department TEXT,management_area TEXT,name TEXT,budget_amount REAL,
       spent_amount REAL DEFAULT 0,fiscal_year INTEGER,status TEXT DEFAULT 'ongoing',description TEXT,created_by INTEGER);
     CREATE TABLE project_owners(project_id INTEGER,user_id INTEGER,PRIMARY KEY(project_id,user_id));
     CREATE TABLE project_expenses(id INTEGER PRIMARY KEY,project_id INTEGER);
@@ -61,4 +61,16 @@ test("project import rejects an unknown responsible-person email without changin
   assert.equal(result.skipped.length, 1);
   assert.match(result.skipped[0].reason, /missing@example\.invalid/);
   assert.equal(env.raw.prepare("SELECT COUNT(*) AS count FROM projects").get().count, 0);
+});
+
+test("project import stores kindergarten as a separate early-childhood area", async () => {
+  const env = environment();
+  const result = await importProjectRows(env, [{
+    department: "early_childhood", name: "โครงการบ้านนักวิทยาศาสตร์น้อย", fiscal_year: 2570,
+    budget_amount: 5000, owner_emails: "teacher@example.invalid",
+  }], 1);
+  assert.equal(result.created, 1);
+  const project = env.raw.prepare("SELECT * FROM projects").get();
+  assert.equal(project.department, "academic");
+  assert.equal(project.management_area, "early_childhood");
 });
