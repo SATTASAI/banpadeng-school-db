@@ -171,6 +171,25 @@ async function replaceItems(env, expenseId, items) {
   await env.DB.batch(statements);
 }
 
+async function projectBudgetAvailability(env, projectId, excludeExpenseId = 0) {
+  const row = await env.DB.prepare(`SELECT p.budget_amount,
+    COALESCE(SUM(CASE WHEN e.status IN ('pending','approved','paid') AND e.id<>? THEN e.amount ELSE 0 END),0) AS committed_amount
+    FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id WHERE p.id=? GROUP BY p.id`)
+    .bind(excludeExpenseId, projectId).first();
+  if (!row) return null;
+  const budgetAmount = Number(row.budget_amount || 0), committedAmount = Number(row.committed_amount || 0);
+  return { budget_amount: budgetAmount, committed_amount: committedAmount, available_amount: budgetAmount - committedAmount };
+}
+
+async function budgetLimitError(env, projectId, requestedAmount, excludeExpenseId = 0) {
+  const availability = await projectBudgetAvailability(env, projectId, excludeExpenseId);
+  if (!availability) return "ไม่พบโครงการที่เลือก";
+  if (Number(requestedAmount) > availability.available_amount + 0.000001) {
+    return `ยอดคำขอเกินวงเงินโครงการ คงเหลือที่ขอได้ ${availability.available_amount.toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} บาท`;
+  }
+  return null;
+}
+
 async function overview(request, env) {
   const user = await currentUser(request, env);
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
@@ -212,7 +231,7 @@ async function overview(request, env) {
   const financeAssignment = await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='finance_review' AND department='' ").first();
   const totals = Object.fromEntries(STATUSES.map((status) => [status, { item_count: 0, total_amount: 0 }]));
   for (const row of statusRows.results) totals[row.status] = { item_count: Number(row.item_count), total_amount: Number(row.total_amount) };
-  const number = (value) => Number(value || 0), total = number(summary.total_budget), approved = number(summary.approved_amount), paid = number(summary.paid_amount);
+  const number = (value) => Number(value || 0), total = number(summary.total_budget), pending = number(summary.pending_amount), approved = number(summary.approved_amount), paid = number(summary.paid_amount);
   const requestData = requests.results.map((row) => {
     const approvals = approvalsByRequest.get(row.id) || [], activeApproval = approvals.find((step) => step.status === "pending");
     return { ...row, amount: number(row.amount), approvals, items: itemsByRequest.get(row.id) || [],
@@ -223,7 +242,7 @@ async function overview(request, env) {
       document_ready: Boolean(row.workflow_completed_at && ["approved", "paid"].includes(row.status)) };
   });
   return jsonResponse({ fiscal_year: year,
-    summary: { ...summary, total_budget: total, pending_amount: number(summary.pending_amount), approved_amount: approved, paid_amount: paid, income_amount: number(summary.income_amount), available_amount: total - approved - paid },
+    summary: { ...summary, total_budget: total, pending_amount: pending, approved_amount: approved, paid_amount: paid, income_amount: number(summary.income_amount), available_amount: total - pending - approved - paid },
     status_totals: totals,
     projects: projects.results.map((row) => ({ ...row, budget_amount: number(row.budget_amount), spent_amount: number(row.spent_amount), pending_amount: number(row.pending_amount), approved_amount: number(row.approved_amount), can_request: isAdmin(user) || Boolean(row.can_request) })),
     requests: requestData, incomes: incomes.results.map((row) => ({ ...row, amount: number(row.amount) })), audit: audits.results,
@@ -249,7 +268,12 @@ async function createRequest(request, env) {
   if (!Number.isInteger(year) || year < 2500 || year > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
   if (Number(project.fiscal_year) !== year) return jsonResponse({ error: `โครงการนี้อยู่ในปีงบประมาณ ${project.fiscal_year}` }, 409);
   const saveAsDraft = Boolean(body.save_as_draft);
-  if (!saveAsDraft) { const readiness = await workflowAssignments(env, project.department, user.id); if (readiness.missing.length) return jsonResponse({ error: `ยังส่งคำขอไม่ได้ เพราะยังไม่ได้กำหนดผู้อนุมัติ: ${readiness.missing.join(", ")}` }, 409); }
+  if (!saveAsDraft) {
+    const limitError = await budgetLimitError(env, projectId, parsed.total);
+    if (limitError) return jsonResponse({ error: limitError, code: "project_budget_exceeded" }, 409);
+    const readiness = await workflowAssignments(env, project.department, user.id);
+    if (readiness.missing.length) return jsonResponse({ error: `ยังส่งคำขอไม่ได้ เพราะยังไม่ได้กำหนดผู้อนุมัติ: ${readiness.missing.join(", ")}` }, 409);
+  }
   const number = await requestNo(env, year);
   const result = await env.DB.prepare(`INSERT INTO project_expenses
     (project_id,expense_date,document_no,category,description,payee,amount,status,notes,created_by,request_no,fiscal_year,
@@ -279,6 +303,10 @@ async function updateRequest(request, env, id) {
   if (body.needed_date && !validDate(body.needed_date)) return jsonResponse({ error: "วันที่ต้องการใช้เงินไม่ถูกต้อง" }, 400);
   const parsed = normalizeItems(body);
   if (parsed.error) return jsonResponse({ error: parsed.error }, 400);
+  if (!body.save_as_draft) {
+    const limitError = await budgetLimitError(env, row.project_id, parsed.total, id);
+    if (limitError) return jsonResponse({ error: limitError, code: "project_budget_exceeded" }, 409);
+  }
   await env.DB.prepare(`UPDATE project_expenses SET expense_date=?,category=?,description=?,payee=?,amount=?,notes=?,request_purpose=?,
     necessity=?,source_type=?,payment_preference=?,needed_date=?,updated_at=datetime('now') WHERE id=?`).bind(
     body.expense_date, parsed.items.length === 1 ? parsed.items[0].category : "other", purpose, clean(body.payee, 250), parsed.total,
@@ -304,6 +332,8 @@ async function workflowAction(request, env, id) {
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
   if (body.action === "submit") {
     if (Number(row.created_by) !== Number(user.id) || row.status !== "draft") return jsonResponse({ error: "ส่งได้เฉพาะคำขอร่างของตนเอง" }, 409);
+    const limitError = await budgetLimitError(env, row.project_id, row.amount, id);
+    if (limitError) return jsonResponse({ error: limitError, code: "project_budget_exceeded" }, 409);
     const readiness = await workflowAssignments(env, row.department, user.id);
     if (readiness.missing.length) return jsonResponse({ error: `ยังส่งคำขอไม่ได้ เพราะยังไม่ได้กำหนดผู้อนุมัติ: ${readiness.missing.join(", ")}` }, 409);
     await env.DB.prepare("DELETE FROM budget_request_approvals WHERE expense_id=?").bind(id).run();
@@ -315,6 +345,10 @@ async function workflowAction(request, env, id) {
     const approval = await env.DB.prepare("SELECT * FROM budget_request_approvals WHERE expense_id=? AND status='pending' ORDER BY step_order LIMIT 1").bind(id).first();
     if (!approval) return jsonResponse({ error: "รายการนี้ไม่มีขั้นอนุมัติที่รอดำเนินการ" }, 409);
     if (Number(approval.assigned_user_id) !== Number(user.id)) return jsonResponse({ error: "รายการนี้ไม่ได้อยู่ในคิวอนุมัติของคุณ" }, 403);
+    if (body.action === "sign") {
+      const limitError = await budgetLimitError(env, row.project_id, row.amount, id);
+      if (limitError) return jsonResponse({ error: limitError, code: "project_budget_exceeded" }, 409);
+    }
     const note = clean(body.review_note, 1000);
     if (["return", "reject"].includes(body.action) && !note) return jsonResponse({ error: "กรุณาระบุเหตุผล" }, 400);
     if (body.action === "return") {
@@ -332,11 +366,6 @@ async function workflowAction(request, env, id) {
       ]);
       await audit(env, user, "reject", id, { step: approval.step_key, note }, request);
       return jsonResponse({ ok: true });
-    }
-    if (approval.step_key === "director_approval") {
-      const committed = await env.DB.prepare("SELECT COALESCE(SUM(amount),0) total FROM project_expenses WHERE project_id=? AND id<>? AND status IN('approved','paid')").bind(row.project_id, id).first();
-      const available = Number(row.budget_amount || 0) - Number(committed.total || 0);
-      if (Number(row.amount) > available) return jsonResponse({ error: `วงเงินโครงการไม่พอ คงเหลือ ${available.toLocaleString("th-TH")} บาท` }, 409);
     }
     await env.DB.prepare("UPDATE budget_request_approvals SET status='approved',note=?,acted_by=?,signed_name=?,signed_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(note, user.id, user.full_name, approval.id).run();
     const next = await env.DB.prepare("SELECT * FROM budget_request_approvals WHERE expense_id=? AND status='waiting' ORDER BY step_order LIMIT 1").bind(id).first();

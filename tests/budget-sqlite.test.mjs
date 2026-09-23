@@ -170,10 +170,16 @@ test("digital budget request follows every assigned signature before printing an
   assert.equal(printableReport.status, 200);
   assert.match(printableReport.body, /รายงานการใช้จ่ายงบประมาณ/);
 
-  const second = await call(env, 2, "requests", "POST", requestPayload(200));
-  assert.equal(second.status, 201);
-  for (const userId of [4, 5, 6]) assert.equal((await call(env, userId, `requests/${second.body.id}/action`, "POST", { action: "sign" })).status, 200);
-  assert.equal((await call(env, 7, `requests/${second.body.id}/action`, "POST", { action: "sign" })).status, 409);
+  const overBudget = await call(env, 2, "requests", "POST", requestPayload(200));
+  assert.equal(overBudget.status, 409);
+  assert.equal(overBudget.body.code, "project_budget_exceeded");
+  assert.match(overBudget.body.error, /คงเหลือที่ขอได้ 100\.00 บาท/);
+
+  const draft = await call(env, 2, "requests", "POST", { ...requestPayload(200), save_as_draft: true });
+  assert.equal(draft.status, 201);
+  const submitDraft = await call(env, 2, `requests/${draft.body.id}/action`, "POST", { action: "submit" });
+  assert.equal(submitDraft.status, 409);
+  assert.equal(submitDraft.body.code, "project_budget_exceeded");
 });
 
 test("a signer can return a request for editing and the owner can resubmit it", async () => {
