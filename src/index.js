@@ -3192,6 +3192,9 @@ function departmentDriveLabel(department) {
 }
 
 async function getDriveFolderSegments(env, entityType, entityId) {
+  if (entityType === "public_site_image") {
+    return ["เว็บไซต์ประชาสัมพันธ์", String(new Date().getUTCFullYear())];
+  }
   if (entityType === "document") {
     const row = await env.DB.prepare(`SELECT COALESCE(d.management_area,d.department) AS department, y.year_be
       FROM documents d LEFT JOIN academic_years y ON y.id = d.academic_year_id WHERE d.id = ?`).bind(entityId).first();
@@ -3376,6 +3379,85 @@ async function readStoredAttachment(env, attachment) {
   const object = await env.FILES.get(attachment.object_key);
   if (!object) throw new Error("ไม่พบไฟล์ในพื้นที่จัดเก็บ");
   return object.body;
+}
+
+const PUBLIC_SITE_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+async function validatePublicSiteImage(file) {
+  if (!file || typeof file.arrayBuffer !== "function") return { error: "กรุณาเลือกไฟล์รูปภาพ" };
+  const mimeType = String(file.type || "").toLowerCase();
+  if (!PUBLIC_SITE_IMAGE_MIMES.has(mimeType)) return { error: "รองรับเฉพาะ JPG, PNG และ WebP" };
+  if (file.size <= 0) return { error: "ไฟล์ว่างหรือไม่สมบูรณ์" };
+  if (file.size > 5 * 1024 * 1024) return { error: "รูปภาพต้องมีขนาดไม่เกิน 5 MB" };
+  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const ascii = String.fromCharCode(...bytes);
+  const valid = mimeType === "image/jpeg" ? bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+    : mimeType === "image/png" ? bytes.slice(0, 8).every((value, index) => value === [0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a][index])
+      : ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WEBP";
+  return valid ? { mimeType } : { error: "ชนิดไฟล์ไม่ตรงกับเนื้อหาไฟล์ กรุณาเลือกไฟล์ต้นฉบับที่ถูกต้อง" };
+}
+
+async function handlePublicSiteImageUpload(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user || user.status !== "active") return jsonResponse({ error: "กรุณาเข้าสู่ระบบใหม่" }, 401);
+  if (!["superadmin", "executive", "staff"].includes(user.role)) {
+    return jsonResponse({ error: "ไม่มีสิทธิ์จัดการเว็บไซต์" }, 403);
+  }
+  const form = await request.formData().catch(() => null);
+  const file = form?.get("file");
+  const validation = await validatePublicSiteImage(file);
+  if (validation.error) return jsonResponse({ error: validation.error }, 400);
+  const configError = requireDriveConfig(env);
+  if (configError) return jsonResponse({ error: configError }, 503);
+
+  const safeName = String(file.name || "website-image")
+    .replace(/[^\p{L}\p{N}._ -]/gu, "_")
+    .slice(0, 180);
+  const entityId = Date.now() * 1000 + crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
+  const fileHash = await hashManagedFile(file);
+  let driveFile;
+  try {
+    driveFile = await uploadToGoogleDrive(env, file, "public_site_image", entityId, safeName, validation.mimeType);
+    const inserted = await env.DB.prepare(`INSERT INTO file_attachments
+      (entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url,file_hash)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+      .bind("public_site_image", entityId, `drive/public-site/${crypto.randomUUID()}`, safeName,
+        validation.mimeType, file.size, user.id, "drive", driveFile.id, driveFile.webViewLink || null, fileHash).run();
+    const attachmentId = inserted.meta.last_row_id;
+    await writeAuditLog(env, user, "upload", "public_site_image", attachmentId, {
+      file_name: safeName, file_size: file.size, file_hash: fileHash,
+      storage_provider: "drive", drive_file_id: driveFile.id,
+    }, request);
+    return jsonResponse({
+      id: attachmentId,
+      storage_provider: "drive",
+      url: `${new URL(request.url).origin}/api/public-site/images/${attachmentId}`,
+    }, 201);
+  } catch (error) {
+    if (driveFile?.id) await deleteGoogleDriveFile(env, driveFile.id).catch(() => {});
+    return jsonResponse({ error: error?.message || "จัดเก็บรูปภาพใน Google Drive ไม่สำเร็จ" }, 502);
+  }
+}
+
+async function handlePublicSiteImage(env, attachmentId) {
+  const attachment = await env.DB.prepare(
+    "SELECT * FROM file_attachments WHERE id=? AND entity_type='public_site_image'"
+  ).bind(attachmentId).first();
+  if (!attachment || !String(attachment.mime_type || "").startsWith("image/")) {
+    return jsonResponse({ error: "ไม่พบรูปภาพ" }, 404);
+  }
+  try {
+    const body = await readStoredAttachment(env, attachment);
+    return new Response(body, { headers: {
+      "Content-Type": attachment.mime_type,
+      "Content-Length": String(attachment.file_size),
+      "Cache-Control": "public, max-age=31536000, immutable",
+      "ETag": `\"${attachment.file_hash || attachment.id}\"`,
+      "X-Content-Type-Options": "nosniff",
+    } });
+  } catch (error) {
+    return jsonResponse({ error: error?.message || "เปิดรูปภาพไม่สำเร็จ" }, 502);
+  }
 }
 
 async function handlePublicMaintenanceImage(request, env, attachmentId) {
@@ -4083,6 +4165,9 @@ export default {
 
       const publicMaintenanceImageMatch = pathname.match(/^\/api\/public\/maintenance-image\/(\d+)$/);
       if (publicMaintenanceImageMatch && method === "GET") return await handlePublicMaintenanceImage(request,env,Number(publicMaintenanceImageMatch[1]));
+      const publicSiteImageMatch = pathname.match(/^\/api\/public-site\/images\/(\d+)$/);
+      if (publicSiteImageMatch && method === "GET") return await handlePublicSiteImage(env, Number(publicSiteImageMatch[1]));
+      if (pathname === "/api/public-site/images" && method === "POST") return await handlePublicSiteImageUpload(request, env);
 
       const timetableSyncResponse = await handleTimetableSyncRoute(request, env, pathname, method);
       if (timetableSyncResponse) return timetableSyncResponse;
