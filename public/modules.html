@@ -26,6 +26,7 @@
   .feature-footer { margin-top:auto; display:flex; align-items:center; justify-content:space-between; gap:8px; }
   .feature-status { font-size:11px; color:var(--color-text-muted); }
   .feature-status.ready { color:var(--color-success); font-weight:600; }
+  .feature-status.beta { color:#A76308; font-weight:600; }
   .feature-link { font-size:12px; font-weight:600; text-decoration:none; }
   .workspace-shell { flex:1; min-height:0; display:flex; flex-direction:column; background:rgba(255,255,255,.82); border:1px solid rgba(72,94,116,.14); border-radius:16px; overflow:hidden; box-shadow:0 18px 45px rgba(41,68,95,.10),inset 0 1px rgba(255,255,255,.82); backdrop-filter:blur(24px) saturate(140%); }
   .workspace-content { flex:1; min-height:0; position:relative; background:linear-gradient(145deg,rgba(246,249,252,.88),rgba(239,245,249,.84)); }
@@ -61,7 +62,7 @@
         <div class="overview-panel" id="overviewPanel">
           <section class="feature-grid" id="featureGrid"></section>
           <div class="notice" id="moduleNotice">
-            รายการที่ระบุว่า “วางโครงสร้างแล้ว” ถูกเพิ่มไว้ในระบบเรียบร้อย และพร้อมต่อยอดฐานข้อมูล แบบฟอร์ม และขั้นตอนอนุมัติในเฟสถัดไป
+            สถานะอ้างอิงจากความพร้อมของฐานข้อมูล แบบฟอร์ม และขั้นตอนทำงานจริง: “เปิดใช้งานแล้ว”, “ใช้งานพื้นฐาน” หรือ “วางโครงสร้างแล้ว”
           </div>
         </div>
       </div>
@@ -79,6 +80,7 @@
       actions: [{ label: "เปิดทะเบียนนักเรียน", href: "/students.html" },
         { label: "งานวิเคราะห์ผู้เรียนรายบุคคล", href: "/learner-analysis.html", secondary: true }],
       ready: [0, 1, 2, 3, 4],
+      beta: [],
       items: [
         "ประวัติและข้อมูลส่วนตัว",
         "ข้อมูลผู้ปกครองและครอบครัว",
@@ -98,6 +100,7 @@
         { label: "เปิดระบบการลา", href: "/leave.html", secondary: true }
       ],
       ready: [0, 4, 6],
+      beta: [1, 2, 3, 5, 7, 8],
       items: [
         "ประวัติส่วนตัวและข้อมูลการติดต่อ",
         "ตำแหน่ง วิทยฐานะ และอายุราชการ",
@@ -118,6 +121,7 @@
         { label: "จัดตารางสอน", href: "/timetable.html", secondary: true },
         { label: "จัดครูสอนแทน", href: "/substitutes.html", secondary: true }],
       ready: [1],
+      beta: [3, 8, 9, 10, 11, 12, 13, 14, 15],
       items: [
         "หลักสูตรสถานศึกษา",
         "โครงการและแผนงานด้านวิชาการ",
@@ -142,7 +146,8 @@
       title: "ฝ่ายปฐมวัย (งานอนุบาล)",
       description: "บริหารหลักสูตรปฐมวัย การจัดประสบการณ์ การประเมินพัฒนาการ สุขภาวะ ความปลอดภัย และความร่วมมือกับผู้ปกครอง",
       actions: [{ label: "เปิดงานและโครงการปฐมวัย", href: "/department.html?dept=early_childhood" }],
-      ready: [0, 1, 2, 3, 4, 5, 6, 7],
+      ready: [],
+      beta: [0, 1, 2, 3, 4, 5, 6, 7],
       items: [
         "หลักสูตรการศึกษาปฐมวัย",
         "แผนจัดประสบการณ์และหน่วยการเรียนรู้",
@@ -165,6 +170,7 @@
         { label: "ธนาคารโรงเรียน", href: "/school-bank.html", secondary: true }
       ],
       ready: [0, 5, 6, 8, 9],
+      beta: [1, 2, 4, 7],
       items: [
         "โครงการและแผนการใช้จ่าย",
         "งบประมาณประจำปี",
@@ -190,6 +196,7 @@
         { label: "เปิดระบบมอบหมายงาน", href: "/tasks.html", secondary: true }
       ],
       ready: [0, 1, 2, 3, 4, 6, 7],
+      beta: [5],
       items: [
         "โครงการและแผนงานฝ่ายบุคคล",
         "คำสั่งปฏิบัติหน้าที่",
@@ -205,8 +212,10 @@
       number: 7,
       title: "ฝ่ายบริหารงานทั่วไป",
       description: "งานสารบรรณ อาคารสถานที่ ยานพาหนะ ประชาสัมพันธ์ และกิจกรรมโรงเรียน",
-      actions: [{ label: "เปิดงานและโครงการบริหารทั่วไป", href: "/department.html?dept=general" }],
-      ready: [0],
+      actions: [{ label: "เปิดงานและโครงการบริหารทั่วไป", href: "/department.html?dept=general" },
+        { label: "เปิดสารบรรณอิเล็กทรอนิกส์", href: "/correspondence.html", secondary: true }],
+      ready: [0, 1, 2, 3],
+      beta: [4, 5, 6, 7],
       items: [
         "โครงการและแผนงานฝ่ายบริหารทั่วไป",
         "หนังสือราชการ",
@@ -223,7 +232,8 @@
       title: "ระบบดูแลช่วยเหลือนักเรียน",
       description: "คัดกรอง ดูแล ติดตาม ส่งต่อ และประสานความร่วมมือเพื่อช่วยเหลือนักเรียนรายบุคคล",
       actions: [{ label: "เปิดระบบดูแลช่วยเหลือ", href: "/support.html" }, { label: "เปิดข้อมูลนักเรียน", href: "/students.html", secondary: true }],
-      ready: [0, 1, 2, 3, 4, 5, 6, 7],
+      ready: [],
+      beta: [0, 1, 2, 3, 4, 5, 6, 7],
       items: [
         "คัดกรองนักเรียน",
         "เยี่ยมบ้าน",
@@ -241,6 +251,7 @@
       description: "คลังเอกสารกลางที่จัดหมวด ค้นหา กำหนดสิทธิ์ และตรวจสอบประวัติการแก้ไขได้",
       actions: [{ label: "เปิดคลังเอกสาร", href: "/documents.html" }],
       ready: [0, 1, 3, 5],
+      beta: [2, 4, 6],
       items: [
         "จัดเก็บไฟล์แยกตามฝ่าย",
         "แยกตามปีการศึกษา โครงการ และประเภทเอกสาร",
@@ -257,6 +268,7 @@
       description: "รายงานเพื่อการบริหาร หน่วยงานต้นสังกัด และการส่งออกข้อมูลในรูปแบบมาตรฐาน",
       actions: [{ label: "เปิดหน้ารายงาน", href: "/reports.html" }],
       ready: [0, 1, 7],
+      beta: [],
       items: [
         "รายงานข้อมูลนักเรียน",
         "รายงานข้อมูลครูและบุคลากร",
@@ -276,6 +288,7 @@
       description: "กำหนดบทบาทและสิทธิ์แยกตามเมนู ข้อมูล และการดำเนินการของผู้ใช้งานแต่ละกลุ่ม",
       actions: [{ label: "เปิดจัดการผู้ใช้งาน", href: "/admin-users.html" }],
       ready: [0, 1, 2, 7],
+      beta: [],
       items: [
         "ผู้ดูแลระบบ",
         "ผู้บริหาร",
@@ -294,7 +307,8 @@
       title: "ระบบสำรองข้อมูลและความปลอดภัย",
       description: "ควบคุมความปลอดภัย ความต่อเนื่องของข้อมูล การตรวจสอบย้อนหลัง และการใช้งานหลายคนพร้อมกัน",
       actions: [{ label: "เปิดตรวจสอบระบบ", href: "/security.html" }, { label: "จัดการผู้ใช้งาน", href: "/admin-users.html", secondary: true }],
-      ready: [4, 5, 6],
+      ready: [0, 1, 2, 4, 5, 6],
+      beta: [],
       items: [
         "สำรองและกู้คืนข้อมูล",
         "ประวัติการแก้ไขข้อมูล",
@@ -316,12 +330,13 @@
     document.getElementById("moduleCount").textContent = `${module.items.length} หัวข้องาน`;
 
     document.getElementById("featureGrid").innerHTML = module.items.map((item, index) => {
-      const ready = module.ready.includes(index);
+      const status = module.ready.includes(index) ? "ready" : (module.beta || []).includes(index) ? "beta" : "planned";
+      const statusLabel = { ready:"เปิดใช้งานแล้ว", beta:"ใช้งานพื้นฐาน", planned:"วางโครงสร้างแล้ว" }[status];
       return `<article class="feature-card" data-feature-index="${index}">
         <span class="feature-number">${String(index + 1).padStart(2, "0")}</span>
         <h3>${item}</h3>
         <div class="feature-footer">
-          <span class="feature-status ${ready ? "ready" : ""}">${ready ? "เปิดใช้งานแล้ว" : "วางโครงสร้างแล้ว"}</span>
+          <span class="feature-status ${status}">${statusLabel}</span>
         </div>
       </article>`;
     }).join("");

@@ -217,6 +217,7 @@
     <div class="sidebar-footer">
       <span class="role-chip" id="roleChip">—</span>
       <div id="userName">—</div>
+      <a href="/account.html">บัญชีและความปลอดภัย</a>
       <a href="#" id="logoutLink">ออกจากระบบ</a>
     </div>
   </div>
@@ -417,7 +418,7 @@
     ],
     general: [
       { label:"โครงการและแผนงานฝ่ายบริหารทั่วไป", url:"/department.html?dept=general" },
-      { label:"สารบรรณและหนังสือราชการ", url:"/work-center.html?area=general&topic=1,2,3" },
+      { label:"สารบรรณและหนังสือราชการ", url:"/correspondence.html" },
       { label:"อาคาร สถานที่ และห้องเรียน", url:"/maintenance.html?section=facilities" },
       { label:"ยานพาหนะ", url:"/work-center.html?area=general&topic=5" },
       { label:"ประชาสัมพันธ์ ข่าวสาร และกิจกรรม", url:"/work-center.html?area=general&topic=6,7" },
@@ -557,9 +558,9 @@
 
   const SEARCH_TYPE_LABELS = {
     page:"เมนู",student:"นักเรียน",staff:"บุคลากร",project:"โครงการ",document:"เอกสาร",
-    inventory:"พัสดุ",maintenance:"แจ้งซ่อม",task:"งาน",work:"งานฝ่าย",
+    inventory:"พัสดุ",maintenance:"แจ้งซ่อม",task:"งาน",work:"งานฝ่าย",correspondence:"สารบรรณ",
   };
-  const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน",work:"ฝ่าย" };
+  const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน",work:"ฝ่าย",correspondence:"สบ" };
   const SEARCH_PAGES = [
     {title:"แดชบอร์ดภาพรวม",subtitle:"ข้อมูลสรุปสำหรับผู้บริหาร",page_key:"overview",url:"/dashboard.html",keywords:"หน้าหลัก ภาพรวม dashboard"},
     {title:"ข้อมูลนักเรียน",subtitle:"ทะเบียนนักเรียนและผู้ปกครอง",page_key:"students",url:"/students.html",keywords:"นักเรียน ห้องเรียน ผู้ปกครอง"},
@@ -574,6 +575,7 @@
     {title:"ระบบพัสดุและครุภัณฑ์",subtitle:"ทะเบียนวัสดุ ครุภัณฑ์ และการตรวจนับ",page_key:"budget",url:"/inventory.html",keywords:"พัสดุ ครุภัณฑ์ วัสดุ serial"},
     {title:"ฝ่ายบริหารงานบุคคล",subtitle:"ทะเบียนบุคลากร การลา คำสั่ง และพัฒนาบุคลากร",page_key:"personnel",url:"/personnel.html",keywords:"บุคคล ทะเบียนครู ลา เวร pa"},
     {title:"ฝ่ายบริหารงานทั่วไป",subtitle:"อาคาร สารบรรณ และประชาสัมพันธ์",page_key:"general",url:"/modules.html?module=general",keywords:"ทั่วไป อาคาร สารบรรณ"},
+    {title:"สารบรรณอิเล็กทรอนิกส์",subtitle:"ทะเบียนหนังสือรับ ส่ง และภายใน",page_key:"general",url:"/correspondence.html",keywords:"หนังสือราชการ รับ ส่ง เกษียณ สารบรรณ"},
     {title:"อาคารสถานที่และแจ้งซ่อม",subtitle:"แจ้งเหตุและติดตามงานซ่อม",page_key:"maintenance",url:"/maintenance.html",keywords:"ซ่อม ชำรุด อาคาร สถานที่"},
     {title:"ระบบดูแลช่วยเหลือนักเรียน",subtitle:"คัดกรอง เยี่ยมบ้าน และติดตาม",page_key:"student-support",url:"/support.html",keywords:"ทุน กลุ่มเสี่ยง เยี่ยมบ้าน"},
     {title:"เอกสารและคลังไฟล์",subtitle:"ค้นหาและจัดเก็บเอกสาร",page_key:"documents",url:"/documents.html",keywords:"ไฟล์ pdf หนังสือ เอกสาร"},

@@ -23,13 +23,21 @@ export async function getCurrentUser(request, env) {
   const payload = await verifyJWT(token, env.JWT_SECRET);
   if (!payload || !payload.sub) return null;
 
-  const user = await env.DB.prepare(
-    "SELECT id, email, full_name, role, status, created_at FROM users WHERE id = ?"
-  )
-    .bind(payload.sub)
-    .first();
+  let user;
+  try {
+    user = await env.DB.prepare(
+      "SELECT id, email, full_name, role, status, session_version, password_changed_at, last_login_at, created_at FROM users WHERE id = ?"
+    ).bind(payload.sub).first();
+  } catch (error) {
+    // รองรับฐานทดสอบ/ฐานเดิมระหว่าง deploy ก่อน runtime migration ทำงาน
+    if (!String(error?.message || error).toLowerCase().includes("session_version")) throw error;
+    user = await env.DB.prepare(
+      "SELECT id, email, full_name, role, status, created_at FROM users WHERE id = ?"
+    ).bind(payload.sub).first();
+  }
 
   if (!user || user.status !== "active") return null;
+  if (user.session_version != null && Number(payload.sv || 1) !== Number(user.session_version)) return null;
   return user;
 }
 

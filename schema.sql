@@ -14,11 +14,68 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
   approved_at   TEXT,
   approved_by   INTEGER REFERENCES users(id),
+  session_version INTEGER NOT NULL DEFAULT 1,
+  password_changed_at TEXT,
+  last_login_at TEXT,
   deleted_at    TEXT,
   deleted_by    INTEGER REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+
+-- จำกัดการเดารหัสผ่านตามอีเมลและ IP โดยไม่กระทบบัญชีอื่น
+CREATE TABLE IF NOT EXISTS auth_login_throttles (
+  throttle_key TEXT PRIMARY KEY,
+  failure_count INTEGER NOT NULL DEFAULT 0,
+  first_failed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_failed_at TEXT NOT NULL DEFAULT (datetime('now')),
+  locked_until TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_auth_login_throttles_locked ON auth_login_throttles(locked_until);
+
+-- งานสารบรรณอิเล็กทรอนิกส์
+CREATE TABLE IF NOT EXISTS correspondence_counters (
+  buddhist_year INTEGER NOT NULL,
+  register_type TEXT NOT NULL,
+  last_number INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (buddhist_year, register_type)
+);
+CREATE TABLE IF NOT EXISTS correspondence_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  register_type TEXT NOT NULL CHECK(register_type IN ('incoming','outgoing','internal')),
+  register_no TEXT NOT NULL UNIQUE,
+  document_no TEXT,
+  subject TEXT NOT NULL,
+  sender TEXT,
+  recipient TEXT,
+  document_date TEXT,
+  received_date TEXT,
+  urgency TEXT NOT NULL DEFAULT 'normal',
+  confidentiality TEXT NOT NULL DEFAULT 'normal',
+  status TEXT NOT NULL DEFAULT 'received',
+  assigned_to INTEGER REFERENCES users(id),
+  due_date TEXT,
+  direction_note TEXT,
+  document_id INTEGER REFERENCES documents(id),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  updated_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT(datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT(datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS correspondence_updates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  correspondence_id INTEGER NOT NULL REFERENCES correspondence_records(id) ON DELETE CASCADE,
+  previous_status TEXT,
+  new_status TEXT,
+  note TEXT,
+  assigned_to INTEGER REFERENCES users(id),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT(datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_correspondence_type_date ON correspondence_records(register_type,received_date,document_date);
+CREATE INDEX IF NOT EXISTS idx_correspondence_status ON correspondence_records(status,due_date);
+CREATE INDEX IF NOT EXISTS idx_correspondence_assigned ON correspondence_records(assigned_to,status);
+CREATE INDEX IF NOT EXISTS idx_correspondence_updates_record ON correspondence_updates(correspondence_id,created_at DESC);
 
 -- Schema: โมดูลจัดการงาน (มอบหมายงาน/ติดตามสถานะ)
 

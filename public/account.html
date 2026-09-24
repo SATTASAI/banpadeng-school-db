@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ความปลอดภัยบัญชี — โรงเรียนบ้านป่าเด็ง</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .account-page{max-width:820px}.account-head{margin:10px 0 20px}.account-head h1{margin:8px 0 4px}.account-head p,.muted{color:var(--color-text-muted)}
+    .account-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.account-card{padding:22px;border:1px solid var(--color-border);border-radius:18px;background:var(--color-surface);box-shadow:var(--shadow-card)}
+    .account-card h2{margin:0 0 5px;font-size:19px}.account-card form{display:grid;gap:12px;margin-top:18px}.account-card label{display:grid;gap:6px;font-size:13px;font-weight:600}.account-card input{width:100%}
+    .account-card .btn{width:auto;justify-self:start}.profile-row{display:grid;grid-template-columns:130px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--color-border);font-size:13px}.profile-row:last-child{border:0}.profile-row span{color:var(--color-text-muted)}
+    .danger-card{grid-column:1/-1;border-color:#efc7cc;background:#fffafb}.danger-card .btn{background:#b33e4b;color:#fff;border-color:#b33e4b}.message{display:none;margin-top:13px;padding:10px 12px;border-radius:10px;background:#e8f6ee;color:#217248;font-size:13px}.message.error{background:#ffeded;color:#a9323f}.message.visible{display:block}
+    @media(max-width:700px){.account-grid{grid-template-columns:1fr}.danger-card{grid-column:auto}.account-page{padding:18px 14px}.profile-row{grid-template-columns:1fr;gap:2px}}
+  </style>
+</head>
+<body>
+  <main class="app-main account-page">
+    <a href="/dashboard.html">← กลับแดชบอร์ด</a>
+    <header class="account-head"><h1>บัญชีและความปลอดภัย</h1><p>ตรวจสอบบัญชี เปลี่ยนรหัสผ่าน และยกเลิกการเข้าสู่ระบบบนอุปกรณ์อื่น</p></header>
+    <div class="account-grid">
+      <section class="account-card">
+        <h2>ข้อมูลบัญชี</h2><p class="muted">ข้อมูลที่ใช้เข้าสู่ระบบโรงเรียน</p>
+        <div id="profile">กำลังโหลด...</div>
+      </section>
+      <section class="account-card">
+        <h2>เปลี่ยนรหัสผ่าน</h2><p class="muted">การเปลี่ยนรหัสผ่านจะยกเลิก Session เดิมทั้งหมด</p>
+        <form id="passwordForm">
+          <label>รหัสผ่านปัจจุบัน<input id="currentPassword" type="password" autocomplete="current-password" required></label>
+          <label>รหัสผ่านใหม่<input id="newPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <label>ยืนยันรหัสผ่านใหม่<input id="confirmPassword" type="password" minlength="8" autocomplete="new-password" required></label>
+          <button class="btn btn-primary" id="passwordButton">บันทึกรหัสผ่านใหม่</button>
+        </form>
+        <div class="message" id="passwordMessage" role="status"></div>
+      </section>
+      <section class="account-card danger-card">
+        <h2>ออกจากระบบทุกอุปกรณ์</h2>
+        <p class="muted">ใช้เมื่อสงสัยว่ามีผู้อื่นเข้าถึงบัญชี ระบบจะยกเลิก Session ทั้งหมดรวมถึงอุปกรณ์นี้</p>
+        <button class="btn" id="logoutAllButton">ออกจากระบบทุกอุปกรณ์</button>
+      </section>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script>
+    const escapeHtml=value=>String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
+    const roleLabel={teacher:"ครู",staff:"เจ้าหน้าที่",executive:"ผู้บริหาร",superadmin:"ผู้ดูแลระบบ"};
+    const message=(text,error=false)=>{const el=document.getElementById("passwordMessage");el.textContent=text;el.className=`message visible${error?" error":""}`};
+    async function load(){
+      const {user}=await apiRequest("/api/auth/me");if(!user){location="/login.html";return}
+      document.getElementById("profile").innerHTML=`
+        <div class="profile-row"><span>ชื่อ</span><strong>${escapeHtml(user.full_name)}</strong></div>
+        <div class="profile-row"><span>อีเมล</span><strong>${escapeHtml(user.email)}</strong></div>
+        <div class="profile-row"><span>บทบาท</span><strong>${escapeHtml(roleLabel[user.role]||"รอกำหนดสิทธิ์")}</strong></div>
+        <div class="profile-row"><span>เข้าสู่ระบบล่าสุด</span><strong>${user.last_login_at?new Date(user.last_login_at.replace(" ","T")+"Z").toLocaleString("th-TH"):"ยังไม่มีข้อมูล"}</strong></div>`;
+    }
+    document.getElementById("passwordForm").addEventListener("submit",async event=>{
+      event.preventDefault();const current=document.getElementById("currentPassword").value,newPassword=document.getElementById("newPassword").value,confirm=document.getElementById("confirmPassword").value;
+      if(newPassword!==confirm){message("ยืนยันรหัสผ่านใหม่ไม่ตรงกัน",true);return}
+      const button=document.getElementById("passwordButton");button.disabled=true;
+      try{await apiRequest("/api/auth/change-password",{method:"POST",body:{current_password:current,new_password:newPassword}});event.target.reset();message("เปลี่ยนรหัสผ่านเรียบร้อย และยกเลิก Session เดิมแล้ว")}
+      catch(error){message(error.message,true)}finally{button.disabled=false}
+    });
+    document.getElementById("logoutAllButton").addEventListener("click",async()=>{
+      if(!confirm("ต้องการออกจากระบบทุกอุปกรณ์ใช่หรือไม่?"))return;
+      try{await apiRequest("/api/auth/logout-all",{method:"POST"});location="/login.html"}catch(error){message(error.message,true)}
+    });
+    load().catch(error=>message(error.message,true));
+  </script>
+</body>
+</html>
