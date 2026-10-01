@@ -498,6 +498,8 @@ export async function handleRegister(request, env) {
 
 // ---------- /api/auth/login ----------
 async function handleLogin(request, env) {
+  let loginStep="request";
+  try {
   let body;
   try {
     body = await request.json();
@@ -514,13 +516,16 @@ async function handleLogin(request, env) {
 
   const ipAddress = request.headers.get("CF-Connecting-IP") || "unknown";
   const throttleKey = `${email}|${ipAddress}`.slice(0, 500);
+  loginStep="throttle_read";
   const throttle = await env.DB.prepare(
     "SELECT failure_count, locked_until FROM auth_login_throttles WHERE throttle_key = ?"
   ).bind(throttleKey).first();
+  loginStep="throttle_status";
   if (throttle?.locked_until && new Date(`${throttle.locked_until.replace(" ", "T")}Z`).getTime() > Date.now()) {
     return jsonResponse({ error: "มีการลองเข้าสู่ระบบผิดหลายครั้ง กรุณารอ 15 นาทีแล้วลองใหม่" }, 429, { "Retry-After": "900" });
   }
 
+  loginStep="account_read";
   const user = await env.DB.prepare(
     "SELECT id, email, full_name, role, status, password_hash, password_salt FROM users WHERE email = ?"
   )
@@ -528,10 +533,12 @@ async function handleLogin(request, env) {
     .first();
 
   if (!user) {
+    loginStep="failed_login_write";
     await recordFailedLogin(env, throttleKey);
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
+  loginStep="password_verify";
   let ok;
   try { ok = await verifyPassword(password, user.password_salt, user.password_hash); }
   catch (error) {
@@ -544,6 +551,7 @@ async function handleLogin(request, env) {
     return jsonResponse({error:"เกิดข้อผิดพลาดในการตรวจรหัสผ่าน กรุณาลองใหม่อีกครั้ง",code,failure},503);
   }
   if (!ok) {
+    loginStep="failed_login_write";
     await recordFailedLogin(env, throttleKey);
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
@@ -552,11 +560,13 @@ async function handleLogin(request, env) {
     return jsonResponse({ error: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, 403);
   }
 
+  loginStep="successful_login_write";
   await env.DB.batch([
     env.DB.prepare("DELETE FROM auth_login_throttles WHERE throttle_key = ?").bind(throttleKey),
     env.DB.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").bind(user.id),
   ]);
   const current = await env.DB.prepare("SELECT session_version FROM users WHERE id = ?").bind(user.id).first();
+  loginStep="session_sign";
   const token = await signJWT({ sub: user.id, sv: Number(current?.session_version || 1) }, env.JWT_SECRET);
 
   return jsonResponse(
@@ -572,6 +582,13 @@ async function handleLogin(request, env) {
     200,
     { "Set-Cookie": buildSessionCookie(token) }
   );
+  } catch(error) {
+    const message=String(error?.message||"");
+    const schemaError=message.match(/no such (?:table|column): [a-zA-Z0-9_.]+/);
+    const reason=schemaError?schemaError[0]:String(error?.name||"Error");
+    console.error("Login failed",{step:loginStep,reason});
+    return jsonResponse({error:"เกิดข้อผิดพลาดภายในระบบ",code:"LOGIN_STEP_FAILURE",step:loginStep,reason},503);
+  }
 }
 
 async function recordFailedLogin(env, throttleKey) {
@@ -4549,6 +4566,11 @@ export default {
         return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
       }
     } catch (err) {
+      if(pathname==="/api/auth/login"){
+        const message=String(err?.message||"");
+        const schemaError=message.match(/(?:no such (?:table|column)|duplicate column name): [a-zA-Z0-9_.]+/);
+        return jsonResponse({error:"เกิดข้อผิดพลาดภายในระบบ",code:"LOGIN_SETUP_FAILURE",reason:schemaError?schemaError[0]:String(err?.name||"Error")},503);
+      }
       return jsonResponse({ error: "เกิดข้อผิดพลาดภายในระบบ" }, 500);
     }
 
