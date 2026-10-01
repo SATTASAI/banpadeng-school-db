@@ -28,7 +28,14 @@ if (window.parent !== window) {
   }, true);
 }
 
+const DATABASE_QUOTA_KEY="school-database-quota";
+function storedDatabaseQuota(){try{const q=JSON.parse(sessionStorage.getItem(DATABASE_QUOTA_KEY)||"null");if(q&&Date.parse(q.reset_at)>Date.now())return q;sessionStorage.removeItem(DATABASE_QUOTA_KEY);}catch{}return null;}
+function setDatabaseQuota(data){try{if(data)sessionStorage.setItem(DATABASE_QUOTA_KEY,JSON.stringify(data));else sessionStorage.removeItem(DATABASE_QUOTA_KEY);}catch{}window.dispatchEvent(new CustomEvent("database-quota-changed",{detail:data}));}
 async function apiRequest(path, options = {}) {
+  const quota=storedDatabaseQuota();
+  const retryAllowed=["/api/auth/login","/api/auth/me","/api/auth/logout"].includes(path);
+  if(quota&&!retryAllowed){const error=new Error(quota.error);error.status=503;error.data=quota;throw error;}
+
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const headers = isFormData ? {} : { "Content-Type": "application/json" };
   const requestBody = options.body == null
@@ -52,12 +59,14 @@ async function apiRequest(path, options = {}) {
   }
 
   if (!res.ok) {
+    if(data?.code==="DATABASE_DAILY_QUOTA_EXCEEDED")setDatabaseQuota(data);
     const message = (data && data.error) || "เกิดข้อผิดพลาด กรุณาลองใหม่";
     const error = new Error(message);
     error.status = res.status;
     error.data = data;
     throw error;
   }
+  if(path==="/api/auth/login"||(path==="/api/auth/me"&&data?.user))setDatabaseQuota(null);
   if (!["GET","HEAD","OPTIONS"].includes(String(options.method || "GET").toUpperCase()) && !path.startsWith("/api/auth/")) {
     window.dispatchEvent(new CustomEvent("school-data-changed"));
     if (window.parent !== window) window.parent.postMessage({type:"school-data-changed"},window.location.origin);
