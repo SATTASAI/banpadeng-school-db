@@ -7,10 +7,6 @@ function text(value, maxLength = 1000) {
   return cleaned ? cleaned.slice(0, maxLength) : null;
 }
 
-function projectKey(row) {
-  return `${String(row.department || "").trim().toLowerCase()}|${Number(row.fiscal_year)}|${String(row.name || "").trim().toLocaleLowerCase("th")}`;
-}
-
 function parseOwnerEmails(value) {
   return [...new Set(String(value || "")
     .split(/[;,\n]+/)
@@ -31,20 +27,24 @@ async function resolveOwnerIds(env, ownerEmails) {
   return ownerEmails.map((email) => found.get(email));
 }
 
-async function removeEmptyDuplicateProjects(env, canonicalId, duplicateIds) {
-  let removed = 0;
-  for (const duplicateId of duplicateIds) {
-    const dependencies = await env.DB.prepare(
-      `SELECT
-        (SELECT COUNT(*) FROM project_expenses WHERE project_id = ?) AS expense_count,
-        (SELECT COUNT(*) FROM documents WHERE project_id = ?) AS document_count`
-    ).bind(duplicateId, duplicateId).first();
-    if (Number(dependencies?.expense_count || 0) || Number(dependencies?.document_count || 0)) continue;
-    await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(duplicateId).run();
-    await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(duplicateId).run();
-    removed += 1;
+// Name is a label, never a project identifier. Compare the actual details and owners.
+export async function findDuplicateProject(env, row, ownerIds, excludeId = 0) {
+  const { results } = await env.DB.prepare(`SELECT * FROM projects
+    WHERE COALESCE(management_area,department)=? AND fiscal_year=?
+      AND LOWER(TRIM(name))=LOWER(TRIM(?)) AND id<>? ORDER BY id`)
+    .bind(row.department, Number(row.fiscal_year), text(row.name,300), excludeId).all();
+  const owners = [...new Set(ownerIds.map(Number))].sort((a,b)=>a-b);
+  for (const p of results) {
+    if (Number(p.budget_amount) !== Number(row.budget_amount || 0)
+      || text(p.description,3000) !== text(row.description,3000)
+      || (p.funding_type || null) !== (row.funding_type || null)
+      || (p.status || 'ongoing') !== (row.status || 'ongoing')
+      || Number(p.progress_percent || 0) !== Number(row.progress_percent || 0)
+      || Number(p.spent_amount || 0) !== Number(row.spent_amount || 0)) continue;
+    const {results: assigned} = await env.DB.prepare('SELECT user_id FROM project_owners WHERE project_id=? ORDER BY user_id').bind(p.id).all();
+    if (JSON.stringify(assigned.map(o=>Number(o.user_id))) === JSON.stringify(owners)) return p;
   }
-  return removed;
+  return null;
 }
 
 export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds = null) {
@@ -61,30 +61,18 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
   const ownerIds = explicitOwnerIds === null
     ? await resolveOwnerIds(env, parseOwnerEmails(rawRow.owner_emails))
     : [...new Set(explicitOwnerIds.map(Number).filter(Number.isInteger))];
-  const { results: matches } = await env.DB.prepare(
-    `SELECT id FROM projects
-     WHERE COALESCE(management_area,department) = ? AND fiscal_year = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
-     ORDER BY id ASC`
-  ).bind(department, fiscalYear, name).all();
-
-  let projectId;
-  let created;
-  let duplicatesRemoved = 0;
-  if (matches.length) {
-    projectId = Number(matches[0].id);
-    created = false;
-    await env.DB.prepare(
-      `UPDATE projects SET department = ?, management_area = ?, name = ?, budget_amount = ?, description = ?, funding_type=COALESCE(?,funding_type) WHERE id = ?`
-    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, text(rawRow.description, 3000), fundingType, projectId).run();
-    duplicatesRemoved = await removeEmptyDuplicateProjects(env, projectId, matches.slice(1).map((row) => Number(row.id)));
-  } else {
-    const result = await env.DB.prepare(
-      `INSERT INTO projects (department, management_area, name, budget_amount, spent_amount, fiscal_year, description, created_by, funding_type)
-       VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
-    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy, fundingType).run();
-    projectId = Number(result.meta.last_row_id);
-    created = true;
+  const row = { ...rawRow, department, name, fiscal_year:fiscalYear, budget_amount:budgetAmount, funding_type:fundingType };
+  const duplicate = await findDuplicateProject(env,row,ownerIds);
+  if (duplicate && rawRow.confirm_duplicate !== true) {
+    const error = new Error('ชื่อโครงการและรายละเอียดตรงกับโครงการที่มีอยู่ แน่ใจใช่ไหมที่จะกดยืนยัน?');
+    error.code = 'duplicate_project'; error.project_id = duplicate.id;
+    throw error;
   }
+  const result = await env.DB.prepare(
+    `INSERT INTO projects (department, management_area, name, budget_amount, spent_amount, fiscal_year, description, created_by, funding_type)
+     VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
+  ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy, fundingType).run();
+  const projectId = Number(result.meta.last_row_id);
 
   await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
   if (ownerIds.length) {
@@ -92,25 +80,19 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
       env.DB.prepare("INSERT OR IGNORE INTO project_owners (project_id, user_id) VALUES (?, ?)").bind(projectId, ownerId)
     ));
   }
-  return { id: projectId, created, updated: !created, duplicates_removed: duplicatesRemoved };
+  return { id: projectId, created: true, updated: false, duplicates_removed: 0 };
 }
 
 export async function importProjectRows(env, rows, createdBy) {
-  const latestRows = new Map();
-  rows.forEach((row, index) => latestRows.set(projectKey(row), { row, index }));
   let created = 0;
-  let updated = 0;
-  let duplicates_removed = 0;
   const skipped = [];
-  for (const { row, index } of latestRows.values()) {
+  for (let index=0; index<rows.length; index++) {
     try {
-      const result = await upsertProjectRow(env, row, createdBy);
-      created += result.created ? 1 : 0;
-      updated += result.updated ? 1 : 0;
-      duplicates_removed += result.duplicates_removed;
+      await upsertProjectRow(env, rows[index], createdBy);
+      created++;
     } catch (error) {
-      skipped.push({ row: index + 1, reason: error.message || "นำเข้าข้อมูลไม่สำเร็จ" });
+      skipped.push({ row:index+1, reason:error.message || 'นำเข้าข้อมูลไม่สำเร็จ', ...(error.code ? {code:error.code} : {}) });
     }
   }
-  return { created, updated, duplicates_removed, superseded: rows.length - latestRows.size, skipped };
+  return { created, updated:0, duplicates_removed:0, superseded:0, skipped };
 }

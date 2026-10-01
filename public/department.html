@@ -396,17 +396,23 @@
       body.owner_ids = Array.from(document.querySelectorAll("#ownerChecks input:checked")).map((el) => Number(el.value));
     }
 
+    const saveButton = document.getElementById("saveProjectBtn");
+    if (saveButton.disabled) return;
+    saveButton.disabled = true;
+    const save = () => apiRequest(editingProjectId ? `/api/projects/${editingProjectId}` : `/api/departments/${dept}/projects`, {method:editingProjectId ? "PATCH" : "POST",body});
     try {
-      if (editingProjectId) {
-        await apiRequest(`/api/projects/${editingProjectId}`, { method: "PATCH", body });
-      } else {
-        await apiRequest(`/api/departments/${dept}/projects`, { method: "POST", body });
+      try { await save(); }
+      catch (err) {
+        if (err.data?.code !== "duplicate_project") throw err;
+        if (!confirm("ชื่อโครงการและรายละเอียดตรงกับโครงการที่มีอยู่ทั้งหมด\nแน่ใจใช่ไหมที่จะกดยืนยัน?")) return;
+        body.confirm_duplicate = true;
+        await save();
       }
       document.getElementById("projectModal").style.display = "none";
       await loadProjects();
     } catch (err) {
       alert(err.message);
-    }
+    } finally { saveButton.disabled = false; }
   });
 
   (async () => {

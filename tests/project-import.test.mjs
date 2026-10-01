@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { importProjectRows } from "../src/lib/project-import.js";
+import { importProjectRows, upsertProjectRow } from "../src/lib/project-import.js";
 
 function environment() {
   const db = new DatabaseSync(":memory:");
@@ -31,7 +31,7 @@ function environment() {
   return { raw: db, DB: { prepare, async batch(statements) { return Promise.all(statements.map((statement) => statement.run())); } } };
 }
 
-test("project import keeps the latest row and overwrites the existing project", async () => {
+test("project import preserves distinct same-name projects and never overwrites or removes them", async () => {
   const env = environment();
   env.raw.exec(`
     INSERT INTO projects(department,name,budget_amount,fiscal_year,description,created_by)
@@ -43,12 +43,12 @@ test("project import keeps the latest row and overwrites the existing project", 
     { department: "academic", name: "โครงการอ่านคล่อง", fiscal_year: 2570, budget_amount: 3500, description: "ล่าสุด", owner_emails: "teacher@example.invalid" },
   ], 1);
 
-  assert.deepEqual(result, { created: 0, updated: 1, duplicates_removed: 1, superseded: 1, skipped: [] });
+  assert.deepEqual(result, { created: 2, updated: 0, duplicates_removed: 0, superseded: 0, skipped: [] });
   const projects = env.raw.prepare("SELECT * FROM projects").all();
-  assert.equal(projects.length, 1);
-  assert.equal(projects[0].budget_amount, 3500);
-  assert.equal(projects[0].description, "ล่าสุด");
-  assert.deepEqual(env.raw.prepare("SELECT user_id FROM project_owners WHERE project_id=?").all(projects[0].id).map((row) => Number(row.user_id)), [2]);
+  assert.equal(projects.length, 4);
+  assert.equal(projects[3].budget_amount, 3500);
+  assert.equal(projects[3].description, "ล่าสุด");
+  assert.deepEqual(env.raw.prepare("SELECT user_id FROM project_owners WHERE project_id=?").all(projects[3].id).map((row) => Number(row.user_id)), [2]);
 });
 
 test("project import rejects an unknown responsible-person email without changing data", async () => {
@@ -73,4 +73,20 @@ test("project import stores kindergarten as a separate early-childhood area", as
   const project = env.raw.prepare("SELECT * FROM projects").get();
   assert.equal(project.department, "academic");
   assert.equal(project.management_area, "early_childhood");
+});
+
+test('exact duplicate requires explicit confirmation; different details and owners are independent',async()=>{
+ const env=environment();
+ const base={department:'academic',name:'ชื่อซ้ำ',fiscal_year:2570,budget_amount:1000,description:'รายละเอียด',funding_type:'subsidy'};
+ const original=await upsertProjectRow(env,base,1,[2]);
+ await assert.rejects(upsertProjectRow(env,base,1,[2]),e=>e.code==='duplicate_project');
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM projects').get().n,1);
+ for(const change of [{description:'อีกกิจกรรม'},{budget_amount:2000},{funding_type:'school_income'},{fiscal_year:2571},{department:'general'}]) {
+  const result=await upsertProjectRow(env,{...base,...change},1,[2]);assert.notEqual(result.id,original.id);
+ }
+ await upsertProjectRow(env,base,1,[1]);
+ const confirmed=await upsertProjectRow(env,{...base,confirm_duplicate:true},1,[2]);assert.notEqual(confirmed.id,original.id);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM projects').get().n,8);
+ assert.equal(env.raw.prepare('SELECT description FROM projects WHERE id=?').get(original.id).description,base.description);
+ const result=await importProjectRows(env,[{...base,owner_emails:'teacher@example.invalid'}],1);assert.equal(result.skipped[0].code,'duplicate_project');
 });

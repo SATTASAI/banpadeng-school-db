@@ -9,7 +9,7 @@ import {
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { importStaffRows } from "./lib/staff-import.js";
-import { importProjectRows, upsertProjectRow } from "./lib/project-import.js";
+import { importProjectRows, upsertProjectRow, findDuplicateProject } from "./lib/project-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
 import {
   ACADEMIC_CENTERS,
@@ -1641,11 +1641,11 @@ async function handleCreateProject(request, env, department) {
 
   try {
     const result = await upsertProjectRow(env, {
-      department, name, budget_amount: budgetAmount, fiscal_year: fiscalYear, funding_type: body.funding_type, description: body.description,
+      department, name, budget_amount: budgetAmount, fiscal_year: fiscalYear, funding_type: body.funding_type, description: body.description, confirm_duplicate: body.confirm_duplicate,
     }, user.id, ownerIds);
     return jsonResponse(result, result.created ? 201 : 200);
   } catch (error) {
-    return jsonResponse({ error: error.message || "บันทึกโครงการไม่สำเร็จ" }, 400);
+    return jsonResponse({ error: error.message || "บันทึกโครงการไม่สำเร็จ", code:error.code, project_id:error.project_id }, error.code === "duplicate_project" ? 409 : 400);
   }
 }
 
@@ -1716,6 +1716,16 @@ async function handleUpdateProject(request, env, projectId) {
     values.push(body.description || null);
   }
 
+  if (body.confirm_duplicate !== true && (updates.length || Array.isArray(body.owner_ids))) {
+    const existing = await env.DB.prepare('SELECT * FROM projects WHERE id=?').bind(projectId).first();
+    if (!existing) return jsonResponse({error:'ไม่พบโครงการ'},404);
+    const {results: assigned} = await env.DB.prepare('SELECT user_id FROM project_owners WHERE project_id=?').bind(projectId).all();
+    const owners = isAdmin(user) && Array.isArray(body.owner_ids) ? body.owner_ids : assigned.map(o=>o.user_id);
+    const candidate = {...existing, department:existing.management_area || existing.department};
+    for (let i=0;i<updates.length;i++) candidate[updates[i].split(' = ')[0]]=values[i];
+    const duplicate = await findDuplicateProject(env,candidate,owners,projectId);
+    if (duplicate) return jsonResponse({error:'ชื่อโครงการและรายละเอียดตรงกับโครงการที่มีอยู่ แน่ใจใช่ไหมที่จะกดยืนยัน?',code:'duplicate_project',project_id:duplicate.id},409);
+  }
   if (updates.length > 0) {
     values.push(projectId);
     await env.DB.prepare(`UPDATE projects SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
