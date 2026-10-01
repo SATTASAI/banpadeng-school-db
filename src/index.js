@@ -30,6 +30,7 @@ import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
 
+import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
 
@@ -1846,6 +1847,7 @@ async function handleUpdateProjectExpense(request, env, expenseId) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const expense = await getProjectExpense(env, expenseId);
   if (!expense) return jsonResponse({ error: "ไม่พบรายการเบิกจ่าย" }, 404);
+  if (expense.category === "opening_balance") return jsonResponse({error:"ปรับยอดยกมาผ่านช่องยอดใช้ไปแล้วในโครงการเท่านั้น"},409);
   if (expense.workflow_version === 2) return jsonResponse({ error: "กรุณาดำเนินการผ่านระบบเอกสารโครงการ" }, 409);
   const canManage = await isProjectOwner(env, user, expense.project_id);
   if (!canManage) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขรายการนี้" }, 403);
@@ -1909,6 +1911,7 @@ async function handleDeleteProjectExpense(request, env, expenseId) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const expense = await getProjectExpense(env, expenseId);
   if (!expense) return jsonResponse({ error: "ไม่พบรายการเบิกจ่าย" }, 404);
+  if (expense.category === "opening_balance") return jsonResponse({error:"ปรับยอดยกมาผ่านช่องยอดใช้ไปแล้วในโครงการเท่านั้น"},409);
   if (expense.workflow_version === 2) return jsonResponse({ error: "กรุณาดำเนินการผ่านระบบเอกสารโครงการ" }, 409);
   const canManage = await isProjectOwner(env, user, expense.project_id);
   if (!canManage) return jsonResponse({ error: "ไม่มีสิทธิ์ลบรายการนี้" }, 403);
@@ -4343,6 +4346,8 @@ export default {
       if (timetableResponse) return timetableResponse;
       const schoolBankResponse = await handleSchoolBankRoute(request, env, pathname, method);
       if (schoolBankResponse) return schoolBankResponse;
+      const balanceResponse = await handleProjectBalanceRoute(request,env,pathname,method);
+      if (balanceResponse) return balanceResponse;
       const projectWorkflowResponse = await handleProjectWorkflowRoute(request, env, pathname, method);
       if (projectWorkflowResponse) return projectWorkflowResponse;
       const budgetResponse = await handleBudgetRoute(request, env, pathname, method);

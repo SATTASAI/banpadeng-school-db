@@ -1,3 +1,4 @@
+import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary } from "./project-workflow.js";
 
@@ -95,6 +96,7 @@ export async function ensureBudgetSchema(env) {
     env.DB.prepare(`UPDATE projects SET fiscal_year=CAST(strftime('%Y',COALESCE(created_at,datetime('now'))) AS INTEGER)+CASE WHEN CAST(strftime('%m',COALESCE(created_at,datetime('now'))) AS INTEGER)>=10 THEN 544 ELSE 543 END WHERE fiscal_year IS NULL`),
   ]);
   await ensureProjectWorkflowSchema(env);
+  await ensureProjectBalanceSchema(env);
   readyDatabases.add(env.DB);
 }
 
@@ -298,6 +300,7 @@ async function updateRequest(request, env, id) {
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
+  if (row.category === "opening_balance") return jsonResponse({error:"ปรับยอดยกมาผ่านช่องยอดใช้ไปแล้วในโครงการเท่านั้น"},409);
   if (row.workflow_version === 2) return jsonResponse({ error: "กรุณาแก้ไขผ่านระบบเอกสารโครงการ" }, 409);
   if (Number(row.created_by) !== Number(user.id)) return jsonResponse({ error: "เฉพาะผู้จัดทำคำขอเท่านั้นที่แก้ไขได้" }, 403);
   if (row.status !== "draft") return jsonResponse({ error: "คำขอที่ส่งเข้ากระบวนการแล้วแก้ไขไม่ได้ เว้นแต่ถูกส่งกลับ" }, 409);
@@ -333,6 +336,7 @@ async function workflowAction(request, env, id) {
   if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department,p.budget_amount FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
+  if (row.category === "opening_balance") return jsonResponse({error:"ปรับยอดยกมาผ่านช่องยอดใช้ไปแล้วในโครงการเท่านั้น"},409);
   if (row.workflow_version === 2) return jsonResponse({ error: "กรุณาดำเนินการผ่านหน้าโครงการฝ่ายอื่น ๆ" }, 409);
   if (body.action === "submit") {
     if (Number(row.created_by) !== Number(user.id) || row.status !== "draft") return jsonResponse({ error: "ส่งได้เฉพาะคำขอร่างของตนเอง" }, 409);

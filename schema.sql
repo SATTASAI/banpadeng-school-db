@@ -975,3 +975,26 @@ CREATE TABLE IF NOT EXISTS auth_reset_throttles (
   window_started_at TEXT NOT NULL,
   last_requested_at TEXT NOT NULL
 );
+
+-- Corrections of historical project spending require administrator/executive approval.
+CREATE TABLE IF NOT EXISTS project_balance_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  base_total REAL NOT NULL, requested_total REAL NOT NULL, reason TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+  requested_by INTEGER NOT NULL REFERENCES users(id), reviewed_by INTEGER REFERENCES users(id), review_note TEXT,
+  created_at TEXT NOT NULL DEFAULT(datetime('now')), reviewed_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_balance_pending_project ON project_balance_requests(project_id) WHERE status='pending';
+CREATE TABLE IF NOT EXISTS project_balance_notifications (
+  request_id INTEGER NOT NULL REFERENCES project_balance_requests(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id), read_at TEXT,
+  PRIMARY KEY(request_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS project_balance_changes (
+  token TEXT PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  old_total REAL NOT NULL, new_total REAL NOT NULL, reason TEXT NOT NULL,
+  actor_id INTEGER NOT NULL REFERENCES users(id), request_id INTEGER REFERENCES project_balance_requests(id),
+  created_at TEXT NOT NULL DEFAULT(datetime('now'))
+);

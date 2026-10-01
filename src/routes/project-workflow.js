@@ -125,6 +125,8 @@ export async function projectWorkflowSnapshots(env, user, department = null, fis
   if (department) { filters.push("COALESCE(p.management_area,p.department)=?"); values.push(department); }
   if (fiscalYear) { filters.push("p.fiscal_year=?"); values.push(fiscalYear); }
   const { results } = await env.DB.prepare(`SELECT p.*,COALESCE(p.management_area,p.department) AS department,
+    COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid' AND e.category='opening_balance'),0) AS opening_spent_amount,
+    COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid' AND e.category<>'opening_balance'),0) AS confirmed_spent_amount,
     COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid'),0) AS spent_amount,
     COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status IN ('pending','approved')),0) AS reserved_amount,
     (SELECT COUNT(*) FROM project_expenses e WHERE e.project_id=p.id AND e.status='pending' AND e.workflow_version=2 AND e.current_step='finance_queue') AS new_request_count,
@@ -149,7 +151,7 @@ async function overview(request, env, user) {
   const fundingSummary = await projectFundingSummary(env,year||currentProjectFiscalYear());
   const projects = await projectWorkflowSnapshots(env, user, department, year);
   const ids = projects.map(p => p.id);
-  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance } });
+  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance, can_balance_edit: isAdmin(user) } });
   const placeholders = ids.map(() => "?").join(",");
   const { results: requests } = await env.DB.prepare(`SELECT e.*,p.name AS project_name,COALESCE(p.management_area,p.department) AS department,u.full_name AS requester_name
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
@@ -166,7 +168,7 @@ async function overview(request, env, user) {
   const { results: notifications } = await env.DB.prepare(`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
     JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id
     WHERE n.user_id=? AND v.project_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`).bind(user.id,...ids).all();
-  return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance }, requests: requests.map(e => ({ ...e,
+  return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
     items: items.filter(i => i.expense_id === e.id), documents: docs.filter(d => d.expense_id === e.id), can_edit: e.status === "draft" && Number(e.created_by) === Number(user.id),
     can_attach: finance || projects.find(p => p.id === e.project_id)?.can_request || Number(e.created_by) === Number(user.id) })) });
 }

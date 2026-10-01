@@ -10,6 +10,7 @@ window.ProjectWorkflow = (() => {
   const field = (label,content,wide=false) => `<label class="field ${wide?'wf-wide':''}"><span>${label}</span>${content}</label>`;
 
   function mount(root, options = {}) {
+    window.addEventListener("project-balances-updated",()=>refresh().catch(()=>{}));
     let data={projects:[],requests:[],notifications:[],permissions:{}},openedProject=Number(options.project)||null, search='', busy=false;
     const dialog=document.createElement('dialog');dialog.className='wf-modal';document.body.append(dialog);
     const statusBox=document.createElement('div');statusBox.className='wf-error';root.before(statusBox);
@@ -30,7 +31,7 @@ window.ProjectWorkflow = (() => {
         <div class="wf-projects">${projects.map(p=>`<article class="wf-project" data-project="${p.id}">
           ${p.unread_count||p.new_request_count?`<small class="wf-alert">${p.new_request_count?`รอรับ ${p.new_request_count}`:`แจ้งเตือน ${p.unread_count}`}</small>`:''}
           <h3>${esc(p.name)}</h3><div class="wf-muted">ฝ่าย${departments[p.department]||esc(p.department)} · ปีงบประมาณ ${p.fiscal_year}</div>
-          <div class="wf-muted">${fundingTypes[p.funding_type]||"ยังไม่ระบุประเภทเงิน"}</div><div class="wf-muted">ผู้รับผิดชอบ: ${esc(p.owner_names||'ยังไม่ระบุ')}</div>${balances(p)}
+          <div class="wf-muted">${fundingTypes[p.funding_type]||"ยังไม่ระบุประเภทเงิน"}</div><div class="wf-muted">ผู้รับผิดชอบ: ${esc(p.owner_names||'ยังไม่ระบุ')}</div>${balances(p)}${window.ProjectBalance?ProjectBalance.field(p,data.permissions.can_balance_edit):""}
           <div class="wf-actions"><button class="btn btn-ghost" data-open="${p.id}">เอกสาร / ความคืบหน้า</button>
           ${p.can_request&&p.status!=='cancelled'?p.funding_type?`<button class="btn btn-primary" data-new="${p.id}">+ จัดทำคำขอเบิกจ่าย</button>`:`<a class="btn btn-primary" href="/department.html?dept=${p.department}&project=${p.id}">ระบุประเภทเงินโครงการ</a>`:''}
           ${data.permissions.can_finance&&options.finance?`<button class="btn btn-ghost" data-allocation="${p.id}">ปรับวงเงินโครงการ</button>`:''}</div>
@@ -121,8 +122,8 @@ window.ProjectWorkflow = (() => {
         finally{busy=false;button.disabled=false;button.textContent='อัปโหลดและแจ้งเจ้าหน้าที่';}};
     }
     function allocation(id){const p=data.projects.find(p=>p.id===id);modal(`<h2>ปรับวงเงินโครงการ</h2><p>${esc(p.name)}</p><form>${field('ยอดจัดสรร (บาท)',`<input name="budget_amount" type="number" required min="${p.spent_amount+p.reserved_amount}" step="0.01" value="${p.budget_amount}">`)}<p>จ่ายแล้ว ${money(p.spent_amount)} · รอดำเนินการ ${money(p.reserved_amount)}</p><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">บันทึก</button></div></form>`);dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await apiRequest(`/api/projects/${id}`,{method:'PATCH',body:{budget_amount:Number(e.target.elements.budget_amount.value)}});dialog.close();await refresh();options.onChange?.();}catch(err){modalError(err.message);}};}
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!dialog.open)refresh().catch(()=>{});});
-    const timer=setInterval(()=>{if(!document.hidden&&!dialog.open)refresh().catch(()=>{});},15000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!dialog.open&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]'))refresh().catch(()=>{});});
+    const timer=setInterval(()=>{if(!document.hidden&&!dialog.open&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]'))refresh().catch(()=>{});},15000);
     window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
     return {refresh,newRequest,openProject};
   }

@@ -69,7 +69,7 @@
     .project-actions { justify-content:flex-start; }
   }
 </style>
-</head>
+<link rel="stylesheet" href="/css/project-balance.css"></head>
 <body>
 <div class="app-shell">
   <div class="app-topbar">
@@ -160,7 +160,7 @@
   </div>
 </div>
 
-<script src="/js/api.js"></script>
+<script src="/js/api.js"></script><script src="/js/project-balance.js"></script>
 <script>
   const DEPT_LABELS = {
     academic: "ฝ่ายบริหารงานวิชาการ",
@@ -299,6 +299,7 @@
                 <span>รอดำเนินการ <strong>${money(p.reserved_amount)}</strong></span>
                 <span>วงเงินที่ขอได้ <strong>${money(p.available_amount)}</strong></span>
               </div>
+              ${ProjectBalance.field(p,currentUser.is_admin)}
               ${p.notification_message ? `<div class="wf-notice" style="margin-top:8px;">${escapeHtml(p.notification_message)}</div>` : ""}
             </div>
             <div class="project-actions">
@@ -413,6 +414,8 @@
     if (!user) { window.location.href = "/login.html"; return; }
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
+    const balanceInbox=document.createElement("div");document.getElementById("projectList").before(balanceInbox);ProjectBalance.mountInbox(balanceInbox,{department:dept});
+    window.addEventListener("project-balances-updated",()=>loadProjects());
 
     document.getElementById("newProjectBtn").style.display = "inline-flex";
     if (user.is_admin) {
@@ -424,7 +427,7 @@
 
     await loadTopics();
     await loadProjects();
-    setInterval(() => { if (!document.hidden && document.getElementById("projectModal").style.display !== "flex") loadProjects().catch(() => {}); },15000);
+    setInterval(() => { if (!document.hidden && !document.querySelector(".pb-dialog[open]") && !document.activeElement?.closest?.("[data-balance-field]") && document.getElementById("projectModal").style.display !== "flex") loadProjects().catch(() => {}); },15000);
   })();
 </script>
 </body>

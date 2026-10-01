@@ -41,7 +41,7 @@ export async function ensureDashboardRevision(env) {
     env.DB.prepare('INSERT OR IGNORE INTO dashboard_revision(id,revision) VALUES(1,0)'),
   ]);
   const tables=['projects','project_expenses','project_owners','budget_income','leave_requests','tasks','students','personnel_records',
-    'users','academic_years','academic_terms','inventory_items','inventory_transactions'];
+    'project_balance_requests','project_balance_changes','users','academic_years','academic_terms','inventory_items','inventory_transactions'];
   const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   const names=new Set(existing.results.map(r=>r.name));
   const statements=[];

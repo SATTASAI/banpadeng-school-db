@@ -176,7 +176,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/project-workflow.css">
-</head>
+<link rel="stylesheet" href="/css/project-balance.css"></head>
 <body>
 <div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
 <div class="layout">
@@ -268,6 +268,7 @@
         <div class="budget-summary-grid" id="leaveSummary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
         <div style="overflow:auto;margin-top:16px" id="leaveTypeSummary"></div>
       </section>
+      <section id="balanceRequestInbox"></section>
       <section id="fundingSummary" style="margin-top:22px"></section>
 
       <section class="dashboard-section">
@@ -335,7 +336,7 @@
   </div>
 </div>
 
-<script src="/js/api.js"></script>
+<script src="/js/api.js"></script><script src="/js/project-balance.js"></script>
 <script src="/js/project-workflow.js"></script>
 <script>
   const PAGE_URLS = {
@@ -792,6 +793,7 @@
       const data = await apiRequest(`/api/overview?fiscal_year=${encodeURIComponent(selectedYear)}`);
       if (selectedYear !== document.getElementById("dashboardFiscalYear").value) {overviewDirty=true;return;}
       overviewRevision=data.data_revision;
+      ProjectBalance.refreshInboxes();
       const yearSelect=document.getElementById("dashboardFiscalYear");
       yearSelect.innerHTML='<option value="all">ทุกปีงบประมาณ</option>'+[...new Set([...(data.fiscal_years||[]),...(selectedYear!=="all"?[Number(selectedYear)]:[])])].sort((a,b)=>b-a).map(year=>`<option value="${Number(year)}">${Number(year)}</option>`).join('');
       yearSelect.value=selectedYear;
@@ -950,6 +952,7 @@
       return;
     }
     dashboardUser = user;
+    ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox"));
 
     document.getElementById("roleChip").textContent = ROLE_LABELS[user.role] || user.role;
     document.getElementById("userName").textContent = user.full_name;
