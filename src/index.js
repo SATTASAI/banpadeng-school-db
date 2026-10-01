@@ -1,3 +1,4 @@
+import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
 import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
 import {
@@ -4384,6 +4385,9 @@ export default {
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);
       const lineTargetMatch = pathname.match(/^\/api\/line\/targets\/(\d+)$/);
       if (lineTargetMatch && method === "PATCH") return await handleUpdateLineTarget(request, env, Number(lineTargetMatch[1]));
+
+      const cleanupResponse=await handleAdminCleanup(request,env,pathname,method);
+      if(cleanupResponse)return cleanupResponse;
 
       if (pathname === "/api/admin/users" && method === "GET") return await handleAdminListUsers(request, env);
 

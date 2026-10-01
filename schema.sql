@@ -922,15 +922,17 @@ CREATE TABLE IF NOT EXISTS budget_supporting_documents (
       title TEXT NOT NULL,native_document_id INTEGER NOT NULL UNIQUE REFERENCES documents(id),created_by INTEGER NOT NULL REFERENCES users(id),notification_sent INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT(datetime('now')));
 
+CREATE TABLE IF NOT EXISTS admin_cleanup_expense_guard(expense_id INTEGER PRIMARY KEY);
+
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_delete BEFORE DELETE ON project_expenses
-      WHEN OLD.workflow_version=2 AND OLD.status='paid' BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END;
+      WHEN OLD.workflow_version=2 AND OLD.status='paid' AND NOT EXISTS(SELECT 1 FROM admin_cleanup_expense_guard WHERE expense_id=OLD.id) BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_insert BEFORE INSERT ON budget_request_items
       WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=NEW.expense_id AND workflow_version=2 AND status<>'draft')
       BEGIN SELECT RAISE(ABORT,'request_not_draft'); END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_delete BEFORE DELETE ON budget_request_items
-      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=OLD.expense_id AND workflow_version=2 AND status<>'draft')
+      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=OLD.expense_id AND workflow_version=2 AND status<>'draft') AND NOT EXISTS(SELECT 1 FROM admin_cleanup_expense_guard WHERE expense_id=OLD.expense_id)
       BEGIN SELECT RAISE(ABORT,'request_not_draft'); END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_funding_lock BEFORE UPDATE OF funding_type ON projects
@@ -1004,3 +1006,8 @@ CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,
  read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key)
 );
+
+-- Admin test cleanup: retained snapshots and short-lived, revocable mode sessions.
+CREATE TABLE IF NOT EXISTS admin_cleanup_archive(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,scope TEXT NOT NULL,reason TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')));
+CREATE TABLE IF NOT EXISTS admin_cleanup_assert(valid INTEGER NOT NULL CHECK(valid=1));
+CREATE TABLE IF NOT EXISTS admin_cleanup_sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL,expires_at INTEGER NOT NULL);

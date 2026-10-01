@@ -28,6 +28,7 @@ export async function ensureProjectWorkflowSchema(env) {
     catch (e) { if (!String(e.message).toLowerCase().includes("duplicate column")) throw e; }
   }
   await env.DB.batch([
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_cleanup_expense_guard(expense_id INTEGER PRIMARY KEY)"),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS project_workflow_events (
       token TEXT PRIMARY KEY,expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
       project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,event_type TEXT NOT NULL,
@@ -40,13 +41,15 @@ export async function ensureProjectWorkflowSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
       title TEXT NOT NULL,native_document_id INTEGER NOT NULL UNIQUE REFERENCES documents(id),created_by INTEGER NOT NULL REFERENCES users(id),notification_sent INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_workflow_paid_delete"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_delete BEFORE DELETE ON project_expenses
-      WHEN OLD.workflow_version=2 AND OLD.status='paid' BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END`),
+      WHEN OLD.workflow_version=2 AND OLD.status='paid' AND NOT EXISTS(SELECT 1 FROM admin_cleanup_expense_guard WHERE expense_id=OLD.id) BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END`),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_insert BEFORE INSERT ON budget_request_items
       WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=NEW.expense_id AND workflow_version=2 AND status<>'draft')
       BEGIN SELECT RAISE(ABORT,'request_not_draft'); END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_workflow_items_delete"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_delete BEFORE DELETE ON budget_request_items
-      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=OLD.expense_id AND workflow_version=2 AND status<>'draft')
+      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=OLD.expense_id AND workflow_version=2 AND status<>'draft') AND NOT EXISTS(SELECT 1 FROM admin_cleanup_expense_guard WHERE expense_id=OLD.expense_id)
       BEGIN SELECT RAISE(ABORT,'request_not_draft'); END`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_project_notifications_unread ON project_notifications(user_id,read_at)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_supporting_documents_expense ON budget_supporting_documents(expense_id)"),

@@ -57,7 +57,7 @@ window.ProjectWorkflow = (() => {
       const project=data.projects.find(p=>p.id===id);if(!project)return '';
       const requests=data.requests.filter(e=>e.project_id===id);
       return `<section class="wf-document-view" data-details data-project-details="${id}">${inline?'<h4 class="wf-section-label">คำขอเบิกจ่ายและเอกสาร</h4>':`<h2>${esc(project.name)} — เอกสารและความคืบหน้า</h2>`}
-        ${requests.map(e=>`<article class="wf-request ${e.current_step==='finance_queue'?'wf-request--attention':''}"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4>
+        ${requests.map(e=>`<article data-cleanup-request="${e.id}" class="wf-request ${e.current_step==='finance_queue'?'wf-request--attention':''}"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4>
           <span class="wf-state ${esc(e.current_step)}">${states[e.current_step]||esc(e.status)}</span>
           <p>${esc(e.request_purpose)}</p><div class="wf-muted">ผู้ขอ: ${esc(e.requester_name)} · ความสำคัญ: ${e.priority==='urgent'?'ด่วนมาก':e.priority==='high'?'ด่วน':'ปกติ'}${e.needed_date?' · ต้องการใช้เงิน '+esc(e.needed_date):''}</div>
           <p class="wf-muted">เหตุผล: ${esc(e.necessity)}${e.review_note?'<br>หมายเหตุเจ้าหน้าที่: '+esc(e.review_note):''}</p>

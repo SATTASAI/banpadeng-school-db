@@ -38,7 +38,7 @@ async function apiRequest(path, options = {}) {
       : JSON.stringify(options.body);
   const res = await fetch(path, {
     method: options.method || "GET",
-    headers,
+    headers: {...headers,...(options.headers||{})},
     body: requestBody,
     credentials: "same-origin",
     cache: "no-store",
@@ -76,3 +76,6 @@ const ROLE_LABELS = {
 // Shared notification bar uses the same authenticated API as the current page.
 (() => { const css=document.createElement('link');css.rel='stylesheet';css.href='/css/global-notifications.css';document.head.append(css);
  const script=document.createElement('script');script.src='/js/global-notifications.js';document.head.append(script); })();
+
+// Admin-only test cleanup controls across the workspace.
+(() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/admin-cleanup.css";document.head.append(css);const script=document.createElement("script");script.src="/js/admin-cleanup.js";document.head.append(script);})();
