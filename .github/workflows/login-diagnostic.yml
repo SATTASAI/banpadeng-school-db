@@ -22,8 +22,8 @@ jobs:
           import json,os,urllib.request,urllib.error,re
           root='https://api.cloudflare.com/client/v4/accounts/'+os.environ['CF_ACCOUNT_ID']
           headers={'Authorization':'Bearer '+os.environ['CF_API_TOKEN'],'Content-Type':'application/json'}
-          def call(path,body=None):
-            req=urllib.request.Request(root+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
+          def call(path,body=None,method=None):
+            req=urllib.request.Request(root+path,headers=headers,data=json.dumps(body).encode() if body is not None else None,method=method)
             try:
               with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
             except urllib.error.HTTPError as e:
@@ -35,7 +35,7 @@ jobs:
           import secrets,time
           token=secrets.token_hex(32)+':'+str(int(time.time())+600)
           secret_path='/workers/scripts/banpadeng-school-db/secrets'
-          configured=call(secret_path,{'name':'LOGIN_DIAGNOSTIC_TOKEN','text':token,'type':'secret_text'})
+          configured=call(secret_path,{'name':'LOGIN_DIAGNOSTIC_TOKEN','text':token,'type':'secret_text'},method='PUT')
           if not configured or not configured.get('success'):raise SystemExit('Cannot configure private diagnostics')
           try:
             for attempt in range(50):
