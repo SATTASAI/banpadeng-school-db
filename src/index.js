@@ -583,9 +583,9 @@ async function handleLogin(request, env) {
     { "Set-Cookie": buildSessionCookie(token) }
   );
   } catch(error) {
-    const message=String(error?.message||"");
+    const message=String(error?.cause?.message||error?.message||"");
     const schemaError=message.match(/no such (?:table|column): [a-zA-Z0-9_.]+/);
-    const reason=schemaError?schemaError[0]:String(error?.name||"Error");
+    const reason=schemaError?schemaError[0]:loginStep==="account_read"?message.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,"[email]").replace(/[a-f0-9]{32,}/gi,"[redacted]").slice(0,240):String(error?.name||"Error");
     console.error("Login failed",{step:loginStep,reason});
     return jsonResponse({error:"เกิดข้อผิดพลาดภายในระบบ",code:"LOGIN_STEP_FAILURE",step:loginStep,reason},503);
   }
