@@ -8,7 +8,7 @@ function environment() {
   db.exec(`
     CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,full_name TEXT,role TEXT,status TEXT);
     CREATE TABLE projects(id INTEGER PRIMARY KEY AUTOINCREMENT,department TEXT,management_area TEXT,name TEXT,budget_amount REAL,
-      spent_amount REAL DEFAULT 0,fiscal_year INTEGER,status TEXT DEFAULT 'ongoing',description TEXT,created_by INTEGER);
+      spent_amount REAL DEFAULT 0,fiscal_year INTEGER,status TEXT DEFAULT 'ongoing',description TEXT,created_by INTEGER,funding_type TEXT);
     CREATE TABLE project_owners(project_id INTEGER,user_id INTEGER,PRIMARY KEY(project_id,user_id));
     CREATE TABLE project_expenses(id INTEGER PRIMARY KEY,project_id INTEGER);
     CREATE TABLE documents(id INTEGER PRIMARY KEY,project_id INTEGER);

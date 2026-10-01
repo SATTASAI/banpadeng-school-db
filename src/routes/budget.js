@@ -1,9 +1,10 @@
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
+import { ensureProjectWorkflowSchema, projectFundingSummary } from "./project-workflow.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
 const CATEGORIES = ["materials", "equipment", "services", "compensation", "utilities", "travel", "food", "opening_balance", "other"];
 const PAYMENT_METHODS = ["transfer", "cash", "cheque", "other"];
-const SOURCE_TYPES = ["subsidy", "school_income", "donation", "other"];
+const SOURCE_TYPES = ["free_education", "subsidy", "school_income", "donation", "other"];
 const WORKFLOW_STEPS = [
   { key: "department_head", label: "หัวหน้าฝ่าย", scoped: true },
   { key: "deputy_director", label: "รองผู้อำนวยการผู้ดูแลฝ่าย", scoped: true },
@@ -93,6 +94,7 @@ export async function ensureBudgetSchema(env) {
     env.DB.prepare("UPDATE project_expenses SET payment_date=substr(paid_at,1,10) WHERE status='paid' AND payment_date IS NULL"),
     env.DB.prepare(`UPDATE projects SET fiscal_year=CAST(strftime('%Y',COALESCE(created_at,datetime('now'))) AS INTEGER)+CASE WHEN CAST(strftime('%m',COALESCE(created_at,datetime('now'))) AS INTEGER)>=10 THEN 544 ELSE 543 END WHERE fiscal_year IS NULL`),
   ]);
+  await ensureProjectWorkflowSchema(env);
   readyDatabases.add(env.DB);
 }
 
@@ -195,17 +197,17 @@ async function overview(request, env) {
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const year = Number(new URL(request.url).searchParams.get("fiscal_year")) || fiscalYear();
   const [summary, incomes, projects, requests, statusRows, audits, approvalRows, itemRows, roleRows, users] = await Promise.all([
-    env.DB.prepare(`SELECT COALESCE((SELECT SUM(budget_amount) FROM projects WHERE status<>'cancelled' AND fiscal_year=?),0) total_budget,
+    env.DB.prepare(`SELECT COALESCE((SELECT SUM(budget_amount) FROM projects WHERE fiscal_year=?),0) total_budget,
       COALESCE((SELECT SUM(amount) FROM project_expenses WHERE fiscal_year=? AND status='pending'),0) pending_amount,
       COALESCE((SELECT SUM(amount) FROM project_expenses WHERE fiscal_year=? AND status='approved'),0) approved_amount,
       COALESCE((SELECT SUM(amount) FROM project_expenses WHERE fiscal_year=? AND status='paid'),0) paid_amount,
       COALESCE((SELECT SUM(amount) FROM budget_income WHERE fiscal_year=?),0) income_amount`).bind(year, year, year, year, year).first(),
     env.DB.prepare(`SELECT i.*,u.full_name creator_name FROM budget_income i LEFT JOIN users u ON u.id=i.created_by WHERE i.fiscal_year=? ORDER BY i.received_date DESC,i.id DESC`).bind(year).all(),
     env.DB.prepare(`SELECT p.id,COALESCE(p.management_area,p.department) AS department,p.name,p.budget_amount,p.spent_amount,p.status,p.description,
-      COALESCE(SUM(CASE WHEN e.fiscal_year=? AND e.status='pending' THEN e.amount ELSE 0 END),0) pending_amount,
-      COALESCE(SUM(CASE WHEN e.fiscal_year=? AND e.status='approved' THEN e.amount ELSE 0 END),0) approved_amount,
+      COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.fiscal_year=? AND e.status='pending'),0) pending_amount,
+      COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.fiscal_year=? AND e.status='approved'),0) approved_amount,
       GROUP_CONCAT(DISTINCT u.full_name) owner_names,MAX(CASE WHEN po.user_id=? THEN 1 ELSE 0 END) can_request
-      FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id
+      FROM projects p
       LEFT JOIN project_owners po ON po.project_id=p.id LEFT JOIN users u ON u.id=po.user_id
       WHERE p.status<>'cancelled' AND p.fiscal_year=? GROUP BY p.id ORDER BY COALESCE(p.management_area,p.department),p.name`).bind(year, year, user.id, year).all(),
     env.DB.prepare(`SELECT e.*,p.name project_name,COALESCE(p.management_area,p.department) AS department,creator.full_name requester_name,approver.full_name approver_name,
@@ -241,7 +243,7 @@ async function overview(request, env) {
       can_pay: row.status === "approved" && row.current_step === "finance_completion" && Number(financeAssignment?.user_id) === Number(user.id),
       document_ready: Boolean(row.workflow_completed_at && ["approved", "paid"].includes(row.status)) };
   });
-  return jsonResponse({ fiscal_year: year,
+  return jsonResponse({ fiscal_year: year, funding_summary: await projectFundingSummary(env,year),
     summary: { ...summary, total_budget: total, pending_amount: pending, approved_amount: approved, paid_amount: paid, income_amount: number(summary.income_amount), available_amount: total - pending - approved - paid },
     status_totals: totals,
     projects: projects.results.map((row) => ({ ...row, budget_amount: number(row.budget_amount), spent_amount: number(row.spent_amount), pending_amount: number(row.pending_amount), approved_amount: number(row.approved_amount), can_request: isAdmin(user) || Boolean(row.can_request) })),
@@ -296,6 +298,7 @@ async function updateRequest(request, env, id) {
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
+  if (row.workflow_version === 2) return jsonResponse({ error: "กรุณาแก้ไขผ่านระบบเอกสารโครงการ" }, 409);
   if (Number(row.created_by) !== Number(user.id)) return jsonResponse({ error: "เฉพาะผู้จัดทำคำขอเท่านั้นที่แก้ไขได้" }, 403);
   if (row.status !== "draft") return jsonResponse({ error: "คำขอที่ส่งเข้ากระบวนการแล้วแก้ไขไม่ได้ เว้นแต่ถูกส่งกลับ" }, 409);
   const body = await request.json().catch(() => null), purpose = clean(body?.request_purpose || body?.description, 1000), necessity = clean(body?.necessity, 1500);
@@ -330,6 +333,7 @@ async function workflowAction(request, env, id) {
   if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   const row = await env.DB.prepare(`SELECT e.*,COALESCE(p.management_area,p.department) AS department,p.budget_amount FROM project_expenses e JOIN projects p ON p.id=e.project_id WHERE e.id=?`).bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" }, 404);
+  if (row.workflow_version === 2) return jsonResponse({ error: "กรุณาดำเนินการผ่านหน้าโครงการฝ่ายอื่น ๆ" }, 409);
   if (body.action === "submit") {
     if (Number(row.created_by) !== Number(user.id) || row.status !== "draft") return jsonResponse({ error: "ส่งได้เฉพาะคำขอร่างของตนเอง" }, 409);
     const limitError = await budgetLimitError(env, row.project_id, row.amount, id);
@@ -486,7 +490,7 @@ async function exportFinancialReport(request, env) {
   if (report.response) return report.response;
   const departments = { academic: "วิชาการ", early_childhood: "ปฐมวัย (งานอนุบาล)", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
   const statuses = { draft: "ร่าง", pending: "กำลังอนุมัติ", approved: "อนุมัติแล้ว", paid: "จ่ายแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิก" };
-  const sources = { subsidy: "เงินอุดหนุน", school_income: "เงินรายได้สถานศึกษา", donation: "เงินบริจาค", other: "อื่น ๆ" };
+  const sources = { free_education: "งบเรียนฟรี 15 ปี", subsidy: "เงินอุดหนุน", school_income: "เงินรายได้สถานศึกษา", donation: "เงินบริจาค", other: "อื่น ๆ" };
   const methods = { transfer: "โอนเงิน", cash: "เงินสด", cheque: "เช็ค", other: "อื่น ๆ" };
   const header = ["เลขคำขอ","วันที่","ฝ่าย","โครงการ","ผู้ขอ","แหล่งเงิน","วัตถุประสงค์","หมวดรายจ่าย","ยอดขอ","สถานะ","เลขใบสำคัญ","วันที่จ่าย","วิธีจ่าย","เลขอ้างอิง","ผู้รับเงิน","ภาษีหัก ณ ที่จ่าย","ยอดจ่ายสุทธิ","ผู้บันทึกจ่าย"];
   const lines = [header.map(csvCell).join(","), ...report.rows.map((row) => [row.request_no,row.expense_date,departments[row.department],row.project_name,row.requester_name,sources[row.source_type] || row.source_type,row.request_purpose || row.description,row.categories,row.amount,statuses[row.status] || row.status,row.payment_no,row.payment_date,methods[row.payment_method] || row.payment_method,row.payment_reference,row.payment_recipient,row.withholding_tax,row.net_paid,row.payment_recorder_name].map(csvCell).join(","))];

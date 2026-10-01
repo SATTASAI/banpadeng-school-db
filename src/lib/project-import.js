@@ -57,6 +57,7 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
   if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) throw new Error("ปีงบประมาณไม่ถูกต้อง");
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) throw new Error("ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป");
 
+  const fundingType = ["subsidy","free_education","school_income"].includes(rawRow.funding_type) ? rawRow.funding_type : null;
   const ownerIds = explicitOwnerIds === null
     ? await resolveOwnerIds(env, parseOwnerEmails(rawRow.owner_emails))
     : [...new Set(explicitOwnerIds.map(Number).filter(Number.isInteger))];
@@ -73,14 +74,14 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
     projectId = Number(matches[0].id);
     created = false;
     await env.DB.prepare(
-      `UPDATE projects SET department = ?, management_area = ?, name = ?, budget_amount = ?, description = ? WHERE id = ?`
-    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, text(rawRow.description, 3000), projectId).run();
+      `UPDATE projects SET department = ?, management_area = ?, name = ?, budget_amount = ?, description = ?, funding_type=COALESCE(?,funding_type) WHERE id = ?`
+    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, text(rawRow.description, 3000), fundingType, projectId).run();
     duplicatesRemoved = await removeEmptyDuplicateProjects(env, projectId, matches.slice(1).map((row) => Number(row.id)));
   } else {
     const result = await env.DB.prepare(
-      `INSERT INTO projects (department, management_area, name, budget_amount, spent_amount, fiscal_year, description, created_by)
-       VALUES (?, ?, ?, ?, 0, ?, ?, ?)`
-    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy).run();
+      `INSERT INTO projects (department, management_area, name, budget_amount, spent_amount, fiscal_year, description, created_by, funding_type)
+       VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)`
+    ).bind(storedDepartment(department), managementArea(department), name, budgetAmount, fiscalYear, text(rawRow.description, 3000), createdBy, fundingType).run();
     projectId = Number(result.meta.last_row_id);
     created = true;
   }

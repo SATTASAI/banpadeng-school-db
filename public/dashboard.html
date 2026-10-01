@@ -175,6 +175,7 @@
     .updated-at { text-align:left; }
   }
 </style>
+<link rel="stylesheet" href="/css/project-workflow.css">
 </head>
 <body>
 <div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
@@ -256,6 +257,7 @@
       </div>
 
       <div class="overview-grid" id="overviewGrid"></div>
+      <section id="fundingSummary" style="margin-top:22px"></section>
 
       <section class="dashboard-section">
         <div class="section-head">
@@ -323,6 +325,7 @@
 </div>
 
 <script src="/js/api.js"></script>
+<script src="/js/project-workflow.js"></script>
 <script>
   const PAGE_URLS = {
     tasks: "/tasks.html",
@@ -398,7 +401,8 @@
     budget: [
       { label:"ระบบบริหารงบประมาณ", url:"/budget.html" },
       { label:"คำขอใช้เงิน อนุมัติ และเบิกจ่าย", url:"/budget.html?view=requests" },
-      { label:"แผนงาน โครงการ และกรอบงบประมาณ", url:"/budget.html?view=plans" },
+      { label:"โครงการภายในฝ่ายงบประมาณ", url:"/budget.html?view=plans" },
+      { label:"โครงการฝ่ายอื่น ๆ และแจ้งเบิกจ่าย", url:"/budget.html?view=otherProjects" },
       { label:"แหล่งเงิน รายรับ และรายงานการเงิน", url:"/budget.html?view=income" },
       { label:"พัสดุ ครุภัณฑ์ และตรวจสอบทรัพย์สิน", url:"/inventory.html" },
       { label:"ธนาคารโรงเรียน", url:"/school-bank.html" },
@@ -436,6 +440,7 @@
       { label:"Template ระบบดูแลช่วยเหลือ", url:"/import-center.html?template=support" },
     ],
     documents: [
+      { label:"เอกสารโครงการและขอเบิกจ่าย", url:"/project-documents.html" },
       { label:"คลังไฟล์และหมวดหมู่เอกสาร", url:"/documents.html" },
       { label:"ค้นหา ดาวน์โหลด และดูตัวอย่าง", url:"/documents.html?section=search" },
       { label:"อัปโหลดและจัดการไฟล์", url:"/documents.html?section=upload" },
@@ -747,6 +752,9 @@
     return `เหลือ ${remaining} วัน`;
   };
 
+  setInterval(() => {
+    if (!document.hidden && document.getElementById("overviewGrid")?.getClientRects().length) loadOverview().catch(() => {});
+  },15000);
   async function loadOverview() {
     const errorBox = document.getElementById("errorBox");
     const refreshButton = document.getElementById("refreshOverviewBtn");
@@ -765,6 +773,7 @@
         <div class="overview-card"><div class="overview-number ${data.pending_leave_requests > 0 ? "warn" : ""}">${data.pending_leave_requests}</div><div class="overview-label">คำขอลารอดำเนินการ</div></div>
       `;
 
+      ProjectWorkflow.renderFundingSummary(document.getElementById("fundingSummary"),data.funding_summary);
       const period = data.current_academic_period;
       document.getElementById("academicContextLabel").textContent = period
         ? `${period.academic_year_label} · ${period.academic_term_name || "ยังไม่เปิดภาคเรียน"}`
@@ -937,3 +946,4 @@
 </script>
 </body>
 </html>
+

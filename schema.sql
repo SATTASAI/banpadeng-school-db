@@ -235,7 +235,8 @@ CREATE TABLE IF NOT EXISTS projects (
   status            TEXT NOT NULL DEFAULT 'ongoing' CHECK (status IN ('ongoing','completed','cancelled')),
   description       TEXT,
   created_by        INTEGER NOT NULL REFERENCES users(id),
-  created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  funding_type TEXT CHECK(funding_type IN ('subsidy','free_education','school_income') OR funding_type IS NULL)
 );
 
 CREATE TABLE IF NOT EXISTS project_owners (
@@ -286,7 +287,11 @@ CREATE TABLE IF NOT EXISTS project_expenses (
   net_paid       REAL,
   payment_recorded_by INTEGER REFERENCES users(id),
   created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  workflow_version INTEGER NOT NULL DEFAULT 1,
+  priority TEXT NOT NULL DEFAULT 'normal',
+  finance_received_by INTEGER,
+  finance_received_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS work_topics (
@@ -898,3 +903,58 @@ CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_teaching_assignments_term
   ON academic_teaching_assignments(academic_term_id, classroom);
+
+
+
+-- Project document workflow and persistent notifications
+CREATE TABLE IF NOT EXISTS project_workflow_events (
+      token TEXT PRIMARY KEY,expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,event_type TEXT NOT NULL,
+      message TEXT NOT NULL,actor_id INTEGER REFERENCES users(id),created_at TEXT NOT NULL DEFAULT(datetime('now')));
+
+CREATE TABLE IF NOT EXISTS project_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,event_token TEXT NOT NULL REFERENCES project_workflow_events(token) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id),audience TEXT NOT NULL,read_at TEXT,
+      UNIQUE(event_token,user_id));
+
+CREATE TABLE IF NOT EXISTS budget_supporting_documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,expense_id INTEGER NOT NULL REFERENCES project_expenses(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,native_document_id INTEGER NOT NULL UNIQUE REFERENCES documents(id),created_by INTEGER NOT NULL REFERENCES users(id),notification_sent INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT(datetime('now')));
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_delete BEFORE DELETE ON project_expenses
+      WHEN OLD.workflow_version=2 AND OLD.status='paid' BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_insert BEFORE INSERT ON budget_request_items
+      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=NEW.expense_id AND workflow_version=2 AND status<>'draft')
+      BEGIN SELECT RAISE(ABORT,'request_not_draft'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_items_delete BEFORE DELETE ON budget_request_items
+      WHEN EXISTS(SELECT 1 FROM project_expenses WHERE id=OLD.expense_id AND workflow_version=2 AND status<>'draft')
+      BEGIN SELECT RAISE(ABORT,'request_not_draft'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_funding_lock BEFORE UPDATE OF funding_type ON projects
+      WHEN OLD.funding_type IS NOT NULL AND NEW.funding_type IS NOT OLD.funding_type
+        AND EXISTS(SELECT 1 FROM project_expenses WHERE project_id=OLD.id AND status IN ('pending','approved','paid'))
+      BEGIN SELECT RAISE(ABORT,'project_funding_locked'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_insert BEFORE INSERT ON project_expenses
+      WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid') BEGIN
+      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND status IN ('pending','approved','paid')),0),2)
+        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      THEN RAISE(ABORT,'project_budget_exceeded') END; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_update BEFORE UPDATE ON project_expenses
+      WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid')
+        AND (OLD.status NOT IN ('pending','approved','paid') OR NEW.amount>OLD.amount OR NEW.project_id<>OLD.project_id) BEGIN
+      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND id<>NEW.id AND status IN ('pending','approved','paid')),0),2)
+        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      THEN RAISE(ABORT,'project_budget_exceeded') END; END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_lock BEFORE UPDATE ON project_expenses
+      WHEN OLD.workflow_version=2 AND OLD.status='paid' AND (NEW.amount<>OLD.amount OR NEW.project_id<>OLD.project_id OR NEW.status<>OLD.status)
+      BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END;
+
+CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_reduction BEFORE UPDATE OF budget_amount ON projects
+      WHEN NEW.budget_amount<OLD.budget_amount AND ROUND(NEW.budget_amount,2)<ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0),2)
+      BEGIN SELECT RAISE(ABORT,'project_budget_exceeded'); END;

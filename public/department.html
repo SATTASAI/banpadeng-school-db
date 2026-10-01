@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ฝ่ายงาน — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css" />
+<link rel="stylesheet" href="/css/project-workflow.css" />
 <style>
   .section-title { display:flex; justify-content:space-between; align-items:center; margin-top:32px; margin-bottom:12px; }
   .section-title .btn { width:auto; padding:8px 16px; font-size:13px; }
@@ -99,38 +100,6 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="expenseModal" style="display:none;">
-  <div class="modal expense-modal-panel">
-    <div class="expense-modal-head">
-      <div><h2 id="expenseModalTitle" style="margin:0;">ทะเบียนเบิกจ่าย</h2><p id="expenseModalSubtitle"></p></div>
-      <button class="btn btn-ghost" id="closeExpenseModalBtn">ปิด</button>
-    </div>
-    <div class="expense-modal-body">
-      <div class="expense-summary" id="expenseSummary"></div>
-      <section class="expense-form-card" id="expenseFormCard">
-        <h3 id="expenseFormTitle">เพิ่มรายการเบิกจ่าย</h3>
-        <div class="expense-form-grid">
-          <div class="field"><label>วันที่รายการ</label><input type="date" id="eDate" /></div>
-          <div class="field"><label>เลขที่เอกสาร</label><input type="text" id="eDocumentNo" placeholder="เช่น บด.001/2569" /></div>
-          <div class="field"><label>หมวดรายจ่าย</label><select id="eCategory" style="width:100%;padding:10px 12px;"><option value="materials">วัสดุ</option><option value="equipment">ครุภัณฑ์</option><option value="services">ค่าใช้สอย/จ้างบริการ</option><option value="compensation">ค่าตอบแทน</option><option value="utilities">สาธารณูปโภค</option><option value="travel">ค่าเดินทาง</option><option value="food">ค่าอาหาร/อาหารว่าง</option><option value="other">อื่น ๆ</option></select></div>
-          <div class="field span-2"><label>รายละเอียดรายการ</label><input type="text" id="eDescription" placeholder="ระบุสิ่งที่ขอเบิกหรือจ่าย" /></div>
-          <div class="field"><label>จำนวนเงิน (บาท)</label><input type="number" id="eAmount" min="0.01" step="0.01" /></div>
-          <div class="field"><label>ผู้รับเงิน/ร้านค้า</label><input type="text" id="ePayee" /></div>
-          <div class="field" id="expenseStatusField"><label>สถานะ</label><select id="eStatus" style="width:100%;padding:10px 12px;"><option value="draft">ร่าง</option><option value="pending">รอตรวจสอบ</option><option value="approved">อนุมัติแล้ว</option><option value="paid">จ่ายแล้ว</option><option value="rejected">ไม่อนุมัติ</option><option value="cancelled">ยกเลิก</option></select></div>
-          <div class="field"><label>ลิงก์หลักฐาน/ไฟล์แนบ</label><input type="url" id="eAttachment" placeholder="https://..." /></div>
-          <div class="field span-3"><label>หมายเหตุ</label><input type="text" id="eNotes" /></div>
-        </div>
-        <div class="expense-form-actions">
-          <button class="btn btn-ghost" id="deleteExpenseBtn" style="display:none;color:var(--color-danger);">ลบรายการ</button>
-          <button class="btn btn-ghost" id="resetExpenseBtn">ล้างแบบฟอร์ม</button>
-          <button class="btn btn-primary" id="saveExpenseBtn">บันทึกรายการ</button>
-        </div>
-      </section>
-      <div class="expense-table-wrap" id="expenseList"></div>
-    </div>
-  </div>
-</div>
-
 <div class="modal-backdrop" id="topicModal" style="display:none;">
   <div class="modal">
     <h2 id="topicModalTitle" style="margin-bottom:16px;">หัวข้องาน</h2>
@@ -158,9 +127,11 @@
       <input type="text" id="pName" />
     </div>
     <div class="field">
-      <label>ยอดงบประมาณ (บาท)</label>
+      <label>ยอดจัดสรรโครงการ (เจ้าหน้าที่การเงิน)</label>
       <input type="number" id="pBudget" min="0" step="0.01" />
     </div>
+    <div class="field"><label>ปีงบประมาณ</label><select id="pFiscalYear"></select></div>
+    <div class="field"><label>ประเภทเงินโครงการ *</label><select id="pFundingType" required><option value="">เลือกประเภทเงิน</option><option value="subsidy">งบอุดหนุน</option><option value="free_education">งบเรียนฟรี 15 ปี</option><option value="school_income">งบรายได้สถานศึกษา</option></select></div>
     <div class="field" id="progressField" style="display:none;">
       <label>% ความคืบหน้า</label>
       <input type="number" id="pProgress" min="0" max="100" />
@@ -319,22 +290,27 @@
         <div class="project-card" data-project-id="${p.id}">
           <div class="project-head">
             <div>
-              <div class="project-name">${escapeHtml(p.name)}</div>
+              <div class="project-name">${escapeHtml(p.name)} ${p.unread_count ? `<small style="color:#bd3544;font-size:12px;">● แจ้งเตือน ${p.unread_count}</small>` : ""}</div>
               ${p.description ? `<div style="font-size:13px; color:var(--color-text-muted); margin-top:2px;">${escapeHtml(p.description)}</div>` : ""}
               <div class="project-budget">
                 <span>งบทั้งหมด <strong>${money(p.budget_amount)}</strong></span>
-                <span class="spent">ใช้แล้ว <strong>${money(p.spent_amount)}</strong></span>
+                <span class="spent">จ่ายแล้ว <strong>${money(p.spent_amount)}</strong></span>
                 <span class="${remaining < 0 ? "over" : "remaining"}">${remaining < 0 ? "เกินงบ" : "คงเหลือ"} <strong>${money(Math.abs(remaining))}</strong></span>
+                <span>รอดำเนินการ <strong>${money(p.reserved_amount)}</strong></span>
+                <span>วงเงินที่ขอได้ <strong>${money(p.available_amount)}</strong></span>
               </div>
+              ${p.notification_message ? `<div class="wf-notice" style="margin-top:8px;">${escapeHtml(p.notification_message)}</div>` : ""}
             </div>
             <div class="project-actions">
-              <button class="btn btn-ghost" data-expenses="${p.id}">รายการเบิกจ่าย</button>
+              <a class="btn btn-ghost" href="/project-documents.html?dept=${dept}&project=${p.id}">เอกสาร / ความคืบหน้า</a>
+              ${canManage ? `<a class="btn btn-primary" href="/project-documents.html?dept=${dept}&project=${p.id}&new=1">แจ้งขอเบิกจ่าย</a>` : ""}
               ${canManage ? `<button class="btn btn-ghost" data-edit="${p.id}">แก้ไขโครงการ</button>` : ""}
             </div>
           </div>
           <div class="progress-track"><div class="progress-fill" style="width:${p.progress_percent}%;"></div></div>
           <div class="project-meta">
             <span>${p.progress_percent}%</span>
+            <span>${({subsidy:"งบอุดหนุน",free_education:"งบเรียนฟรี 15 ปี",school_income:"งบรายได้สถานศึกษา"})[p.funding_type] || "ยังไม่ระบุประเภทเงิน"}</span>
             <span class="badge ${p.status === "ongoing" ? "badge-normal" : p.status === "completed" ? "badge-low" : "badge-high"}" style="padding:2px 10px; border-radius:999px;">${STATUS_LABEL[p.status]}</span>
             <span>ผู้ดูแล: ${p.owners.map((o) => escapeHtml(o.full_name)).join(", ") || "-"}</span>
           </div>
@@ -346,12 +322,6 @@
       btn.addEventListener("click", () => {
         const p = projects.find((x) => x.id == btn.getAttribute("data-edit"));
         openProjectModal(p);
-      });
-    });
-    list.querySelectorAll("[data-expenses]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const project = projects.find((item) => item.id == btn.getAttribute("data-expenses"));
-        openExpenseModal(project);
       });
     });
     if (requestedProjectId) {
@@ -367,8 +337,14 @@
     editingProjectId = project ? project.id : null;
     document.getElementById("projectModalTitle").textContent = project ? "แก้ไขโครงการ" : "เพิ่มโครงการ";
     document.getElementById("pName").value = project ? project.name : "";
-    document.getElementById("pBudget").value = project ? project.budget_amount || "" : "";
+    document.getElementById("pBudget").value = project ? project.budget_amount || 0 : 0;
+    document.getElementById("pBudget").readOnly = !currentUser.is_admin;
+    const now = new Date(); const fy = now.getFullYear() + (now.getMonth() >= 9 ? 544 : 543);
+    const chosenYear = Number(project?.fiscal_year || fy);
+    document.getElementById("pFiscalYear").innerHTML = [...new Set([fy-2,fy-1,fy,fy+1,chosenYear])].sort().map(y => `<option value="${y}" ${y===chosenYear?"selected":""}>${y}</option>`).join("");
+    document.getElementById("pFiscalYear").disabled = Boolean(project);
     document.getElementById("pDescription").value = project ? project.description || "" : "";
+    document.getElementById("pFundingType").value = project?.funding_type || "";
     document.getElementById("progressField").style.display = project ? "block" : "none";
     document.getElementById("statusField").style.display = project ? "block" : "none";
     if (project) {
@@ -404,7 +380,11 @@
     if (!name) return alert("กรุณากรอกชื่อโครงการ");
     if (budget_amount < 0) return alert("ยอดงบประมาณต้องไม่น้อยกว่า 0");
 
-    const body = { name, budget_amount, description };
+    const funding_type = document.getElementById("pFundingType").value;
+    if (!funding_type) return alert("กรุณาเลือกประเภทเงินโครงการ");
+    const body = { name, description, funding_type };
+    if (currentUser.is_admin) body.budget_amount = budget_amount;
+    if (!editingProjectId) body.fiscal_year = Number(document.getElementById("pFiscalYear").value);
     if (editingProjectId) {
       body.progress_percent = Number(document.getElementById("pProgress").value || 0);
       body.status = document.getElementById("pStatus").value;
@@ -428,177 +408,13 @@
     }
   });
 
-  function localIsoDate() {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
-
-  function safeAttachmentUrl(value) {
-    try {
-      const url = new URL(value);
-      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
-    } catch {
-      return null;
-    }
-  }
-
-  function resetExpenseForm() {
-    editingExpenseId = null;
-    document.getElementById("expenseFormTitle").textContent = "เพิ่มรายการเบิกจ่าย";
-    document.getElementById("eDate").value = localIsoDate();
-    document.getElementById("eDocumentNo").value = "";
-    document.getElementById("eCategory").value = "materials";
-    document.getElementById("eDescription").value = "";
-    document.getElementById("eAmount").value = "";
-    document.getElementById("ePayee").value = "";
-    document.getElementById("eStatus").value = currentExpenseData?.permissions?.can_approve ? "pending" : "pending";
-    document.getElementById("eAttachment").value = "";
-    document.getElementById("eNotes").value = "";
-    document.getElementById("deleteExpenseBtn").style.display = "none";
-  }
-
-  function editExpense(expense) {
-    editingExpenseId = expense.id;
-    document.getElementById("expenseFormTitle").textContent = "แก้ไขรายการเบิกจ่าย";
-    document.getElementById("eDate").value = expense.expense_date || localIsoDate();
-    document.getElementById("eDocumentNo").value = expense.document_no || "";
-    document.getElementById("eCategory").value = expense.category || "other";
-    document.getElementById("eDescription").value = expense.description || "";
-    document.getElementById("eAmount").value = expense.amount || "";
-    document.getElementById("ePayee").value = expense.payee || "";
-    document.getElementById("eStatus").value = expense.status || "pending";
-    document.getElementById("eAttachment").value = expense.attachment_url || "";
-    document.getElementById("eNotes").value = expense.notes || "";
-    const canDelete = expense.status !== "paid"
-      && (currentExpenseData.permissions.can_approve || ["draft", "pending"].includes(expense.status));
-    document.getElementById("deleteExpenseBtn").style.display = canDelete ? "inline-flex" : "none";
-    document.getElementById("eDescription").focus();
-  }
-
-  function renderExpenseLedger(data) {
-    currentExpenseData = data;
-    const project = data.project;
-    const pendingTotal = data.status_totals.pending.total_amount + data.status_totals.approved.total_amount;
-    const remaining = project.remaining_amount;
-    document.getElementById("expenseSummary").innerHTML = `
-      <div class="expense-summary-card"><span>งบโครงการ</span><strong>${money(project.budget_amount)}</strong></div>
-      <div class="expense-summary-card paid"><span>จ่ายแล้ว</span><strong>${money(project.spent_amount)}</strong></div>
-      <div class="expense-summary-card ${remaining < 0 ? "over" : "remaining"}"><span>${remaining < 0 ? "เกินงบ" : "คงเหลือ"}</span><strong>${money(Math.abs(remaining))}</strong></div>
-      <div class="expense-summary-card"><span>รอตรวจสอบ/อนุมัติ</span><strong>${money(pendingTotal)}</strong></div>`;
-
-    document.getElementById("expenseFormCard").style.display = data.permissions.can_manage ? "block" : "none";
-    document.getElementById("expenseStatusField").style.display = data.permissions.can_approve ? "block" : "none";
-    const list = document.getElementById("expenseList");
-    if (!data.expenses.length) {
-      list.innerHTML = `<div class="empty-state" style="padding:34px 20px;">ยังไม่มีรายการเบิกจ่ายในโครงการนี้</div>`;
-      return;
-    }
-    list.innerHTML = `<table>
-      <thead><tr><th>วันที่/เลขที่</th><th>รายละเอียด</th><th>ผู้รับเงิน</th><th>จำนวนเงิน</th><th>สถานะ</th><th>หลักฐาน</th><th></th></tr></thead>
-      <tbody>${data.expenses.map((expense) => {
-        const attachment = safeAttachmentUrl(expense.attachment_url);
-        const editable = data.permissions.can_manage && (data.permissions.can_approve || ["draft", "pending"].includes(expense.status));
-        return `<tr>
-          <td>${escapeHtml(thaiDate(expense.expense_date))}<br><small>${escapeHtml(expense.document_no || "ไม่ระบุเลขที่")}</small></td>
-          <td><strong>${escapeHtml(expense.description)}</strong><br><small>${escapeHtml(EXPENSE_CATEGORY_LABEL[expense.category] || expense.category)}${expense.notes ? ` · ${escapeHtml(expense.notes)}` : ""}</small></td>
-          <td>${escapeHtml(expense.payee || "-")}<br><small>โดย ${escapeHtml(expense.creator_name || "-")}</small></td>
-          <td><strong>${money(expense.amount)}</strong></td>
-          <td><span class="expense-status ${escapeHtml(expense.status)}">${escapeHtml(EXPENSE_STATUS_LABEL[expense.status] || expense.status)}</span></td>
-          <td>${attachment ? `<a href="${escapeHtml(attachment)}" target="_blank" rel="noopener">เปิดหลักฐาน</a>` : "-"}</td>
-          <td>${editable ? `<div class="expense-row-actions"><button data-edit-expense="${expense.id}">แก้ไข</button></div>` : ""}</td>
-        </tr>`;
-      }).join("")}</tbody>
-    </table>`;
-    list.querySelectorAll("[data-edit-expense]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const expense = data.expenses.find((item) => item.id == button.getAttribute("data-edit-expense"));
-        if (expense) editExpense(expense);
-      });
-    });
-  }
-
-  async function loadExpenseLedger() {
-    if (!currentExpenseProjectId) return;
-    const data = await apiRequest(`/api/projects/${currentExpenseProjectId}/expenses`);
-    renderExpenseLedger(data);
-  }
-
-  async function openExpenseModal(project) {
-    if (!project) return;
-    currentExpenseProjectId = project.id;
-    currentExpenseData = null;
-    editingExpenseId = null;
-    document.getElementById("expenseModalTitle").textContent = "ทะเบียนเบิกจ่ายโครงการ";
-    document.getElementById("expenseModalSubtitle").textContent = project.name;
-    document.getElementById("expenseSummary").innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:18px;">กำลังโหลดข้อมูล...</div>`;
-    document.getElementById("expenseList").innerHTML = `<div class="empty-state" style="padding:34px;">กำลังโหลดรายการ...</div>`;
-    document.getElementById("expenseFormCard").style.display = "none";
-    document.getElementById("expenseModal").style.display = "flex";
-    try {
-      await loadExpenseLedger();
-      resetExpenseForm();
-    } catch (error) {
-      document.getElementById("expenseList").innerHTML = `<div class="empty-state" style="color:var(--color-danger);">${escapeHtml(error.message)}</div>`;
-    }
-  }
-
-  document.getElementById("closeExpenseModalBtn").addEventListener("click", () => {
-    document.getElementById("expenseModal").style.display = "none";
-  });
-  document.getElementById("resetExpenseBtn").addEventListener("click", resetExpenseForm);
-  document.getElementById("saveExpenseBtn").addEventListener("click", async () => {
-    if (!currentExpenseProjectId || !currentExpenseData?.permissions?.can_manage) return;
-    const body = {
-      expense_date: document.getElementById("eDate").value,
-      document_no: document.getElementById("eDocumentNo").value.trim(),
-      category: document.getElementById("eCategory").value,
-      description: document.getElementById("eDescription").value.trim(),
-      amount: Number(document.getElementById("eAmount").value),
-      payee: document.getElementById("ePayee").value.trim(),
-      attachment_url: document.getElementById("eAttachment").value.trim(),
-      notes: document.getElementById("eNotes").value.trim(),
-    };
-    if (currentExpenseData.permissions.can_approve) body.status = document.getElementById("eStatus").value;
-    if (!body.expense_date || !body.description || !(body.amount > 0)) return alert("กรุณากรอกวันที่ รายละเอียด และจำนวนเงินให้ครบถ้วน");
-    if (body.attachment_url && !safeAttachmentUrl(body.attachment_url)) return alert("ลิงก์หลักฐานต้องขึ้นต้นด้วย http:// หรือ https://");
-    const button = document.getElementById("saveExpenseBtn");
-    button.disabled = true;
-    try {
-      if (editingExpenseId) {
-        await apiRequest(`/api/project-expenses/${editingExpenseId}`, { method: "PATCH", body });
-      } else {
-        await apiRequest(`/api/projects/${currentExpenseProjectId}/expenses`, { method: "POST", body });
-      }
-      await loadExpenseLedger();
-      resetExpenseForm();
-      await loadProjects();
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      button.disabled = false;
-    }
-  });
-  document.getElementById("deleteExpenseBtn").addEventListener("click", async () => {
-    if (!editingExpenseId || !confirm("ยืนยันลบรายการเบิกจ่ายนี้?")) return;
-    try {
-      await apiRequest(`/api/project-expenses/${editingExpenseId}`, { method: "DELETE" });
-      await loadExpenseLedger();
-      resetExpenseForm();
-      await loadProjects();
-    } catch (error) {
-      alert(error.message);
-    }
-  });
-
   (async () => {
     const { user } = await apiRequest("/api/auth/me");
     if (!user) { window.location.href = "/login.html"; return; }
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
 
+    document.getElementById("newProjectBtn").style.display = "inline-flex";
     if (user.is_admin) {
       document.getElementById("newTopicBtn").style.display = "inline-flex";
       document.getElementById("newProjectBtn").style.display = "inline-flex";
@@ -608,6 +424,7 @@
 
     await loadTopics();
     await loadProjects();
+    setInterval(() => { if (!document.hidden && document.getElementById("projectModal").style.display !== "flex") loadProjects().catch(() => {}); },15000);
   })();
 </script>
 </body>
