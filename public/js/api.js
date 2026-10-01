@@ -41,6 +41,7 @@ async function apiRequest(path, options = {}) {
     headers,
     body: requestBody,
     credentials: "same-origin",
+    cache: "no-store",
   });
 
   let data = null;
@@ -56,6 +57,11 @@ async function apiRequest(path, options = {}) {
     error.status = res.status;
     error.data = data;
     throw error;
+  }
+  if (!["GET","HEAD","OPTIONS"].includes(String(options.method || "GET").toUpperCase()) && !path.startsWith("/api/auth/")) {
+    window.dispatchEvent(new CustomEvent("school-data-changed"));
+    if (window.parent !== window) window.parent.postMessage({type:"school-data-changed"},window.location.origin);
+    try { if (typeof BroadcastChannel !== "undefined") { const channel=new BroadcastChannel("school-data-changed");channel.postMessage({type:"school-data-changed"});channel.close(); } } catch {}
   }
   return data;
 }

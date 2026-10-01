@@ -30,6 +30,7 @@ import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
 
+import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
 
 let extendedSchemaReady = false;
@@ -3971,7 +3972,16 @@ async function handleOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
 
+  const yearParam = new URL(request.url).searchParams.get("fiscal_year");
+  const budgetFiscalYear = !yearParam || yearParam === "all" ? null : Number(yearParam);
+  if (budgetFiscalYear !== null && (!Number.isInteger(budgetFiscalYear) || budgetFiscalYear < 2500 || budgetFiscalYear > 3000)) {
+    return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
+  }
   await Promise.all([ensurePersonnelData(env), ensureAcademicData(env)]);
+  await ensureDashboardRevision(env);
+  if (typeof env.DB.withSession === "function") env = { ...env, DB: env.DB.withSession("first-primary") };
+  const dataRevision = await dashboardRevision(env);
+  const activity = await dashboardActivitySummary(env, budgetFiscalYear);
   const currentAcademicPeriod = await getCurrentAcademicPeriod(env);
 
   const studentsEnrolled = await env.DB.prepare(
@@ -3987,13 +3997,10 @@ async function handleOverview(request, env) {
   const ongoingProjects = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing'"
   ).first();
-  const pendingLeave = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM leave_requests WHERE status = 'pending'"
-  ).first();
   const pendingProjectExpenses = await env.DB.prepare(
     `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total_amount
-     FROM project_expenses WHERE status IN ('pending','approved')`
-  ).first();
+     FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)`
+  ).bind(budgetFiscalYear,budgetFiscalYear).first();
   const inventoryAlerts = await env.DB.prepare(`SELECT
     SUM(CASE WHEN status='active' AND minimum_quantity > 0 AND current_quantity <= minimum_quantity THEN 1 ELSE 0 END) AS low_stock_count,
     SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
@@ -4002,36 +4009,35 @@ async function handleOverview(request, env) {
     WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now')
       AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
         WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`).first();
-  const budgetFiscalYear = currentProjectFiscalYear();
   const { results: departmentRows } = await env.DB.prepare(
     `SELECT COALESCE(management_area,department) AS department,
             COUNT(*) AS project_count,
             ROUND(AVG(progress_percent), 0) AS average_progress,
             COALESCE(SUM(budget_amount), 0) AS total_budget,
-            COALESCE(SUM(spent_amount), 0) AS spent_budget
-     FROM projects WHERE fiscal_year=?
+            COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=projects.id AND e.status='paid')), 0) AS spent_budget
+     FROM projects WHERE (? IS NULL OR fiscal_year=?)
      GROUP BY COALESCE(management_area,department)`
-  ).bind(budgetFiscalYear).all();
+  ).bind(budgetFiscalYear,budgetFiscalYear).all();
 
   const { results: projectBudgetRows } = await env.DB.prepare(
-    `SELECT p.id, COALESCE(p.management_area,p.department) AS department, p.name, p.status, p.progress_percent,
+    `SELECT p.id, COALESCE(p.management_area,p.department) AS department, p.name, p.status, p.progress_percent, p.fiscal_year,
             COALESCE(p.budget_amount, 0) AS budget_amount,
-            COALESCE(p.spent_amount, 0) AS spent_amount,
-            COALESCE(p.budget_amount, 0) - COALESCE(p.spent_amount, 0) AS remaining_amount,
+            COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid'),0) AS spent_amount,
+            COALESCE(p.budget_amount, 0) - COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid'),0) AS remaining_amount,
             y.label AS academic_year_label,
             GROUP_CONCAT(u.full_name, ', ') AS owner_names
      FROM projects p
      LEFT JOIN academic_years y ON y.id = p.academic_year_id
      LEFT JOIN project_owners po ON po.project_id = p.id
      LEFT JOIN users u ON u.id = po.user_id
-     WHERE p.fiscal_year=?
+     WHERE (? IS NULL OR p.fiscal_year=?)
      GROUP BY p.id
      ORDER BY CASE COALESCE(p.management_area,p.department)
                 WHEN 'academic' THEN 1 WHEN 'early_childhood' THEN 2 WHEN 'budget' THEN 3
                 WHEN 'personnel' THEN 4 WHEN 'general' THEN 5 ELSE 6 END,
               CASE p.status WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
               p.name`
-  ).bind(budgetFiscalYear).all();
+  ).bind(budgetFiscalYear,budgetFiscalYear).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
     `SELECT full_name, license_expiry_date,
@@ -4068,12 +4074,13 @@ async function handleOverview(request, env) {
   const totalProjectSpent = departmentSummary.reduce((sum, row) => sum + row.spent_budget, 0);
 
   return jsonResponse({
+    data_revision: dataRevision,
     students_enrolled: studentsEnrolled.count,
     staff_count: staffCount.count,
     open_tasks: openTasks.count,
     overdue_tasks: overdueTasks.count,
     ongoing_projects: ongoingProjects.count,
-    pending_leave_requests: pendingLeave.count,
+    pending_leave_requests: activity.leave_summary.pending,
     pending_project_expenses: Number(pendingProjectExpenses?.count || 0),
     pending_project_expense_amount: Number(pendingProjectExpenses?.total_amount || 0),
     inventory_low_stock_count: Number(inventoryAlerts?.low_stock_count || 0),
@@ -4085,8 +4092,9 @@ async function handleOverview(request, env) {
     department_summary: departmentSummary,
     licenses_expiring: licensesExpiring,
     current_academic_period: currentAcademicPeriod,
-    funding_summary: await projectFundingSummary(env),
-  });
+    funding_summary: await projectFundingSummary(env,budgetFiscalYear),
+    ...activity,
+  },200,{ "Cache-Control": "no-store" });
 }
 
 // ---------- /api/students/import (POST) — นำเข้าจาก Excel/CSV แบบ upsert ตามเลขประจำตัว ----------
@@ -4483,6 +4491,14 @@ export default {
       const driveBackupFileMatch = pathname.match(/^\/api\/security\/drive-backup\/files\/(\d+)$/);
       if (driveBackupFileMatch && method === "GET") return await handleDriveBackupFile(request, env, driveBackupFileMatch[1], getGoogleDriveAccessToken);
 
+      if (pathname === "/api/overview/revision" && method === "GET") {
+        const user = await getCurrentUser(request,env);
+        if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
+        await ensurePersonnelData(env);
+        await ensureDashboardRevision(env);
+        const liveEnv=typeof env.DB.withSession === "function" ? {...env,DB:env.DB.withSession("first-primary")} : env;
+        return jsonResponse({ revision: await dashboardRevision(liveEnv) },200,{"Cache-Control":"no-store"});
+      }
       if (pathname === "/api/overview" && method === "GET") return await handleOverview(request, env);
 
       if (pathname.startsWith("/api/")) {

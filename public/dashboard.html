@@ -242,6 +242,8 @@
           <p style="color:var(--color-text-muted); margin:0;">ข้อมูลภาพรวมสำหรับติดตามการดำเนินงานของโรงเรียนบ้านป่าเด็ง</p>
         </div>
         <div>
+          <label for="dashboardFiscalYear" style="font-size:13px">ปีงบประมาณ</label>
+          <select id="dashboardFiscalYear" style="width:auto;margin-right:8px"><option value="all">ทุกปีงบประมาณ</option></select>
           <button class="btn btn-ghost" id="refreshOverviewBtn">อัปเดตข้อมูล</button>
           <div class="updated-at" id="updatedAt">—</div>
         </div>
@@ -257,6 +259,15 @@
       </div>
 
       <div class="overview-grid" id="overviewGrid"></div>
+      <section class="dashboard-section">
+        <div class="section-head"><div><h3 style="margin:0">ความเคลื่อนไหวเงิน</h3><p>รายรับที่บันทึกและเบิกจ่ายที่ยืนยันแล้ว ตามปีงบประมาณที่เลือก</p></div></div>
+        <div class="budget-summary-grid" id="financeSummary" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"></div>
+      </section>
+      <section class="dashboard-section">
+        <div class="section-head"><div><h3 style="margin:0">สถิติการลาบุคลากร</h3><p>จำนวนคำขอและวันลาที่อนุมัติ ตามปีงบประมาณที่เลือก · วันลานับตามปฏิทิน</p></div></div>
+        <div class="budget-summary-grid" id="leaveSummary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
+        <div style="overflow:auto;margin-top:16px" id="leaveTypeSummary"></div>
+      </section>
       <section id="fundingSummary" style="margin-top:22px"></section>
 
       <section class="dashboard-section">
@@ -526,6 +537,7 @@
     document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
     document.getElementById("overviewNav").classList.add("active");
     history.replaceState(null, "", "#");
+    loadOverview().catch(() => {});
   }
   window.showOverview = showOverview;
 
@@ -752,17 +764,42 @@
     return `เหลือ ${remaining} วัน`;
   };
 
-  setInterval(() => {
-    if (!document.hidden && document.getElementById("overviewGrid")?.getClientRects().length) loadOverview().catch(() => {});
-  },15000);
+  let overviewInFlight = false, overviewDirty = false, overviewRevision = null, revisionInFlight = false;
+  function refreshLiveOverview() { if (dashboardUser && !document.hidden) loadOverview().catch(() => {}); }
+  window.addEventListener("school-data-changed",refreshLiveOverview);
+  window.addEventListener("message",event=>{if(event.origin===location.origin && event.data?.type==="school-data-changed") refreshLiveOverview();});
+  window.addEventListener("focus",refreshLiveOverview);
+  document.addEventListener("visibilitychange",refreshLiveOverview);
+  try { if(typeof BroadcastChannel!=="undefined") {const channel=new BroadcastChannel("school-data-changed");channel.onmessage=refreshLiveOverview;} } catch {}
+  async function checkOverviewRevision() {
+    if (!dashboardUser || document.hidden || document.getElementById("overviewWrap").style.display === "none" || revisionInFlight || overviewInFlight) return;
+    revisionInFlight = true;
+    try {const data=await apiRequest("/api/overview/revision");if(data.revision!==overviewRevision) refreshLiveOverview();}
+    catch {refreshLiveOverview();} finally {revisionInFlight=false;}
+  }
+  setInterval(checkOverviewRevision,2000);
   async function loadOverview() {
+    if (!dashboardUser) return;
+    if (overviewInFlight) { overviewDirty = true; return; }
+    overviewInFlight = true;
+    const selectedYear = document.getElementById("dashboardFiscalYear").value;
     const errorBox = document.getElementById("errorBox");
     const refreshButton = document.getElementById("refreshOverviewBtn");
     errorBox.classList.remove("visible");
     refreshButton.disabled = true;
     refreshButton.textContent = "กำลังอัปเดต...";
     try {
-      const data = await apiRequest("/api/overview");
+      const data = await apiRequest(`/api/overview?fiscal_year=${encodeURIComponent(selectedYear)}`);
+      if (selectedYear !== document.getElementById("dashboardFiscalYear").value) {overviewDirty=true;return;}
+      overviewRevision=data.data_revision;
+      const yearSelect=document.getElementById("dashboardFiscalYear");
+      yearSelect.innerHTML='<option value="all">ทุกปีงบประมาณ</option>'+[...new Set([...(data.fiscal_years||[]),...(selectedYear!=="all"?[Number(selectedYear)]:[])])].sort((a,b)=>b-a).map(year=>`<option value="${Number(year)}">${Number(year)}</option>`).join('');
+      yearSelect.value=selectedYear;
+      const finance=data.finance_summary||{};
+      document.getElementById("financeSummary").innerHTML=[['รายรับที่บันทึก',finance.received_amount],['เบิกจ่ายยืนยันแล้ว',finance.paid_amount],['รอตรวจสอบ/เบิกจ่าย',finance.reserved_amount],['รายรับหักเบิกจ่าย',finance.balance_amount]].map(([label,value])=>`<div class="budget-summary-card"><span>${label}</span><strong>${formatMoney(value||0)}</strong></div>`).join('');
+      const leave=data.leave_summary||{};
+      document.getElementById("leaveSummary").innerHTML=[['คำขอทั้งหมด',leave.total],['รออนุมัติ',leave.pending],['อนุมัติแล้ว',leave.approved],['ไม่อนุมัติ',leave.rejected],['วันลาที่อนุมัติ',leave.approved_days],['ผู้ลาวันนี้ · ทุกปี',leave.on_leave_today]].map(([label,value])=>`<div class="budget-summary-card"><span>${label}</span><strong>${Number(value||0)}</strong></div>`).join('');
+      document.getElementById("leaveTypeSummary").innerHTML=`<table><thead><tr><th>ประเภทการลา</th><th>คำขอทั้งหมด</th><th>รออนุมัติ</th><th>อนุมัติ</th><th>ไม่อนุมัติ</th><th>วันลาที่อนุมัติ</th></tr></thead><tbody>${(leave.by_type||[]).map(row=>`<tr><td>${escapeHtml(row.label)}</td><td>${Number(row.total)}</td><td>${Number(row.pending)}</td><td>${Number(row.approved)}</td><td>${Number(row.rejected)}</td><td>${Number(row.approved_days)}</td></tr>`).join('')}</tbody></table>`;
 
       document.getElementById("overviewGrid").innerHTML = `
         <div class="overview-card"><div class="overview-number">${data.students_enrolled}</div><div class="overview-label">นักเรียนกำลังศึกษาอยู่</div></div>
@@ -831,7 +868,7 @@
               <div class="project-budget-name">
                 ${escapeHtml(project.name)}
                 <span class="project-status-chip ${escapeHtml(project.status)}">${escapeHtml(PROJECT_STATUS_LABELS[project.status] || project.status)}</span>
-                <div class="project-budget-sub">${escapeHtml(project.owner_names || "ยังไม่ระบุผู้รับผิดชอบ")}${project.academic_year_label ? ` · ${escapeHtml(project.academic_year_label)}` : ""} · คืบหน้า ${project.progress_percent}%</div>
+                <div class="project-budget-sub">${escapeHtml(project.owner_names || "ยังไม่ระบุผู้รับผิดชอบ")} · ปีงบประมาณ ${Number(project.fiscal_year)}${project.academic_year_label ? ` · ${escapeHtml(project.academic_year_label)}` : ""} · คืบหน้า ${project.progress_percent}%</div>
               </div>
               <div class="project-budget-values">
                 งบ ${formatMoney(project.budget_amount)} · ใช้ ${formatMoney(project.spent_amount)}
@@ -886,7 +923,7 @@
       }
       document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด ${new Intl.DateTimeFormat("th-TH", {
         dateStyle: "medium",
-        timeStyle: "short",
+        timeStyle: "medium",
       }).format(new Date())}`;
     } catch (err) {
       errorBox.textContent = err.message;
@@ -894,9 +931,12 @@
     } finally {
       refreshButton.disabled = false;
       refreshButton.textContent = "อัปเดตข้อมูล";
+      overviewInFlight = false;
+      if (overviewDirty) { overviewDirty=false;refreshLiveOverview(); }
     }
   }
 
+  document.getElementById("dashboardFiscalYear").addEventListener("change",refreshLiveOverview);
   document.getElementById("refreshOverviewBtn").addEventListener("click", loadOverview);
 
   (async () => {

@@ -17,7 +17,7 @@ export async function projectFundingSummary(env, fiscalYear = currentProjectFisc
     COALESCE(SUM(p.budget_amount),0) AS total_amount,
     COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid')),0) AS spent_amount,
     COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=p.id AND e.status IN ('pending','approved'))),0) AS reserved_amount
-    FROM projects p WHERE p.fiscal_year=? GROUP BY p.funding_type`).bind(fiscalYear).all();
+    FROM projects p WHERE (? IS NULL OR p.fiscal_year=?) GROUP BY p.funding_type`).bind(fiscalYear,fiscalYear).all();
   const convert = row => ({ project_count: Number(row?.project_count||0), total_amount: round(row?.total_amount||0), spent_amount: round(row?.spent_amount||0),
     reserved_amount: round(row?.reserved_amount||0), remaining_amount: round(Number(row?.total_amount||0)-Number(row?.spent_amount||0)),
     available_amount: round(Number(row?.total_amount||0)-Number(row?.spent_amount||0)-Number(row?.reserved_amount||0)) });
