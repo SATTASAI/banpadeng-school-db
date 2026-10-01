@@ -72,3 +72,7 @@ const ROLE_LABELS = {
   staff: "เจ้าหน้าที่ธุรการ",
   superadmin: "ผู้ดูแลระบบ",
 };
+
+// Shared notification bar uses the same authenticated API as the current page.
+(() => { const css=document.createElement('link');css.rel='stylesheet';css.href='/css/global-notifications.css';document.head.append(css);
+ const script=document.createElement('script');script.src='/js/global-notifications.js';document.head.append(script); })();

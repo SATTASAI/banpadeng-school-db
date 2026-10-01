@@ -1,6 +1,7 @@
+import { money, sumMoney } from '../lib/project-finance.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 const ready=new WeakSet();
-const round=n=>Math.round(Number(n)*100)/100;
+const round=money;
 const amount=v=>v!==null && v!==undefined && v!=='' && Number.isFinite(Number(v)) && Number(v)>=0 && Number(v)<=1e12 ? round(v) : null;
 export async function ensureProjectBalanceSchema(env){
  if(ready.has(env.DB))return;
@@ -22,9 +23,9 @@ export async function ensureProjectBalanceSchema(env){
  ]);ready.add(env.DB);
 }
 async function project(env,id){return env.DB.prepare(`SELECT p.id,p.name,p.department,p.fiscal_year,p.budget_amount,p.funding_type,
- COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=p.id AND status='paid'),0) total_spent,
- COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=p.id AND status='paid' AND category<>'opening_balance'),0) confirmed_spent,
- COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=p.id AND status='paid' AND category='opening_balance'),0) opening_spent
+ COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses WHERE project_id=p.id AND status='paid'),0) total_spent,
+ COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses WHERE project_id=p.id AND status='paid' AND COALESCE(category,'other')<>'opening_balance'),0) confirmed_spent,
+ COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses WHERE project_id=p.id AND status='paid' AND category='opening_balance'),0) opening_spent
  FROM projects p WHERE p.id=?`).bind(id).first()}
 async function inbox(request,env,user){
  const params=new URL(request.url).searchParams,dept=params.get('department')||'',admin=isAdmin(user);
@@ -58,10 +59,10 @@ async function propose(request,env,user,id){
 async function change(env,user,id,target,base,reason,requestId=null){
  const p=await project(env,id);if(!p)return jsonResponse({error:'ไม่พบโครงการ'},404);
  if(target<round(p.confirmed_spent))return jsonResponse({error:'ยอดใหม่ต่ำกว่ารายการเบิกจ่ายที่ยืนยันแล้ว แก้ไขรายการเหล่านั้นผ่านช่องนี้ไม่ได้'},409);
- const token=crypto.randomUUID(),opening=round(target-p.confirmed_spent);
+ const token=crypto.randomUUID(),opening=sumMoney([target,-p.confirmed_spent]);
  const statements=[env.DB.prepare(`INSERT INTO project_balance_changes(token,project_id,old_total,new_total,reason,actor_id,request_id)
-  SELECT ?,?,?,?,?,?,? WHERE ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=? AND status='paid'),0),2)=?
-  AND ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=? AND status='paid' AND category<>'opening_balance'),0),2)=?
+  SELECT ?,?,?,?,?,?,? WHERE ROUND(COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses WHERE project_id=? AND status='paid'),0),2)=?
+  AND ROUND(COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses WHERE project_id=? AND status='paid' AND COALESCE(category,'other')<>'opening_balance'),0),2)=?
   AND (? IS NULL OR EXISTS(SELECT 1 FROM project_balance_requests WHERE id=? AND status='pending'))`)
   .bind(token,id,base,target,reason,user.id,requestId,id,base,id,round(p.confirmed_spent),requestId,requestId),
   env.DB.prepare(`UPDATE project_expenses SET amount=CASE WHEN ?>0 THEN ? ELSE amount END,

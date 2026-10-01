@@ -1,3 +1,4 @@
+import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary } from "./project-workflow.js";
@@ -135,10 +136,10 @@ function normalizeItems(body) {
       line_no: index + 1,
       category: CATEGORIES.includes(row.category) && row.category !== "opening_balance" ? row.category : "other",
       description, quantity, unit: clean(row.unit, 100), unit_price: unitPrice,
-      amount: Math.round(quantity * unitPrice * 100) / 100,
+      amount: multiplyMoney(quantity,unitPrice),
     });
   }
-  return { items, total: Math.round(items.reduce((sum, item) => sum + item.amount, 0) * 100) / 100 };
+  return { items, total: sumMoney(items.map(item=>item.amount)) };
 }
 
 async function workflowAssignments(env, department, requesterId) {
@@ -177,12 +178,12 @@ async function replaceItems(env, expenseId, items) {
 
 async function projectBudgetAvailability(env, projectId, excludeExpenseId = 0) {
   const row = await env.DB.prepare(`SELECT p.budget_amount,
-    COALESCE(SUM(CASE WHEN e.status IN ('pending','approved','paid') AND e.id<>? THEN e.amount ELSE 0 END),0) AS committed_amount
+    COALESCE(SUM(CASE WHEN e.status IN ('pending','approved','paid') AND e.id<>? THEN CAST(ROUND(e.amount*100+0.000001) AS INTEGER) ELSE 0 END),0)/100.0 AS committed_amount
     FROM projects p LEFT JOIN project_expenses e ON e.project_id=p.id WHERE p.id=? GROUP BY p.id`)
     .bind(excludeExpenseId, projectId).first();
   if (!row) return null;
   const budgetAmount = Number(row.budget_amount || 0), committedAmount = Number(row.committed_amount || 0);
-  return { budget_amount: budgetAmount, committed_amount: committedAmount, available_amount: budgetAmount - committedAmount };
+  return { budget_amount: budgetAmount, committed_amount: committedAmount, available_amount: sumMoney([budgetAmount,-committedAmount]) };
 }
 
 async function budgetLimitError(env, projectId, requestedAmount, excludeExpenseId = 0) {
@@ -211,7 +212,7 @@ async function overview(request, env) {
       GROUP_CONCAT(DISTINCT u.full_name) owner_names,MAX(CASE WHEN po.user_id=? THEN 1 ELSE 0 END) can_request
       FROM projects p
       LEFT JOIN project_owners po ON po.project_id=p.id LEFT JOIN users u ON u.id=po.user_id
-      WHERE p.status<>'cancelled' AND p.fiscal_year=? GROUP BY p.id ORDER BY COALESCE(p.management_area,p.department),p.name`).bind(year, year, user.id, year).all(),
+      WHERE p.fiscal_year=? GROUP BY p.id ORDER BY COALESCE(p.management_area,p.department),p.name`).bind(year, year, user.id, year).all(),
     env.DB.prepare(`SELECT e.*,p.name project_name,COALESCE(p.management_area,p.department) AS department,creator.full_name requester_name,approver.full_name approver_name,
       payer.full_name payment_recorder_name,
       (SELECT a.id FROM file_attachments a WHERE a.entity_type='project_expense' AND a.entity_id=e.id ORDER BY a.id DESC LIMIT 1) attachment_id,
@@ -219,7 +220,7 @@ async function overview(request, env) {
       FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users creator ON creator.id=e.created_by
       LEFT JOIN users approver ON approver.id=e.approved_by LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE e.fiscal_year=?
       ORDER BY CASE e.status WHEN 'pending' THEN 0 WHEN 'approved' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END,e.created_at DESC,e.id DESC`).bind(year).all(),
-    env.DB.prepare("SELECT status,COUNT(*) item_count,COALESCE(SUM(amount),0) total_amount FROM project_expenses WHERE fiscal_year=? GROUP BY status").bind(year).all(),
+    env.DB.prepare("SELECT status,COUNT(*) item_count,COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)),0)/100.0 total_amount FROM project_expenses WHERE fiscal_year=? GROUP BY status").bind(year).all(),
     env.DB.prepare(`SELECT a.*,u.full_name user_name FROM audit_logs a LEFT JOIN users u ON u.id=a.user_id WHERE a.resource='budget_request' ORDER BY a.created_at DESC LIMIT 100`).all(),
     env.DB.prepare(`SELECT a.*,assignee.full_name assigned_name,actor.full_name acted_name FROM budget_request_approvals a
       JOIN project_expenses e ON e.id=a.expense_id LEFT JOIN users assignee ON assignee.id=a.assigned_user_id
@@ -235,7 +236,9 @@ async function overview(request, env) {
   const financeAssignment = await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='finance_review' AND department='' ").first();
   const totals = Object.fromEntries(STATUSES.map((status) => [status, { item_count: 0, total_amount: 0 }]));
   for (const row of statusRows.results) totals[row.status] = { item_count: Number(row.item_count), total_amount: Number(row.total_amount) };
-  const number = (value) => Number(value || 0), total = number(summary.total_budget), pending = number(summary.pending_amount), approved = number(summary.approved_amount), paid = number(summary.paid_amount);
+  const financials=await projectFinancialRows(env,year),financialMap=new Map(financials.map(p=>[p.id,p])),canonical=financialTotals(financials);
+  for(const p of projects.results)Object.assign(p,financialMap.get(p.id));
+  const number = (value) => moneyValue(value || 0), total = canonical.total_amount, pending = canonical.pending_amount, approved = canonical.approved_amount, paid = canonical.spent_amount;
   const requestData = requests.results.map((row) => {
     const approvals = approvalsByRequest.get(row.id) || [], activeApproval = approvals.find((step) => step.status === "pending");
     return { ...row, amount: number(row.amount), approvals, items: itemsByRequest.get(row.id) || [],
@@ -245,8 +248,8 @@ async function overview(request, env) {
       can_pay: row.status === "approved" && row.current_step === "finance_completion" && Number(financeAssignment?.user_id) === Number(user.id),
       document_ready: Boolean(row.workflow_completed_at && ["approved", "paid"].includes(row.status)) };
   });
-  return jsonResponse({ fiscal_year: year, funding_summary: await projectFundingSummary(env,year),
-    summary: { ...summary, total_budget: total, pending_amount: pending, approved_amount: approved, paid_amount: paid, income_amount: number(summary.income_amount), available_amount: total - pending - approved - paid },
+  return jsonResponse({ fiscal_year: year, funding_summary: await projectFundingSummary(env,year,financials),
+    summary: { ...summary, total_budget: total, pending_amount: pending, approved_amount: approved, paid_amount: paid, income_amount: number(summary.income_amount), remaining_amount: canonical.remaining_amount, available_amount: canonical.available_amount },
     status_totals: totals,
     projects: projects.results.map((row) => ({ ...row, budget_amount: number(row.budget_amount), spent_amount: number(row.spent_amount), pending_amount: number(row.pending_amount), approved_amount: number(row.approved_amount), can_request: isAdmin(user) || Boolean(row.can_request) })),
     requests: requestData, incomes: incomes.results.map((row) => ({ ...row, amount: number(row.amount) })), audit: audits.results,
@@ -391,11 +394,11 @@ async function workflowAction(request, env, id) {
     if (row.status !== "approved" || row.current_step !== "finance_completion") return jsonResponse({ error: "คำขอยังผ่านการลงนามไม่ครบ" }, 409);
     const paymentNo = clean(body.payment_no, 100), paymentDate = String(body.payment_date || ""), method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null;
     const recipient = clean(body.payment_recipient, 250) || clean(row.payee, 250), reference = clean(body.payment_reference, 150);
-    const withholdingTax = Number(body.withholding_tax || 0), note = clean(body.payment_note, 1000);
+    const withholdingTax = moneyValue(body.withholding_tax || 0), note = clean(body.payment_note, 1000);
     if (!paymentNo || !validDate(paymentDate) || !method || !recipient) return jsonResponse({ error: "กรุณาระบุเลขที่ใบสำคัญ วันที่ วิธีจ่าย และผู้รับเงิน" }, 400);
     if (["transfer", "cheque"].includes(method) && !reference) return jsonResponse({ error: "กรุณาระบุเลขอ้างอิงการโอนหรือเลขที่เช็ค" }, 400);
     if (!Number.isFinite(withholdingTax) || withholdingTax < 0 || withholdingTax > Number(row.amount)) return jsonResponse({ error: "ภาษีหัก ณ ที่จ่ายต้องไม่เกินยอดอนุมัติ" }, 400);
-    const netPaid = Math.round((Number(row.amount) - withholdingTax) * 100) / 100;
+    const netPaid = sumMoney([row.amount,-withholdingTax]);
     await env.DB.prepare(`UPDATE project_expenses SET status='paid',current_step='completed',payment_no=?,payment_date=?,payment_method=?,
       payment_reference=?,payment_recipient=?,payment_note=?,withholding_tax=?,net_paid=?,payment_recorded_by=?,paid_at=datetime('now'),updated_at=datetime('now') WHERE id=?`)
       .bind(paymentNo, paymentDate, method, reference, recipient, note, withholdingTax, netPaid, user.id, id).run();
@@ -426,7 +429,7 @@ async function createIncome(request, env) {
   const user = await currentUser(request, env);
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้น" }, 403);
-  const body = await request.json().catch(() => null), amount = Number(body?.amount);
+  const body = await request.json().catch(() => null), amount = moneyValue(body?.amount);
   if (!body || !validDate(body.received_date) || !clean(body.source_name, 300) || !Number.isFinite(amount) || amount <= 0) return jsonResponse({ error: "กรุณากรอกวันที่ แหล่งเงิน และจำนวนเงิน" }, 400);
   const year = Number(body.fiscal_year) || fiscalYear(body.received_date);
   const result = await env.DB.prepare("INSERT INTO budget_income(fiscal_year,received_date,document_no,source_name,source_type,amount,notes,created_by) VALUES(?,?,?,?,?,?,?,?)")
@@ -470,14 +473,12 @@ async function reportRows(request, env) {
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users requester ON requester.id=e.created_by
     LEFT JOIN users payer ON payer.id=e.payment_recorded_by WHERE ${filters.where}
     ORDER BY e.expense_date DESC,e.id DESC`).bind(...filters.bindings).all();
-  const summary = results.reduce((sum, row) => {
-    const amount = Number(row.amount || 0), tax = Number(row.withholding_tax || 0), net = Number(row.net_paid ?? amount);
-    sum.request_count += 1; sum.total_amount += amount;
-    if (row.status === "pending") sum.pending_amount += amount;
-    if (row.status === "approved") sum.approved_amount += amount;
-    if (row.status === "paid") { sum.paid_amount += amount; sum.withholding_tax += tax; sum.net_paid += net; }
-    return sum;
-  }, { request_count: 0, total_amount: 0, pending_amount: 0, approved_amount: 0, paid_amount: 0, withholding_tax: 0, net_paid: 0 });
+  const paid=results.filter(r=>r.status==='paid');
+  const summary={request_count:results.length,total_amount:sumMoney(results.map(r=>r.amount)),
+    pending_amount:sumMoney(results.filter(r=>r.status==='pending').map(r=>r.amount)),
+    approved_amount:sumMoney(results.filter(r=>r.status==='approved').map(r=>r.amount)),
+    paid_amount:sumMoney(paid.map(r=>r.amount)),withholding_tax:sumMoney(paid.map(r=>r.withholding_tax||0)),
+    net_paid:sumMoney(paid.map(r=>r.net_paid??r.amount))};
   return { user, filters, rows: results, summary };
 }
 

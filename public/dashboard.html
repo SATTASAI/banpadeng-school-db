@@ -176,7 +176,7 @@
   }
 </style>
 <link rel="stylesheet" href="/css/project-workflow.css">
-<link rel="stylesheet" href="/css/project-balance.css"></head>
+<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"></head>
 <body>
 <div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
 <div class="layout">
@@ -268,6 +268,7 @@
         <div class="budget-summary-grid" id="leaveSummary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
         <div style="overflow:auto;margin-top:16px" id="leaveTypeSummary"></div>
       </section>
+      <div id="projectAllocationChart"></div>
       <section id="balanceRequestInbox"></section>
       <section id="fundingSummary" style="margin-top:22px"></section>
 
@@ -336,7 +337,7 @@
   </div>
 </div>
 
-<script src="/js/api.js"></script><script src="/js/project-balance.js"></script>
+<script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
 <script src="/js/project-workflow.js"></script>
 <script>
   const PAGE_URLS = {
@@ -573,6 +574,12 @@
     }
     if (updateHash !== false) history.pushState(null, "", "#" + key);
   }
+
+  window.openNotificationPage = (url) => {
+    if(url === '/dashboard.html'){showOverview();return;}
+    const key=url.startsWith('/leave')?'leave':url.startsWith('/tasks')?'tasks':url.startsWith('/budget')?'budget':url.startsWith('/department')?'departments':'project-documents';
+    showPage(key,true,url);
+  };
 
   const SEARCH_TYPE_LABELS = {
     page:"เมนู",student:"นักเรียน",staff:"บุคลากร",project:"โครงการ",document:"เอกสาร",
@@ -813,6 +820,7 @@
       `;
 
       ProjectWorkflow.renderFundingSummary(document.getElementById("fundingSummary"),data.funding_summary);
+      ProjectAllocationChart.render(document.getElementById("projectAllocationChart"),data.department_summary.flatMap(d=>d.projects),data.fiscal_year?`ทุกฝ่าย · ปีงบประมาณ ${data.fiscal_year}`:"ทุกฝ่าย · ทุกปีงบประมาณ");
       const period = data.current_academic_period;
       document.getElementById("academicContextLabel").textContent = period
         ? `${period.academic_year_label} · ${period.academic_term_name || "ยังไม่เปิดภาคเรียน"}`

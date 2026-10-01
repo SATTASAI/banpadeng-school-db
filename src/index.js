@@ -1,3 +1,5 @@
+import { handleNotifications } from './routes/notifications.js';
+import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
 import {
   generateSalt,
   hashPassword,
@@ -83,16 +85,19 @@ async function ensureProjectExpenseSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_project_expenses_project ON project_expenses(project_id, expense_date DESC)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_project_expenses_status ON project_expenses(status, expense_date DESC)"),
     env.DB.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_project_expenses_opening ON project_expenses(project_id) WHERE category = 'opening_balance'"),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_expenses_insert"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_insert AFTER INSERT ON project_expenses BEGIN
-      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)/100.0
       WHERE id = NEW.project_id; END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_expenses_update"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_update AFTER UPDATE ON project_expenses BEGIN
-      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)/100.0
       WHERE id = OLD.project_id;
-      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id = NEW.project_id AND status = 'paid'), 0)/100.0
       WHERE id = NEW.project_id; END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_expenses_delete"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_expenses_delete AFTER DELETE ON project_expenses BEGIN
-      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)
+      UPDATE projects SET spent_amount = COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id = OLD.project_id AND status = 'paid'), 0)/100.0
       WHERE id = OLD.project_id; END`),
   ]);
 
@@ -111,7 +116,7 @@ async function ensureProjectExpenseSchema(env) {
   await env.DB.prepare(
     `UPDATE projects
      SET spent_amount = COALESCE((
-       SELECT SUM(e.amount) FROM project_expenses e
+       SELECT SUM(CAST(ROUND(e.amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses e
        WHERE e.project_id = projects.id AND e.status = 'paid'
      ), 0)`
   ).run();
@@ -1630,7 +1635,7 @@ async function handleCreateProject(request, env, department) {
   if (!PROJECT_FUNDING_TYPES[body.funding_type]) return jsonResponse({ error: "กรุณาเลือกงบอุดหนุน งบเรียนฟรี 15 ปี หรืองบรายได้สถานศึกษา" },400);
 
   const ownerIds = isAdmin(user) && Array.isArray(body.owner_ids) ? body.owner_ids.map(Number) : [user.id];
-  const budgetAmount = !(await canManageProjectFinance(env,user)) || body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
+  const budgetAmount = !(await canManageProjectFinance(env,user)) || body.budget_amount === "" || body.budget_amount == null ? 0 : money(body.budget_amount);
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
     return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
   }
@@ -1691,7 +1696,7 @@ async function handleUpdateProject(request, env, projectId) {
   }
   if (body.budget_amount !== undefined) {
     if (!financeManager) return jsonResponse({ error: "ยอดจัดสรรแก้ไขได้โดยเจ้าหน้าที่การเงินเท่านั้น" },403);
-    const amount = body.budget_amount === "" || body.budget_amount == null ? 0 : Number(body.budget_amount);
+    const amount = body.budget_amount === "" || body.budget_amount == null ? 0 : money(body.budget_amount);
     if (!Number.isFinite(amount) || amount < 0) return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
     updates.push("budget_amount = ?");
     values.push(amount);
@@ -1815,6 +1820,8 @@ async function handleListProjectExpenses(request, env, projectId) {
   ).bind(projectId).first();
   if (!project) return jsonResponse({ error: "ไม่พบโครงการ" }, 404);
 
+  const financial=(await projectFinancialRows(env,null,project.department)).find(p=>p.id===projectId);
+  Object.assign(project,financial);
   const { results: expenses } = await env.DB.prepare(
     `SELECT e.*, creator.full_name AS creator_name, approver.full_name AS approver_name
      FROM project_expenses e
@@ -1824,7 +1831,7 @@ async function handleListProjectExpenses(request, env, projectId) {
      ORDER BY e.expense_date DESC, e.created_at DESC, e.id DESC`
   ).bind(projectId).all();
   const { results: statusRows } = await env.DB.prepare(
-    `SELECT status, COUNT(*) AS item_count, COALESCE(SUM(amount), 0) AS total_amount
+    `SELECT status, COUNT(*) AS item_count, COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)), 0)/100.0 AS total_amount
      FROM project_expenses WHERE project_id = ? GROUP BY status`
   ).bind(projectId).all();
 
@@ -1885,7 +1892,7 @@ async function handleUpdateProjectExpense(request, env, expenseId) {
   }
   if (body.payee !== undefined) { updates.push("payee = ?"); values.push(String(body.payee || "").trim() || null); }
   if (body.amount !== undefined) {
-    const amount = Number(body.amount);
+    const amount = money(body.amount);
     if (!Number.isFinite(amount) || amount <= 0) return jsonResponse({ error: "จำนวนเงินต้องมากกว่า 0 บาท" }, 400);
     updates.push("amount = ?"); values.push(amount);
   }
@@ -4011,7 +4018,7 @@ async function handleOverview(request, env) {
     "SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing'"
   ).first();
   const pendingProjectExpenses = await env.DB.prepare(
-    `SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total_amount
+    `SELECT COUNT(*) AS count, COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)), 0)/100.0 AS total_amount
      FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)`
   ).bind(budgetFiscalYear,budgetFiscalYear).first();
   const inventoryAlerts = await env.DB.prepare(`SELECT
@@ -4061,7 +4068,13 @@ async function handleOverview(request, env) {
      ORDER BY days_remaining ASC, full_name ASC`
   ).all();
 
-  const departmentMap = Object.fromEntries(departmentRows.map((row) => [row.department, row]));
+  const financials=await projectFinancialRows(env,budgetFiscalYear);
+  const financeById=new Map(financials.map(p=>[p.id,p]));
+  for(const p of projectBudgetRows) Object.assign(p,financeById.get(p.id));
+  const departmentMap = Object.fromEntries(DEPARTMENTS.map(department=>{
+    const totals=financialTotals(financials.filter(p=>p.department===department));
+    return [department,{...departmentRows.find(r=>r.department===department),project_count:totals.project_count,total_budget:totals.total_amount,spent_budget:totals.spent_amount}];
+  }));
   const departmentSummary = DEPARTMENTS.map((department) => {
     const row = departmentMap[department];
     return {
@@ -4070,7 +4083,7 @@ async function handleOverview(request, env) {
       average_progress: Number(row?.average_progress || 0),
       total_budget: Number(row?.total_budget || 0),
       spent_budget: Number(row?.spent_budget || 0),
-      remaining_budget: Number(row?.total_budget || 0) - Number(row?.spent_budget || 0),
+      remaining_budget: sumMoney([row?.total_budget||0,-(row?.spent_budget||0)]),
       projects: projectBudgetRows
         .filter((project) => project.department === department)
         .map((project) => ({
@@ -4083,8 +4096,8 @@ async function handleOverview(request, env) {
     };
   });
 
-  const totalProjectBudget = departmentSummary.reduce((sum, row) => sum + row.total_budget, 0);
-  const totalProjectSpent = departmentSummary.reduce((sum, row) => sum + row.spent_budget, 0);
+  const totalProjectBudget = sumMoney(departmentSummary.map(row=>row.total_budget));
+  const totalProjectSpent = sumMoney(departmentSummary.map(row=>row.spent_budget));
 
   return jsonResponse({
     data_revision: dataRevision,
@@ -4101,11 +4114,11 @@ async function handleOverview(request, env) {
     inventory_overdue_borrow_count: Number(overdueInventoryBorrows?.count || 0),
     total_project_budget: totalProjectBudget,
     total_project_spent: totalProjectSpent,
-    total_project_remaining: totalProjectBudget - totalProjectSpent,
+    total_project_remaining: sumMoney([totalProjectBudget,-totalProjectSpent]),
     department_summary: departmentSummary,
     licenses_expiring: licensesExpiring,
     current_academic_period: currentAcademicPeriod,
-    funding_summary: await projectFundingSummary(env,budgetFiscalYear),
+    funding_summary: await projectFundingSummary(env,budgetFiscalYear,financials),
     ...activity,
   },200,{ "Cache-Control": "no-store" });
 }
@@ -4389,6 +4402,8 @@ export default {
       const workRecordMatch = pathname.match(/^\/api\/work-records\/(\d+)$/);
       if (workRecordMatch && method === "GET") return await handleGetWorkRecord(request, env, Number(workRecordMatch[1]));
       if (workRecordMatch && method === "PATCH") return await handleUpdateWorkRecord(request, env, Number(workRecordMatch[1]));
+      const notificationResponse=await handleNotifications(request,env,pathname,method);
+      if(notificationResponse)return notificationResponse;
       if (pathname === "/api/tasks" && method === "GET") return await handleListTasks(request, env);
       if (pathname === "/api/tasks" && method === "POST") return await handleCreateTask(request, env);
 

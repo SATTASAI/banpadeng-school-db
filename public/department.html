@@ -69,7 +69,7 @@
     .project-actions { justify-content:flex-start; }
   }
 </style>
-<link rel="stylesheet" href="/css/project-balance.css"></head>
+<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"></head>
 <body>
 <div class="app-shell">
   <div class="app-topbar">
@@ -89,6 +89,7 @@
     </div>
     <div class="topic-grid" id="topicGrid"></div>
 
+    <div id="projectAllocationChart"></div>
     <div class="section-title">
       <h3 style="margin:0;">โครงการ</h3>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -160,7 +161,7 @@
   </div>
 </div>
 
-<script src="/js/api.js"></script><script src="/js/project-balance.js"></script>
+<script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
 <script>
   const DEPT_LABELS = {
     academic: "ฝ่ายบริหารงานวิชาการ",
@@ -277,6 +278,7 @@
   async function loadProjects() {
     const { projects } = await apiRequest(`/api/departments/${dept}/projects`);
     currentProjects = projects;
+    ProjectAllocationChart.render(document.getElementById("projectAllocationChart"),projects,document.getElementById("deptTitle").textContent+" · ทุกปีงบประมาณ");
     const list = document.getElementById("projectList");
     if (projects.length === 0) {
       list.innerHTML = `<div class="empty-state">ยังไม่มีโครงการในฝ่ายนี้</div>`;
@@ -285,7 +287,7 @@
     list.innerHTML = projects
       .map((p) => {
         const canManage = currentUser.is_admin || p.owners.some((o) => o.user_id === currentUser.id);
-        const remaining = Number(p.budget_amount || 0) - Number(p.spent_amount || 0);
+        const remaining = p.remaining_amount;
         return `
         <div class="project-card" data-project-id="${p.id}">
           <div class="project-head">

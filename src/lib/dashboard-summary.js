@@ -1,3 +1,4 @@
+import { money, sumMoney } from './project-finance.js';
 // Live dashboard aggregates use the stored ledgers; no totals are kept in browser storage.
 export async function dashboardActivitySummary(env, fiscalYear = null) {
   const start = fiscalYear ? `${fiscalYear-544}-10-01` : null;
@@ -11,9 +12,9 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
     env.DB.prepare(`SELECT COUNT(DISTINCT user_id) people FROM leave_requests WHERE status='approved'
       AND start_date<=date('now','+7 hours') AND end_date>=date('now','+7 hours')`).first(),
     env.DB.prepare(`SELECT
-      (SELECT COALESCE(SUM(amount),0) FROM budget_income WHERE (? IS NULL OR fiscal_year=?)) received_amount,
-      (SELECT COALESCE(SUM(amount),0) FROM project_expenses WHERE status='paid' AND (? IS NULL OR fiscal_year=?)) paid_amount,
-      (SELECT COALESCE(SUM(amount),0) FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)) reserved_amount`)
+      (SELECT COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)),0)/100.0 FROM budget_income WHERE (? IS NULL OR fiscal_year=?)) received_amount,
+      (SELECT COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)),0)/100.0 FROM project_expenses WHERE status='paid' AND (? IS NULL OR fiscal_year=?)) paid_amount,
+      (SELECT COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)),0)/100.0 FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)) reserved_amount`)
       .bind(fiscalYear,fiscalYear,fiscalYear,fiscalYear,fiscalYear,fiscalYear).first(),
     env.DB.prepare(`SELECT fiscal_year FROM projects WHERE fiscal_year IS NOT NULL UNION SELECT fiscal_year FROM budget_income
       UNION SELECT fiscal_year FROM project_expenses WHERE fiscal_year IS NOT NULL ORDER BY fiscal_year DESC`).all(),
@@ -27,8 +28,8 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
   });
   const sum=key=>byType.reduce((n,r)=>n+r[key],0);
   return { fiscal_year:fiscalYear, fiscal_years:years.results.map(r=>Number(r.fiscal_year)),
-    finance_summary:{received_amount:Number(finances.received_amount),paid_amount:Number(finances.paid_amount),
-      reserved_amount:Number(finances.reserved_amount),balance_amount:Number(finances.received_amount)-Number(finances.paid_amount)},
+    finance_summary:{received_amount:money(finances.received_amount),paid_amount:money(finances.paid_amount),
+      reserved_amount:money(finances.reserved_amount),balance_amount:sumMoney([finances.received_amount,-finances.paid_amount])},
     leave_summary:{total:sum('total'),pending:sum('pending'),approved:sum('approved'),rejected:sum('rejected'),
       approved_days:sum('approved_days'),on_leave_today:Number(today.people||0),by_type:byType} };
 }

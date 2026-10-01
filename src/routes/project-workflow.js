@@ -1,8 +1,9 @@
+import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 
 const ready = new WeakSet();
 const clean = (v, max = 1500) => String(v ?? "").trim().slice(0, max) || null;
-const round = (v) => Math.round(Number(v) * 100) / 100;
+const round = money;
 const validDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "") && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
 const categories = ["materials", "equipment", "services", "compensation", "utilities", "travel", "food", "other"];
 export const PROJECT_FUNDING_TYPES = { subsidy: "งบอุดหนุน", free_education: "งบเรียนฟรี 15 ปี", school_income: "งบรายได้สถานศึกษา" };
@@ -12,17 +13,10 @@ export function currentProjectFiscalYear() {
   return year + (month >= 10 ? 544 : 543);
 }
 
-export async function projectFundingSummary(env, fiscalYear = currentProjectFiscalYear()) {
-  const { results } = await env.DB.prepare(`SELECT p.funding_type,COUNT(*) AS project_count,
-    COALESCE(SUM(p.budget_amount),0) AS total_amount,
-    COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid')),0) AS spent_amount,
-    COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=p.id AND e.status IN ('pending','approved'))),0) AS reserved_amount
-    FROM projects p WHERE (? IS NULL OR p.fiscal_year=?) GROUP BY p.funding_type`).bind(fiscalYear,fiscalYear).all();
-  const convert = row => ({ project_count: Number(row?.project_count||0), total_amount: round(row?.total_amount||0), spent_amount: round(row?.spent_amount||0),
-    reserved_amount: round(row?.reserved_amount||0), remaining_amount: round(Number(row?.total_amount||0)-Number(row?.spent_amount||0)),
-    available_amount: round(Number(row?.total_amount||0)-Number(row?.spent_amount||0)-Number(row?.reserved_amount||0)) });
-  return { fiscal_year: fiscalYear, budgets: Object.entries(PROJECT_FUNDING_TYPES).map(([key,label])=>({ key,label,...convert(results.find(r=>r.funding_type===key)) })),
-    unclassified: convert(results.find(r=>!r.funding_type)) };
+export async function projectFundingSummary(env, fiscalYear = currentProjectFiscalYear(), financialRows = null) {
+  const projects=financialRows || await projectFinancialRows(env,fiscalYear);
+  return {fiscal_year:fiscalYear,budgets:Object.entries(PROJECT_FUNDING_TYPES).map(([key,label])=>({key,label,...financialTotals(projects.filter(p=>p.funding_type===key))})),
+    unclassified:financialTotals(projects.filter(p=>!PROJECT_FUNDING_TYPES[p.funding_type]))};
 }
 
 export async function ensureProjectWorkflowSchema(env) {
@@ -60,22 +54,25 @@ export async function ensureProjectWorkflowSchema(env) {
       WHEN OLD.funding_type IS NOT NULL AND NEW.funding_type IS NOT OLD.funding_type
         AND EXISTS(SELECT 1 FROM project_expenses WHERE project_id=OLD.id AND status IN ('pending','approved','paid'))
       BEGIN SELECT RAISE(ABORT,'project_funding_locked'); END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_workflow_budget_insert"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_insert BEFORE INSERT ON project_expenses
       WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid') BEGIN
-      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND status IN ('pending','approved','paid')),0),2)
-        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      SELECT CASE WHEN CAST(ROUND(NEW.amount*100+0.000001) AS INTEGER)+COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.project_id AND status IN ('pending','approved','paid')),0)
+        > CAST(ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id)*100+0.000001) AS INTEGER)
       THEN RAISE(ABORT,'project_budget_exceeded') END; END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_workflow_budget_update"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_update BEFORE UPDATE ON project_expenses
       WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid')
         AND (OLD.status NOT IN ('pending','approved','paid') OR NEW.amount>OLD.amount OR NEW.project_id<>OLD.project_id) BEGIN
-      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND id<>NEW.id AND status IN ('pending','approved','paid')),0),2)
-        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      SELECT CASE WHEN CAST(ROUND(NEW.amount*100+0.000001) AS INTEGER)+COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.project_id AND id<>NEW.id AND status IN ('pending','approved','paid')),0)
+        > CAST(ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id)*100+0.000001) AS INTEGER)
       THEN RAISE(ABORT,'project_budget_exceeded') END; END`),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_lock BEFORE UPDATE ON project_expenses
       WHEN OLD.workflow_version=2 AND OLD.status='paid' AND (NEW.amount<>OLD.amount OR NEW.project_id<>OLD.project_id OR NEW.status<>OLD.status)
       BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END`),
+    env.DB.prepare("DROP TRIGGER IF EXISTS trg_project_workflow_budget_reduction"),
     env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_reduction BEFORE UPDATE OF budget_amount ON projects
-      WHEN NEW.budget_amount<OLD.budget_amount AND ROUND(NEW.budget_amount,2)<ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0),2)
+      WHEN NEW.budget_amount<OLD.budget_amount AND CAST(ROUND(NEW.budget_amount*100+0.000001) AS INTEGER)<COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0)
       BEGIN SELECT RAISE(ABORT,'project_budget_exceeded'); END`),
   ]);
   ready.add(env.DB);
@@ -120,7 +117,7 @@ export async function notifyBudgetSupportingDocument(env, user, documentId) {
   ]);
 }
 
-export async function projectWorkflowSnapshots(env, user, department = null, fiscalYear = null) {
+export async function projectWorkflowSnapshots(env, user, department = null, fiscalYear = null, financialRows = null) {
   const filters = [], values = [user.id, user.id, user.id];
   if (department) { filters.push("COALESCE(p.management_area,p.department)=?"); values.push(department); }
   if (fiscalYear) { filters.push("p.fiscal_year=?"); values.push(fiscalYear); }
@@ -140,16 +137,16 @@ export async function projectWorkflowSnapshots(env, user, department = null, fis
     FROM projects p ${filters.length ? "WHERE " + filters.join(" AND ") : ""}
     ORDER BY CASE WHEN new_request_count>0 THEN 0 WHEN unread_count>0 THEN 1 WHEN active_request_count>0 THEN 2 ELSE 3 END,
       priority_rank,COALESCE(next_needed_date,'9999-12-31'),p.name`).bind(...values).all();
-  return results.map(p => ({ ...p, budget_amount: round(p.budget_amount || 0), spent_amount: round(p.spent_amount), reserved_amount: round(p.reserved_amount),
-    remaining_amount: round(Number(p.budget_amount || 0) - p.spent_amount), available_amount: round(Number(p.budget_amount || 0) - p.spent_amount - p.reserved_amount),
-    can_request: isAdmin(user) || Boolean(p.can_request) }));
+  const financials=new Map((financialRows || await projectFinancialRows(env,fiscalYear,department)).map(p=>[p.id,p]));
+  return results.map(p=>({...p,...financials.get(p.id),can_request:isAdmin(user)||Boolean(p.can_request)}));
 }
 
 async function overview(request, env, user) {
   const url = new URL(request.url), year = Number(url.searchParams.get("fiscal_year")) || null, department = url.searchParams.get("department") || null;
   const finance = await canManageProjectFinance(env, user);
-  const fundingSummary = await projectFundingSummary(env,year||currentProjectFiscalYear());
-  const projects = await projectWorkflowSnapshots(env, user, department, year);
+  const financialRows=await projectFinancialRows(env,year);
+  const fundingSummary = await projectFundingSummary(env,year,financialRows);
+  const projects = await projectWorkflowSnapshots(env, user, department, year,financialRows);
   const ids = projects.map(p => p.id);
   if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance, can_balance_edit: isAdmin(user) } });
   const placeholders = ids.map(() => "?").join(",");
@@ -179,11 +176,11 @@ function parseBody(body) {
   if (!Array.isArray(body.items) || !body.items.length || body.items.length > 100) return { error: "กรุณาเพิ่มรายการค่าใช้จ่าย 1–100 รายการ" };
   const items = [];
   for (const [index, r] of body.items.entries()) {
-    const quantity = Number(r.quantity), price = Number(r.unit_price), amount = round(quantity * price);
+    const quantity = Number(r.quantity), price = Number(r.unit_price), amount = multiplyMoney(quantity,price);
     if (!clean(r.description,500) || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(Math.round(amount * 100))) return { error: `รายการที่ ${index+1} ไม่ถูกต้อง` };
     items.push({ description: clean(r.description,500), category: categories.includes(r.category) ? r.category : "other", quantity, unit: clean(r.unit,100), price, amount });
   }
-  const total = round(items.reduce((a,r) => a+r.amount,0));
+  const total = sumMoney(items.map(r=>r.amount));
   if (!(total > 0)) return { error: "ยอดเบิกต้องมากกว่า 0 บาท" };
   return { items, total };
 }
@@ -248,7 +245,7 @@ async function action(request, env, user, id) {
       if (!validDate(date) || !["cash","transfer","cheque","other"].includes(method) || !recipient || !number || !Number.isFinite(tax) || tax<0 || tax>Number(row.amount)) return jsonResponse({ error: "กรุณาระบุเลขที่ใบสำคัญ วันที่ วิธีจ่าย ผู้รับเงิน และภาษีให้ถูกต้อง" },400);
       if (["transfer","cheque"].includes(method) && !reference) return jsonResponse({ error: "กรุณาระบุเลขอ้างอิงการโอนหรือเช็ค" },400);
       sql = `UPDATE project_expenses SET status='paid',current_step='completed',payment_no=?,payment_date=?,payment_method=?,payment_reference=?,payment_recipient=?,withholding_tax=?,net_paid=?,payment_note=?,payment_recorded_by=?,paid_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='approved' AND current_step='finance_ready'`;
-      args = [number,date,method,reference,recipient,tax,round(row.amount-tax),clean(body.payment_note),user.id,id]; message = "ยืนยันการเบิกจ่ายแล้ว สามารถเบิกจ่ายได้ ยอดเงินคงเหลือปรับแล้ว";
+      args = [number,date,method,reference,recipient,tax,sumMoney([row.amount,-tax]),clean(body.payment_note),user.id,id]; message = "ยืนยันการเบิกจ่ายแล้ว สามารถเบิกจ่ายได้ ยอดเงินคงเหลือปรับแล้ว";
     } else return jsonResponse({ error: "คำสั่งไม่ถูกต้อง" },400);
   }
   const token = crypto.randomUUID();

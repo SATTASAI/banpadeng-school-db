@@ -380,7 +380,7 @@ AFTER INSERT ON project_expenses
 BEGIN
   UPDATE projects
   SET spent_amount = COALESCE((
-    SELECT SUM(amount) FROM project_expenses
+    SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses
     WHERE project_id = NEW.project_id AND status = 'paid'
   ), 0)
   WHERE id = NEW.project_id;
@@ -391,13 +391,13 @@ AFTER UPDATE ON project_expenses
 BEGIN
   UPDATE projects
   SET spent_amount = COALESCE((
-    SELECT SUM(amount) FROM project_expenses
+    SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses
     WHERE project_id = OLD.project_id AND status = 'paid'
   ), 0)
   WHERE id = OLD.project_id;
   UPDATE projects
   SET spent_amount = COALESCE((
-    SELECT SUM(amount) FROM project_expenses
+    SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses
     WHERE project_id = NEW.project_id AND status = 'paid'
   ), 0)
   WHERE id = NEW.project_id;
@@ -408,7 +408,7 @@ AFTER DELETE ON project_expenses
 BEGIN
   UPDATE projects
   SET spent_amount = COALESCE((
-    SELECT SUM(amount) FROM project_expenses
+    SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER))/100.0 FROM project_expenses
     WHERE project_id = OLD.project_id AND status = 'paid'
   ), 0)
   WHERE id = OLD.project_id;
@@ -940,15 +940,15 @@ CREATE TRIGGER IF NOT EXISTS trg_project_workflow_funding_lock BEFORE UPDATE OF 
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_insert BEFORE INSERT ON project_expenses
       WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid') BEGIN
-      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND status IN ('pending','approved','paid')),0),2)
-        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      SELECT CASE WHEN CAST(ROUND(NEW.amount*100+0.000001) AS INTEGER)+COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.project_id AND status IN ('pending','approved','paid')),0)
+        > CAST(ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id)*100+0.000001) AS INTEGER)
       THEN RAISE(ABORT,'project_budget_exceeded') END; END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_update BEFORE UPDATE ON project_expenses
       WHEN NEW.workflow_version=2 AND NEW.status IN ('pending','approved','paid')
         AND (OLD.status NOT IN ('pending','approved','paid') OR NEW.amount>OLD.amount OR NEW.project_id<>OLD.project_id) BEGIN
-      SELECT CASE WHEN ROUND(NEW.amount+COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.project_id AND id<>NEW.id AND status IN ('pending','approved','paid')),0),2)
-        > ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id),2)
+      SELECT CASE WHEN CAST(ROUND(NEW.amount*100+0.000001) AS INTEGER)+COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.project_id AND id<>NEW.id AND status IN ('pending','approved','paid')),0)
+        > CAST(ROUND((SELECT budget_amount FROM projects WHERE id=NEW.project_id)*100+0.000001) AS INTEGER)
       THEN RAISE(ABORT,'project_budget_exceeded') END; END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_lock BEFORE UPDATE ON project_expenses
@@ -956,7 +956,7 @@ CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_lock BEFORE UPDATE ON pro
       BEGIN SELECT RAISE(ABORT,'confirmed_payment_locked'); END;
 
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_reduction BEFORE UPDATE OF budget_amount ON projects
-      WHEN NEW.budget_amount<OLD.budget_amount AND ROUND(NEW.budget_amount,2)<ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0),2)
+      WHEN NEW.budget_amount<OLD.budget_amount AND CAST(ROUND(NEW.budget_amount*100+0.000001) AS INTEGER)<COALESCE((SELECT SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0)
       BEGIN SELECT RAISE(ABORT,'project_budget_exceeded'); END;
 
 -- Password recovery: store only token hashes; revoke sessions on successful reset.
@@ -997,4 +997,10 @@ CREATE TABLE IF NOT EXISTS project_balance_changes (
   old_total REAL NOT NULL, new_total REAL NOT NULL, reason TEXT NOT NULL,
   actor_id INTEGER NOT NULL REFERENCES users(id), request_id INTEGER REFERENCES project_balance_requests(id),
   created_at TEXT NOT NULL DEFAULT(datetime('now'))
+);
+
+-- Individual read receipts for the unified notification bar.
+CREATE TABLE IF NOT EXISTS notification_reads (
+ user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,
+ read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key)
 );

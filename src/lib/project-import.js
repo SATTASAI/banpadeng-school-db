@@ -1,3 +1,4 @@
+import { money } from './project-finance.js';
 const DEPARTMENTS = new Set(["academic", "early_childhood", "budget", "personnel", "general"]);
 const storedDepartment = (department) => department === "early_childhood" ? "academic" : department;
 const managementArea = (department) => department === "early_childhood" ? "early_childhood" : null;
@@ -51,7 +52,7 @@ export async function upsertProjectRow(env, rawRow, createdBy, explicitOwnerIds 
   const department = String(rawRow.department || "").trim().toLowerCase();
   const name = text(rawRow.name, 300);
   const fiscalYear = Number(rawRow.fiscal_year);
-  const budgetAmount = rawRow.budget_amount === "" || rawRow.budget_amount == null ? 0 : Number(rawRow.budget_amount);
+  const budgetAmount = rawRow.budget_amount === "" || rawRow.budget_amount == null ? 0 : money(rawRow.budget_amount);
   if (!DEPARTMENTS.has(department)) throw new Error("ฝ่ายงานไม่ถูกต้อง");
   if (!name) throw new Error("กรุณากรอกชื่อโครงการ");
   if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) throw new Error("ปีงบประมาณไม่ถูกต้อง");
