@@ -1,3 +1,4 @@
+import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
@@ -5,7 +6,7 @@ async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CRE
 function feed(env,user){
  const sql=`WITH messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
- '/project-documents.html?project='||p.id url,n.read_at read_at
+ CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at
  FROM project_notifications n JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id WHERE n.user_id=?
  UNION ALL
  SELECT 'balance:'||r.id||':'||r.status,'คำขอแก้ยอด: '||p.name,
@@ -32,6 +33,7 @@ export async function handleNotifications(request,env,pathname,method){
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
  await ensure(env);const q=feed(env,user);
  if(pathname==='/api/notifications'&&method==='GET'){
+  await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();
   return jsonResponse({unread_count:Number(results[0]?.unread_count||0),notifications:results.map(({unread_count,read_at,...r})=>r)},200,{'Cache-Control':'no-store'});
  }

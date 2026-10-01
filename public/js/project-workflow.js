@@ -11,6 +11,7 @@ window.ProjectWorkflow = (() => {
 
   function mount(root, options = {}) {
     window.addEventListener("project-balances-updated",()=>refresh().catch(()=>{}));
+    let refreshing=null;
     let data={projects:[],requests:[],notifications:[],permissions:{}},openedProject=Number(options.project)||null, search='', busy=false;
     const dialog=document.createElement('dialog');dialog.className='wf-modal';document.body.append(dialog);
     const statusBox=document.createElement('div');statusBox.className='wf-error';root.before(statusBox);
@@ -18,9 +19,11 @@ window.ProjectWorkflow = (() => {
     function modal(content){dialog.innerHTML=`<div class="wf-modal-error wf-error"></div>${content}`;if(!dialog.open)dialog.showModal();dialog.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>dialog.close());}
     function modalError(message){const box=dialog.querySelector('.wf-modal-error');if(box){box.textContent=message;box.style.display='block';}}
     async function refresh(){
-      try { error(); const q=new URLSearchParams();if(options.department)q.set('department',options.department);const year=typeof options.year==='function'?options.year():options.year;if(year)q.set('fiscal_year',year);
+      if(refreshing)return refreshing;
+      refreshing=(async()=>{try { error(); const q=new URLSearchParams();if(options.department)q.set('department',options.department);const year=typeof options.year==='function'?options.year():options.year;if(year)q.set('fiscal_year',year);
         data=await apiRequest('/api/project-documents/overview?'+q);render();options.onRefresh?.(data);return data;
-      } catch(e){error(e.message);throw e;}
+      } catch(e){error(e.message);throw e;}})();
+      try{return await refreshing;}finally{refreshing=null;}
     }
     function balances(p){return `<div class="wf-balances"><div><span>งบทั้งหมด</span><strong>${money(p.budget_amount)}</strong></div><div><span>จ่ายแล้ว</span><strong>${money(p.spent_amount)}</strong></div><div class="wf-remaining"><span>เงินคงเหลือ</span><strong>${money(p.remaining_amount)}</strong></div><div><span>รอดำเนินการ / วงเงินที่ขอได้</span><strong>${money(p.reserved_amount)} / ${money(p.available_amount)}</strong></div></div>`;}
     function render(){
@@ -122,9 +125,14 @@ window.ProjectWorkflow = (() => {
         finally{busy=false;button.disabled=false;button.textContent='อัปโหลดและแจ้งเจ้าหน้าที่';}};
     }
     function allocation(id){const p=data.projects.find(p=>p.id===id);modal(`<h2>ปรับวงเงินโครงการ</h2><p>${esc(p.name)}</p><form>${field('ยอดจัดสรร (บาท)',`<input name="budget_amount" type="number" required min="${p.spent_amount+p.reserved_amount}" step="0.01" value="${p.budget_amount}">`)}<p>จ่ายแล้ว ${money(p.spent_amount)} · รอดำเนินการ ${money(p.reserved_amount)}</p><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">บันทึก</button></div></form>`);dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await apiRequest(`/api/projects/${id}`,{method:'PATCH',body:{budget_amount:Number(e.target.elements.budget_amount.value)}});dialog.close();await refresh();options.onChange?.();}catch(err){modalError(err.message);}};}
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!dialog.open&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]'))refresh().catch(()=>{});});
-    const timer=setInterval(()=>{if(!document.hidden&&!dialog.open&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]'))refresh().catch(()=>{});},15000);
-    window.addEventListener('pagehide',()=>clearInterval(timer),{once:true});
+    function refreshVisible(){if(!document.hidden&&!dialog.open&&!busy&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]')&&!document.activeElement?.matches?.('[data-search]'))refresh().catch(()=>{});}
+    document.addEventListener('visibilitychange',refreshVisible);
+    window.addEventListener('focus',refreshVisible);
+    window.addEventListener('school-data-changed',refreshVisible);
+    window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='school-data-changed')refreshVisible();});
+    let channel;try{channel=new BroadcastChannel('school-data-changed');channel.onmessage=refreshVisible;}catch{}
+    const timer=setInterval(refreshVisible,5000);
+    window.addEventListener('pagehide',()=>{clearInterval(timer);channel?.close();},{once:true});
     return {refresh,newRequest,openProject};
   }
   function renderFundingSummary(container,summary){

@@ -88,15 +88,34 @@ async function ownsProject(env, user, id) {
   return isAdmin(user) || Boolean(await env.DB.prepare("SELECT 1 FROM project_owners WHERE project_id=? AND user_id=?").bind(id, user.id).first());
 }
 
+// Recover unnotified queue entries and include staff assigned after submission.
+// Existing read receipts are preserved by the unique event/user constraint.
+export async function ensureFinanceQueueNotifications(env,user) {
+  if(!await canManageProjectFinance(env,user))return;
+  await env.DB.batch([
+    env.DB.prepare(`INSERT OR IGNORE INTO project_workflow_events(token,expense_id,project_id,event_type,message,actor_id,created_at)
+      SELECT 'queue-recovery:'||e.id||':'||COALESCE(e.submitted_at,e.created_at),e.id,e.project_id,'submit_recovered',
+      'มีคำขอเบิกจ่ายรอเจ้าหน้าที่รับเรื่อง',e.created_by,COALESCE(e.submitted_at,e.created_at)
+      FROM project_expenses e WHERE e.workflow_version=2 AND e.status='pending' AND e.current_step='finance_queue'
+      AND NOT EXISTS(SELECT 1 FROM project_workflow_events v WHERE v.expense_id=e.id
+        AND v.event_type IN ('submit','submit_recovered') AND v.created_at>=COALESCE(e.submitted_at,e.created_at))`),
+    env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+      SELECT v.token,?,'finance' FROM project_workflow_events v JOIN project_expenses e ON e.id=v.expense_id
+      WHERE e.workflow_version=2 AND e.status='pending' AND e.current_step='finance_queue'
+      AND v.event_type IN ('submit','submit_recovered') AND v.created_at>=COALESCE(e.submitted_at,e.created_at)`)
+      .bind(user.id),
+  ]);
+}
+
 export async function canAccessBudgetSupportingDocument(env, user, documentId) {
   const row = await env.DB.prepare(`SELECT e.project_id,e.created_by FROM budget_supporting_documents d JOIN project_expenses e ON e.id=d.expense_id WHERE d.id=?`).bind(documentId).first();
   return Boolean(row && (Number(row.created_by) === Number(user.id) || await ownsProject(env, user, row.project_id) || await canManageProjectFinance(env, user)));
 }
 
-function eventStatements(env, token, expenseId, eventType, message, user, audience, conditional = false) {
+function eventStatements(env, token, expenseId, eventType, message, user, audience, condition = "1", conditionValues = []) {
   const statements = [env.DB.prepare(`INSERT INTO project_workflow_events(token,expense_id,project_id,event_type,message,actor_id)
-    SELECT ?,e.id,e.project_id,?,?,? FROM project_expenses e WHERE e.id=? ${conditional ? "AND changes()=1" : ""}`)
-    .bind(token, eventType, message, user.id, expenseId)];
+    SELECT ?,e.id,e.project_id,?,?,? FROM project_expenses e WHERE e.id=? AND (${condition})`)
+    .bind(token, eventType, message, user.id, expenseId,...conditionValues)];
   const recipients = audience === "finance"
     ? `SELECT u.id FROM users u WHERE u.status='active' AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key='finance_review' AND a.department=''))`
     : `SELECT u.id FROM users u WHERE u.status='active' AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
@@ -111,10 +130,11 @@ export async function notifyBudgetSupportingDocument(env, user, documentId) {
   const row = await env.DB.prepare("SELECT expense_id,title FROM budget_supporting_documents WHERE id=?").bind(documentId).first();
   if (!row) return;
   const token = crypto.randomUUID();
-  await env.DB.batch([
-    env.DB.prepare("UPDATE budget_supporting_documents SET notification_sent=1 WHERE id=? AND notification_sent=0").bind(documentId),
-    ...eventStatements(env, token, row.expense_id, "attachment_added", `เพิ่มเอกสาร: ${row.title}`, user, "finance", true),
-  ]);
+  const events=eventStatements(env,token,row.expense_id,"attachment_added",`เพิ่มเอกสาร: ${row.title}`,user,"finance",
+    'EXISTS(SELECT 1 FROM budget_supporting_documents WHERE id=? AND notification_sent=0)',[documentId]);
+  await env.DB.batch([events[0],
+    env.DB.prepare("UPDATE budget_supporting_documents SET notification_sent=1 WHERE id=? AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)").bind(documentId,token),
+    ...events.slice(1)]);
 }
 
 export async function projectWorkflowSnapshots(env, user, department = null, fiscalYear = null, financialRows = null) {
@@ -144,6 +164,7 @@ export async function projectWorkflowSnapshots(env, user, department = null, fis
 async function overview(request, env, user) {
   const url = new URL(request.url), year = Number(url.searchParams.get("fiscal_year")) || null, department = url.searchParams.get("department") || null;
   const finance = await canManageProjectFinance(env, user);
+  await ensureFinanceQueueNotifications(env,user);
   const financialRows=await projectFinancialRows(env,year);
   const fundingSummary = await projectFundingSummary(env,year,financialRows);
   const projects = await projectWorkflowSnapshots(env, user, department, year,financialRows);
@@ -249,8 +270,13 @@ async function action(request, env, user, id) {
     } else return jsonResponse({ error: "คำสั่งไม่ถูกต้อง" },400);
   }
   const token = crypto.randomUUID();
-  const results = await env.DB.batch([env.DB.prepare(sql).bind(...args),...eventStatements(env,token,id,kind,message,user,audience,true)]);
-  if (!results[0].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" },409);
+  const conditions={submit:"e.status='draft'",receive:"e.status='pending' AND e.current_step='finance_queue'",
+    complete:"e.status='pending' AND e.current_step='finance_processing'",return:"e.status IN ('pending','approved')",
+    reject:"e.status IN ('pending','approved')",pay:"e.status='approved' AND e.current_step='finance_ready'"};
+  const events=eventStatements(env,token,id,kind,message,user,audience,conditions[kind]);
+  // The event is the transaction marker. Do not depend on changes() across D1 statements.
+  const results=await env.DB.batch([events[0],env.DB.prepare(sql+' AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)').bind(...args,token),...events.slice(1)]);
+  if (!results[1].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" },409);
   return jsonResponse({ ok: true });
 }
 
