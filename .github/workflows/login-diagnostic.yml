@@ -1,0 +1,41 @@
+name: Diagnose school login configuration
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/login-diagnostic.yml'
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read only login configuration and credential format
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,urllib.request,urllib.error,re
+          root='https://api.cloudflare.com/client/v4/accounts/'+os.environ['CF_ACCOUNT_ID']
+          headers={'Authorization':'Bearer '+os.environ['CF_API_TOKEN'],'Content-Type':'application/json'}
+          def call(path,body=None):
+            req=urllib.request.Request(root+path,headers=headers,data=json.dumps(body).encode() if body is not None else None)
+            try:
+              with urllib.request.urlopen(req,timeout=20) as r:return json.load(r)
+            except urllib.error.HTTPError as e:
+              print('Lookup HTTP status:',e.code,'for',path.split('?')[0]);return None
+          settings=call('/workers/scripts/banpadeng-school-db/settings')
+          if settings:
+            bindings=(settings.get('result') or {}).get('bindings') or []
+            print(json.dumps({'jwt_secret_binding_present':any(b.get('name')=='JWT_SECRET' for b in bindings),'database_binding_present':any(b.get('name')=='DB' and b.get('type')=='d1' for b in bindings),'binding_types':[{'name':b.get('name'),'type':b.get('type')} for b in bindings if b.get('name') in ('JWT_SECRET','DB')]},ensure_ascii=False))
+          config=open('wrangler.jsonc').read()
+          db_id=re.search(r'"database_id"\s*:\s*"([a-f0-9-]+)"',config).group(1)
+          sql="SELECT COUNT(*) AS matching_accounts, MIN(status) AS account_status, MIN(role) AS account_role, MIN(typeof(password_hash)) AS hash_type, MIN(length(password_hash)) AS hash_length, MIN(typeof(password_salt)) AS salt_type, MIN(length(password_salt)) AS salt_length, MAX(CASE WHEN password_hash GLOB '*[^0-9a-fA-F]*' THEN 1 ELSE 0 END) AS hash_not_hex, MAX(CASE WHEN password_salt GLOB '*[^0-9a-fA-F]*' THEN 1 ELSE 0 END) AS salt_not_hex FROM users WHERE email=?"
+          result=call('/d1/database/'+db_id+'/query',{'sql':sql,'params':['sattawat.imc@gmail.com']})
+          if result:
+            print('Read-only account format:',json.dumps(result.get('result'),ensure_ascii=False))
+          PY
