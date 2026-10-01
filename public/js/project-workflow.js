@@ -10,7 +10,7 @@ window.ProjectWorkflow = (() => {
   const field = (label,content,wide=false) => `<label class="field ${wide?'wf-wide':''}"><span>${label}</span>${content}</label>`;
 
   function mount(root, options = {}) {
-    window.addEventListener("project-balances-updated",()=>refresh().catch(()=>{}));
+    window.addEventListener("project-balances-updated",refreshVisible);
     let refreshing=null;
     let data={projects:[],requests:[],notifications:[],permissions:{}},openedProject=Number(options.project)||null, search='', busy=false;
     const dialog=document.createElement('dialog');dialog.className='wf-modal';document.body.append(dialog);
@@ -25,38 +25,43 @@ window.ProjectWorkflow = (() => {
       } catch(e){error(e.message);throw e;}})();
       try{return await refreshing;}finally{refreshing=null;}
     }
-    function balances(p){return `<div class="wf-balances"><div><span>งบทั้งหมด</span><strong>${money(p.budget_amount)}</strong></div><div><span>จ่ายแล้ว</span><strong>${money(p.spent_amount)}</strong></div><div class="wf-remaining"><span>เงินคงเหลือ</span><strong>${money(p.remaining_amount)}</strong></div><div><span>รอดำเนินการ / วงเงินที่ขอได้</span><strong>${money(p.reserved_amount)} / ${money(p.available_amount)}</strong></div></div>`;}
+    function balances(p){return `<div class="wf-balances"><div><span>งบทั้งหมด</span><strong>${money(p.budget_amount)}</strong></div><div><span>จ่ายแล้ว</span><strong>${money(p.spent_amount)}</strong></div><div class="wf-remaining ${p.remaining_amount<0?'wf-negative':''}"><span>เงินคงเหลือ</span><strong>${money(p.remaining_amount)}</strong></div><div><span>รอดำเนินการ / วงเงินที่ขอได้</span><strong>${money(p.reserved_amount)} / ${money(p.available_amount)}</strong></div></div>`;}
     function render(){
       const projects=data.projects.filter(p=>(!options.internal || p.department==='budget') && (!search || (p.name+' '+p.owner_names).toLowerCase().includes(search)));
       const unread=data.notifications.filter(n=>!n.read_at);
-      root.innerHTML=`${unread.slice(0,6).map(n=>`<div class="wf-notice">${esc(n.project_name)}: ${esc(n.message)} <button class="btn btn-ghost" data-open="${n.project_id}">ดูรายการ</button></div>`).join('')}
+      root.innerHTML=`${unread.slice(0,6).map(n=>`<div class="wf-notice wf-notice--alert"><span><strong>${esc(n.project_name)}</strong><br>${esc(n.message)}</span><button class="btn btn-ghost" data-open="${n.project_id}">ไปที่คำขอ</button></div>`).join('')}
         <div class="wf-tools"><input type="search" data-search aria-label="ค้นหาโครงการ" placeholder="ค้นหาชื่อโครงการ / ผู้รับผิดชอบ" value="${esc(search)}"><span class="wf-muted">${projects.length} โครงการ</span></div>
-        <div class="wf-projects">${projects.map(p=>`<article class="wf-project" data-project="${p.id}">
-          ${p.unread_count||p.new_request_count?`<small class="wf-alert">${p.new_request_count?`รอรับ ${p.new_request_count}`:`แจ้งเตือน ${p.unread_count}`}</small>`:''}
-          <h3>${esc(p.name)}</h3><div class="wf-muted">ฝ่าย${departments[p.department]||esc(p.department)} · ปีงบประมาณ ${p.fiscal_year}</div>
-          <div class="wf-muted">${fundingTypes[p.funding_type]||"ยังไม่ระบุประเภทเงิน"}</div><div class="wf-muted">ผู้รับผิดชอบ: ${esc(p.owner_names||'ยังไม่ระบุ')}</div>${balances(p)}${window.ProjectBalance?ProjectBalance.field(p,data.permissions.can_balance_edit):""}
-          <div class="wf-actions"><button class="btn btn-ghost" data-open="${p.id}">เอกสาร / ความคืบหน้า</button>
-          ${p.can_request&&p.status!=='cancelled'?p.funding_type?`<button class="btn btn-primary" data-new="${p.id}">+ จัดทำคำขอเบิกจ่าย</button>`:`<a class="btn btn-primary" href="/department.html?dept=${p.department}&project=${p.id}">ระบุประเภทเงินโครงการ</a>`:''}
-          ${data.permissions.can_finance&&options.finance?`<button class="btn btn-ghost" data-allocation="${p.id}">ปรับวงเงินโครงการ</button>`:''}</div>
-        </article>`).join('')||'<p class="wf-muted">ยังไม่มีโครงการในรายการนี้</p>'}</div>
-        ${openedProject?renderProject(openedProject):''}`;
+        <div class="wf-projects">${projects.map(p=>`<article class="wf-project ${p.new_request_count?'wf-project--attention':''}" data-project="${p.id}">
+          <div class="wf-project-info">${p.unread_count||p.new_request_count?`<small class="wf-alert">${p.new_request_count?`รอรับ ${p.new_request_count}`:`แจ้งเตือน ${p.unread_count}`}</small>`:''}
+          <h3>${esc(p.name)}</h3><div class="wf-muted">ฝ่าย${departments[p.department]||esc(p.department)} · ปีงบประมาณ ${p.fiscal_year} · รหัส ${p.id}</div>
+          <div class="wf-muted">${fundingTypes[p.funding_type]||"ยังไม่ระบุประเภทเงิน"}</div><div class="wf-muted">ผู้รับผิดชอบ: ${esc(p.owner_names||'ยังไม่ระบุ')}</div>
+          ${p.description?`<p class="wf-project-description">${esc(p.description)}</p>`:''}<div class="wf-muted">ความคืบหน้า ${Number(p.progress_percent||0)}% · ${({ongoing:'กำลังดำเนินการ',completed:'เสร็จสิ้น',cancelled:'ยกเลิก'})[p.status]||esc(p.status)}</div></div>
+          <div class="wf-project-summary">${balances(p)}</div>
+          <div class="wf-project-controls">${window.ProjectBalance?ProjectBalance.field(p,data.permissions.can_balance_edit):""}
+          ${data.permissions.can_finance&&options.finance?`<div class="wf-allocation" data-allocation-field><label>งบจัดสรรโครงการ (บาท)<input type="number" min="${Math.round((p.spent_amount+p.reserved_amount)*100)/100}" step="0.01" value="${p.budget_amount}" data-allocation-value="${p.id}"></label><button class="btn btn-ghost" data-allocation-save="${p.id}">บันทึกวงเงิน</button></div>`:''}
+          <div class="wf-actions"><button class="btn btn-ghost" data-open="${p.id}">ไปที่เอกสาร / คำขอ</button>
+          ${p.can_request||data.permissions.can_finance?`<button class="btn btn-ghost" data-edit-project="${p.id}">แก้ไขรายละเอียดโครงการ</button>`:''}
+          ${p.can_request&&p.status!=='cancelled'?p.funding_type?`<button class="btn btn-primary" data-new="${p.id}">+ จัดทำคำขอเบิกจ่าย</button>`:`<button class="btn btn-primary" data-edit-project="${p.id}">ระบุประเภทเงินโครงการ</button>`:''}</div></div>
+          ${data.requests.some(e=>e.project_id===p.id)?renderProject(p.id,true):'<div class="wf-project-empty wf-muted">ยังไม่มีคำขอเบิกจ่ายที่คุณมีสิทธิ์ดู</div>'}
+        </article>`).join('')||'<p class="wf-muted">ยังไม่มีโครงการในรายการนี้</p>'}</div>`;
       root.querySelector('[data-search]').oninput=e=>{search=e.target.value.trim().toLowerCase();const pos=e.target.selectionStart;render();const input=root.querySelector('[data-search]');input.focus();input.setSelectionRange(pos,pos);};
       root.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>openProject(Number(b.dataset.open)));
       root.querySelectorAll('[data-new]').forEach(b=>b.onclick=()=>newRequest(Number(b.dataset.new)));
-      root.querySelectorAll('[data-allocation]').forEach(b=>b.onclick=()=>allocation(Number(b.dataset.allocation)));
+      root.querySelectorAll('[data-allocation-save]').forEach(b=>b.onclick=()=>saveAllocation(Number(b.dataset.allocationSave),b));
+      root.querySelectorAll('[data-edit-project]').forEach(b=>b.onclick=()=>projectEditor(Number(b.dataset.editProject)));
       root.querySelectorAll('[data-edit-request]').forEach(b=>b.onclick=()=>editRequest(Number(b.dataset.editRequest)));
       root.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>requestAction(Number(b.dataset.request),b.dataset.action));
       root.querySelectorAll('[data-attach]').forEach(b=>b.onclick=()=>attach(Number(b.dataset.attach)));
     }
-    function renderProject(id){
+    function renderProject(id,inline=false){
       const project=data.projects.find(p=>p.id===id);if(!project)return '';
       const requests=data.requests.filter(e=>e.project_id===id);
-      return `<section class="wf-document-view" data-details><h2>${esc(project.name)} — เอกสารและความคืบหน้า</h2>
-        ${requests.map(e=>`<article class="wf-request"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4>
+      return `<section class="wf-document-view" data-details data-project-details="${id}">${inline?'<h4 class="wf-section-label">คำขอเบิกจ่ายและเอกสาร</h4>':`<h2>${esc(project.name)} — เอกสารและความคืบหน้า</h2>`}
+        ${requests.map(e=>`<article class="wf-request ${e.current_step==='finance_queue'?'wf-request--attention':''}"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4>
           <span class="wf-state ${esc(e.current_step)}">${states[e.current_step]||esc(e.status)}</span>
           <p>${esc(e.request_purpose)}</p><div class="wf-muted">ผู้ขอ: ${esc(e.requester_name)} · ความสำคัญ: ${e.priority==='urgent'?'ด่วนมาก':e.priority==='high'?'ด่วน':'ปกติ'}${e.needed_date?' · ต้องการใช้เงิน '+esc(e.needed_date):''}</div>
           <p class="wf-muted">เหตุผล: ${esc(e.necessity)}${e.review_note?'<br>หมายเหตุเจ้าหน้าที่: '+esc(e.review_note):''}</p>
-          <div style="overflow:auto"><table class="wf-detail-table"><thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>${(e.items||[]).map(i=>`<tr><td>${esc(i.description)}</td><td>${i.quantity} ${esc(i.unit)}</td><td>${money(i.unit_price)}</td><td>${money(i.amount)}</td></tr>`).join('')}</tbody></table></div>
+          <details class="wf-line-items"><summary>รายการค่าใช้จ่าย ${(e.items||[]).length} รายการ</summary><div style="overflow:auto"><table class="wf-detail-table"><thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>${(e.items||[]).map(i=>`<tr><td>${esc(i.description)}</td><td>${i.quantity} ${esc(i.unit)}</td><td>${money(i.unit_price)}</td><td>${money(i.amount)}</td></tr>`).join('')}</tbody></table></div></details>
           ${e.status==='paid'?`<div class="wf-notice">ใบสำคัญ ${esc(e.payment_no)} · วันที่ ${esc(e.payment_date)} · ผู้รับเงิน ${esc(e.payment_recipient)} · ยอดสุทธิ ${money(e.net_paid)} บาท</div>`:''}
           <div class="wf-files">${e.documents.filter(d=>d.attachment_id).map(d=>`<a href="/api/attachments/${d.attachment_id}" target="_blank" rel="noopener">${esc(d.title)} — ${esc(d.file_name)}</a>`).join('')||'<span class="wf-muted">ยังไม่มีไฟล์แนบ</span>'}</div>
           <div class="wf-actions">${e.can_edit?`<button class="btn btn-ghost" data-edit-request="${e.id}">แก้ไขร่าง</button><button class="btn btn-primary" data-request="${e.id}" data-action="submit">ส่งเอกสาร</button>`:''}
@@ -70,7 +75,7 @@ window.ProjectWorkflow = (() => {
       const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ดำเนินการเสร็จสิ้น'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
       return primary+(['pending','approved'].includes(e.status)?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
     }
-    async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();root.querySelector('[data-details]')?.scrollIntoView({behavior:'smooth',block:'start'});}
+    async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();root.querySelector(`[data-project="${id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});}
     function newRequest(id){editRequest(null,id);}
     function editRequest(id,projectId){
       let savedId=id;const request=data.requests.find(e=>e.id===id);const selectedId=request?.project_id||projectId;const eligible=data.projects.filter(p=>p.can_request&&p.status!=='cancelled');
@@ -124,8 +129,40 @@ window.ProjectWorkflow = (() => {
         }catch(err){modalError((done?'อัปโหลดสำเร็จ '+done+' ไฟล์แล้ว · ':'')+err.message);await refresh().catch(()=>{});if(done)form.elements.files.value='';}
         finally{busy=false;button.disabled=false;button.textContent='อัปโหลดและแจ้งเจ้าหน้าที่';}};
     }
-    function allocation(id){const p=data.projects.find(p=>p.id===id);modal(`<h2>ปรับวงเงินโครงการ</h2><p>${esc(p.name)}</p><form>${field('ยอดจัดสรร (บาท)',`<input name="budget_amount" type="number" required min="${p.spent_amount+p.reserved_amount}" step="0.01" value="${p.budget_amount}">`)}<p>จ่ายแล้ว ${money(p.spent_amount)} · รอดำเนินการ ${money(p.reserved_amount)}</p><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">บันทึก</button></div></form>`);dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await apiRequest(`/api/projects/${id}`,{method:'PATCH',body:{budget_amount:Number(e.target.elements.budget_amount.value)}});dialog.close();await refresh();options.onChange?.();}catch(err){modalError(err.message);}};}
-    function refreshVisible(){if(!document.hidden&&!dialog.open&&!busy&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field]')&&!document.activeElement?.matches?.('[data-search]'))refresh().catch(()=>{});}
+    async function saveAllocation(id,button){
+      const input=root.querySelector(`[data-allocation-value="${id}"]`);if(!input.reportValidity())return;
+      button.disabled=true;try{await apiRequest(`/api/projects/${id}`,{method:'PATCH',body:{budget_amount:Number(input.value)}});await refresh();options.onChange?.();}
+      catch(e){error(e.message);}finally{button.disabled=false;}
+    }
+    async function projectEditor(id=null){
+      const p=id?data.projects.find(p=>p.id===id):null,department=p?.department||options.department||'budget';
+      const admin=data.permissions.can_balance_edit,finance=data.permissions.can_finance;
+      try{
+        const [{user},userData,projectData]=await Promise.all([apiRequest('/api/auth/me'),admin?apiRequest('/api/users'):Promise.resolve({users:[]}),admin&&p?apiRequest(`/api/departments/${department}/projects`):Promise.resolve({projects:[]})]);
+        const projectOwners=p?(projectData.projects.find(x=>x.id===p.id)?.owners||[]):[];
+        const assigned=p?projectOwners.map(o=>Number(o.user_id)):[user.id];
+        const ownerChoices=[...userData.users,...projectOwners.filter(o=>!userData.users.some(u=>Number(u.id)===Number(o.user_id))).map(o=>({id:o.user_id,full_name:o.full_name,role:'assigned'}))];
+        const currentYear=Number(today().slice(0,4))+(Number(today().slice(5,7))>=10?544:543);
+        modal(`<h2>${p?'แก้ไขรายละเอียดโครงการ':'เพิ่มโครงการภายในฝ่าย'}</h2><form data-project-editor><div class="wf-grid">
+          ${field('ชื่อโครงการ',`<input name="name" required maxlength="300" value="${esc(p?.name||'')}">`,true)}
+          ${field('ประเภทเงิน',`<select name="funding_type" required><option value="">เลือกประเภทเงิน</option>${opts(fundingTypes,p?.funding_type)}</select>`)}
+          ${field('ปีงบประมาณ',`<input name="fiscal_year" type="number" min="2500" max="3000" required value="${p?.fiscal_year||currentYear}" ${p?'readonly':''}>`)}
+          ${!p?field('งบจัดสรร (บาท)',`<input name="budget_amount" type="number" min="0" step="0.01" value="0" ${finance?'':'readonly'}>`):''}
+          ${field('รายละเอียดโครงการ',`<textarea name="description" maxlength="3000">${esc(p?.description||'')}</textarea>`,true)}
+          ${p?field('ความคืบหน้า (%)',`<input name="progress_percent" type="number" min="0" max="100" step="any" value="${p.progress_percent||0}">`)+field('สถานะ',`<select name="status">${opts({ongoing:'กำลังดำเนินการ',completed:'เสร็จสิ้น',cancelled:'ยกเลิก'},p.status)}</select>`):''}
+          ${admin?field('ผู้รับผิดชอบโครงการ',`<div class="wf-owner-choices">${ownerChoices.filter(u=>u.role).map(u=>`<label><input type="checkbox" name="owner_ids" value="${u.id}" ${assigned.includes(Number(u.id))?'checked':''}>${esc(u.full_name)}</label>`).join('')}</div>`,true):''}
+          </div><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">บันทึกโครงการ</button></div></form>`);
+        const form=dialog.querySelector('[data-project-editor]');form.onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;const button=form.querySelector('button:last-child');button.disabled=true;
+          try{const body=Object.fromEntries(new FormData(form));if(admin)body.owner_ids=[...form.querySelectorAll('[name="owner_ids"]:checked')].map(i=>Number(i.value));
+            if(p)delete body.fiscal_year;else if(!finance)delete body.budget_amount;
+            const save=()=>apiRequest(p?`/api/projects/${p.id}`:`/api/departments/${department}/projects`,{method:p?'PATCH':'POST',body});
+            try{await save();}catch(err){if(err.data?.code!=='duplicate_project')throw err;if(!confirm('ชื่อโครงการและรายละเอียดตรงกับโครงการที่มีอยู่ทั้งหมด\nแน่ใจใช่ไหมที่จะกดยืนยัน?'))return;body.confirm_duplicate=true;await save();}
+            dialog.close();await refresh();options.onChange?.();
+          }catch(err){modalError(err.message);}finally{busy=false;button.disabled=false;}
+        };
+      }catch(e){error(e.message);}
+    }
+    function refreshVisible(){if(!document.hidden&&!dialog.open&&!busy&&!document.querySelector('.pb-dialog[open]')&&!document.activeElement?.closest?.('[data-balance-field],[data-allocation-field]')&&!document.activeElement?.matches?.('[data-search]'))refresh().catch(()=>{});}
     document.addEventListener('visibilitychange',refreshVisible);
     window.addEventListener('focus',refreshVisible);
     window.addEventListener('school-data-changed',refreshVisible);
@@ -133,7 +170,7 @@ window.ProjectWorkflow = (() => {
     let channel;try{channel=new BroadcastChannel('school-data-changed');channel.onmessage=refreshVisible;}catch{}
     const timer=setInterval(refreshVisible,5000);
     window.addEventListener('pagehide',()=>{clearInterval(timer);channel?.close();},{once:true});
-    return {refresh,newRequest,openProject};
+    return {refresh,newRequest,openProject,newProject:()=>projectEditor()};
   }
   function renderFundingSummary(container,summary){
     if(!container||!summary)return;
