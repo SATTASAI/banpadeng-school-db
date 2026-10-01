@@ -532,7 +532,17 @@ async function handleLogin(request, env) {
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
-  const ok = await verifyPassword(password, user.password_salt, user.password_hash);
+  let ok;
+  try { ok = await verifyPassword(password, user.password_salt, user.password_hash); }
+  catch (error) {
+    const invalidHash=typeof user.password_hash!=="string"||!user.password_hash;
+    const invalidSalt=typeof user.password_salt!=="string"||!user.password_salt;
+    const code=invalidHash?"LOGIN_HASH_MISSING":invalidSalt?"LOGIN_SALT_MISSING":"LOGIN_CRYPTO_FAILURE";
+    const diagnostic=String(error?.message||"");
+    const failure=diagnostic.includes("iterations")?"iterations":diagnostic.includes("derive")?"derive":diagnostic.includes("length")?"record_length":diagnostic.includes("substr")?"record_salt":String(error?.name||"Error");
+    console.error("Login password verification failed",{code,failure});
+    return jsonResponse({error:"เกิดข้อผิดพลาดในการตรวจรหัสผ่าน กรุณาลองใหม่อีกครั้ง",code,failure},503);
+  }
   if (!ok) {
     await recordFailedLogin(env, throttleKey);
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
@@ -4307,19 +4317,6 @@ export default {
       if (pathname === "/api/line/webhook" && method === "POST") return await handleLineWebhook(request, env, context);
       if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
 
-      // Short-lived diagnostics are callable only by the private recovery workflow.
-      if(pathname==="/api/internal/login-diagnostic"&&method==="GET"){
-        const token=env.LOGIN_DIAGNOSTIC_TOKEN;
-        if(!token||request.headers.get("Authorization")!=="Bearer "+token||Number(token.split(":").at(-1))<Date.now()/1000)return jsonResponse({error:"Not found"},404);
-        const checks={};
-        try{await ensureAuthSecuritySchema(env);checks.schema="ok";}catch(e){checks.schema=String(e.message).slice(0,200);}
-        const row=await env.DB.prepare("SELECT id,status,role,typeof(password_hash) hash_type,length(password_hash) hash_length,typeof(password_salt) salt_type,length(password_salt) salt_length,session_version FROM users WHERE email=?").bind("sattawat.imc@gmail.com").first();
-        checks.account=row?{status:row.status,role:row.role,hash_type:row.hash_type,hash_length:row.hash_length,salt_type:row.salt_type,salt_length:row.salt_length,session_version:row.session_version}:null;
-        try{const salt=generateSalt();const hashed=await hashPassword("diagnostic-test-only",salt);checks.crypto=await verifyPassword("diagnostic-test-only",salt,hashed)?"ok":"failed";}catch(e){checks.crypto=String(e.message).slice(0,200);}
-        try{await signJWT({sub:0},env.JWT_SECRET);checks.signing="ok";}catch(e){checks.signing=String(e.message).slice(0,200);}
-        if(row)try{await env.DB.prepare("UPDATE users SET last_login_at=last_login_at WHERE id=?").bind(row.id).run();checks.login_write="ok";}catch(e){checks.login_write=String(e.message).slice(0,200);}
-        return jsonResponse(checks,200,{"Cache-Control":"no-store"});
-      }
       if (pathname.startsWith("/api/auth/")) await ensureAuthSecuritySchema(env);
       const passwordResetResponse = await handlePasswordResetRoute(request, env, pathname, method);
       if (passwordResetResponse) return passwordResetResponse;
