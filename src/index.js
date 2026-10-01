@@ -30,6 +30,8 @@ import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
 
+import { handlePasswordResetRoute } from "./routes/password-reset.js";
+
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
 const authSecuritySchemaReady = new WeakSet();
@@ -4271,6 +4273,8 @@ export default {
       if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
 
       if (pathname.startsWith("/api/auth/")) await ensureAuthSecuritySchema(env);
+      const passwordResetResponse = await handlePasswordResetRoute(request, env, pathname, method);
+      if (passwordResetResponse) return passwordResetResponse;
       if (pathname === "/api/auth/register" && method === "POST") return await handleRegister(request, env);
       if (pathname === "/api/auth/login" && method === "POST") return await handleLogin(request, env);
       if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout();

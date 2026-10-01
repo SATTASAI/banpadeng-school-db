@@ -958,3 +958,20 @@ CREATE TRIGGER IF NOT EXISTS trg_project_workflow_paid_lock BEFORE UPDATE ON pro
 CREATE TRIGGER IF NOT EXISTS trg_project_workflow_budget_reduction BEFORE UPDATE OF budget_amount ON projects
       WHEN NEW.budget_amount<OLD.budget_amount AND ROUND(NEW.budget_amount,2)<ROUND(COALESCE((SELECT SUM(amount) FROM project_expenses WHERE project_id=NEW.id AND status IN ('pending','approved','paid')),0),2)
       BEGIN SELECT RAISE(ABORT,'project_budget_exceeded'); END;
+
+-- Password recovery: store only token hashes; revoke sessions on successful reset.
+CREATE TABLE IF NOT EXISTS auth_password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  session_version INTEGER NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at TEXT,
+  created_at TEXT NOT NULL DEFAULT(datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON auth_password_resets(user_id);
+CREATE TABLE IF NOT EXISTS auth_reset_throttles (
+  throttle_key TEXT PRIMARY KEY,
+  request_count INTEGER NOT NULL,
+  window_started_at TEXT NOT NULL,
+  last_requested_at TEXT NOT NULL
+);
