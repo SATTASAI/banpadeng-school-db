@@ -34,7 +34,7 @@ export async function handleDepartmentStaffRoute(request,env,pathname,method){
  if(photo&&method==='GET'){
  const row=await env.DB.prepare('SELECT photo,photo_type FROM department_staff WHERE department=? AND personnel_id=?').bind(dept,id).first();
  if(!row?.photo)return jsonResponse({error:'ยังไม่มีรูปบุคลากร'},404);
- return new Response(row.photo,{headers:{...safeHeaders,'Content-Type':row.photo_type}});
+ return new Response(Array.isArray(row.photo)?new Uint8Array(row.photo):row.photo,{headers:{...safeHeaders,'Content-Type':row.photo_type}});
  }
  if(!rawId&&method==='GET'){
  const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,p.position,p.homeroom_classroom,p.departments,d.personnel_id AS member_id,d.photo_version,

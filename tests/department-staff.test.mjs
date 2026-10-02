@@ -41,7 +41,7 @@ function fixture() {
     let args = [];
     return {
       bind(...values) { args = values.map(v=>v instanceof ArrayBuffer?new Uint8Array(v):v); return this; },
-      async first() { return db.prepare(sql).get(...args) || null; },
+      async first() { const row=db.prepare(sql).get(...args); if(row?.photo)row.photo=Array.from(row.photo);return row||null; },
       async all() { return { results: db.prepare(sql).all(...args) }; },
       async run() { const result = db.prepare(sql).run(...args); return { meta: { changes: Number(result.changes), last_row_id: Number(result.lastInsertRowid) } }; },
     };
