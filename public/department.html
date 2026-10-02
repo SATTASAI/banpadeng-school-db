@@ -278,7 +278,7 @@
   async function loadProjects() {
     const { projects } = await apiRequest(`/api/departments/${dept}/projects`);
     currentProjects = projects;
-    ProjectAllocationChart.render(document.getElementById("projectAllocationChart"),projects,document.getElementById("deptTitle").textContent+" · ทุกปีงบประมาณ");
+    ProjectAllocationChart.render(document.getElementById("projectAllocationChart"),projects,"ทุกปีงบประมาณ",dept);
     const list = document.getElementById("projectList");
     if (projects.length === 0) {
       list.innerHTML = `<div class="empty-state">ยังไม่มีโครงการในฝ่ายนี้</div>`;

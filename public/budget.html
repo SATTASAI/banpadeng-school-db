@@ -55,12 +55,12 @@ function renderProjects(){
   if(!financeWorkflow){
     const balanceInbox=document.createElement("div");$("financeWorkflow").before(balanceInbox);ProjectBalance.mountInbox(balanceInbox);
     financeWorkflow=ProjectWorkflow.mount($("financeWorkflow"),{finance:true,onRefresh:state=>{const count=state.projects.reduce((sum,p)=>sum+(p.new_request_count||p.unread_count||0),0);$("financeAlertCount").textContent=count?"("+count+")":"";},onChange:()=>load()});
-    internalWorkflow=ProjectWorkflow.mount($("internalWorkflow"),{finance:true,internal:true,department:"budget",onRefresh:state=>ProjectAllocationChart.render($("budgetAllocationChart"),state.projects,"ฝ่ายงบประมาณ · ทุกปีงบประมาณ"),onChange:()=>load()});
+    internalWorkflow=ProjectWorkflow.mount($("internalWorkflow"),{finance:true,internal:true,department:"budget",onRefresh:state=>ProjectAllocationChart.render($("budgetAllocationChart"),state.projects,"ทุกปีงบประมาณ","budget"),onChange:()=>load()});
     $("refreshFinance").onclick=()=>financeWorkflow.refresh();
     $("newInternalProject").onclick=()=>internalWorkflow.newProject();
   }
   financeWorkflow.refresh().then(state=>{const count=state.projects.reduce((sum,p)=>sum+(p.new_request_count||p.unread_count||0),0);$("financeAlertCount").textContent=count?"("+count+")":"";}).catch(()=>{});
-  internalWorkflow.refresh().then(state=>ProjectAllocationChart.render($("budgetAllocationChart"),state.projects.filter(p=>p.department==='budget'),"ฝ่ายงบประมาณ · ทุกปีงบประมาณ")).catch(()=>{});
+  internalWorkflow.refresh().then(state=>ProjectAllocationChart.render($("budgetAllocationChart"),state.projects.filter(p=>p.department==='budget'),"ทุกปีงบประมาณ","budget")).catch(()=>{});
 }
 function renderIncome(){$("incomeTable").innerHTML=data.incomes.length?`<table><thead><tr><th>วันที่</th><th>เลขที่เอกสาร</th><th>แหล่งเงิน</th><th>ประเภท</th><th>จำนวนเงิน</th><th>ผู้บันทึก</th></tr></thead><tbody>${data.incomes.map(row=>`<tr><td>${date(row.received_date)}</td><td>${esc(row.document_no||"")}</td><td>${esc(row.source_name)}</td><td>${esc(row.source_type)}</td><td><strong>${money(row.amount)}</strong></td><td>${esc(row.creator_name)}</td></tr>`).join("")}</tbody></table>`:`<div class="empty">ยังไม่มีรายรับในปีนี้</div>`}
 function renderReportProjects(){const selected=$("reportProject").value,department=$("reportDepartment").value,projects=data.projects.filter(project=>!department||project.department===department);$("reportProject").innerHTML='<option value="">ทุกโครงการ</option>'+projects.map(project=>`<option value="${project.id}">${esc(project.name)} · ${DEPT[project.department]}</option>`).join("");if(projects.some(project=>String(project.id)===selected))$("reportProject").value=selected}

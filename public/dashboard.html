@@ -822,7 +822,7 @@
       `;
 
       ProjectWorkflow.renderFundingSummary(document.getElementById("fundingSummary"),data.funding_summary);
-      ProjectAllocationChart.render(document.getElementById("projectAllocationChart"),data.department_summary.flatMap(d=>d.projects),data.fiscal_year?`ทุกฝ่าย · ปีงบประมาณ ${data.fiscal_year}`:"ทุกฝ่าย · ทุกปีงบประมาณ");
+      ProjectAllocationChart.renderDepartments(document.getElementById("projectAllocationChart"),data.department_summary,data.fiscal_year?`ปีงบประมาณ ${data.fiscal_year}`:"ทุกปีงบประมาณ");
       const period = data.current_academic_period;
       document.getElementById("academicContextLabel").textContent = period
         ? `${period.academic_year_label} · ${period.academic_term_name || "ยังไม่เปิดภาคเรียน"}`
