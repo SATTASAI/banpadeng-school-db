@@ -88,3 +88,6 @@ const ROLE_LABELS = {
 
 // Admin-only test cleanup controls across the workspace.
 (() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/admin-cleanup.css";document.head.append(css);const script=document.createElement("script");script.src="/js/admin-cleanup.js";document.head.append(script);})();
+
+// Portrait phone layout shared by standalone pages and iframe modules.
+(() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/mobile.css";document.head.append(css);})();

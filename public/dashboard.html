@@ -176,11 +176,13 @@
   }
 </style>
 <link rel="stylesheet" href="/css/project-workflow.css">
-<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"></head>
+<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"><link rel="stylesheet" href="/css/mobile.css"></head>
 <body>
 <div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
+<button class="mobile-nav-backdrop" id="mobileNavBackdrop" type="button" aria-label="ปิดเมนู" hidden></button>
 <div class="layout">
-  <div class="sidebar">
+  <div class="sidebar" id="mobileSidebar">
+    <button type="button" class="mobile-menu-close" id="mobileMenuClose" aria-label="ปิดเมนู">×</button>
     <div class="window-controls" aria-hidden="true">
       <span class="window-control close"></span>
       <span class="window-control minimize"></span>
@@ -226,6 +228,7 @@
 
   <div class="content-area">
     <header class="global-topbar">
+      <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-controls="mobileSidebar" aria-expanded="false" aria-label="เปิดเมนูฝ่ายงาน">☰</button>
       <div class="global-search" id="globalSearch">
         <input type="search" id="globalSearchInput" placeholder="ค้นหานักเรียน บุคลากร เอกสาร หรืองาน..." aria-label="ค้นหาทั่วทั้งระบบ" aria-autocomplete="list" aria-controls="globalSearchResults" aria-expanded="false" autocomplete="off" />
         <div class="global-search-results" id="globalSearchResults" role="listbox"></div>
@@ -341,6 +344,29 @@
 <script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
 <script src="/js/project-workflow.js"></script>
 <script>
+  const mobileMenuButton=document.getElementById('mobileMenuToggle');
+  const mobileNav=document.getElementById('mobileSidebar');
+  const phoneScreen=window.matchMedia?.('(max-width:720px)');
+  function setMobileMenu(open,returnFocus=false){
+    const enabled=open&&!!phoneScreen?.matches;
+    document.body.classList.toggle('mobile-nav-open',enabled);
+    mobileMenuButton.setAttribute('aria-expanded',String(enabled));
+    document.getElementById('mobileNavBackdrop').hidden=!enabled;
+    document.querySelector('.content-area').inert=enabled;
+    mobileNav.inert=!!phoneScreen?.matches&&!enabled;
+    if(enabled)document.getElementById('mobileMenuClose').focus();
+    else if(returnFocus&&phoneScreen?.matches)mobileMenuButton.focus();
+  }
+  mobileMenuButton.onclick=()=>setMobileMenu(true);
+  document.getElementById('mobileMenuClose').onclick=()=>setMobileMenu(false,true);
+  document.getElementById('mobileNavBackdrop').onclick=()=>setMobileMenu(false,true);
+  phoneScreen?.addEventListener('change',()=>setMobileMenu(false));
+  document.addEventListener('keydown',event=>{
+    if(!document.body.classList.contains('mobile-nav-open'))return;
+    if(event.key==='Escape'){event.preventDefault();setMobileMenu(false,true);}
+    if(event.key==='Tab'){const controls=[...mobileNav.querySelectorAll('a,button,[tabindex]')].filter(el=>el.getClientRects().length&&!el.disabled&&el.tabIndex>=0);const first=controls[0],last=controls.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}}
+  });
+  setMobileMenu(false);
   const PAGE_URLS = {
     tasks: "/tasks.html",
     students: "/modules.html?module=students",
@@ -534,6 +560,7 @@
   buildSidebarSubmenus();
 
   function showOverview() {
+    setMobileMenu(false);
     document.getElementById("overviewWrap").style.display = "block";
     const frame = document.getElementById("contentFrame");
     frame.classList.remove("active");
@@ -559,6 +586,7 @@
   function showPage(key, updateHash, overrideUrl) {
     const url = overrideUrl || PAGE_URLS[key];
     if (!url) return;
+    setMobileMenu(false);
     document.getElementById("overviewWrap").style.display = "none";
     const frame = document.getElementById("contentFrame");
     frame.src = url;
