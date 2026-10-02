@@ -1,3 +1,4 @@
+import {handleDepartmentStaffRoute} from './routes/department-staff.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
@@ -4384,6 +4385,8 @@ export default {
       if (projectWorkflowResponse) return projectWorkflowResponse;
       const budgetResponse = await handleBudgetRoute(request, env, pathname, method);
       if (budgetResponse) return budgetResponse;
+      const departmentStaffResponse = await handleDepartmentStaffRoute(request, env, pathname, method);
+      if (departmentStaffResponse) return departmentStaffResponse;
       const personnelResponse = await handlePersonnelRoute(request, env, pathname, method);
       if (personnelResponse) return personnelResponse;
       const correspondenceResponse = await handleCorrespondenceRoute(request, env, pathname, method);

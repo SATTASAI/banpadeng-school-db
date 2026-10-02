@@ -1,0 +1,11 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>บุคลากรฝ่ายงาน — โรงเรียนบ้านป่าเด็ง</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/department-staff.css"></head><body>
+<main class="directory-page"><header class="directory-header"><div><p class="eyebrow">บุคลากรฝ่ายงาน</p><h1 id="departmentTitle">กำลังโหลด…</h1><p id="staffCount" class="muted" aria-live="polite"></p></div><button class="btn btn-primary" id="addPerson" hidden>＋ เพิ่มบุคลากร</button></header>
+<p id="pageError" role="alert" hidden></p><section id="peopleGrid" class="people-grid" aria-label="บุคลากรในฝ่ายงาน" aria-busy="true"></section></main>
+<dialog id="personDialog" aria-labelledby="dialogTitle"><form id="personForm"><header class="dialog-header"><h2 id="dialogTitle">เพิ่มบุคลากร</h2><button type="button" class="close-dialog" id="closeDialog" aria-label="ปิด">×</button></header>
+<div class="field"><label for="personChoice">เลือกจากทะเบียนบุคลากร</label><select id="personChoice" class="plain"><option value="">เพิ่มบุคลากรใหม่</option></select></div>
+<div class="photo-editor"><img id="photoPreview" alt="ตัวอย่างรูปบุคลากร" hidden><div id="photoPlaceholder" aria-hidden="true">ครู</div><div><label for="personPhoto">รูปบุคลากร</label><input id="personPhoto" type="file" accept="image/jpeg,image/png,image/webp"><p class="muted">JPEG, PNG หรือ WebP ไม่เกิน 2 MB · ระบบจะย่อรูปให้</p></div></div>
+<div class="field"><label for="personName">ชื่อ–นามสกุล</label><input class="plain" id="personName" required maxlength="200" autocomplete="name"></div>
+<div class="field"><label for="personPosition">ตำแหน่ง</label><input class="plain" id="personPosition" maxlength="200" placeholder="เช่น ครู / หัวหน้าฝ่ายวิชาการ"></div>
+<div class="field"><label for="personClassroom">ประจำชั้น</label><input class="plain" id="personClassroom" maxlength="100" placeholder="เช่น ป.4/1 หรือ ไม่ประจำชั้น"></div>
+<p id="formError" role="alert" hidden></p><footer><button class="btn btn-ghost" type="button" id="cancelDialog">ยกเลิก</button><button class="btn btn-primary" id="savePerson" type="submit">บันทึก</button></footer></form></dialog>
+<script src="/js/api.js"></script><script src="/js/department-staff.js"></script></body></html>
