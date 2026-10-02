@@ -213,6 +213,7 @@
       <a href="/modules.html?module=security" data-page="security" class="admin-only" style="display:none;"><span class="nav-number">12</span>สำรองข้อมูลและความปลอดภัย</a>
       <a href="/system-status.html" data-page="system-status" class="admin-only" style="display:none;"><span class="nav-number">SYS</span>สถานะระบบ</a>
       <a href="https://banpadengschool.ac.th/admin" target="_blank" rel="noopener noreferrer" class="admin-only" style="display:none;" title="เปิด Graphic Design for Developer ในแท็บใหม่"><span class="nav-number">WEB</span>จัดการเว็บไซต์</a>
+      <a href="/admin-cleanup.html" data-page="admin-cleanup" class="superadmin-only" style="display:none;"><span class="nav-number">☠</span>ล้างข้อมูลทดสอบ</a>
       <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่าการแจ้งเตือน LINE</a>
     </nav>
     <div class="sidebar-footer">
@@ -359,6 +360,7 @@
     security: "/modules.html?module=security",
     "system-status": "/system-status.html",
     "line-settings": "/line-settings.html",
+    "admin-cleanup": "/admin-cleanup.html",
   };
 
   const moduleEntries = (module, labels, routes = {}) => labels.map((label, index) => ({
