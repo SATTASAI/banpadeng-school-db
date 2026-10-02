@@ -1,3 +1,4 @@
+import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
@@ -3305,7 +3306,7 @@ async function getGoogleDriveAccessToken(env) {
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok || !data.access_token) {
-    throw new Error(`เชื่อมต่อ Google Drive ไม่สำเร็จ (${response.status})`);
+    throw new Error(googleOAuthTokenError(response.status,data));
   }
   return data.access_token;
 }
