@@ -78,3 +78,30 @@ test('department directory persists people and photos, keeps other departments, 
  assert.equal(belongsToDepartment('ไม่ใช่วิชาการ','academic'),false);
  assert.equal(imageType(new TextEncoder().encode('<svg/>')),null);
 });
+
+test('one head per department occupies the first row; executives only appear in administration and retain existing photos',async()=>{
+ const env=fixture(),token=await signJWT({sub:1},secret);
+ const call=(dept,method='GET',body)=>handleDepartmentStaffRoute(new Request(`https://school.example/api/department-staff/${dept}`,{method,headers:{Cookie:`bpd_session=${token}`},body:body===undefined?undefined:JSON.stringify(body)}),env,`/api/department-staff/${dept}`,method);
+ await call('academic');
+ await env.DB.prepare("INSERT INTO users(id,email,full_name,role,status) VALUES(3,'director@example.test','ผู้อำนวยการ','executive','active')").run();
+ await env.DB.prepare("INSERT INTO personnel_records(user_id,full_name,normalized_name,position,departments) VALUES(3,'ผู้อำนวยการ','director','ผู้อำนวยการโรงเรียน','academic'),(NULL,'รองผู้อำนวยการ','deputy','รองผู้อำนวยการโรงเรียน','academic,budget')").run();
+ const director=await env.DB.prepare("SELECT id FROM personnel_records WHERE normalized_name='director'").first();
+ const bytes=new Uint8Array([255,216,255,224,0,16]);
+ await env.DB.prepare("INSERT INTO department_staff(department,personnel_id,photo,photo_type,photo_version) VALUES('academic',?,?,'image/jpeg',1)").bind(director.id,bytes.buffer).run();
+ let academic=await (await call('academic')).json(),administration=await (await call('administration')).json();
+ assert.equal(academic.people.length,1);assert.ok(!academic.choices.some(p=>p.id===director.id));
+ assert.equal(administration.people.length,2);assert.equal(administration.people[0].id,director.id);assert.equal(administration.people[0].is_head,true);assert.equal(administration.people[1].is_head,false);
+ assert.equal(administration.people[0].photo_url,`/api/department-staff/academic/${director.id}/photo`);
+ assert.equal((await call('academic','POST',{personnel_id:director.id,position:'ผู้อำนวยการโรงเรียน'})).status,409);
+ const existing=academic.people[0];assert.equal((await call('administration','POST',{personnel_id:existing.id,position:'ครู'})).status,409);
+ assert.equal((await call('academic','POST',{personnel_id:existing.id,position:'ครู',is_head:true})).status,200);
+ const created=await (await call('academic','POST',{full_name:'ครูหัวหน้าใหม่',position:'ครู',is_head:true})).json();
+ academic=await (await call('academic')).json();assert.equal(academic.people[0].id,created.id);assert.equal(academic.people.filter(p=>p.is_head).length,1);assert.equal(academic.people.find(p=>p.id===existing.id).is_head,false);
+ await call('budget','POST',{personnel_id:existing.id,position:'ครู',is_head:true});
+ assert.equal((await (await call('budget')).json()).people[0].id,existing.id);
+ assert.equal((await (await call('academic')).json()).people[0].id,created.id);
+ assert.equal((await call('academic','POST',{personnel_id:created.id,position:'ครู',is_head:'true'})).status,400);
+ const additional=await (await call('administration','POST',{full_name:'ผู้บริหารเพิ่ม',position:'ผู้บริหารสถานศึกษา'})).json();assert.ok(additional.id);
+ administration=await (await call('administration')).json();assert.equal(administration.people.length,3);
+ assert.equal((await (await call('general')).json()).people.length,0);
+});

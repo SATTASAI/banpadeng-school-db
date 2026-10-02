@@ -198,12 +198,13 @@
       <a href="/modules.html?module=students" data-page="students"><span class="nav-number">02</span>ข้อมูลนักเรียน</a>
       <a href="/modules.html?module=staff" data-page="staff"><span class="nav-number">03</span>ข้อมูลครูและบุคลากร</a>
       <a href="/academic-years.html" data-page="academic-periods"><span class="nav-number">ปี</span>ปีการศึกษา/ภาคเรียน</a>
-      <div class="nav-label">5 ฝ่ายงาน</div>
+      <div class="nav-label">6 ฝ่ายงาน</div>
       <a href="/modules.html?module=academic" data-page="academic"><span class="nav-number">04</span>ฝ่ายบริหารงานวิชาการ</a>
       <a href="/modules.html?module=early_childhood" data-page="early_childhood"><span class="nav-number">ปฐ.</span>ฝ่ายปฐมวัย (งานอนุบาล)</a>
       <a href="/modules.html?module=budget" data-page="budget"><span class="nav-number">05</span>ฝ่ายบริหารงานงบประมาณ</a>
       <a href="/personnel.html" data-page="personnel"><span class="nav-number">06</span>ฝ่ายบริหารงานบุคคล</a>
       <a href="/modules.html?module=general" data-page="general"><span class="nav-number">07</span>ฝ่ายบริหารงานทั่วไป</a>
+      <a href="/department-staff.html?dept=administration" data-page="administration"><span class="nav-number">บห.</span>ฝ่ายบริหารสถานศึกษา</a>
       <div class="nav-label">ระบบอัตโนมัติ</div>
       <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>ระบบแจ้งซ่อมและติดตาม</a>
       <div class="nav-label">ระบบสนับสนุน</div>
@@ -368,6 +369,7 @@
   });
   setMobileMenu(false);
   const PAGE_URLS = {
+    administration: "/department-staff.html?dept=administration",
     tasks: "/tasks.html",
     students: "/modules.html?module=students",
     staff: "/modules.html?module=staff",
@@ -617,6 +619,7 @@
   };
   const SEARCH_TYPE_ICONS = { page:"ไป",student:"นร",staff:"ครู",project:"ผง",document:"อก",inventory:"พส",maintenance:"ซ่อม",task:"งาน",work:"ฝ่าย",correspondence:"สบ" };
   const SEARCH_PAGES = [
+    {title:"ฝ่ายบริหารสถานศึกษา",subtitle:"ผู้อำนวยการและคณะผู้บริหาร",page_key:"administration",url:"/department-staff.html?dept=administration",keywords:"ผู้บริหาร ผู้อำนวยการ รองผู้อำนวยการ"},
     {title:"แดชบอร์ดภาพรวม",subtitle:"ข้อมูลสรุปสำหรับผู้บริหาร",page_key:"overview",url:"/dashboard.html",keywords:"หน้าหลัก ภาพรวม dashboard"},
     {title:"ข้อมูลนักเรียน",subtitle:"ทะเบียนนักเรียนและผู้ปกครอง",page_key:"students",url:"/students.html",keywords:"นักเรียน ห้องเรียน ผู้ปกครอง"},
     {title:"งานวิเคราะห์ผู้เรียนรายบุคคล",subtitle:"บันทึกและพิมพ์รายคนหรือรายห้อง",page_key:"students",url:"/learner-analysis.html",keywords:"วิเคราะห์ผู้เรียน พิมพ์ รายห้อง ครู"},
