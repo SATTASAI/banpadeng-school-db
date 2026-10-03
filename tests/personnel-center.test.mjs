@@ -66,3 +66,9 @@ test("personnel overview summarizes profile readiness and existing workflows", a
   assert.deepEqual(body.work_by_topic["5"], { total: 2, completed: 1, overdue: 1 });
   assert.equal(body.permissions.can_manage, true);
 });
+
+test('personnel overview combines legacy staff and personnel development without counting cancelled work as overdue',async()=>{
+ const env=fixture();await env.DB.prepare(`INSERT INTO work_records VALUES(3,'staff','8','completed',date('now','-1 day')),(4,'personnel','6','planned',date('now','-1 day')),(5,'staff','7','cancelled',date('now','-1 day')),(6,'staff','3','planned',date('now','+1 day'))`).run();
+ const token=await signJWT({sub:1},secret),request=new Request('https://school.example/api/personnel/overview',{headers:{Cookie:`bpd_session=${token}`}}),response=await handlePersonnelRoute(request,env,'/api/personnel/overview','GET'),body=await response.json();
+ assert.deepEqual(body.work_by_scope['personnel-development'],{total:3,completed:1,overdue:1});assert.deepEqual(body.work_by_scope['personnel-duties'],{total:1,completed:0,overdue:0});assert.equal(body.work_by_topic['5'].total,2);
+});

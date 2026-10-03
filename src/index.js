@@ -1,3 +1,4 @@
+import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute} from './routes/department-staff.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -2240,6 +2241,9 @@ async function handleListWorkRecords(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const params = new URL(request.url).searchParams;
+  const scope = cleanText(params.get("scope"), 40);
+  const scopeCondition = scope ? workScopeCondition(scope) : null;
+  if (scope && !scopeCondition) return jsonResponse({ error: "หมวดงานรวมไม่ถูกต้อง" }, 400);
   const area = cleanText(params.get("area"), 40);
   const topicKey = cleanText(params.get("topic"), 80);
   const topicKeys = topicKey ? topicKey.split(",").map((key) => cleanText(key, 80)).filter(Boolean) : [];
@@ -2251,8 +2255,9 @@ async function handleListWorkRecords(request, env) {
 
   const baseConditions = ["1=1"];
   const baseBinds = [];
-  if (area) { baseConditions.push("w.area=?"); baseBinds.push(area); }
-  if (topicKeys.length) {
+  if (scopeCondition) { baseConditions.push(scopeCondition.sql); baseBinds.push(...scopeCondition.binds); }
+  else if (area) { baseConditions.push("w.area=?"); baseBinds.push(area); }
+  if (!scopeCondition && topicKeys.length) {
     baseConditions.push(`w.topic_key IN (${topicKeys.map(() => "?").join(",")})`);
     baseBinds.push(...topicKeys);
   }

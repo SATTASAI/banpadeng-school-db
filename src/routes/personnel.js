@@ -1,3 +1,4 @@
+import { workScopeSummary } from "../lib/work-scopes.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
 
@@ -44,11 +45,11 @@ async function overview(request, env) {
       SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) AS open_count,
       SUM(CASE WHEN status='open' AND due_date IS NOT NULL AND due_date<date('now') THEN 1 ELSE 0 END) AS overdue_count
       FROM tasks`).first(),
-    env.DB.prepare(`SELECT topic_key,
+    env.DB.prepare(`SELECT area,topic_key,
       COUNT(*) AS total_count,
       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_count,
-      SUM(CASE WHEN status<>'completed' AND due_date IS NOT NULL AND due_date<date('now') THEN 1 ELSE 0 END) AS overdue_count
-      FROM work_records WHERE area='personnel' GROUP BY topic_key`).all(),
+      SUM(CASE WHEN status NOT IN ('completed','cancelled') AND due_date IS NOT NULL AND due_date<date('now') THEN 1 ELSE 0 END) AS overdue_count
+      FROM work_records WHERE area IN ('personnel','staff') GROUP BY area,topic_key`).all(),
     env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(position),''),'ไม่ระบุตำแหน่ง') AS label,COUNT(*) AS count
       FROM personnel_records WHERE status='active' GROUP BY COALESCE(NULLIF(TRIM(position),''),'ไม่ระบุตำแหน่ง')
       ORDER BY count DESC,label LIMIT 12`).all(),
@@ -76,7 +77,7 @@ async function overview(request, env) {
   }));
   const completeCount = people.filter((row) => row.completeness.percent === 100).length;
   const licenseAttention = people.filter((row) => row.license_days_remaining !== null && row.license_days_remaining <= 180).length;
-  const workByTopic = Object.fromEntries(workSummary.results.map((row) => [String(row.topic_key), {
+  const workByTopic = Object.fromEntries(workSummary.results.filter(row => row.area === 'personnel').map((row) => [String(row.topic_key), {
     total: number(row.total_count), completed: number(row.completed_count), overdue: number(row.overdue_count),
   }]));
   workByTopic.project = { total: number(projects?.total_count), completed: number(projects?.completed_count), overdue: 0 };
@@ -97,6 +98,7 @@ async function overview(request, env) {
     positions: positions.results.map((row) => ({ label: row.label, count: number(row.count) })),
     recent_leaves: recentLeaves.results,
     work_by_topic: workByTopic,
+    work_by_scope: workScopeSummary(workSummary.results),
     permissions: { can_manage: isAdmin(user) },
   }, 200, { "Cache-Control": "private, no-store" });
 }
