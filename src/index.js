@@ -479,7 +479,7 @@ export async function handleRegister(request, env) {
     const conflict = String(error?.message || "").startsWith("PERSONNEL_");
     return jsonResponse({
       error: conflict
-        ? "พบข้อมูลบุคลากรที่ตรงกับหลายรายการหรือผูกกับบัญชีเดิม กรุณาเข้าสู่ระบบด้วยบัญชีเดิมหรือติดต่อผู้ดูแลระบบ"
+        ? "พบข้อมูลที่ตรงกับบุคลากรหลายรายการ กรุณาติดต่อผู้ดูแลระบบเพื่อตรวจสอบ"
         : "ไม่สามารถบันทึกข้อมูลบุคลากรได้ กรุณาลองใหม่อีกครั้ง",
     }, conflict ? 409 : 500);
   }
@@ -656,11 +656,13 @@ async function handleAdminListUsers(request, env) {
     return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
   }
 
+  await ensurePersonnelData(env);
   const { results } = await env.DB.prepare(
     `SELECT u.id, u.email, u.full_name, u.role, u.status, u.created_at, u.approved_at,
             p.position, p.phone, p.departments
      FROM users u
-     LEFT JOIN personnel_records p ON p.user_id = u.id AND p.status = 'active'
+     LEFT JOIN personnel_accounts pa ON pa.user_id=u.id
+     LEFT JOIN personnel_records p ON p.id=pa.personnel_id AND p.status='active'
      WHERE u.deleted_at IS NULL
      ORDER BY u.created_at DESC`
   ).all();
@@ -1439,6 +1441,7 @@ async function handleListStaff(request, env) {
 
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.user_id, p.full_name, u.role,
+            EXISTS(SELECT 1 FROM personnel_accounts pa WHERE pa.personnel_id=p.id AND pa.user_id=?) AS can_edit,
             p.personnel_type, p.position_number, p.position, p.academic_rank,
             p.subjects, p.phone, p.homeroom_classroom,
             p.email, p.departments, p.responsible_projects, p.teaching_periods,
@@ -1449,7 +1452,7 @@ async function handleListStaff(request, env) {
      LEFT JOIN users u ON u.id = p.user_id
      WHERE p.status = 'active'
      ORDER BY p.first_name, p.full_name`
-  ).all();
+  ).bind(user.id).all();
 
   return jsonResponse({ staff: results });
 }
@@ -1466,7 +1469,9 @@ async function handleUpdateStaff(request, env, targetId) {
     .bind(targetId)
     .first();
   if (!target) return jsonResponse({ error: "ไม่พบบุคลากรนี้" }, 404);
-  if (!isAdmin(user) && user.id !== target.user_id) {
+  const linked = await env.DB.prepare("SELECT user_id FROM personnel_accounts WHERE user_id=? AND personnel_id=?")
+    .bind(user.id,targetId).first();
+  if (!isAdmin(user) && user.id !== target.user_id && !linked) {
     return jsonResponse({ error: "แก้ไขได้เฉพาะข้อมูลของตัวเอง หรือต้องเป็นผู้ดูแลระบบ/ผู้บริหาร" }, 403);
   }
 

@@ -164,7 +164,7 @@
     const panel = document.getElementById("staffPanel");
     panel.innerHTML = staff
       .map((s) => {
-        const canEdit = currentUser.is_admin || currentUser.id === s.user_id;
+        const canEdit = currentUser.is_admin || currentUser.id === s.user_id || !!s.can_edit;
         const details = [
           s.personnel_type ? `ประเภท ${PERSONNEL_TYPE_LABELS[s.personnel_type] || s.personnel_type}` : null,
           s.position,

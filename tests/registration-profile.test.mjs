@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { handleRegister } from "../src/index.js";
 
-function environment() {
+export function environment() {
   const db = new DatabaseSync(":memory:");
   db.exec(`
     PRAGMA foreign_keys = ON;
@@ -87,8 +87,12 @@ test("registration requires personnel fields and creates a linked personnel reco
     email: "another-teacher@example.invalid",
     phone: "089-999-9999",
   }), env);
-  assert.equal(duplicateNameResponse.status, 409);
-  assert.equal(env.raw.prepare("SELECT count(*) AS count FROM users").get().count, 1);
+  assert.equal(duplicateNameResponse.status, 201);
+  const anotherUser = (await duplicateNameResponse.json()).user.id;
+  const linked = env.raw.prepare("SELECT personnel_id FROM personnel_accounts WHERE user_id=?").get(anotherUser);
+  assert.equal(linked.personnel_id, profile.id);
+  assert.equal(env.raw.prepare("SELECT phone FROM personnel_records WHERE id=?").get(profile.id).phone, "089-999-9999");
+  assert.equal(env.raw.prepare("SELECT count(*) AS count FROM personnel_records WHERE full_name=? AND status='active'").get(base.full_name).count, 1);
 
   const duplicateEmailResponse = await handleRegister(request(base), env);
   assert.equal(duplicateEmailResponse.status, 409);

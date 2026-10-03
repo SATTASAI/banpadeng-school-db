@@ -1,3 +1,4 @@
+import {mergeConfirmedPersonnel, personnelIdentity, keepPersonnelSeparate} from "./personnel-merge.js";
 import { LICENSE_IMPORT_KEY, LICENSE_ROWS } from "../data/license-seed.js";
 
 let initializationPromise;
@@ -92,10 +93,7 @@ function cleanName(value) {
 }
 
 function comparableName(value) {
-  return cleanName(value).replace(
-    /^(?:ว่าที่ร้อยตรีหญิง|ว่าที่รตหญิง|ว่าที่ร้อยตรี|ว่าที่รต|นางสาว|นาง|นาย)/,
-    ""
-  );
+  return personnelIdentity(value);
 }
 
 async function seedLicenseRows(env) {
@@ -187,6 +185,7 @@ async function initialize(env) {
   await ensurePersonnelColumns(env);
   await seedLicenseRows(env);
   await linkExistingAccounts(env);
+  await mergeConfirmedPersonnel(env);
 }
 
 export function ensurePersonnelData(env) {
@@ -215,9 +214,10 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
   const phone = (value) => String(value || "").replace(/\D/g, "");
   const departmentKey = (value) => String(value || "").split(",").map(text).filter(Boolean).sort().join(",");
   const emailMatches = people.filter((row) => text(row.email) === email);
-  const nameMatches = people.filter((row) => comparableName(row.full_name) === comparableName(fullName));
+  const nameMatches = keepPersonnelSeparate(fullName) ? [] : people.filter((row) => comparableName(row.full_name) === comparableName(fullName));
   // A phone number plus at least two independent profile fields can identify a renamed person.
   const detailMatches = people.filter((row) => {
+    if (keepPersonnelSeparate(fullName)) return false;
     if (phone(profile.phone).length < 8 || phone(row.phone) !== phone(profile.phone)) return false;
     const fields = ["position", "subjects", "homeroom_classroom"];
     let matches = fields.filter((key) => text(profile[key]) && text(profile[key]) === text(row[key])).length;
@@ -227,11 +227,6 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
   const candidates = emailMatches.length ? emailMatches : nameMatches.length ? nameMatches : detailMatches;
   if (candidates.length > 1) throw new Error("PERSONNEL_AMBIGUOUS_MATCH");
   const person = candidates[0] || null;
-  // Registration may update imported/unlinked records or records from a deleted account,
-  // but must never take over an existing account or its personnel identity.
-  if (person?.user_id && Number(person.user_id) !== Number(profile.user_id) && !person.account_deleted_at) {
-    throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
-  }
   const otherMatches = [...nameMatches, ...detailMatches];
   if (person && otherMatches.some((row) => row.id !== person.id)) {
     throw new Error("PERSONNEL_AMBIGUOUS_MATCH");
@@ -247,7 +242,7 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     profile.teaching_periods ?? null,
   ];
   if (person) {
-    const updated = await env.DB.prepare(
+    await env.DB.batch([env.DB.prepare(
       `UPDATE personnel_records SET
          user_id = ?, email = ?, full_name = ?, position = ?, subjects = COALESCE(?, subjects),
          phone = ?, homeroom_classroom = COALESCE(?, homeroom_classroom), departments = ?,
@@ -255,10 +250,11 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
          teaching_periods = COALESCE(?, teaching_periods), updated_at = datetime('now')
        WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     ).bind(
-      profile.user_id, email, fullName, values[0], values[1], values[2], values[3],
-      values[4], values[5], values[6], person.id, person.user_id
-    ).run();
-    if (!updated.meta.changes) throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
+      person.account_deleted_at ? profile.user_id : person.user_id || profile.user_id, email, fullName, values[0], values[1], values[2], values[3],
+      values[4], values[5], values[6], person.id, person.user_id),
+      env.DB.prepare(`INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)
+        ON CONFLICT(user_id) DO UPDATE SET personnel_id=excluded.personnel_id`).bind(profile.user_id,person.id),
+    ]);
     return person.id;
   }
 
@@ -277,5 +273,7 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     profile.user_id, fullName, uniqueNormalizedName, email, values[0], values[1], values[2],
     values[3], values[4], values[5], values[6]
   ).run();
+  await env.DB.prepare("INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)")
+    .bind(profile.user_id,result.meta.last_row_id).run();
   return result.meta.last_row_id;
 }
