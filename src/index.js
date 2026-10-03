@@ -1152,19 +1152,21 @@ async function handleListStudents(request, env) {
   const termId = Number(url.searchParams.get("academic_term_id"));
   // รายการสำหรับค้นหาและกรองเท่านั้น; ข้อมูลสุขภาพ ครอบครัว และเลขบัตรประชาชน
   // จะถูกอ่านผ่าน /api/students/:id เมื่อเปิดข้อมูลรายคน
+  await ensureStudentDetailsSchema(env);
   let results;
   if (Number.isInteger(termId) && termId > 0) {
     ({ results } = await env.DB.prepare(
-      `SELECT s.id, s.student_code, s.full_name,
+      `SELECT s.id, s.student_code, s.full_name, d.gender,
               e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
               e.academic_year_id, e.academic_term_id
        FROM student_enrollments e JOIN students s ON s.id = e.student_id
+       LEFT JOIN student_details d ON d.student_id = s.id
        WHERE e.academic_term_id = ? ORDER BY e.classroom, s.full_name`
     ).bind(termId).all());
   } else {
     ({ results } = await env.DB.prepare(
-      `SELECT s.id, s.student_code, s.full_name, s.grade_level, s.classroom, s.status
-       FROM students s ORDER BY s.classroom, s.full_name`
+      `SELECT s.id, s.student_code, s.full_name, d.gender, s.grade_level, s.classroom, s.status
+       FROM students s LEFT JOIN student_details d ON d.student_id = s.id ORDER BY s.classroom, s.full_name`
     ).all());
   }
 
