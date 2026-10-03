@@ -1,3 +1,4 @@
+import {canManageSubstitutes} from "../lib/substitute-permissions.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
 
@@ -193,6 +194,12 @@ export async function handleTimetableRoute(request,env,pathname,method){
   if(!pathname.startsWith("/api/timetable/")&&!pathname.startsWith("/api/substitutes/"))return null;
   const user=await getCurrentUser(request,env);if(!user||!user.role)return reply({error:"กรุณาเข้าสู่ระบบ"},401);
   if(!["teacher","staff","executive","superadmin"].includes(user.role))return reply({error:"ไม่มีสิทธิ์เข้าถึง"},403);
+  const isSubstitute=pathname.startsWith('/api/substitutes/');
+  if(isSubstitute){
+    const allowed=await canManageSubstitutes(env,user);
+    if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
+    if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรที่ได้รับมอบหมายเท่านั้น'},403);
+  }
   await ensurePersonnelData(env);await ensureSchema(env);
   const url=new URL(request.url),isTimetable=pathname.startsWith("/api/timetable/");
   if(isTimetable){
@@ -209,7 +216,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
   }else{
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
-    if(!isAdmin(user))return reply({error:"ผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่จัดครูสอนแทนได้"},403);
+
     if(pathname==="/api/substitutes/assignments"&&method==="POST")return assign(request,env,user);
   }
   return reply({error:"ไม่พบ endpoint"},404);

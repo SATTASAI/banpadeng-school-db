@@ -207,6 +207,8 @@
       <a href="/department-staff.html?dept=general" data-page="general"><span class="nav-number">07</span>ฝ่ายทั่วไป</a>
       <div class="nav-label">ระบบสนับสนุน</div>
       <a href="/support.html" data-page="student-support"><span class="nav-number">08</span>ดูแลนักเรียน</a>
+      <a href="/leave.html" data-page="leave"><span class="nav-number">ลา</span>การลา</a>
+      <a href="/substitutes.html" data-page="substitutes" class="personnel-only" style="display:none"><span class="nav-number">แทน</span>จัดครูสอนแทน</a>
       <a href="/documents.html" data-page="documents"><span class="nav-number">09</span>เอกสาร</a>
       <a href="/reports.html" data-page="reports"><span class="nav-number">10</span>รายงาน</a>
       <div class="nav-label admin-only" style="display:none;">บริหารระบบ</div>
@@ -406,6 +408,12 @@
         link.dataset.parentPage = key;
         link.dataset.url = item.url;
         link.textContent = item.label;
+        if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
+        if (item.url === '/budget.html?view=otherProjects') {
+          const badge=document.createElement('small');
+          badge.id='budgetRequestBadge';badge.hidden=true;
+          badge.style.cssText='margin-left:6px;color:#b53543;font-weight:700;';link.appendChild(badge);
+        }
         if (item.external) {
           link.dataset.external = "true";
           link.target = "_blank";
@@ -466,6 +474,20 @@
     }
     if (updateHash !== false) history.pushState(null, "", "#" + key);
   }
+
+  window.addEventListener('message',event=>{
+    const frame=document.getElementById('contentFrame');
+    if(event.origin!==location.origin || event.source!==frame.contentWindow || event.data?.type!=='budget-navigation')return;
+    const view=event.data.view;
+    const child=[...document.querySelectorAll('.nav-child')].find(link=>link.dataset.url===`/budget.html?view=${view}`);
+    if(child){
+      document.querySelectorAll('.sidebar nav a').forEach(link=>link.classList.remove('active'));
+      child.classList.add('active');document.querySelector('.sidebar nav a[data-page="budget"]').classList.add('active');
+      openOnlyNavGroup(child.closest('.nav-group'));
+    }
+    const count=Number(event.data.pendingCount),badge=document.getElementById('budgetRequestBadge');
+    if(badge && Number.isSafeInteger(count) && count>=0){badge.textContent=String(count);badge.hidden=!count;}
+  });
 
   window.openNotificationPage = (url) => {
     if(url === '/dashboard.html'){showOverview();return;}
@@ -873,6 +895,8 @@
       });
     }
 
+    const substitutePermission=await apiRequest('/api/substitutes/permissions').catch(()=>({can_manage:false}));
+    document.querySelectorAll('.personnel-only').forEach(element=>element.style.display=substitutePermission.can_manage?'flex':'none');
     await loadOverview();
 
     const initialKey = window.location.hash.replace("#", "");

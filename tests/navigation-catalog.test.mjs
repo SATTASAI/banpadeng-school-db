@@ -48,3 +48,33 @@ test('merged work API preserves filters, summaries, and record permissions',asyn
  const found=await call('&q=Legacy');assert.equal(found.body.records.length,1);assert.equal(found.body.summary.total,1);
  user=null;assert.equal((await call('')).status,401);user={id:1,role:'teacher'};assert.equal((await context.handleListWorkRecords({url:'https://school.test/api/work-records?scope=invalid'},env)).status,400);db.close();
 });
+
+test('budget uses one sidebar navigation in the workspace and synchronizes the selected view',()=>{
+ const html=fs.readFileSync('public/budget.html','utf8');
+ assert(!html.includes('<nav class="tabs">'));
+ assert(html.includes('.embedded .budget-page-picker{display:none}'));
+ assert.equal(n.groups.budget.find(item=>item.url==='/budget.html?view=roles').adminOnly,true);
+ assert(n.groups.budget.some(item=>item.url==='/budget.html?view=audit'));
+ const nodes=new Map();
+ const ids=['requests','disbursements','plans','otherProjects','incomeView','reports','audit','roles'];
+ for(const id of [...ids,'budgetViewSelect','financeAlertCount']){
+   const classes=new Set();nodes.set(id,{value:'',textContent:'',classList:{add:c=>classes.add(c),remove:c=>classes.delete(c),contains:c=>classes.has(c)}});
+ }
+ const messages=[],history=[];
+ const context=vm.createContext({URL,location:new URL('https://school.test/budget.html?view=plans&project=42'),history:{replaceState(_a,_b,url){history.push(url)}},
+  window:{parent:{postMessage(data,origin){messages.push({data,origin})}}},
+  document:{querySelectorAll:()=>ids.map(id=>nodes.get(id))},$:id=>nodes.get(id)});
+ const start=html.indexOf("const BUDGET_VIEWS="),end=html.indexOf('\n(async()=>',start);
+ vm.runInContext(html.slice(start,end),context);
+ for(const view of ['requests','disbursements','plans','otherProjects','income','reports','audit','roles']){
+   context.switchBudgetView(view);
+   assert.equal(ids.filter(id=>nodes.get(id).classList.contains('active')).length,1);
+   assert(nodes.get(view==='income'?'incomeView':view).classList.contains('active'));
+   assert.equal(nodes.get('budgetViewSelect').value,view);
+   assert.equal(new URL(history.at(-1),'https://school.test').searchParams.get('view'),view);
+   assert.equal(new URL(history.at(-1),'https://school.test').searchParams.get('project'),'42');
+   assert.equal(messages.at(-1).data.view,view);assert.equal(messages.at(-1).origin,'https://school.test');
+ }
+ context.switchBudgetView('invalid');assert(nodes.get('otherProjects').classList.contains('active'));
+ context.setFinanceAlertCount(3);assert.equal(nodes.get('financeAlertCount').textContent,'(3)');assert.equal(messages.at(-1).data.pendingCount,3);
+});
