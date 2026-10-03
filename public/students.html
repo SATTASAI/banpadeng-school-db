@@ -538,8 +538,21 @@
     document.getElementById("nextPageBtn").disabled = currentStudentPage === totalPages;
   }
 
-  document.getElementById("exportStudentsBtn").addEventListener("click", () => {
-    StudentExport.open(allStudents, { query: document.getElementById("searchInput").value, grade: document.getElementById("gradeFilter").value, classroom: document.getElementById("classroomFilter").value, status: document.getElementById("statusFilter").value, sort: document.getElementById("sortSelect").value });
+  document.getElementById("exportStudentsBtn").addEventListener("click", async () => {
+    const button = document.getElementById("exportStudentsBtn");
+    button.disabled = true;
+    button.textContent = "กำลังเตรียมข้อมูล…";
+    try {
+      const { students } = await apiRequest("/api/students/export");
+      StudentExport.open(students, { query: document.getElementById("searchInput").value, grade: document.getElementById("gradeFilter").value, classroom: document.getElementById("classroomFilter").value, status: document.getElementById("statusFilter").value, sort: document.getElementById("sortSelect").value });
+    } catch (err) {
+      const errorBox = document.getElementById("errorBox");
+      errorBox.textContent = err.message;
+      errorBox.classList.add("visible");
+    } finally {
+      button.disabled = false;
+      button.textContent = "ดาวน์โหลดข้อมูลนักเรียน";
+    }
   });
 
   async function loadStudents() {

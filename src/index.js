@@ -1142,7 +1142,7 @@ async function saveStudentDetails(env, studentId, body) {
 }
 
 // ---------- /api/students (GET) ----------
-async function handleListStudents(request, env) {
+async function handleListStudents(request, env, includeNationalId = false) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) {
     return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
@@ -1150,13 +1150,13 @@ async function handleListStudents(request, env) {
 
   const url = new URL(request.url);
   const termId = Number(url.searchParams.get("academic_term_id"));
-  // รายการสำหรับค้นหาและกรองเท่านั้น; ข้อมูลสุขภาพ ครอบครัว และเลขบัตรประชาชน
-  // จะถูกอ่านผ่าน /api/students/:id เมื่อเปิดข้อมูลรายคน
+  // รายการปกติไม่มีเลขบัตรประชาชน; อ่านเพิ่มเฉพาะการส่งออกที่ผู้ใช้เลือก
+  // ข้อมูลสุขภาพและครอบครัวยังคงอ่านผ่าน /api/students/:id
   await ensureStudentDetailsSchema(env);
   let results;
   if (Number.isInteger(termId) && termId > 0) {
     ({ results } = await env.DB.prepare(
-      `SELECT s.id, s.student_code, s.full_name, d.gender,
+      `SELECT s.id, s.student_code, s.full_name, ${includeNationalId ? "s.national_id," : ""} d.gender,
               e.grade_level AS grade_level, e.classroom AS classroom, e.status AS status,
               e.academic_year_id, e.academic_term_id
        FROM student_enrollments e JOIN students s ON s.id = e.student_id
@@ -1165,7 +1165,7 @@ async function handleListStudents(request, env) {
     ).bind(termId).all());
   } else {
     ({ results } = await env.DB.prepare(
-      `SELECT s.id, s.student_code, s.full_name, d.gender, s.grade_level, s.classroom, s.status
+      `SELECT s.id, s.student_code, s.full_name, ${includeNationalId ? "s.national_id," : ""} d.gender, s.grade_level, s.classroom, s.status
        FROM students s LEFT JOIN student_details d ON d.student_id = s.id ORDER BY s.classroom, s.full_name`
     ).all());
   }
@@ -4433,6 +4433,7 @@ export default {
       if (taskMatch && method === "PATCH") return await handleUpdateTask(request, env, Number(taskMatch[1]));
       if (taskMatch && method === "DELETE") return await handleDeleteTask(request, env, Number(taskMatch[1]));
 
+      if (pathname === "/api/students/export" && method === "GET") return await handleListStudents(request, env, true);
       if (pathname === "/api/students" && method === "GET") return await handleListStudents(request, env);
       if (pathname === "/api/students" && method === "POST") return await handleCreateStudent(request, env);
       if (pathname === "/api/students/import" && method === "POST") return await handleImportStudents(request, env);

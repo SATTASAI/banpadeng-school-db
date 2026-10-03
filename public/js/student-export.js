@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const statuses = { enrolled: 'กำลังศึกษาอยู่', transferred: 'ย้ายโรงเรียน', graduated: 'จบการศึกษา', withdrawn: 'ออกกลางคัน' };
-  const columns = [['number','ลำดับ'],['student_code','เลขประจำตัว'],['full_name','ชื่อ–นามสกุล'],['gender','เพศ'],['grade_level','ชั้น'],['classroom','ห้อง'],['status','สถานะ']];
+  const columns = [['number','ลำดับ'],['student_code','เลขประจำตัว'],['national_id','เลขบัตรประชาชน'],['full_name','ชื่อ–นามสกุล'],['gender','เพศ'],['grade_level','ชั้น'],['classroom','ห้อง'],['status','สถานะ']];
   const compare = (a,b) => String(a ?? '').localeCompare(String(b ?? ''),'th',{numeric:true});
   function gender(value) {
     const v=String(value ?? '').trim().toLowerCase();
