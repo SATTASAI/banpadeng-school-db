@@ -87,13 +87,8 @@ test("registration requires personnel fields and creates a linked personnel reco
     email: "another-teacher@example.invalid",
     phone: "089-999-9999",
   }), env);
-  assert.equal(duplicateNameResponse.status, 201);
-  const duplicatePayload = await duplicateNameResponse.json();
-  const duplicateProfile = env.raw.prepare("SELECT * FROM personnel_records WHERE user_id = ?")
-    .get(duplicatePayload.user.id);
-  assert.equal(duplicateProfile.full_name, base.full_name);
-  assert.equal(duplicateProfile.email, "another-teacher@example.invalid");
-  assert.match(duplicateProfile.normalized_name, /#user:\d+$/);
+  assert.equal(duplicateNameResponse.status, 409);
+  assert.equal(env.raw.prepare("SELECT count(*) AS count FROM users").get().count, 1);
 
   const duplicateEmailResponse = await handleRegister(request(base), env);
   assert.equal(duplicateEmailResponse.status, 409);
@@ -112,4 +107,46 @@ test("registration requires personnel fields and creates a linked personnel reco
   ).get(base.email);
   assert.equal(transferredProfile.user_id, reRegistered.user.id);
   assert.equal(transferredProfile.full_name, "นายครู ทดสอบ");
+
+  const insertImported = (name, key, email, phone, position, classroom) => {
+    return Number(env.raw.prepare(`INSERT INTO personnel_records
+      (full_name, normalized_name, email, phone, position, homeroom_classroom, departments,
+       license_expiry_date, source_file) VALUES (?, ?, ?, ?, ?, ?, 'academic', '2030-12-31', 'import.xlsx')`)
+      .run(name, key, email, phone, position, classroom).lastInsertRowid);
+  };
+  const originalId = insertImported("นางสาวครู นำเข้า", "import-name", "old@example.invalid", "0811111111", "ครู", "ป.1/1");
+  const importedSignup = await handleRegister(request({ ...base, full_name: "ครู นำเข้า",
+    email: "new@example.invalid", phone: "0822222222", position: "ครูชำนาญการพิเศษ", subjects: "วิทยาศาสตร์" }), env);
+  assert.equal(importedSignup.status, 201);
+  const updated = env.raw.prepare("SELECT * FROM personnel_records WHERE id = ?").get(originalId);
+  assert.equal(updated.email, "new@example.invalid");
+  assert.equal(updated.position, "ครูชำนาญการพิเศษ");
+  assert.equal(updated.phone, "0822222222");
+  assert.equal(updated.subjects, "วิทยาศาสตร์");
+  assert.equal(updated.license_expiry_date, "2030-12-31");
+  assert.equal(updated.source_file, "import.xlsx");
+  assert.equal(updated.user_id, (await importedSignup.json()).user.id);
+
+  const renamedId = insertImported("ครูชื่อเดิม", "rename", "rename-old@example.invalid", "0833333333", "ครู", "ป.2/1");
+  const renamedSignup = await handleRegister(request({ ...base, full_name: "ครูชื่อใหม่",
+    email: "rename-new@example.invalid", phone: "083-333-3333", position: "ครู",
+    homeroom_classroom: "ป.2/1", departments: ["academic"] }), env);
+  assert.equal(renamedSignup.status, 201);
+  assert.equal(env.raw.prepare("SELECT full_name FROM personnel_records WHERE id = ?").get(renamedId).full_name, "ครูชื่อใหม่");
+
+  const unrelatedId = insertImported("ครูคนละคน", "unrelated", "unrelated@example.invalid", "0844444444", "ครู", "ป.2/1");
+  const unrelatedSignup = await handleRegister(request({ ...base, full_name: "ครูอีกคน",
+    email: "separate@example.invalid", phone: "0855555555", position: "ครู",
+    homeroom_classroom: "ป.2/1", departments: ["academic"] }), env);
+  assert.equal(unrelatedSignup.status, 201);
+  assert.equal(env.raw.prepare("SELECT user_id FROM personnel_records WHERE id = ?").get(unrelatedId).user_id, null);
+
+  const ambiguousId = insertImported("นายครูซ้ำ", "ambiguous-1", null, null, null, null);
+  insertImported("ครูซ้ำ", "ambiguous-2", null, null, null, null);
+  const countBefore = env.raw.prepare("SELECT count(*) AS count FROM users").get().count;
+  const ambiguousSignup = await handleRegister(request({ ...base, full_name: "ครูซ้ำ", email: "ambiguous@example.invalid" }), env);
+  assert.equal(ambiguousSignup.status, 409);
+  assert.equal(env.raw.prepare("SELECT user_id FROM personnel_records WHERE id = ?").get(ambiguousId).user_id, null);
+  assert.equal(env.raw.prepare("SELECT count(*) AS count FROM users").get().count, countBefore);
+
 });

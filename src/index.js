@@ -479,7 +479,7 @@ export async function handleRegister(request, env) {
     const conflict = String(error?.message || "").startsWith("PERSONNEL_");
     return jsonResponse({
       error: conflict
-        ? "ข้อมูลชื่อหรืออีเมลขัดกับทะเบียนบุคลากรเดิม กรุณาติดต่อผู้ดูแลระบบ"
+        ? "พบข้อมูลบุคลากรที่ตรงกับหลายรายการหรือผูกกับบัญชีเดิม กรุณาเข้าสู่ระบบด้วยบัญชีเดิมหรือติดต่อผู้ดูแลระบบ"
         : "ไม่สามารถบันทึกข้อมูลบุคลากรได้ กรุณาลองใหม่อีกครั้ง",
     }, conflict ? 409 : 500);
   }

@@ -205,29 +205,36 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
   const fullName = String(profile.full_name || "").trim();
   const normalizedName = cleanName(fullName);
 
-  let person = await env.DB.prepare(
-    "SELECT id, user_id, email, full_name FROM personnel_records WHERE lower(email) = ? AND status = 'active'"
-  ).bind(email).first();
-  let linkedAccountDeleted = false;
-  if (person?.user_id && Number(person.user_id) !== Number(profile.user_id)) {
-    const linkedAccount = await env.DB.prepare(
-      "SELECT id, deleted_at FROM users WHERE id = ?"
-    ).bind(person.user_id).first();
-    linkedAccountDeleted = Boolean(linkedAccount?.deleted_at);
-  }
-  if (person && comparableName(person.full_name) !== comparableName(fullName) && !linkedAccountDeleted) {
-    throw new Error("PERSONNEL_EMAIL_CONFLICT");
-  }
-  if (!person) {
-    const sameName = await env.DB.prepare(
-      "SELECT id, user_id, email, full_name FROM personnel_records WHERE normalized_name = ? AND status = 'active'"
-    ).bind(normalizedName).first();
-    // ใช้ทะเบียนเดิมเฉพาะรายการที่ยังไม่มีบัญชีและอีเมลเท่านั้น
-    // บุคลากรคนละคนอาจมีชื่อ-นามสกุลซ้ำกันได้ จึงต้องแยกด้วยอีเมล/บัญชี
-    if (sameName && !sameName.user_id && !String(sameName.email || "").trim()) person = sameName;
-  }
-  if (person && person.user_id && Number(person.user_id) !== Number(profile.user_id) && !linkedAccountDeleted) {
+  const { results: people } = await env.DB.prepare(
+    `SELECT p.id, p.user_id, p.email, p.full_name, p.phone, p.position,
+            p.subjects, p.homeroom_classroom, p.departments, u.deleted_at AS account_deleted_at
+     FROM personnel_records p LEFT JOIN users u ON u.id = p.user_id
+     WHERE p.status = 'active'`
+  ).all();
+  const text = (value) => String(value || "").normalize("NFC").trim().replace(/\s+/g, " ").toLowerCase();
+  const phone = (value) => String(value || "").replace(/\D/g, "");
+  const departmentKey = (value) => String(value || "").split(",").map(text).filter(Boolean).sort().join(",");
+  const emailMatches = people.filter((row) => text(row.email) === email);
+  const nameMatches = people.filter((row) => comparableName(row.full_name) === comparableName(fullName));
+  // A phone number plus at least two independent profile fields can identify a renamed person.
+  const detailMatches = people.filter((row) => {
+    if (phone(profile.phone).length < 8 || phone(row.phone) !== phone(profile.phone)) return false;
+    const fields = ["position", "subjects", "homeroom_classroom"];
+    let matches = fields.filter((key) => text(profile[key]) && text(profile[key]) === text(row[key])).length;
+    if (departmentKey(profile.departments) && departmentKey(profile.departments) === departmentKey(row.departments)) matches++;
+    return matches >= 2;
+  });
+  const candidates = emailMatches.length ? emailMatches : nameMatches.length ? nameMatches : detailMatches;
+  if (candidates.length > 1) throw new Error("PERSONNEL_AMBIGUOUS_MATCH");
+  const person = candidates[0] || null;
+  // Registration may update imported/unlinked records or records from a deleted account,
+  // but must never take over an existing account or its personnel identity.
+  if (person?.user_id && Number(person.user_id) !== Number(profile.user_id) && !person.account_deleted_at) {
     throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
+  }
+  const otherMatches = [...nameMatches, ...detailMatches];
+  if (person && otherMatches.some((row) => row.id !== person.id)) {
+    throw new Error("PERSONNEL_AMBIGUOUS_MATCH");
   }
 
   const values = [
@@ -240,17 +247,18 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     profile.teaching_periods ?? null,
   ];
   if (person) {
-    await env.DB.prepare(
+    const updated = await env.DB.prepare(
       `UPDATE personnel_records SET
          user_id = ?, email = ?, full_name = ?, position = ?, subjects = COALESCE(?, subjects),
          phone = ?, homeroom_classroom = COALESCE(?, homeroom_classroom), departments = ?,
          responsible_projects = COALESCE(?, responsible_projects),
          teaching_periods = COALESCE(?, teaching_periods), updated_at = datetime('now')
-       WHERE id = ?`
+       WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     ).bind(
       profile.user_id, email, fullName, values[0], values[1], values[2], values[3],
-      values[4], values[5], values[6], person.id
+      values[4], values[5], values[6], person.id, person.user_id
     ).run();
+    if (!updated.meta.changes) throw new Error("PERSONNEL_ACCOUNT_CONFLICT");
     return person.id;
   }
 
