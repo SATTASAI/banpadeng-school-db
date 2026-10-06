@@ -1,3 +1,4 @@
+import {ensureLeaveData} from "../lib/leave-data.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
@@ -50,6 +51,11 @@ async function ensureSchema(env){
     UNIQUE(absence_id,timetable_entry_id),
     UNIQUE(absence_date,period,substitute_teacher_id)
   )`).run();
+  const {results:columns}=await env.DB.prepare("PRAGMA table_info(substitute_assignments)").all();
+  if(!columns.some(c=>c.name==='leave_request_id')){
+    try{await env.DB.prepare("ALTER TABLE substitute_assignments ADD COLUMN leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE SET NULL").run();}
+    catch(e){if(!/duplicate column name/i.test(String(e)))throw e;}
+  }
   ready.add(env.DB);
 }
 
@@ -137,6 +143,23 @@ async function publish(env,term){
 }
 
 function weekday(date){const day=new Date(`${date}T12:00:00Z`).getUTCDay();return day>=1&&day<=5?day:null;}
+// Canonical personnel accounts include prior accounts merged into the same teacher.
+async function leaveAbsences(env,date){
+  if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
+  const {results}=await env.DB.prepare(`SELECT r.id AS leave_request_id,p.id AS teacher_id,p.full_name,
+    COALESCE(r.leave_subtype,r.leave_type) AS leave_type,r.start_date,r.end_date,r.leave_days,r.status,r.workflow_stage
+    FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id
+    JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
+    WHERE ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved')
+    ORDER BY CASE r.status WHEN 'approved' THEN 0 ELSE 1 END,p.full_name,r.id`).bind(date).all();
+  return reply({date,leave_requests:results});
+}
+async function sourceLeave(env,id,date,teacherId){
+  return env.DB.prepare(`SELECT r.id FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id
+    JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
+    WHERE r.id=? AND a.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date
+    AND r.status IN ('pending','approved')`).bind(id,teacherId,date).first();
+}
 async function coverage(env,date,teacherId){
   if(!validDate(date)||!teacherId)return reply({error:"เลือกวันที่และครูให้ถูกต้อง"},400);
   const day=weekday(date);if(!day)return reply({error:"เลือกวันจันทร์ถึงศุกร์"},400);
@@ -158,12 +181,16 @@ async function coverage(env,date,teacherId){
       JOIN timetable_entries e ON e.teacher_id=a.teacher_id AND e.plan_id=? AND e.weekday=? WHERE a.absence_date=?`)
     .bind(published.id,day,date,published.id,day,date).all();
   const {results:absences}=await env.DB.prepare("SELECT teacher_id FROM substitute_absences WHERE absence_date=?").bind(date).all();
-  const unavailable=new Set(absences.map(a=>a.teacher_id));
+  const leaveData=await (await leaveAbsences(env,date)).json();
+  const unavailable=new Set([...absences.map(a=>a.teacher_id),...leaveData.leave_requests.map(r=>r.teacher_id)]);
   return reply({term,date,teacher_id:teacherId,lessons:lessons.map(l=>({...l,available_teachers:teachers.filter(t=>!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))}))});
 }
 async function assign(request,env,user){
   const body=await request.json().catch(()=>null),date=body?.date,teacherId=validId(body?.teacher_id),entryId=validId(body?.entry_id),subId=validId(body?.substitute_teacher_id);
   if(!validDate(date)||!teacherId||!entryId||!subId||teacherId===subId)return reply({error:"เลือกวัน ครู คาบ และครูสอนแทนให้ถูกต้อง"},400);
+  const leaveId=body.leave_request_id==null?null:validId(body.leave_request_id);
+  if(body.leave_request_id!=null&&(!leaveId||!await sourceLeave(env,leaveId,date,teacherId)))
+    return reply({error:"ใบลาไม่ตรงกับครูหรือวันที่ หรือถูกยกเลิก/ไม่อนุมัติแล้ว กรุณาโหลดข้อมูลใหม่"},409);
   const result=await coverage(env,date,teacherId);
   if(result.status!==200)return result;
   const data=await result.json(),lesson=data.lessons.find(x=>x.id===entryId);
@@ -173,16 +200,24 @@ async function assign(request,env,user){
   await env.DB.prepare("INSERT OR IGNORE INTO substitute_absences(absence_date,teacher_id,reason,created_by) VALUES (?,?,?,?)")
     .bind(date,teacherId,reason||null,user.id).run();
   const absence=await env.DB.prepare("SELECT id FROM substitute_absences WHERE absence_date=? AND teacher_id=?").bind(date,teacherId).first();
-  try{await env.DB.prepare(`INSERT INTO substitute_assignments(absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by)
-    VALUES (?,?,?,?,?,?,?,?)`).bind(absence.id,entryId,subId,weekday(date),lesson.period,date,notes||null,user.id).run();}
+  try{const inserted=await env.DB.prepare(`INSERT INTO substitute_assignments(absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by,leave_request_id)
+    SELECT ?,?,?,?,?,?,?,?,?
+    WHERE (? IS NULL OR EXISTS(SELECT 1 FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id
+      WHERE r.id=? AND a.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved')))
+    AND NOT EXISTS(SELECT 1 FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id
+      WHERE a.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved'))`)
+    .bind(absence.id,entryId,subId,weekday(date),lesson.period,date,notes||null,user.id,leaveId,
+      leaveId,leaveId,teacherId,date,subId,date).run();
+    if(!inserted.meta.changes)return reply({error:"ข้อมูลการลาเปลี่ยนระหว่างบันทึก กรุณาโหลดข้อมูลใหม่"},409);
+  }
   catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"คาบนี้มีการมอบหมายครูแล้ว กรุณารีเฟรช"},409);throw error;}
   return reply({ok:true});
 }
 async function assignments(env,date){
   if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
-  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,e.subject,e.grade_level,e.classroom,
+  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.leave_request_id,r.status AS leave_status,e.subject,e.grade_level,e.classroom,
     absent.full_name AS absent_name,sub.full_name AS substitute_name
-    FROM substitute_assignments a JOIN substitute_absences ab ON ab.id=a.absence_id
+    FROM substitute_assignments a LEFT JOIN leave_requests r ON r.id=a.leave_request_id JOIN substitute_absences ab ON ab.id=a.absence_id
     JOIN timetable_entries e ON e.id=a.timetable_entry_id
     JOIN personnel_records absent ON absent.id=ab.teacher_id
     JOIN personnel_records sub ON sub.id=a.substitute_teacher_id
@@ -200,7 +235,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
     if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรที่ได้รับมอบหมายเท่านั้น'},403);
   }
-  await ensurePersonnelData(env);await ensureSchema(env);
+  await ensurePersonnelData(env);await ensureSchema(env);if(isSubstitute)await ensureLeaveData(env);
   const url=new URL(request.url),isTimetable=pathname.startsWith("/api/timetable/");
   if(isTimetable){
     const term=await termById(env,validId(method==="GET"||method==="DELETE"?url.searchParams.get("term_id"):(await request.clone().json().catch(()=>null))?.term_id));
@@ -214,6 +249,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(removed&&method==="PATCH")return moveSlot(request,env,term,Number(removed[1]));
     if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term);
   }else{
+    if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
 

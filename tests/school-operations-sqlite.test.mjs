@@ -14,6 +14,7 @@ function fixture(){
   CREATE TABLE academic_years(id INTEGER PRIMARY KEY,year_be INTEGER);
   CREATE TABLE academic_terms(id INTEGER PRIMARY KEY,academic_year_id INTEGER,name TEXT,start_date TEXT,end_date TEXT);
   CREATE TABLE students(id INTEGER PRIMARY KEY,student_code TEXT,full_name TEXT);
+  CREATE TABLE leave_requests(id INTEGER PRIMARY KEY,user_id INTEGER REFERENCES users(id),leave_type TEXT,start_date TEXT,end_date TEXT,status TEXT);
   CREATE TABLE student_enrollments(student_id INTEGER,academic_term_id INTEGER,grade_level TEXT,classroom TEXT,status TEXT);
   INSERT INTO users VALUES (1,'admin@example.invalid','ผู้บริหาร','executive','active','2026-01-01'),
     (2,'teacher@example.invalid','ครูหนึ่ง','teacher','active','2026-01-01'),
