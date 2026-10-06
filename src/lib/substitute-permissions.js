@@ -1,6 +1,7 @@
 import {ensurePersonnelData} from './personnel-data.js';
 import {belongsToDepartment,isSchoolExecutive} from '../routes/department-staff.js';
 export async function canManageSubstitutes(env,user){
+ if(user?.role==='superadmin')return true;
  if(!user || !['teacher','staff','superadmin'].includes(user.role))return false;
  await ensurePersonnelData(env);
  const {results:people}=await env.DB.prepare(`SELECT p.id,p.departments,p.personnel_type,p.position

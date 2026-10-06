@@ -35,7 +35,8 @@ test('substitution reads canonical leave accounts and dates, preserves half-day/
  const r=rows.find(r=>r.leave_request_id===80);assert.equal(r.teacher_id,absent);assert.equal(r.leave_type,'lenient');assert.equal(r.leave_days,0.5);assert.equal(r.status,'pending');assert.equal(r.end_date,'2026-10-07');assert(!('reason' in r));
  assert.equal((await call(env,path+'leaves?date=2026-02-30','GET',undefined,3)).status,400);
  assert.equal((await call(env,path+'leaves?date=2026-10-06','GET',undefined,2)).status,403);
- assert.equal((await call(env,path+'leaves?date=2026-10-06','GET',undefined,1)).status,403);
+ assert.equal((await call(env,path+'leaves?date=2026-10-06','GET',undefined,1)).status,200);
+ assert.equal((await (await call(env,path+'permissions','GET',undefined,1)).json()).can_manage,true);
  env.raw.prepare("DELETE FROM leave_requests WHERE id=80").run();
  assert(!(await (await call(env,path+'leaves?date=2026-10-06','GET',undefined,3)).json()).leave_requests.some(r=>r.leave_request_id===80));
 });
@@ -47,7 +48,7 @@ test('coverage excludes every teacher on pending or approved leave and assignmen
  const data={date:'2026-10-06',teacher_id:absent,entry_id:1,substitute_teacher_id:free,leave_request_id:80};
  for(const patch of [{substitute_teacher_id:onLeave},{leave_request_id:81},{date:'2026-10-08'},{leave_request_id:999}])assert.equal((await call(env,path+'assignments','POST',{...data,...patch},3)).status,409);
  assert.equal((await call(env,path+'assignments','POST',data,2)).status,403);
- assert.equal((await call(env,path+'assignments','POST',data,3)).status,200);
+ assert.equal((await call(env,path+'assignments','POST',data,1)).status,200);
  const rows=(await (await call(env,path+'assignments?date=2026-10-06','GET',undefined,3)).json()).assignments;
  assert.equal(rows[0].leave_request_id,80);assert.equal(rows[0].leave_status,'pending');assert.equal(rows[0].absent_name,'ครู ก');
  assert.equal(env.raw.prepare('SELECT status FROM leave_requests WHERE id=80').get().status,'pending');

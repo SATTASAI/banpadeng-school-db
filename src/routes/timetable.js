@@ -233,7 +233,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
   if(isSubstitute){
     const allowed=await canManageSubstitutes(env,user);
     if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
-    if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรที่ได้รับมอบหมายเท่านั้น'},403);
+    if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรหรือผู้ดูแลระบบเท่านั้น'},403);
   }
   await ensurePersonnelData(env);await ensureSchema(env);if(isSubstitute)await ensureLeaveData(env);
   const url=new URL(request.url),isTimetable=pathname.startsWith("/api/timetable/");

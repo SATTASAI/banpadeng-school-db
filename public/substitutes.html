@@ -28,6 +28,6 @@ async function exportOrder(format){const buttons=[$("exportDocx"),$("exportPdf")
 $("exportDocx").onclick=()=>exportOrder('docx');$("exportPdf").onclick=()=>exportOrder('pdf');
 $("find").onclick=find;$("date").onchange=()=>{Promise.all([loadLeaves(),loadAssignments()]).catch(e=>say(e.message,true))};$("absentTeacher").onchange=()=>{++searchVersion;coverage=null;$("lessons").innerHTML="";showLeave();if(selectedLeave())find()};$("print").onclick=()=>exportOrder('print');
 (async()=>{const auth=await apiRequest('/api/auth/me');me=auth.user;if(!me){location.href='/login.html';return}const permission=await apiRequest('/api/substitutes/permissions');me.can_manage_substitutes=permission.can_manage;
-if(!permission.can_manage){document.querySelectorAll('.filters,.actions').forEach(e=>e.style.display='none');say('เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรที่ได้รับมอบหมายเท่านั้น',true);return}
+if(!permission.can_manage){document.querySelectorAll('.filters,.actions').forEach(e=>e.style.display='none');say('เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรหรือผู้ดูแลระบบเท่านั้น',true);return}
 const staff=await apiRequest('/api/staff');$("date").value=new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Bangkok"});$("issueDate").value=$("date").value;try{$("directorName").value=SubstituteOrderExport.director(staff.staff)}catch(e){$("directorName").placeholder=e.message;}await loadLeaves();await loadAssignments()})().catch(e=>say(e.message,true));
 })();</script></body></html>
