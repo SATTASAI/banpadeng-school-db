@@ -1,6 +1,8 @@
+import {canManageTimetable} from "../lib/timetable-permissions.js";
+import {handleAuto} from "./timetable-auto.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
-import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
+import { getCurrentUser, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
 
 const noStore = { "Cache-Control": "private, no-store" };
@@ -74,7 +76,7 @@ async function draft(env,termId,userId){
   }
   return row;
 }
-async function setup(env,term){
+async function setup(env,term,canManage=false){
   const [classes,teachers,published,draftPlan]=await Promise.all([
     env.DB.prepare(`SELECT grade_level,classroom,COUNT(*) AS students FROM student_enrollments
       WHERE academic_term_id=? AND status='enrolled' AND TRIM(COALESCE(grade_level,''))<>'' AND TRIM(COALESCE(classroom,''))<>''
@@ -84,7 +86,7 @@ async function setup(env,term){
       ORDER BY p.full_name`).all(),
     plan(env,term.id,"published"),plan(env,term.id,"draft")
   ]);
-  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan});
+  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan,can_manage:canManage});
 }
 async function entries(env,term,view){
   const chosen=await plan(env,term.id,view);
@@ -240,9 +242,12 @@ export async function handleTimetableRoute(request,env,pathname,method){
   if(isTimetable){
     const term=await termById(env,validId(method==="GET"||method==="DELETE"?url.searchParams.get("term_id"):(await request.clone().json().catch(()=>null))?.term_id));
     if(!term)return reply({error:"เลือกภาคเรียนจากระบบก่อน"},400);
-    if(pathname==="/api/timetable/setup"&&method==="GET")return setup(env,term);
+    const canManage=await canManageTimetable(env,user);
+    if(pathname==="/api/timetable/setup"&&method==="GET")return setup(env,term,canManage);
+    if(pathname==="/api/timetable/auto/config"&&method==="GET"){if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);return handleAuto(request,env,term,user,pathname,method,{setup,plan,draft});}
     if(pathname==="/api/timetable/entries"&&method==="GET")return entries(env,term,url.searchParams.get("view")==="draft"?"draft":"published");
-    if(!isAdmin(user))return reply({error:"ผู้บริหารหรือผู้ดูแลระบบเท่านั้นที่แก้ตารางสอนได้"},403);
+    if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบที่แก้ตารางสอนได้"},403);
+    const autoResponse=await handleAuto(request,env,term,user,pathname,method,{setup,plan,draft});if(autoResponse)return autoResponse;
     if(pathname==="/api/timetable/slot"&&method==="PUT")return saveSlot(request,env,term,user);
     const removed=pathname.match(/^\/api\/timetable\/slot\/(\d+)$/);
     if(removed&&method==="DELETE")return deleteSlot(env,term,Number(removed[1]));
