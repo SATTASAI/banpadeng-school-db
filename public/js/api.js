@@ -48,6 +48,7 @@ async function apiRequest(path, options = {}) {
     headers: {...headers,...(options.headers||{})},
     body: requestBody,
     credentials: "same-origin",
+    signal: options.signal,
     cache: "no-store",
   });
 

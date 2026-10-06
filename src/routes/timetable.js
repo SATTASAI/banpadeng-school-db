@@ -1,3 +1,4 @@
+import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable} from "../lib/timetable-permissions.js";
 import {handleAuto} from "./timetable-auto.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
@@ -227,6 +228,33 @@ async function assignments(env,date){
   return reply({assignments:results});
 }
 
+// Timetable reads must not initialize budget, inventory, documents or personnel backfills.
+export async function handleTimetableReadRoute(request,env,pathname,method){
+  if(method!=="GET"||!["/api/timetable/periods","/api/timetable/setup","/api/timetable/entries","/api/timetable/auto/config"].includes(pathname))return null;
+  const user=await getCurrentUser(request,env);
+  if(!user||!user.role)return reply({error:"กรุณาเข้าสู่ระบบ"},401);
+  if(!["teacher","staff","executive","superadmin"].includes(user.role))return reply({error:"ไม่มีสิทธิ์เข้าถึง"},403);
+  const required=pathname==="/api/timetable/periods"?["academic_years","academic_terms"]:["academic_years","academic_terms","student_enrollments","personnel_records","personnel_accounts","timetable_plans","timetable_entries",...(pathname.endsWith('/config')?["timetable_auto_config"]:[])];
+  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${required.map(()=>'?').join(',')})`).bind(...required).all();
+  if(results.length!==required.length)return null; // First installation uses the normal migration path.
+  if(pathname==="/api/timetable/periods")return timetablePeriods(env);
+  const term=await termById(env,validId(new URL(request.url).searchParams.get('term_id')));
+  if(!term)return reply({error:"เลือกภาคเรียนจากระบบก่อน"},400);
+  if(pathname==="/api/timetable/entries")return entries(env,term,new URL(request.url).searchParams.get('view')==='draft'?'draft':'published');
+  const canManage=await canManageTimetable(env,user);
+  if(pathname==="/api/timetable/setup")return setup(env,term,canManage);
+  if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);
+  const row=await env.DB.prepare('SELECT config_json FROM timetable_auto_config WHERE academic_term_id=?').bind(term.id).first();
+  return reply({config:row?JSON.parse(row.config_json):null});
+}
+export async function timetablePeriods(env){
+  const [years,terms]=await Promise.all([
+    env.DB.prepare('SELECT id,year_be,label,status FROM academic_years ORDER BY year_be DESC').all(),
+    env.DB.prepare('SELECT id,academic_year_id,name,term_number,status FROM academic_terms ORDER BY academic_year_id,term_number').all()
+  ]);
+  return reply({years:years.results.map(y=>({...y,terms:terms.results.filter(t=>t.academic_year_id===y.id)}))});
+}
+
 export async function handleTimetableRoute(request,env,pathname,method){
   if(!pathname.startsWith("/api/timetable/")&&!pathname.startsWith("/api/substitutes/"))return null;
   const user=await getCurrentUser(request,env);if(!user||!user.role)return reply({error:"กรุณาเข้าสู่ระบบ"},401);
@@ -237,6 +265,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
     if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรหรือผู้ดูแลระบบเท่านั้น'},403);
   }
+  if(pathname==="/api/timetable/periods"&&method==="GET"){await ensureAcademicData(env);return timetablePeriods(env);}
   await ensurePersonnelData(env);await ensureSchema(env);if(isSubstitute)await ensureLeaveData(env);
   const url=new URL(request.url),isTimetable=pathname.startsWith("/api/timetable/");
   if(isTimetable){

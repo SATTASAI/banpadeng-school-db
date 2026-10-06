@@ -31,7 +31,7 @@ import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
 import { handleLearnerAnalysisRoute } from "./routes/learner-analysis.js";
 import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
-import { handleTimetableRoute } from "./routes/timetable.js";
+import { handleTimetableReadRoute, handleTimetableRoute } from "./routes/timetable.js";
 import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
@@ -4249,6 +4249,15 @@ export default {
         await ensureAcademicData(env);
         await ensureExtendedSchema(env);
         return await handleSystemStatus(request, env);
+      }
+
+      // This module owns its schema. Reads avoid unrelated fiscal/HR migrations.
+      if (pathname.startsWith("/api/timetable/")) {
+        const fastRead = await handleTimetableReadRoute(request, env, pathname, method);
+        if (fastRead) return fastRead;
+        await ensureAcademicData(env);
+        const timetableOnly = await handleTimetableRoute(request, env, pathname, method);
+        if (timetableOnly) return timetableOnly;
       }
 
       // ติดตั้ง/อัปเกรดโครงสร้างปีการศึกษาก่อนใช้ API ภายในระบบ
