@@ -1,6 +1,6 @@
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute} from './routes/department-staff.js';
-import {isPersonnelHead} from './lib/leave-permissions.js';
+import {handleLeaveRoute} from './routes/leave.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
@@ -2040,125 +2040,6 @@ async function handleDeleteTopic(request, env, topicId) {
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่ลบได้" }, 403);
 
   await env.DB.prepare("DELETE FROM work_topics WHERE id = ?").bind(topicId).run();
-  return jsonResponse({ ok: true });
-}
-
-// ---------- วันลา ----------
-const LEAVE_TYPES = ["sick", "personal", "maternity", "other"];
-
-// ---------- /api/leave-requests (GET) ----------
-async function handleListLeaveRequests(request, env) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-
-  const personnelHead = await isPersonnelHead(env,user);
-  let query, binds;
-  if (isAdmin(user)) {
-    query = `SELECT lr.*, u.full_name, ap.full_name as approver_name
-              FROM leave_requests lr
-              JOIN users u ON u.id = lr.user_id
-              LEFT JOIN users ap ON ap.id = lr.approved_by
-              ORDER BY lr.status ASC, lr.created_at DESC`;
-    binds = [];
-  } else {
-    query = `SELECT lr.*, u.full_name, ap.full_name as approver_name
-              FROM leave_requests lr
-              JOIN users u ON u.id = lr.user_id
-              LEFT JOIN users ap ON ap.id = lr.approved_by
-              WHERE lr.user_id = ? OR (?=1 AND lr.status='pending')
-              ORDER BY lr.created_at DESC`;
-    binds = [user.id,personnelHead?1:0];
-  }
-
-  const { results } = await env.DB.prepare(query).bind(...binds).all();
-  return jsonResponse({ leave_requests: results, can_view_pending: isAdmin(user)||personnelHead },200,{'Cache-Control':'no-store'});
-}
-
-// ---------- /api/leave-requests (POST) ----------
-async function handleCreateLeaveRequest(request, env) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  }
-
-  const leaveType = body.leave_type;
-  if (!LEAVE_TYPES.includes(leaveType)) return jsonResponse({ error: "กรุณาเลือกประเภทการลา" }, 400);
-
-  const reason = (body.reason || "").trim();
-  if (leaveType === "other" && !reason) {
-    return jsonResponse({ error: "กรุณาระบุเหตุผลเมื่อเลือกประเภท 'อื่นๆ'" }, 400);
-  }
-
-  if (!body.start_date || !body.end_date) {
-    return jsonResponse({ error: "กรุณาระบุวันที่เริ่มและสิ้นสุดการลา" }, 400);
-  }
-  if (body.end_date < body.start_date) {
-    return jsonResponse({ error: "วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม" }, 400);
-  }
-
-  const result = await env.DB.prepare(
-    `INSERT INTO leave_requests (user_id, leave_type, reason, start_date, end_date)
-     VALUES (?, ?, ?, ?, ?)`
-  )
-    .bind(user.id, leaveType, reason || null, body.start_date, body.end_date)
-    .run();
-
-  await writeAuditLog(env, user, "create", "leave_request", result.meta.last_row_id, {
-    leave_type: leaveType, start_date: body.start_date, end_date: body.end_date,
-  }, request);
-  return jsonResponse({ id: result.meta.last_row_id }, 201);
-}
-
-// ---------- /api/leave-requests/:id (PATCH) — อนุมัติ/ไม่อนุมัติ (admin เท่านั้น) ----------
-async function handleUpdateLeaveRequest(request, env, leaveId) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่อนุมัติได้" }, 403);
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  }
-
-  if (!["approved", "rejected"].includes(body.status)) {
-    return jsonResponse({ error: "สถานะไม่ถูกต้อง" }, 400);
-  }
-
-  await env.DB.prepare(
-    "UPDATE leave_requests SET status = ?, approved_by = ?, approved_at = ? WHERE id = ?"
-  )
-    .bind(body.status, user.id, new Date().toISOString(), leaveId)
-    .run();
-
-  await writeAuditLog(env, user, "approve", "leave_request", leaveId, { status: body.status }, request);
-  return jsonResponse({ ok: true });
-}
-
-// ---------- /api/leave-requests/:id (DELETE) — ผู้ยื่นยกเลิกคำขอที่ยังรอดำเนินการ ----------
-async function handleDeleteLeaveRequest(request, env, leaveId) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-
-  const row = await env.DB.prepare("SELECT user_id, status FROM leave_requests WHERE id = ?")
-    .bind(leaveId)
-    .first();
-  if (!row) return jsonResponse({ error: "ไม่พบคำขอลานี้" }, 404);
-  if (row.user_id !== user.id && !isAdmin(user)) {
-    return jsonResponse({ error: "ไม่มีสิทธิ์ยกเลิกคำขอนี้" }, 403);
-  }
-  if (row.status !== "pending" && !isAdmin(user)) {
-    return jsonResponse({ error: "ยกเลิกได้เฉพาะคำขอที่ยังรอดำเนินการ" }, 400);
-  }
-
-  await env.DB.prepare("DELETE FROM leave_requests WHERE id = ?").bind(leaveId).run();
-  await writeAuditLog(env, user, "delete", "leave_request", leaveId, { previous_status: row.status }, request);
   return jsonResponse({ ok: true });
 }
 
@@ -4497,12 +4378,8 @@ export default {
       if (topicMatch && method === "PATCH") return await handleUpdateTopic(request, env, Number(topicMatch[1]));
       if (topicMatch && method === "DELETE") return await handleDeleteTopic(request, env, Number(topicMatch[1]));
 
-      if (pathname === "/api/leave-requests" && method === "GET") return await handleListLeaveRequests(request, env);
-      if (pathname === "/api/leave-requests" && method === "POST") return await handleCreateLeaveRequest(request, env);
-
-      const leaveMatch = pathname.match(/^\/api\/leave-requests\/(\d+)$/);
-      if (leaveMatch && method === "PATCH") return await handleUpdateLeaveRequest(request, env, Number(leaveMatch[1]));
-      if (leaveMatch && method === "DELETE") return await handleDeleteLeaveRequest(request, env, Number(leaveMatch[1]));
+      const leaveResponse=await handleLeaveRoute(request,env,pathname,method);
+      if(leaveResponse)return leaveResponse;
 
       if (pathname === "/api/student-support" && method === "GET") return await handleListSupportCases(request, env);
       if (pathname === "/api/student-support" && method === "POST") return await handleCreateSupportCase(request, env);

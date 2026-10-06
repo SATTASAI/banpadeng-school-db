@@ -37,12 +37,14 @@ test('dashboard includes earlier-year projects and immediately reflects allocati
 
 test('leave counts update on request, approval and deletion and selected-year days clip a cross-year leave',async()=>{
  const env=sharedEnv;const before=await (await call(env,'/api/overview')).json();
- const created=await call(env,'/api/leave-requests','POST',{leave_type:'sick',start_date:'2026-09-30',end_date:'2026-10-02'},2);assert.equal(created.status,201);const{id}=await created.json();
+ const form={reason:'เหตุผลทดสอบ',position:'ครู',contact_address:'ที่อยู่ทดสอบ',contact_phone:'0000000000'};
+ const created=await call(env,'/api/leave-requests','POST',{...form,leave_type:'sick',start_date:'2026-09-30',end_date:'2026-10-02'},2);assert.equal(created.status,201);const{id}=await created.json();
  let data=await (await call(env,'/api/overview')).json();assert.notEqual(data.data_revision,before.data_revision);assert.equal(data.leave_summary.pending,1);assert.equal(data.pending_leave_requests,1);
- assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{status:'approved'})).status,200);
+ // The end-to-end leave workflow tests exercise the authorized decision route.
+ env.raw.prepare("UPDATE leave_requests SET status='approved' WHERE id=?").run(id);
  data=await (await call(env,'/api/overview')).json();assert.equal(data.leave_summary.approved,1);assert.equal(data.leave_summary.approved_days,3);assert.equal(data.pending_leave_requests,0);
  const selected=await (await call(env,'/api/overview?fiscal_year=2570')).json();assert.equal(selected.leave_summary.approved_days,2);assert.equal(selected.leave_summary.by_type[0].approved,1);
- const draft=await (await call(env,'/api/leave-requests','POST',{leave_type:'personal',start_date:'2026-10-01',end_date:'2026-10-01'},2)).json();
+ const draft=await (await call(env,'/api/leave-requests','POST',{...form,leave_type:'personal',start_date:'2026-10-01',end_date:'2026-10-01'},2)).json();
  assert.equal((await call(env,`/api/leave-requests/${draft.id}`,'DELETE',undefined,2)).status,200);
  data=await (await call(env,'/api/overview')).json();assert.equal(data.leave_summary.total,1);assert.equal(data.leave_summary.pending,0);
 });

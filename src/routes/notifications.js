@@ -1,6 +1,7 @@
 import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
+import {ensureLeaveData} from '../lib/leave-data.js';
 const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
@@ -15,10 +16,14 @@ function feed(env,user,personnelHead){
  COALESCE(r.reviewed_at,r.created_at),CASE WHEN ?=1 THEN '/dashboard.html' ELSE '/department.html?dept='||COALESCE(p.management_area,p.department) END,n.read_at
  FROM project_balance_notifications n JOIN project_balance_requests r ON r.id=n.request_id JOIN projects p ON p.id=r.project_id WHERE n.user_id=?
  UNION ALL
- SELECT 'leave:'||r.id||':'||r.status,'การลา: '||u.full_name,
- CASE r.status WHEN 'pending' THEN 'มีคำขอลารอพิจารณา' WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
- COALESCE(r.approved_at,r.created_at),'/leave.html',NULL
- FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE (?=1 AND r.status='pending') OR (r.user_id=? AND r.status IN ('approved','rejected'))
+ SELECT 'leave:'||r.id||':'||CASE WHEN r.status<>'pending' THEN r.status WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'reviewed' ELSE 'forwarded' END ELSE 'pending' END,'การลา: '||u.full_name,
+ CASE r.status WHEN 'pending' THEN CASE WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'รองผู้บริหารบันทึกความเห็นแล้ว รอคำสั่งผู้อำนวยการ' ELSE 'หัวหน้าฝ่ายบุคลากรส่งใบลาให้พิจารณา' END ELSE 'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ' END WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
+ COALESCE(r.approved_at,r.reviewer_at,r.forwarded_at,r.created_at),'/leave.html?request='||r.id,NULL
+ FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE
+ (?=1 AND r.status='pending') OR (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR
+ (r.user_id=? AND r.status IN ('approved','rejected')) OR
+ (?='executive' AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
+ SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND (v.kind='director' OR r.reviewer_at IS NULL)))
  UNION ALL
  SELECT 'task:'||t.id,'งานที่ได้รับมอบหมาย',t.title,t.created_at,'/tasks.html',NULL
  FROM tasks t JOIN task_assignees a ON a.task_id=t.id WHERE a.user_id=? AND a.status<>'done' AND t.status='open'
@@ -27,12 +32,12 @@ function feed(env,user,personnelHead){
  FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
  WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,isAdmin(user)||personnelHead?1:0,user.id,user.id,user.id,user.id]};
+ return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,user.role,user.id,user.id,user.id,user.id]};
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
- await ensure(env);const q=feed(env,user,await isPersonnelHead(env,user));
+ await ensure(env);await ensureLeaveData(env);const q=feed(env,user,await isPersonnelHead(env,user));
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();

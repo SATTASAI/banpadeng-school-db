@@ -27,7 +27,7 @@ test('notification count and read receipts are isolated by user; new statuses no
  INSERT INTO tasks(id,title,created_by) VALUES(1,'งานสำหรับครู',1);INSERT INTO task_assignees(task_id,user_id) VALUES(1,2);
  INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date) VALUES(1,2,'sick','2026-10-01','2026-10-02');`);
  let teacher=await (await call(env,'/api/notifications','GET',undefined,2)).json();assert.equal(teacher.unread_count,2);
- const admin=await (await call(env,'/api/notifications')).json();assert.equal(admin.unread_count,1);assert.equal(admin.notifications[0].url,'/leave.html');
+ const admin=await (await call(env,'/api/notifications')).json();assert.equal(admin.unread_count,1);assert.equal(admin.notifications[0].url,'/leave.html?request=1');
  const outsider=await (await call(env,'/api/notifications','GET',undefined,3)).json();assert.equal(outsider.unread_count,0);
  const key=teacher.notifications.find(n=>n.message_key.startsWith('project:')).message_key;
  assert.equal((await call(env,'/api/notifications/read','POST',{message_key:key},3)).status,200);
@@ -49,7 +49,7 @@ test('new and existing leave requests notify the personnel head and their linked
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:true})).status,200);
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'linked@test','x','x','บัญชีหัวหน้าฝ่าย','teacher');`);
  env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(4,?)').run(person.id);
- const created=await call(env,'/api/leave-requests','POST',{leave_type:'sick',start_date:'2026-10-06',end_date:'2026-10-06'},2);
+ const created=await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ไม่สบาย',position:'ครู',contact_address:'ที่อยู่ทดสอบ',contact_phone:'0000000000',start_date:'2026-10-06',end_date:'2026-10-06'},2);
  assert.equal(created.status,201);const id=(await created.json()).id,key='leave:'+id+':pending';
  for(const user of [3,4]){
   const feed=await (await call(env,'/api/notifications','GET',undefined,user)).json();assert(feed.notifications.some(n=>n.message_key===key));
@@ -64,6 +64,7 @@ test('new and existing leave requests notify the personnel head and their linked
  await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:false});
  const revoked=await (await call(env,'/api/notifications','GET',undefined,4)).json();assert(!revoked.notifications.some(n=>n.message_key===key));
  const hidden=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(hidden.can_view_pending,false);assert.equal(hidden.leave_requests.length,0);
- await call(env,'/api/leave-requests/'+id,'PATCH',{status:'approved'});
+ // Final decision alerts are independent of how the workflow reached that decision.
+ env.raw.prepare("UPDATE leave_requests SET status='approved',approved_at=datetime('now') WHERE id=?").run(id);
  assert((await (await call(env,'/api/notifications','GET',undefined,2)).json()).notifications.some(n=>n.message_key==='leave:'+id+':approved'));
 });
