@@ -4,7 +4,14 @@
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
  let user,records=[],detailId=null,busy=false,first=true;
  function error(e){$('errorBox').textContent=e.message||String(e);$('errorBox').classList.add('visible');}
- function success(message){$('errorBox').classList.remove('visible');$('successBox').textContent=message;$('successBox').hidden=false;}
+ function submitError(message,field){
+  error(Error(message));$('successBox').hidden=true;
+  $('submitError').textContent=message;$('submitError').hidden=false;
+  const target=field?$(field):$('submitError');
+  target.scrollIntoView({behavior:'smooth',block:'center'});
+  if(field){target.setAttribute('aria-invalid','true');target.focus();}
+ }
+ function success(message){$('errorBox').classList.remove('visible');$('submitError').hidden=true;$('successBox').textContent=message;$('successBox').hidden=false;}
  function row(r){
   const actionable=r.can_acknowledge||r.can_record||r.can_review||r.can_decide;
   const note=r.can_review?r.reviewer_comment:r.personnel_note;
@@ -56,12 +63,29 @@
   $('detailSection').scrollIntoView({behavior:'smooth',block:'start'});
  }
  function days(){const a=$('fStart').value,b=$('fEnd').value;if(a&&b&&b>=a)$('fDays').value=String(Math.round((Date.parse(b)-Date.parse(a))/86400000)+1);}
- $('fStart').onchange=days;$('fEnd').onchange=days;
+ for(const id of ['fStart','fEnd']){$(id).oninput=days;$(id).onchange=days;}
+ const requiredFields=[['fType','ประเภทการลา'],['fDate','วันที่เขียนใบลา'],['fPosition','ตำแหน่ง'],['fReason','เหตุผลการลา'],['fStart','วันที่เริ่มลา'],['fEnd','วันที่สิ้นสุดการลา'],['fDays','จำนวนวันลา'],['fPhone','เบอร์ติดต่อ'],['fAddress','ที่อยู่ระหว่างลา']];
+ function validateForm(){
+  for(const [id,label] of requiredFields){
+   $(id).removeAttribute('aria-invalid');
+   if(!$(id).value.trim()){submitError('กรุณาระบุ'+label,id);return false;}
+   if($(id).validity?.badInput||$(id).validity?.typeMismatch){submitError('กรุณาตรวจสอบ'+label,id);return false;}
+  }
+  const start=$('fStart').value,end=$('fEnd').value,count=Number($('fDays').value);
+  if(end<start){submitError('วันที่สิ้นสุดการลาต้องไม่อยู่ก่อนวันที่เริ่มลา','fEnd');return false;}
+  const span=Math.round((Date.parse(end)-Date.parse(start))/86400000)+1;
+  if(!Number.isFinite(count)||count<=0||count>span||count*2!==Math.round(count*2)){
+   submitError('จำนวนวันลาต้องมากกว่า 0 ไม่เกิน '+span+' วัน และระบุได้ทีละครึ่งวัน','fDays');return false;
+  }
+  return true;
+ }
  $('leaveForm').onsubmit=async e=>{
-  e.preventDefault();if(busy)return;busy=true;$('submitBtn').disabled=true;
+  e.preventDefault();if(busy||!validateForm())return;busy=true;$('submitBtn').disabled=true;$('submitBtn').textContent='กำลังส่งใบลา…';$('submitError').hidden=true;
   try{await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim()}});
-   success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';await load();
-  }catch(e){error(e);}finally{busy=false;$('submitBtn').disabled=false;}
+   success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';
+   try{await load();}catch(e){error(Error('บันทึกใบลาสำเร็จแล้ว แต่โหลดทะเบียนไม่สำเร็จ กรุณาโหลดหน้าใหม่เพื่อดูรายการ'));}
+   $('successBox').scrollIntoView({behavior:'smooth',block:'center'});
+  }catch(e){submitError(e.message||'ส่งใบลาไม่สำเร็จ กรุณาลองใหม่');}finally{busy=false;$('submitBtn').disabled=false;$('submitBtn').textContent='ส่งใบลาให้หัวหน้าฝ่ายบุคลากร';}
  };
  document.addEventListener('click',async e=>{
   const button=e.target.closest('button');if(!button||busy)return;

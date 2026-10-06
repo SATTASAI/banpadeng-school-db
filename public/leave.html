@@ -18,7 +18,7 @@
   <div id="successBox" class="leave-success" role="status" hidden></div>
   <section class="panel leave-panel">
    <h3>ยื่นใบลาใหม่</h3>
-   <form id="leaveForm">
+   <form id="leaveForm" novalidate>
     <div class="leave-fields">
      <div class="field"><label for="fType">ประเภทการลา</label><select id="fType" required><option value="sick">ลาป่วย</option><option value="personal">ลากิจส่วนตัว</option><option value="maternity">ลาคลอดบุตร</option><option value="other">อื่น ๆ</option></select></div>
      <div class="field"><label for="fDate">วันที่เขียนใบลา</label><input id="fDate" type="date" required></div>
@@ -32,6 +32,7 @@
      <div class="field leave-wide"><label for="fAddress">ที่อยู่ที่ติดต่อได้ระหว่างลา *</label><textarea id="fAddress" rows="2" maxlength="1000" required></textarea></div>
     </div>
     <p class="muted">การลาครั้งล่าสุดและสถิติการลาดึงจากรายการที่อนุมัติในระบบ สถิติใช้ปีงบประมาณ 1 ตุลาคม–30 กันยายน</p>
+    <p id="submitError" class="leave-submit-error" role="alert" hidden></p>
     <button class="btn btn-primary" id="submitBtn" type="submit">ส่งใบลาให้หัวหน้าฝ่ายบุคลากร</button>
    </form>
   </section>
