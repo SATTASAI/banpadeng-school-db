@@ -16,11 +16,11 @@ export async function handleAuto(request,env,term,user,pathname,method,helpers){
   return reply({config:row?JSON.parse(row.config_json):null});
  }
  const body=await request.json().catch(()=>null),config=body?.config;
- if(!config||!Array.isArray(config.classes)||!Array.isArray(config.assignments)||!Array.isArray(config.unavailable)||typeof config.keep_existing!=='boolean'||JSON.stringify(config).length>200000)return reply({error:'ข้อมูลตั้งค่าจัดตารางไม่ถูกต้อง'},400);
+ if(!config||!Array.isArray(config.classes)||!Array.isArray(config.assignments)||!Array.isArray(config.unavailable)||(config.fixed!==undefined&&!Array.isArray(config.fixed))||typeof config.keep_existing!=='boolean'||JSON.stringify(config).length>200000)return reply({error:'ข้อมูลตั้งค่าจัดตารางไม่ถูกต้อง'},400);
  const setup=await (await helpers.setup(env,term)).json();
  const roomKey=a=>JSON.stringify([a.grade_level,a.classroom]);
  const known=new Set(setup.classes.map(roomKey)),teachers=new Set(setup.teachers.map(t=>t.id));
- if(config.classes.some(c=>!known.has(roomKey(c)))||config.assignments.some(a=>!teachers.has(a.teacher_id))||config.unavailable.some(a=>!teachers.has(a.teacher_id)))return reply({error:'ห้องเรียนหรือครูไม่อยู่ในทะเบียนของภาคเรียนนี้'},400);
+ if(config.classes.some(c=>!known.has(roomKey(c)))||config.assignments.some(a=>!teachers.has(a.teacher_id))||config.unavailable.some(a=>!teachers.has(a.teacher_id))||(config.fixed||[]).some(a=>!known.has(roomKey(a))||!teachers.has(a.teacher_id)))return reply({error:'ห้องเรียนหรือครูไม่อยู่ในทะเบียนของภาคเรียนนี้'},400);
  const chosen=await helpers.plan(env,term.id,'draft')||await helpers.plan(env,term.id,'published');
  const before=chosen?await env.DB.prepare('SELECT revision FROM timetable_plans WHERE id=?').bind(chosen.id).first():null;
  const existing=chosen?(await env.DB.prepare('SELECT * FROM timetable_entries WHERE plan_id=? ORDER BY id').bind(chosen.id).all()).results:[];

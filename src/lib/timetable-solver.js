@@ -5,6 +5,8 @@ const resource = (id,d,p) => JSON.stringify([id,d,p]);
 export function solveTimetable(input, {maxNodes=40000, maxMs=150}={}) {
   const errors=[], assignments=input.assignments||[], classes=input.classes||[];
   const periods=input.periods_per_day||[6,5,5,5,5];
+  const fixed=input.fixed||[];
+  if(!Array.isArray(fixed)||fixed.length>1800)return {ok:false,errors:['คาบที่ล็อกไม่ถูกต้อง']};
   if(!Array.isArray(periods)||periods.length!==5||periods.some(n=>!Number.isInteger(n)||n<1||n>6))return {ok:false,errors:['จำนวนคาบรายวิชาต่อวันต้องอยู่ระหว่าง 1–6']};
   if(!classes.length||classes.length>60||assignments.length>1000)return {ok:false,errors:['เลือกห้องเรียน 1–60 ห้องและภาระสอนไม่เกิน 1,000 รายการ']};
   const selected=new Set(classes.map(key));
@@ -15,19 +17,34 @@ export function solveTimetable(input, {maxNodes=40000, maxMs=150}={}) {
     if(!selected.has(key(a))||!a.subject?.trim()||a.subject.length>120||!Number.isSafeInteger(a.teacher_id)||a.teacher_id<1||!Number.isInteger(a.periods_per_week)||a.periods_per_week<1||a.periods_per_week>30||!Number.isInteger(a.max_per_day)||a.max_per_day<1||a.max_per_day>6||typeof (a.room_name||'')!=='string'||(a.room_name||'').length>100){errors.push('ภาระสอนไม่ถูกต้อง');continue;}
     if(groups.has(k)){errors.push('ภาระสอนครู–วิชา–ห้องซ้ำ');continue;}
     if(a.periods_per_week>periods.reduce((n,p)=>n+Math.min(p,a.max_per_day),0))errors.push(`${a.grade_level}/${a.classroom} ${a.subject}: จำนวนคาบเกินข้อจำกัดต่อวัน`);
-    groups.set(k,{...a,k,remaining:a.periods_per_week});
+    const block=a.block_size??1;
+    if(!Number.isInteger(block)||block<1||block>3||a.periods_per_week%block||a.max_per_day<block)errors.push(`${a.subject}: คาบต่อเนื่องต้องเป็น 1–3 และหารจำนวนคาบต่อสัปดาห์ลงตัว`);
+    groups.set(k,{...a,block_size:block,k,remaining:a.periods_per_week});
   }
   for(const c of classes){const total=assignments.filter(a=>key(a)===key(c)).reduce((n,a)=>n+a.periods_per_week,0);if(total>periods.reduce((n,p)=>n+p,0))errors.push(`${c.grade_level}/${c.classroom}: ภาระสอนเกินช่องรายวิชา`);}
   if(!groups.size)errors.push('เพิ่มภาระสอนก่อนจัดตาราง');
   for(const b of input.unavailable||[]){if(!Number.isSafeInteger(b.teacher_id)||b.teacher_id<1||!Number.isInteger(b.weekday)||b.weekday<1||b.weekday>5||!Number.isInteger(b.period)||b.period<1||b.period>6)errors.push('คาบไม่ว่างของครูไม่ถูกต้อง');else blocked.add(resource(b.teacher_id,b.weekday,b.period));}
   const locked=[], generated=[];
   function occupy(e,add){for(const [set,k] of [[usedClass,slot(e)],[usedTeacher,resource(e.teacher_id,e.weekday,e.period)],...(e.room_name?[[usedRoom,resource(e.room_name,e.weekday,e.period)]]:[])])add?set.add(k):set.delete(k);}
-  for(const e of input.existing||[]){
-    if(selected.has(key(e))&&!input.keep_existing&&e.period<=periods[e.weekday-1])continue;
+  const source=[...(input.existing||[])];
+  const same=(a,b)=>slot(a)===slot(b)&&a.subject===b.subject&&a.teacher_id===b.teacher_id&&(a.room_name||'')===(b.room_name||'');
+  const fixedSeen=new Set();
+  for(const e of fixed){
+    if(!e||!selected.has(key(e))||!e.subject?.trim()||e.subject.length>120||!Number.isSafeInteger(e.teacher_id)||e.teacher_id<1||!Number.isInteger(e.weekday)||e.weekday<1||e.weekday>5||!Number.isInteger(e.period)||e.period<1||e.period>6||typeof (e.room_name||'')!=='string'||(e.room_name||'').length>100){errors.push('คาบที่ล็อกไม่ถูกต้อง');continue;}
+    if(fixedSeen.has(slot(e))){errors.push('คาบล็อกห้อง–วัน–คาบซ้ำ');continue;}fixedSeen.add(slot(e));
+    const old=source.find(a=>slot(a)===slot(e));
+    if(old&&same(old,e))continue;
+    if(old&&(input.keep_existing||old.period>periods[old.weekday-1])){errors.push('คาบที่ล็อกใหม่ขัดกับตารางเดิม');continue;}
+    if(old)source.splice(source.indexOf(old),1);
+    source.push({...e,_fixed:true});
+  }
+  for(const e of source){
+    if(selected.has(key(e))&&!input.keep_existing&&!e._fixed&&!fixed.some(f=>same(f,e))&&e.period<=periods[e.weekday-1])continue;
     if(usedClass.has(slot(e))||usedTeacher.has(resource(e.teacher_id,e.weekday,e.period))||(e.room_name&&usedRoom.has(resource(e.room_name,e.weekday,e.period)))){errors.push('คาบเดิมมีครู ห้องเรียน หรือห้องสอนชนกัน');continue;}
     occupy(e,true);
     if(!selected.has(key(e)))continue;
     locked.push(e);
+    if(blocked.has(resource(e.teacher_id,e.weekday,e.period)))errors.push(`คาบที่ล็อกตรงกับเวลาครูไม่ว่าง: ${e.subject}`);
     // Reserved learner-development periods remain locked but do not count toward subject loads.
     if(e.period>periods[e.weekday-1])continue;
     const g=groups.get(JSON.stringify([e.grade_level,e.classroom,e.subject,e.teacher_id]));
@@ -36,13 +53,27 @@ export function solveTimetable(input, {maxNodes=40000, maxMs=150}={}) {
     g.remaining--;const dk=JSON.stringify([g.grade_level,g.classroom,g.subject,e.weekday]);daily.set(dk,(daily.get(dk)||0)+1);
     if(g.remaining<0||daily.get(dk)>g.max_per_day)errors.push(`คาบที่ล็อกเกินภาระสอนหรือเพดานต่อวัน: ${e.subject}`);
   }
+  for(const g of groups.values()){
+    if(g.block_size>1){
+      const matches=locked.filter(e=>key(e)===key(g)&&e.subject===g.subject&&e.teacher_id===g.teacher_id);
+      for(let d=1;d<=5;d++)for(const half of [[1,2,3],[4,5,6]]){let run=0;for(const p of [...half,0]){if(p&&matches.some(e=>e.weekday===d&&e.period===p))run++;else{if(run%g.block_size)errors.push(`${g.subject}: คาบที่ล็อกต้องครบชุดต่อเนื่อง ${g.block_size} คาบและไม่ข้ามพักกลางวัน`);run=0;}}}
+    }
+  }
   if(errors.length)return {ok:false,errors:[...new Set(errors)]};
-  const options=g=>{const out=[];for(let d=1;d<=5;d++){const dk=JSON.stringify([g.grade_level,g.classroom,g.subject,d]),count=daily.get(dk)||0;if(count>=g.max_per_day)continue;for(let p=1;p<=periods[d-1];p++){const e={grade_level:g.grade_level,classroom:g.classroom,subject:g.subject,teacher_id:g.teacher_id,room_name:g.room_name||'',weekday:d,period:p};if(!usedClass.has(slot(e))&&!usedTeacher.has(resource(g.teacher_id,d,p))&&!blocked.has(resource(g.teacher_id,d,p))&&(!g.room_name||!usedRoom.has(resource(g.room_name,d,p))))out.push({e,dk,score:count*100+p});}}return out.sort((a,b)=>a.score-b.score);};
+  const options=g=>{const out=[];for(let d=1;d<=5;d++){
+    const dk=JSON.stringify([g.grade_level,g.classroom,g.subject,d]),count=daily.get(dk)||0;
+    if(count+g.block_size>g.max_per_day)continue;
+    for(let p=1;p+g.block_size-1<=periods[d-1];p++){
+      if(p<=3&&p+g.block_size-1>3)continue;
+      const es=Array.from({length:g.block_size},(_,i)=>({grade_level:g.grade_level,classroom:g.classroom,subject:g.subject,teacher_id:g.teacher_id,room_name:g.room_name||'',weekday:d,period:p+i}));
+      if(es.every(e=>!usedClass.has(slot(e))&&!usedTeacher.has(resource(g.teacher_id,d,e.period))&&!blocked.has(resource(g.teacher_id,d,e.period))&&(!g.room_name||!usedRoom.has(resource(g.room_name,d,e.period)))))out.push({es,dk,score:count*100+p});
+    }
+  }return out.sort((a,b)=>a.score-b.score);};
   let nodes=0,timedOut=false;const start=Date.now();
   function search(){if(++nodes>maxNodes||Date.now()-start>maxMs){timedOut=true;return false;}let chosen,choices;
-    for(const g of groups.values()){if(!g.remaining)continue;const opts=options(g);if(opts.length<g.remaining)return false;if(!choices||opts.length<choices.length){chosen=g;choices=opts;}}
+    for(const g of groups.values()){if(!g.remaining)continue;const opts=options(g);if(opts.length<g.remaining/g.block_size)return false;if(!choices||opts.length<choices.length){chosen=g;choices=opts;}}
     if(!chosen)return true;
-    for(const {e,dk} of choices){occupy(e,true);chosen.remaining--;daily.set(dk,(daily.get(dk)||0)+1);generated.push(e);if(search())return true;generated.pop();daily.set(dk,daily.get(dk)-1);chosen.remaining++;occupy(e,false);if(timedOut)return false;}return false;
+    for(const {es,dk} of choices){for(const e of es)occupy(e,true);chosen.remaining-=es.length;daily.set(dk,(daily.get(dk)||0)+es.length);generated.push(...es);if(search())return true;generated.splice(-es.length);daily.set(dk,daily.get(dk)-es.length);chosen.remaining+=es.length;for(const e of es)occupy(e,false);if(timedOut)return false;}return false;
   }
   if(!search())return {ok:false,errors:[timedOut?'ค้นหาไม่ทันในรอบนี้ ลองลดจำนวนห้องหรือผ่อนข้อจำกัด ยังสรุปไม่ได้ว่าไม่มีคำตอบ':'จัดไม่ได้ภายใต้เงื่อนไขนี้ ตรวจคาบที่ล็อก เวลาครูไม่ว่าง และภาระสอน'],nodes};
   const entries=[...locked,...generated];
