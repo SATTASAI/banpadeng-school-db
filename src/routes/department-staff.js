@@ -10,7 +10,7 @@ export function belongsToDepartment(value,dept){
  const aliases={academic:['academic','วิชาการ','ฝ่ายวิชาการ','ฝ่ายบริหารงานวิชาการ'],early_childhood:['early_childhood','ปฐมวัย','ฝ่ายปฐมวัย','ฝ่ายบริหารงานปฐมวัย'],budget:['budget','งบประมาณ','ฝ่ายงบประมาณ','ฝ่ายบริหารงบประมาณ','ฝ่ายบริหารงานงบประมาณ'],personnel:['personnel','บุคคล','ฝ่ายบุคคล','ฝ่ายบริหารงานบุคคล'],general:['general','ทั่วไป','บริหารทั่วไป','ฝ่ายบริหารทั่วไป','ฝ่ายบริหารงานทั่วไป']};
  return String(value||'').split(/[,;|\n]+/).some(s=>aliases[dept]?.includes(s.trim()));
 }
-async function ensure(env){
+export async function ensureDepartmentStaff(env){
  await ensurePersonnelData(env);
  if(initialized.has(env.DB))return;
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS department_staff (
@@ -37,7 +37,7 @@ export async function handleDepartmentStaffRoute(request,env,pathname,method){
  const user=await getCurrentUser(request,env);
  if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
  if(method!=='GET'&&user.role!=='superadmin')return jsonResponse({error:'เฉพาะผู้ดูแลระบบเท่านั้น'},403);
- await ensure(env);
+ await ensureDepartmentStaff(env);
  if(photo&&method==='GET'){
  const row=await env.DB.prepare('SELECT photo,photo_type FROM department_staff WHERE department=? AND personnel_id=?').bind(dept,id).first();
  if(!row?.photo)return jsonResponse({error:'ยังไม่มีรูปบุคลากร'},404);

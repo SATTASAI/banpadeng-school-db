@@ -1,7 +1,7 @@
 import {mergeConfirmedPersonnel, personnelIdentity, keepPersonnelSeparate} from "./personnel-merge.js";
 import { LICENSE_IMPORT_KEY, LICENSE_ROWS } from "../data/license-seed.js";
 
-let initializationPromise;
+const initializationPromises = new WeakMap();
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS personnel_records (
@@ -189,13 +189,14 @@ async function initialize(env) {
 }
 
 export function ensurePersonnelData(env) {
-  if (!initializationPromise) {
-    initializationPromise = initialize(env).catch((error) => {
-      initializationPromise = null;
+  if (!initializationPromises.has(env.DB)) {
+    const initializationPromise = initialize(env).catch((error) => {
+      initializationPromises.delete(env.DB);
       throw error;
     });
+    initializationPromises.set(env.DB,initializationPromise);
   }
-  return initializationPromise;
+  return initializationPromises.get(env.DB);
 }
 
 export async function upsertSelfRegisteredPersonnel(env, profile) {

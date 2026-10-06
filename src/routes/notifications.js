@@ -1,9 +1,10 @@
 import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
+import {isPersonnelHead} from '../lib/leave-permissions.js';
 const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
-function feed(env,user){
+function feed(env,user,personnelHead){
  const sql=`WITH messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
  CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at
@@ -26,12 +27,12 @@ function feed(env,user){
  FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
  WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,isAdmin(user)?1:0,user.id,user.id,user.id,user.id]};
+ return {sql,values:[user.id,isAdmin(user)?1:0,user.id,isAdmin(user)||personnelHead?1:0,user.id,user.id,user.id,user.id]};
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
- await ensure(env);const q=feed(env,user);
+ await ensure(env);const q=feed(env,user,await isPersonnelHead(env,user));
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();

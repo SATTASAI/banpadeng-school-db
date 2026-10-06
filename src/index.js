@@ -1,5 +1,6 @@
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute} from './routes/department-staff.js';
+import {isPersonnelHead} from './lib/leave-permissions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
@@ -2050,6 +2051,7 @@ async function handleListLeaveRequests(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
 
+  const personnelHead = await isPersonnelHead(env,user);
   let query, binds;
   if (isAdmin(user)) {
     query = `SELECT lr.*, u.full_name, ap.full_name as approver_name
@@ -2063,13 +2065,13 @@ async function handleListLeaveRequests(request, env) {
               FROM leave_requests lr
               JOIN users u ON u.id = lr.user_id
               LEFT JOIN users ap ON ap.id = lr.approved_by
-              WHERE lr.user_id = ?
+              WHERE lr.user_id = ? OR (?=1 AND lr.status='pending')
               ORDER BY lr.created_at DESC`;
-    binds = [user.id];
+    binds = [user.id,personnelHead?1:0];
   }
 
   const { results } = await env.DB.prepare(query).bind(...binds).all();
-  return jsonResponse({ leave_requests: results });
+  return jsonResponse({ leave_requests: results, can_view_pending: isAdmin(user)||personnelHead },200,{'Cache-Control':'no-store'});
 }
 
 // ---------- /api/leave-requests (POST) ----------

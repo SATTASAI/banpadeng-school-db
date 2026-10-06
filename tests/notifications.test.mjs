@@ -43,3 +43,27 @@ test('notification badge counts every unread message even when the panel display
  const feed=await (await call(env,'/api/notifications','GET',undefined,2)).json();assert.equal(feed.unread_count,65);assert.equal(feed.notifications.length,50);
  await call(env,'/api/notifications/read','POST',{all:true},2);assert.equal((await (await call(env,'/api/notifications','GET',undefined,2)).json()).unread_count,0);
 });
+test('new and existing leave requests notify the personnel head and their linked accounts, without notifying unrelated teachers',async()=>{
+ const env=await fixture();await call(env,'/api/overview');await call(env,'/api/notifications');
+ const person=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
+ assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:true})).status,200);
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'linked@test','x','x','บัญชีหัวหน้าฝ่าย','teacher');`);
+ env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(4,?)').run(person.id);
+ const created=await call(env,'/api/leave-requests','POST',{leave_type:'sick',start_date:'2026-10-06',end_date:'2026-10-06'},2);
+ assert.equal(created.status,201);const id=(await created.json()).id,key='leave:'+id+':pending';
+ for(const user of [3,4]){
+  const feed=await (await call(env,'/api/notifications','GET',undefined,user)).json();assert(feed.notifications.some(n=>n.message_key===key));
+  const inbox=await (await call(env,'/api/leave-requests','GET',undefined,user)).json();assert.equal(inbox.can_view_pending,true);assert(inbox.leave_requests.some(r=>r.id===id));
+ }
+ const owner=await (await call(env,'/api/notifications','GET',undefined,2)).json();assert(!owner.notifications.some(n=>n.message_key===key));
+ await call(env,'/api/notifications/read','POST',{message_key:key},3);
+ assert(!(await (await call(env,'/api/notifications','GET',undefined,3)).json()).notifications.some(n=>n.message_key===key));
+ assert((await (await call(env,'/api/notifications','GET',undefined,4)).json()).notifications.some(n=>n.message_key===key));
+ // Head can inspect requests; final approval remains with existing authorized approvers.
+ assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{status:'approved'},3)).status,403);
+ await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:false});
+ const revoked=await (await call(env,'/api/notifications','GET',undefined,4)).json();assert(!revoked.notifications.some(n=>n.message_key===key));
+ const hidden=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(hidden.can_view_pending,false);assert.equal(hidden.leave_requests.length,0);
+ await call(env,'/api/leave-requests/'+id,'PATCH',{status:'approved'});
+ assert((await (await call(env,'/api/notifications','GET',undefined,2)).json()).notifications.some(n=>n.message_key==='leave:'+id+':approved'));
+});

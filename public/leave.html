@@ -133,9 +133,9 @@
     const errorBox = document.getElementById("errorBox");
     errorBox.classList.remove("visible");
     try {
-      const { leave_requests } = await apiRequest("/api/leave-requests");
+      const { leave_requests, can_view_pending } = await apiRequest("/api/leave-requests");
 
-      if (currentUser.is_admin) {
+      if (can_view_pending) {
         const pending = leave_requests.filter((lr) => lr.status === "pending");
         document.getElementById("pendingSection").style.display = pending.length > 0 ? "block" : "none";
         document.getElementById("pendingPanel").innerHTML = pending.map((lr) => renderRow(lr, true)).join("");
@@ -149,7 +149,7 @@
         emptyState.style.display = "block";
       } else {
         emptyState.style.display = "none";
-        historyPanel.innerHTML = history.map((lr) => renderRow(lr, currentUser.is_admin)).join("");
+        historyPanel.innerHTML = history.map((lr) => renderRow(lr, can_view_pending)).join("");
       }
 
       document.querySelectorAll("[data-approve]").forEach((btn) => {
