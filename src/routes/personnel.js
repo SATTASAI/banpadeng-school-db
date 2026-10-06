@@ -1,6 +1,7 @@
 import { workScopeSummary } from "../lib/work-scopes.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
+import {ensureLeaveData} from "../lib/leave-data.js";
 
 const PROFILE_FIELDS = [
   ["personnel_type", "ประเภทบุคลากร"],
@@ -26,6 +27,7 @@ async function overview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensurePersonnelData(env);
+  await ensureLeaveData(env);
 
   const [staff, leaveSummary, recentLeaves, tasks, workSummary, positions, projects] = await Promise.all([
     env.DB.prepare(`SELECT id,user_id,full_name,email,personnel_type,position_number,position,academic_rank,phone,
@@ -38,7 +40,7 @@ async function overview(request, env) {
       SUM(CASE WHEN status='approved' AND start_date<=date('now') AND end_date>=date('now') THEN 1 ELSE 0 END) AS absent_today,
       SUM(CASE WHEN status='approved' AND start_date>=date('now','start of year') THEN julianday(end_date)-julianday(start_date)+1 ELSE 0 END) AS approved_days_ytd
       FROM leave_requests`).first(),
-    env.DB.prepare(`SELECT lr.id,lr.leave_type,lr.start_date,lr.end_date,lr.status,u.full_name
+    env.DB.prepare(`SELECT lr.id,COALESCE(lr.leave_subtype,lr.leave_type) leave_type,lr.start_date,lr.end_date,lr.status,u.full_name
       FROM leave_requests lr JOIN users u ON u.id=lr.user_id
       ORDER BY CASE lr.status WHEN 'pending' THEN 0 ELSE 1 END,lr.created_at DESC LIMIT 8`).all(),
     env.DB.prepare(`SELECT

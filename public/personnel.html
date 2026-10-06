@@ -51,7 +51,7 @@ body{background:inherit}.page{max-width:1240px;margin:auto;padding:24px}.hero{di
 <script src="/js/api.js"></script>
 <script>
 const $=id=>document.getElementById(id),esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#39;");
-const LEAVE={sick:"ลาป่วย",personal:"ลากิจ",maternity:"ลาคลอด",other:"ลาอื่น ๆ"},STATUS={pending:"รออนุมัติ",approved:"อนุมัติแล้ว",rejected:"ไม่อนุมัติ"};
+const LEAVE={sick:"ลาป่วย",personal:"ลากิจ",maternity:"ลาคลอด",lenient:"ลาอนุโลม",other:"ลาอื่น ๆ"},STATUS={pending:"รออนุมัติ",approved:"อนุมัติแล้ว",rejected:"ไม่อนุมัติ"};
 const WORK=[
   {scope:"personnel-duties",title:"คำสั่งและเวร",url:"/work-center.html?area=personnel&topic=1,3&scope=personnel-duties"},
   {key:"5",title:"ประเมิน PA",url:"/work-center.html?area=personnel&topic=5"},

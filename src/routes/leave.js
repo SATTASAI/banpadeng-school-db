@@ -1,6 +1,6 @@
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
-import {ensureLeaveData,executives,isDirector,isDeputy,validDate,calendarDays,today,leaveForm} from '../lib/leave-data.js';
+import {ensureLeaveData,executives,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -25,7 +25,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const assignments=new Map(assigned.map(r=>[r.leave_id,r.kind]));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
-  return json({leave_requests:results.map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&r.workflow_stage==='submitted',
+  return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&r.workflow_stage==='submitted',
    can_record:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',can_forward:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',
    can_review:user.role==='executive'&&assignments.get(r.id)==='deputy'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_decide:user.role==='executive'&&assignments.get(r.id)==='director'&&r.status==='pending'&&r.workflow_stage==='forwarded',
@@ -43,7 +43,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  if(!id&&method==='POST') {
   const body=await request.json().catch(()=>null);if(!body||typeof body!=='object')return fail('รูปแบบข้อมูลไม่ถูกต้อง');
   for(const [field,max] of [['reason',2000],['position',200],['contact_address',1000],['contact_phone',100]])if(typeof body[field]==='string'&&body[field].length>max)return fail('ข้อมูลยาวเกินกำหนด');
-  if(!['sick','personal','maternity','other'].includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
+  if(!['sick','personal','maternity','lenient','other'].includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
   const reason=text(body.reason,2000);if(!reason)return fail('กรุณาระบุเหตุผลการลา');
   if(!validDate(body.start_date)||!validDate(body.end_date)||body.end_date<body.start_date)return fail('วันที่เริ่มและสิ้นสุดการลาไม่ถูกต้อง');
   const days=Number(body.leave_days??calendarDays(body.start_date,body.end_date));
@@ -52,8 +52,8 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
   const results=await env.DB.batch([
-   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone)
-    VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone),
+   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) VALUES(last_insert_rowid(),?,'submitted')").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid()").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);

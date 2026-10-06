@@ -7,3 +7,9 @@ test('the supplied leave form exports fields, a six-column leave statistics tabl
  const pdf=e.pdfDefinition(r);assert.equal(pdf.pageSize,'A4');assert.equal(pdf.defaultStyle.font,'Sarabun');assert(JSON.stringify(pdf).includes('สถิติการลา'));assert(JSON.stringify(pdf).includes('เบอร์โทรศัพท์ที่สามารถติดต่อได้ 0000000000'));assert(JSON.stringify(pdf).includes('เห็นควรอนุญาต'));
  const pending=e.model({...r,status:'pending',last_leave:{leave_type:'sick',start_date:'2026-10-01',end_date:'2026-10-02',leave_days:2}});assert.match(pending.last,/1 ตุลาคม/);assert.match(pending.lastEnd,/2 วัน/);assert.equal(pending.decisionChoice,'(   ) อนุญาต    (   ) ไม่อนุญาต');
 });
+
+test('lenient leave exports its title reason and separate statistics in both Word and PDF',()=>{
+ const leave={...r,leave_type:'lenient',stats:[{type:'lenient',previous_count:1,previous_days:0.5,current_days:0.5,total_count:2,total_days:1}],last_leave:{leave_type:'lenient',start_date:'2026-10-01',end_date:'2026-10-01',leave_days:0.5}};
+ const m=e.model(leave);assert.equal(m.title,'แบบใบลาอนุโลม');assert.match(m.subject,/ขอลาอนุโลม/);assert.match(m.other,/อนุโลม.*ติดต่อราชการ/);assert.match(m.last,/อนุโลม/);assert.equal(m.stats[0][0],'อนุโลม');
+ const xml=e.docxFiles(leave)['word/document.xml'];assert.match(xml,/แบบใบลาอนุโลม/);assert.match(xml,/อนุโลม  เนื่องจาก/);const pdf=JSON.stringify(e.pdfDefinition(leave));assert.match(pdf,/แบบใบลาอนุโลม/);assert.match(pdf,/อนุโลม/);
+});

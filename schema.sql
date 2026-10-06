@@ -422,6 +422,7 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id       INTEGER NOT NULL REFERENCES users(id),
   leave_type    TEXT NOT NULL CHECK (leave_type IN ('sick','personal','maternity','other')),
+  leave_subtype TEXT CHECK (leave_subtype IS NULL OR leave_subtype='lenient'),
   reason        TEXT,
   start_date    TEXT NOT NULL,
   end_date      TEXT NOT NULL,

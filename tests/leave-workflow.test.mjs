@@ -84,3 +84,19 @@ test('runtime migration preserves legacy leave records and permits the new head 
  await ensureLeaveData(env);const row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=99').get();assert.equal(row.workflow_stage,'submitted');assert.equal(row.start_date,'2026-10-01');
  const {leave_request:r}=await (await call(env,'/api/leave-requests/99','GET',undefined,2)).json();assert.equal(r.leave_days,1);
 });
+
+test('lenient leave remains distinct from other leave through notifications, approval, form history and dashboard totals',async()=>{
+ const {env,deputy}=await setup();
+ const created=await call(env,'/api/leave-requests','POST',{...form,leave_type:'lenient'},2);assert.equal(created.status,201);const {id}=await created.json();
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert.equal(list.leave_requests.find(r=>r.id===id).leave_type,'lenient');assert(await notice(env,3,'leave:'+id+':pending'));
+ let summary=await dashboardActivitySummary(env,2570);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='lenient').pending,1);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='other').total,0);
+ await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3);
+ await call(env,'/api/leave-requests/'+id,'PATCH',{action:'forward',deputy_personnel_id:deputy},3);
+ await call(env,'/api/leave-requests/'+id,'PATCH',{action:'review',note:'ความเห็นทดสอบ'},5);
+ assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ summary=await dashboardActivitySummary(env,2570);const stats=summary.leave_summary.by_type.find(r=>r.key==='lenient');assert.equal(stats.label,'ลาอนุโลม');assert.equal(stats.approved,1);assert.equal(stats.approved_days,0.5);assert.equal(summary.leave_summary.total,1);
+ const next=await (await call(env,'/api/leave-requests','POST',{...form,leave_type:'lenient',start_date:'2026-10-07',end_date:'2026-10-07'},2)).json();
+ const {leave_request:r}=await (await call(env,'/api/leave-requests/'+next.id,'GET',undefined,2)).json();assert.equal(r.leave_type,'lenient');assert.equal(r.last_leave.leave_type,'lenient');const row=r.stats.find(s=>s.type==='lenient');assert.equal(row.previous_days,0.5);assert.equal(row.current_days,0.5);assert.equal(row.total_days,1);
+ const other=await call(env,'/api/leave-requests','POST',{...form,leave_type:'other'},2);assert.equal(other.status,201);
+ summary=await dashboardActivitySummary(env,2570);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='other').total,1);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='lenient').total,2);
+});

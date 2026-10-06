@@ -7,7 +7,7 @@ export function ensureLeaveData(env) {
   await ensureDepartmentStaff(env);
   const {results} = await env.DB.prepare('PRAGMA table_info(leave_requests)').all();
   const columns = {
-   workflow_stage:"TEXT NOT NULL DEFAULT 'submitted'",position:'TEXT',request_date:'TEXT',leave_days:'REAL',
+   leave_subtype:'TEXT',workflow_stage:"TEXT NOT NULL DEFAULT 'submitted'",position:'TEXT',request_date:'TEXT',leave_days:'REAL',
    contact_address:'TEXT',contact_phone:'TEXT',acknowledged_by:'INTEGER',acknowledged_at:'TEXT',
    personnel_note:'TEXT',forwarded_by:'INTEGER',forwarded_at:'TEXT',forward_token:'TEXT',deputy_personnel_id:'INTEGER',
    deputy_name:'TEXT',deputy_position:'TEXT',director_name:'TEXT',director_position:'TEXT',
@@ -46,14 +46,18 @@ export async function executives(env) {
 export function validDate(s) {return typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;}
 export function calendarDays(start,end) {return Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;}
 export function today() {return new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});}
+// Additive subtype preserves existing D1 CHECK constraints and foreign-key history.
+export function leaveRecord(row) {return {...row,leave_type:row.leave_subtype||row.leave_type};}
 export async function leaveForm(env,row) {
+ row=leaveRecord(row);
  const person=await env.DB.prepare(`SELECT p.* FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(row.user_id).first();
  const start=row.start_date,year=Number(start.slice(0,4))-(start.slice(5,7)<'10'?1:0),from=`${year}-10-01`,to=`${year+1}-09-30`;
- const {results:history}=await env.DB.prepare(`SELECT r.* FROM leave_requests r
+ const {results:storedHistory}=await env.DB.prepare(`SELECT r.* FROM leave_requests r
   WHERE r.status='approved' AND r.id<>? AND r.start_date<=? AND
   (r.user_id=? OR (? IS NOT NULL AND r.user_id IN (SELECT user_id FROM personnel_accounts WHERE personnel_id=?)))
   ORDER BY r.start_date DESC,r.id DESC`).bind(row.id,start,row.user_id,person?.id??null,person?.id??null).all();
- const stats=['sick','personal','maternity',...(row.leave_type==='other'?['other']:[])].map(type=>{
+ const history=storedHistory.map(leaveRecord);
+ const stats=['sick','personal','maternity',...(row.leave_type==='lenient'||history.some(r=>r.leave_type==='lenient')?['lenient']:[]),...(row.leave_type==='other'?['other']:[])].map(type=>{
   const prior=history.filter(r=>r.leave_type===type&&r.start_date>=from&&r.start_date<=to);
   const previous_days=prior.reduce((sum,r)=>sum+Number(r.leave_days??calendarDays(r.start_date,r.end_date)),0),current_days=row.leave_type===type?Number(row.leave_days??calendarDays(row.start_date,row.end_date)):0;
   return {type,previous_count:prior.length,previous_days,current_days,total_count:prior.length+(current_days>0?1:0),total_days:previous_days+current_days};

@@ -6,11 +6,11 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
   const start = fiscalYear ? `${fiscalYear-544}-10-01` : null;
   const end = fiscalYear ? `${fiscalYear-543}-09-30` : null;
   const [leaveRows, today, finances, years] = await Promise.all([
-    env.DB.prepare(`SELECT leave_type,status,COUNT(*) request_count,
+    env.DB.prepare(`SELECT COALESCE(leave_subtype,leave_type) leave_type,status,COUNT(*) request_count,
       COALESCE(SUM(CASE WHEN status='approved' THEN MAX(0,
         julianday(MIN(end_date,COALESCE(?,end_date)))-julianday(MAX(start_date,COALESCE(?,start_date)))+1)
         *COALESCE(leave_days,julianday(end_date)-julianday(start_date)+1)/(julianday(end_date)-julianday(start_date)+1) ELSE 0 END),0) approved_days
-      FROM leave_requests WHERE (? IS NULL OR (end_date>=? AND start_date<=?)) GROUP BY leave_type,status`)
+      FROM leave_requests WHERE (? IS NULL OR (end_date>=? AND start_date<=?)) GROUP BY COALESCE(leave_subtype,leave_type),status`)
       .bind(end,start,start,start,end).all(),
     env.DB.prepare(`SELECT COUNT(DISTINCT user_id) people FROM leave_requests WHERE status='approved'
       AND start_date<=date('now','+7 hours') AND end_date>=date('now','+7 hours')`).first(),
@@ -22,7 +22,7 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
     env.DB.prepare(`SELECT fiscal_year FROM projects WHERE fiscal_year IS NOT NULL UNION SELECT fiscal_year FROM budget_income
       UNION SELECT fiscal_year FROM project_expenses WHERE fiscal_year IS NOT NULL ORDER BY fiscal_year DESC`).all(),
   ]);
-  const labels={sick:'ลาป่วย',personal:'ลากิจ',maternity:'ลาคลอด',other:'ลาอื่น ๆ'};
+  const labels={sick:'ลาป่วย',personal:'ลากิจ',maternity:'ลาคลอด',lenient:'ลาอนุโลม',other:'ลาอื่น ๆ'};
   const byType=Object.entries(labels).map(([key,label])=>{
     const rows=leaveRows.results.filter(r=>r.leave_type===key);
     const count=status=>Number(rows.find(r=>r.status===status)?.request_count||0);

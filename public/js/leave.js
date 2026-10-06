@@ -1,7 +1,7 @@
 (function(){
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
+ const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
  let user,records=[],detailId=null,busy=false,first=true;
  function error(e){$('errorBox').textContent=e.message||String(e);$('errorBox').classList.add('visible');}
  function submitError(message,field){
