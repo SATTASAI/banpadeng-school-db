@@ -4,7 +4,7 @@ const STUDENT_IMPORT_BATCH_SIZE = 20;
 
 function createStudentImportSession(rows) {
   return {
-    rows, offset: 0, created: 0, updated: 0,
+    rows, offset: 0, created: 0, updated: 0, reactivated: 0,
     skipped: [], running: false,
   };
 }
@@ -27,6 +27,7 @@ async function runStudentImportBatches(session, sendBatch, onProgress) {
       }
       session.created += result.created;
       session.updated += result.updated;
+      session.reactivated += Number(result.reactivated) || 0;
       session.skipped.push(...result.skipped.map((item) => ({
         // Item numbers refer to parsed data rows, excluding headers and empty rows.
         row: start + item.row,

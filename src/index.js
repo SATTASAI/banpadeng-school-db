@@ -5,6 +5,7 @@ import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
+import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
 import {
   generateSalt,
@@ -1230,10 +1231,26 @@ async function handleCreateStudent(request, env) {
   if (!studentCode) return jsonResponse({ error: "กรุณากรอกเลขประจำตัวนักเรียน" }, 400);
   if (!fullName) return jsonResponse({ error: "กรุณากรอกชื่อ-นามสกุลนักเรียน" }, 400);
 
-  const existing = await env.DB.prepare("SELECT id FROM students WHERE student_code = ?")
+  const existing = await env.DB.prepare("SELECT id, full_name, status FROM students WHERE student_code = ?")
     .bind(studentCode)
     .first();
-  if (existing) return jsonResponse({ error: "เลขประจำตัวนี้ถูกใช้แล้ว" }, 409);
+  if (existing) {
+    const left = ["transferred", "withdrawn"].includes(existing.status);
+    return jsonResponse({
+      error: left
+        ? `เลขประจำตัวนี้เป็นของ ${existing.full_name} ซึ่งเคยเรียนที่นี่ (สถานะ: ${existing.status === "transferred" ? "ย้ายโรงเรียน" : "ออกกลางคัน"}) — ค้นหาชื่อแล้วกด "รับกลับเข้าเรียน" เพื่อใช้ข้อมูลและเลขประจำตัวเดิม`
+        : "เลขประจำตัวนี้ถูกใช้แล้ว",
+      existing_student_id: existing.id,
+    }, 409);
+  }
+  const nationalIdDigits = String(body.national_id || "").replace(/\D/g, "");
+  if (nationalIdDigits) {
+    const sameId = await env.DB.prepare("SELECT id, student_code, full_name, status FROM students WHERE national_id = ?").bind(nationalIdDigits).first();
+    if (sameId) return jsonResponse({
+      error: `เลขประจำตัวประชาชนนี้เป็นของ ${sameId.full_name} (เลขประจำตัว ${sameId.student_code}) ซึ่งมีในระบบแล้ว — ถ้าย้ายกลับมา ให้กด "รับกลับเข้าเรียน" ที่ข้อมูลเดิมแทนการเพิ่มใหม่`,
+      existing_student_id: sameId.id,
+    }, 409);
+  }
 
   const result = await env.DB.prepare(
     `INSERT INTO students
@@ -1324,23 +1341,7 @@ async function handleUpdateStudent(request, env, studentId) {
 }
 
 // ---------- /api/students/:id (DELETE) ----------
-async function handleDeleteStudent(request, env, studentId) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) {
-    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  }
-  if (!isAdmin(user)) {
-    return jsonResponse({ error: "ไม่มีสิทธิ์ลบข้อมูลนักเรียน" }, 403);
-  }
-
-  await ensureStudentDetailsSchema(env);
-  await env.DB.prepare("DELETE FROM student_details WHERE student_id = ?").bind(studentId).run();
-  await env.DB.prepare("DELETE FROM guardians WHERE student_id = ?").bind(studentId).run();
-  await env.DB.prepare("DELETE FROM students WHERE id = ?").bind(studentId).run();
-
-  await writeAuditLog(env, user, "delete", "student", studentId, null, request);
-  return jsonResponse({ ok: true });
-}
+// ไม่ลบโดยตรงแล้ว — ดู src/routes/student-deletion.js (soft delete + คำขอลบถาวรที่ต้องให้ผู้อำนวยการอนุมัติ)
 
 // ---------- /api/students/:id/guardians (POST) ----------
 async function handleAddGuardian(request, env, studentId) {
@@ -4113,7 +4114,7 @@ async function handleImportStudents(request, env) {
     // One lookup plus at most two writes per student (ทะเบียนหลัก + ข้อมูลเพิ่มเติม).
     const codes = [...new Set(validRows.map((row) => row.baseValues[0]))];
     const { results } = await env.DB.prepare(
-      `SELECT student_code, full_name FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
+      `SELECT student_code, full_name, status FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
     ).bind(...codes).all();
     const existingByCode = new Map(results.map((row) => [String(row.student_code), row]));
     const normalizeNameForMatch = (value) => String(value || "")
@@ -4134,8 +4135,10 @@ async function handleImportStudents(request, env) {
     const knownCodes = new Set(existingByCode.keys());
     let created = 0;
     let updated = 0;
+    let reactivated = 0;
     const statements = [];
     rowsToWrite.forEach(({ baseValues: values, details }) => {
+      if (["transferred", "withdrawn"].includes(existingByCode.get(String(values[0]))?.status)) reactivated++;
       if (knownCodes.has(values[0])) updated++;
       else { created++; knownCodes.add(values[0]); }
       // Retrying a committed batch updates the same student codes, without duplicates.
@@ -4154,16 +4157,17 @@ async function handleImportStudents(request, env) {
           grade_level = COALESCE(excluded.grade_level, students.grade_level),
           health_conditions = COALESCE(excluded.health_conditions, students.health_conditions),
           allergies = COALESCE(excluded.allergies, students.allergies),
-          photo_url = COALESCE(excluded.photo_url, students.photo_url)`).bind(...values));
+          photo_url = COALESCE(excluded.photo_url, students.photo_url),
+          status = CASE WHEN students.status IN ('transferred','withdrawn') THEN 'enrolled' ELSE students.status END`).bind(...values));
       const detailStatement = prepareStudentDetailsUpsert(env, values[0], details, true);
       if (detailStatement) statements.push(detailStatement);
     });
     // D1 batch is transactional: an error rolls back every write in this batch.
     await env.DB.batch(statements);
     await writeAuditLog(env, user, "import", "student", null, {
-      created, updated, skipped: skipped.length, submitted: body.rows.length,
+      created, updated, reactivated, skipped: skipped.length, submitted: body.rows.length,
     }, request);
-    return jsonResponse({ created, updated, skipped });
+    return jsonResponse({ created, updated, reactivated, skipped });
   } catch (err) {
     const message = String(err && err.message || "");
     if (/no such column|has no column named/i.test(message)) {
@@ -4335,6 +4339,8 @@ export default {
       if (taskMatch && method === "PATCH") return await handleUpdateTask(request, env, Number(taskMatch[1]));
       if (taskMatch && method === "DELETE") return await handleDeleteTask(request, env, Number(taskMatch[1]));
 
+      const studentDeletionResponse = await handleStudentDeletionRoute(request, env, pathname, method);
+      if (studentDeletionResponse) return studentDeletionResponse;
       if (pathname === "/api/students/export" && method === "GET") return await handleListStudents(request, env, true);
       if (pathname === "/api/students" && method === "GET") return await handleListStudents(request, env);
       if (pathname === "/api/students" && method === "POST") return await handleCreateStudent(request, env);
@@ -4348,7 +4354,6 @@ export default {
       const studentMatch = pathname.match(/^\/api\/students\/(\d+)$/);
       if (studentMatch && method === "GET") return await handleGetStudent(request, env, Number(studentMatch[1]));
       if (studentMatch && method === "PATCH") return await handleUpdateStudent(request, env, Number(studentMatch[1]));
-      if (studentMatch && method === "DELETE") return await handleDeleteStudent(request, env, Number(studentMatch[1]));
 
       const guardianMatch = pathname.match(/^\/api\/guardians\/(\d+)$/);
       if (guardianMatch && method === "PATCH") return await handleUpdateGuardian(request, env, Number(guardianMatch[1]));

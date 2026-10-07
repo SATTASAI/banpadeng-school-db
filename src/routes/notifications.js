@@ -2,10 +2,11 @@ import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData} from '../lib/leave-data.js';
+import {ensureStudentDeletionSchema,isSchoolDirector} from './student-deletion.js';
 const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
-function feed(env,user,personnelHead){
+function feed(env,user,personnelHead,director){
  const sql=`WITH messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
  CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at
@@ -31,13 +32,18 @@ function feed(env,user,personnelHead){
  SELECT 'approval:'||a.id,'เอกสารเบิกจ่ายรอลงนาม',p.name||' · '||a.step_label,a.updated_at,'/budget.html?view=requests',NULL
  FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
  WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
+ UNION ALL
+ SELECT 'student-delete:'||d.id||':'||d.status,'ขอลบข้อมูลนักเรียนถาวร: '||d.student_name,
+ CASE d.status WHEN 'pending' THEN 'รอผู้อำนวยการพิจารณา — '||d.reason WHEN 'approved' THEN 'ผู้อำนวยการอนุมัติ ลบข้อมูลแล้ว' ELSE 'ผู้อำนวยการไม่อนุมัติการลบ' END,
+ COALESCE(d.decided_at,d.requested_at),'/students.html?delete_requests=1',NULL
+ FROM student_delete_requests d WHERE (?=1 AND d.status='pending') OR (d.requested_by=? AND d.status IN ('approved','rejected'))
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,user.role,user.id,user.id,user.id,user.id]};
+ return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,user.role,user.id,user.id,user.id,director?1:0,user.id,user.id]};
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
- await ensure(env);await ensureLeaveData(env);const q=feed(env,user,await isPersonnelHead(env,user));
+ await ensure(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user));
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();

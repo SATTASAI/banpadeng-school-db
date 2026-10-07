@@ -46,6 +46,16 @@
   .status-chip { font-size:12px; font-weight:600; padding:2px 10px; border-radius:999px; }
   .status-enrolled { background:rgba(63,122,85,0.12); color:var(--color-success); }
   .status-other { background:var(--color-danger-bg); color:var(--color-danger); }
+  .delete-requests { border:1px solid var(--color-border, #e3e6ef); border-radius:14px; padding:14px 16px; margin:0 0 16px; background:var(--color-surface, #fff); }
+  .delete-requests-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .delete-requests-head h3 { margin:0; font-size:16px; }
+  .delete-requests-head span { color:var(--color-text-muted); font-size:13px; }
+  .delete-request { display:grid; grid-template-columns:1fr auto; gap:8px 12px; padding:10px 0; border-top:1px solid var(--color-border, #e3e6ef); }
+  .delete-request:first-child { border-top:0; }
+  .delete-request .meta { color:var(--color-text-muted); font-size:13px; }
+  .delete-request .acts { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .delete-request .acts .btn { width:auto; padding:6px 12px; }
+  @media (max-width:640px) { .delete-request { grid-template-columns:1fr; } }
   .import-modal { max-width:640px; }
   .mapping-row { display:grid; grid-template-columns:180px 1fr; gap:12px; align-items:center; margin-bottom:10px; }
   .mapping-row label { font-size:14px; font-weight:500; }
@@ -117,6 +127,14 @@
         <button class="btn btn-primary" style="width:auto;" id="newStudentBtn">+ เพิ่มนักเรียน</button>
       </div>
     </div>
+
+    <section class="delete-requests" id="deleteRequestsPanel" hidden aria-label="คำขอลบข้อมูลนักเรียนถาวร">
+      <div class="delete-requests-head">
+        <h3>คำขอลบข้อมูลนักเรียนถาวร</h3>
+        <span id="deleteRequestsHint"></span>
+      </div>
+      <div id="deleteRequestsList"></div>
+    </section>
 
     <section class="student-tools" aria-label="ค้นหาและกรองข้อมูลนักเรียน">
       <div class="student-search-row">
@@ -257,7 +275,8 @@
     </div>
 
     <div class="modal-actions">
-      <button class="btn btn-ghost" id="deleteStudentBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger);">ลบนักเรียน</button>
+      <button class="btn btn-ghost" id="deleteStudentBtn" style="display:none; color:var(--color-danger); border-color:var(--color-danger);" title="ส่งคำขอให้ผู้อำนวยการอนุมัติ — ลบได้เมื่อ ผอ. อนุมัติแล้วเท่านั้น">ขอลบถาวร</button>
+      <button class="btn btn-ghost" id="reenrollBtn" style="display:none;">รับกลับเข้าเรียน</button>
       <button class="btn btn-ghost" id="cancelModalBtn">ยกเลิก</button>
       <button class="btn btn-primary" id="saveStudentBtn">บันทึก</button>
     </div>
@@ -336,6 +355,7 @@
 </script>
 <script>
   let currentUser = null;
+  let editingStudentStatus = null;
   let allStudents = [];
   let editingStudentId = null;
   let currentStudentPage = 1;
@@ -797,7 +817,8 @@
     document.getElementById("modalTitle").textContent = studentId ? "แก้ไขข้อมูลนักเรียน" : "เพิ่มนักเรียน";
     document.getElementById("statusField").style.display = studentId ? "block" : "none";
     document.getElementById("guardianSection").style.display = studentId ? "block" : "none";
-    document.getElementById("deleteStudentBtn").style.display = studentId && currentUser.is_admin ? "inline-flex" : "none";
+    document.getElementById("deleteStudentBtn").style.display = "none";
+    document.getElementById("reenrollBtn").style.display = "none";
 
     if (studentId) {
       const { student } = await apiRequest(`/api/students/${studentId}`);
@@ -815,6 +836,11 @@
       document.getElementById("fHealth").value = student.health_conditions || "";
       document.getElementById("fAllergy").value = student.allergies || "";
       document.getElementById("fStatus").value = student.status;
+      editingStudentStatus = student.status;
+      const leftSchool = ["transferred", "withdrawn"].includes(student.status);
+      // soft delete: ย้ายออก/ออกกลางคันยังค้นหาได้ รับกลับได้ ลบถาวรต้องให้ ผอ. อนุมัติ
+      document.getElementById("deleteStudentBtn").style.display = leftSchool && currentUser.is_admin ? "inline-flex" : "none";
+      document.getElementById("reenrollBtn").style.display = leftSchool ? "inline-flex" : "none";
       renderGuardians(student.guardians);
     } else {
       document.getElementById("fCode").value = "";
@@ -838,15 +864,65 @@
   document.getElementById("newStudentBtn").addEventListener("click", () => openModal(null));
   document.getElementById("deleteStudentBtn").addEventListener("click", async () => {
     if (!editingStudentId) return;
-    if (!confirm("ยืนยันลบข้อมูลนักเรียนคนนี้? การลบไม่สามารถย้อนกลับได้")) return;
+    const reason = prompt("เหตุผลที่ต้องลบข้อมูลนักเรียนคนนี้ถาวร (ผู้อำนวยการจะเป็นผู้พิจารณา — เมื่ออนุมัติแล้วกู้คืนไม่ได้)");
+    if (reason === null) return;
+    if (!reason.trim()) return alert("กรุณาระบุเหตุผล");
     try {
-      await apiRequest(`/api/students/${editingStudentId}`, { method: "DELETE" });
+      await apiRequest(`/api/students/${editingStudentId}/delete-request`, { method: "POST", body: { reason: reason.trim() } });
+      alert("ส่งคำขอแล้ว — ข้อมูลจะถูกลบเมื่อผู้อำนวยการอนุมัติ");
       document.getElementById("studentModal").style.display = "none";
-      await loadStudents();
+      await loadDeleteRequests();
     } catch (err) {
       alert(err.message);
     }
   });
+  document.getElementById("reenrollBtn").addEventListener("click", () => {
+    document.getElementById("fStatus").value = "enrolled";
+    document.getElementById("reenrollBtn").style.display = "none";
+    document.getElementById("deleteStudentBtn").style.display = "none";
+    alert("ตรวจสอบระดับชั้นและห้องเรียนที่จะเข้าเรียน แล้วกดบันทึก — ใช้เลขประจำตัวและข้อมูลเดิมทั้งหมด");
+    document.getElementById("fGrade").focus();
+  });
+
+  // ---------- คำขอลบข้อมูลนักเรียนถาวร (ผู้อำนวยการอนุมัติ) ----------
+  const REQUEST_STATUS = { pending: "รอผู้อำนวยการพิจารณา", approved: "อนุมัติ ลบแล้ว", rejected: "ไม่อนุมัติ", cancelled: "ยกเลิกคำขอ" };
+  async function loadDeleteRequests() {
+    const panel = document.getElementById("deleteRequestsPanel");
+    if (!currentUser?.is_admin) { panel.hidden = true; return; }
+    try {
+      const { requests, can_decide } = await apiRequest("/api/student-delete-requests");
+      const show = requests.filter((r) => r.status === "pending" || Date.now() - Date.parse(String(r.decided_at || r.requested_at).replace(" ", "T") + "Z") < 14 * 864e5);
+      panel.hidden = !show.length;
+      if (!show.length) return;
+      const pending = show.filter((r) => r.status === "pending").length;
+      document.getElementById("deleteRequestsHint").textContent = pending
+        ? (can_decide ? `รอท่านพิจารณา ${pending} รายการ` : `รอผู้อำนวยการพิจารณา ${pending} รายการ`) : "";
+      document.getElementById("deleteRequestsList").innerHTML = show.map((r) => `<div class="delete-request">
+        <div><strong>${escapeStudentText(r.student_code)} ${escapeStudentText(r.student_name)}</strong>
+          <div class="meta">เหตุผล: ${escapeStudentText(r.reason)} · ขอโดย ${escapeStudentText(r.requested_by_name || "")} ${escapeStudentText(String(r.requested_at || "").slice(0, 10))}</div>
+          ${r.status !== "pending" ? `<div class="meta">${escapeStudentText(REQUEST_STATUS[r.status] || r.status)}${r.decided_by_name ? ` โดย ${escapeStudentText(r.decided_by_name)}` : ""}${r.decision_note ? ` — ${escapeStudentText(r.decision_note)}` : ""}</div>` : ""}</div>
+        <div class="acts">${r.status === "pending"
+          ? (can_decide
+            ? `<button class="btn btn-primary" data-decide="approve" data-id="${r.id}" style="background:var(--color-danger); border-color:var(--color-danger);">อนุมัติให้ลบถาวร</button><button class="btn btn-ghost" data-decide="reject" data-id="${r.id}">ไม่อนุมัติ</button>`
+            : `<span class="status-chip status-other">${REQUEST_STATUS.pending}</span>${r.requested_by === currentUser.id || currentUser.role === "superadmin" ? `<button class="btn btn-ghost" data-decide="cancel" data-id="${r.id}">ยกเลิกคำขอ</button>` : ""}`)
+          : `<span class="status-chip ${r.status === "approved" ? "status-other" : "status-enrolled"}">${escapeStudentText(REQUEST_STATUS[r.status] || r.status)}</span>`}</div>
+      </div>`).join("");
+      for (const b of panel.querySelectorAll("[data-decide]")) b.onclick = async () => {
+        const action = b.dataset.decide;
+        if (action === "approve" && !confirm("ยืนยันลบข้อมูลนักเรียนคนนี้ถาวร? ข้อมูลทะเบียน ผู้ปกครอง และผลการเรียนในระบบจะถูกลบและกู้คืนไม่ได้")) return;
+        const note = action === "cancel" ? "" : prompt(action === "approve" ? "บันทึกความเห็น (ถ้ามี)" : "เหตุผลที่ไม่อนุมัติ (ถ้ามี)") ?? null;
+        if (note === null) return;
+        try {
+          await apiRequest(`/api/student-delete-requests/${b.dataset.id}/${action}`, { method: "POST", body: { note } });
+          await Promise.all([loadDeleteRequests(), loadStudents()]);
+        } catch (err) { alert(err.message); }
+      };
+      if (new URLSearchParams(location.search).get("delete_requests")) panel.scrollIntoView({ block: "start" });
+    } catch (err) {
+      panel.hidden = true;
+    }
+  }
+
   document.getElementById("cancelModalBtn").addEventListener("click", () => {
     document.getElementById("studentModal").style.display = "none";
   });
@@ -891,6 +967,7 @@
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
     await loadStudents();
+    await loadDeleteRequests();
     const requestedStudentId = Number(new URLSearchParams(window.location.search).get("student"));
     if (requestedStudentId) await openStudentDetails(requestedStudentId);
   })();
@@ -1099,7 +1176,7 @@
     summary.style.display = "block";
     summary.replaceChildren();
     const counts = document.createElement("p");
-    counts.textContent = `ผลที่ระบบยืนยันแล้ว: เพิ่มใหม่ ${session.created} รายการ, อัปเดต ${session.updated} รายการ, ข้าม ${session.skipped.length} รายการ`;
+    counts.textContent = `ผลที่ระบบยืนยันแล้ว: เพิ่มใหม่ ${session.created} รายการ, อัปเดต ${session.updated} รายการ${session.reactivated ? ` (รับกลับเข้าเรียน ${session.reactivated} คน)` : ""}, ข้าม ${session.skipped.length} รายการ`;
     summary.appendChild(counts);
     session.skipped.forEach((item) => {
       const detail = document.createElement("div");
