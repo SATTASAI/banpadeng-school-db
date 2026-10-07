@@ -125,11 +125,12 @@
     </section>
   </div>
   <section class="analysis-panel" id="assignmentPanel" hidden style="margin-top:16px;">
-    <h2>มอบหมายครูผู้จัดทำงานวิเคราะห์</h2>
-    <p class="analysis-hint">ผู้บริหารหรือผู้ดูแลเลือกระดับชั้นและห้องด้านบน แล้วมอบหมายครูตามภาคเรียน ครูจะเข้าถึงเฉพาะห้องที่ได้รับมอบหมาย</p>
+    <h2>ครูผู้จัดทำงานวิเคราะห์ (ครูประจำชั้น)</h2>
+    <p class="analysis-hint">เลือกระดับชั้นและห้องด้านบนเพื่อดูครูประจำชั้นของห้อง ครูจะเข้าถึงเฉพาะห้องที่เป็นครูประจำชั้น</p>
     <div class="analysis-row">
-      <div class="analysis-field"><label for="assignmentUser">ครูหรือบุคลากร</label><select id="assignmentUser"></select></div>
-      <div class="analysis-actions"><button class="btn btn-primary" id="assignTeacher" type="button">มอบหมายห้องนี้</button></div>
+      <div class="analysis-field" hidden><select id="assignmentUser"></select></div>
+      <div class="analysis-actions" style="grid-column:1/-1"><p style="margin:0;color:var(--color-text-muted)">ครูประจำชั้นกำหนดที่ระบบรายงานผลการเรียน (เมนู "ครูประจำชั้น") ที่เดียว แล้วจะแสดงที่นี่อัตโนมัติ
+        · <a href="https://grades.banpadengschool.ac.th/admin.html#homerooms" target="_blank" rel="noopener">ไปที่ระบบรายงานผลการเรียน</a></p><button id="assignTeacher" type="button" hidden></button></div>
     </div>
     <div class="assignment-list" id="assignmentList" aria-live="polite">เลือกระดับชั้นและห้องเรียนก่อน</div>
   </section>
@@ -157,7 +158,7 @@
     try{
       const data=await apiRequest(`${route}assignments?term_id=${encodeURIComponent(term)}&grade_level=${encodeURIComponent(grade)}&classroom=${encodeURIComponent(classroom)}`);
       if(version!==assignmentVersion||$("term").value!==term||$("grade").value!==grade||$("classroom").value!==classroom)return;
-      $("assignmentList").innerHTML=data.assignments.length?data.assignments.map(a=>`<span class="assignment-chip">${escapeHtml(a.full_name)} <button type="button" data-assignment="${a.id}" aria-label="ยกเลิกมอบหมาย ${escapeHtml(a.full_name)}">×</button></span>`).join(""):"ยังไม่มีผู้ได้รับมอบหมายในห้องนี้";
+      $("assignmentList").innerHTML=data.assignments.length?data.assignments.map(a=>`<span class="assignment-chip">${escapeHtml(a.full_name)}</span>`).join(""):"ยังไม่มีผู้ได้รับมอบหมายในห้องนี้";
       $("assignmentList").querySelectorAll("[data-assignment]").forEach(btn=>btn.onclick=async()=>{
         if(!confirm("ยกเลิกการมอบหมายครูในห้องนี้?"))return;
         btn.disabled=true;

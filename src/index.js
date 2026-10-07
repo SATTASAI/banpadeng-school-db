@@ -6,6 +6,7 @@ import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
+import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
 import {
   generateSalt,
@@ -1207,79 +1208,8 @@ function composeFullName(prefix, first, last, fallback) {
 }
 
 async function handleCreateStudent(request, env) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) {
-    return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  }
-  if (!canManageStudents(user)) {
-    return jsonResponse({ error: "ไม่มีสิทธิ์เพิ่มข้อมูลนักเรียน" }, 403);
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  }
-
-  const studentCode = (body.student_code || "").trim();
-  const namePrefix = (body.name_prefix || "").trim();
-  const firstName = (body.first_name || "").trim();
-  const lastName = (body.last_name || "").trim();
-  const fullName = composeFullName(namePrefix, firstName, lastName, body.full_name);
-
-  if (!studentCode) return jsonResponse({ error: "กรุณากรอกเลขประจำตัวนักเรียน" }, 400);
-  if (!fullName) return jsonResponse({ error: "กรุณากรอกชื่อ-นามสกุลนักเรียน" }, 400);
-
-  const existing = await env.DB.prepare("SELECT id, full_name, status FROM students WHERE student_code = ?")
-    .bind(studentCode)
-    .first();
-  if (existing) {
-    const left = ["transferred", "withdrawn"].includes(existing.status);
-    return jsonResponse({
-      error: left
-        ? `เลขประจำตัวนี้เป็นของ ${existing.full_name} ซึ่งเคยเรียนที่นี่ (สถานะ: ${existing.status === "transferred" ? "ย้ายโรงเรียน" : "ออกกลางคัน"}) — ค้นหาชื่อแล้วกด "รับกลับเข้าเรียน" เพื่อใช้ข้อมูลและเลขประจำตัวเดิม`
-        : "เลขประจำตัวนี้ถูกใช้แล้ว",
-      existing_student_id: existing.id,
-    }, 409);
-  }
-  const nationalIdDigits = String(body.national_id || "").replace(/\D/g, "");
-  if (nationalIdDigits) {
-    const sameId = await env.DB.prepare("SELECT id, student_code, full_name, status FROM students WHERE national_id = ?").bind(nationalIdDigits).first();
-    if (sameId) return jsonResponse({
-      error: `เลขประจำตัวประชาชนนี้เป็นของ ${sameId.full_name} (เลขประจำตัว ${sameId.student_code}) ซึ่งมีในระบบแล้ว — ถ้าย้ายกลับมา ให้กด "รับกลับเข้าเรียน" ที่ข้อมูลเดิมแทนการเพิ่มใหม่`,
-      existing_student_id: sameId.id,
-    }, 409);
-  }
-
-  const result = await env.DB.prepare(
-    `INSERT INTO students
-       (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
-        classroom, grade_level, photo_url, health_conditions, allergies, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')`
-  )
-    .bind(
-      studentCode,
-      fullName,
-      body.national_id || null,
-      namePrefix || null,
-      firstName || null,
-      lastName || null,
-      body.birth_date || null,
-      body.classroom || null,
-      body.grade_level || null,
-      body.photo_url || null,
-      body.health_conditions || null,
-      body.allergies || null
-    )
-    .run();
-
-  await saveStudentDetails(env, result.meta.last_row_id, body);
-
-  await writeAuditLog(env, user, "create", "student", result.meta.last_row_id, {
-    student_code: studentCode, full_name: fullName,
-  }, request);
-  return jsonResponse({ id: result.meta.last_row_id }, 201);
+  // เพิ่มนักเรียน/รับย้ายเข้า ทำที่ระบบรายงานผลการเรียน (เมนู นักเรียน) ที่เดียว
+  return jsonResponse({ error: `เพิ่มนักเรียนไม่ได้ที่ระบบนี้ — ${GRADE_OWNED_MESSAGE} (เมนู "นักเรียน" หรือ "นำเข้าจาก Excel")` }, 409);
 }
 
 // ---------- /api/students/:id (PATCH) ----------
@@ -1299,6 +1229,10 @@ async function handleUpdateStudent(request, env, studentId) {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
 
+  // ชื่อ เลขประจำตัว วันเกิด ห้อง สถานะ เพศ น้ำหนักส่วนสูง แก้ที่ระบบรายงานผลการเรียนที่เดียว — ตัดออก ไม่บันทึกที่นี่
+  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  const ignored = stripGradeOwned(body);
+  if (ignored.length && !Object.keys(body).length) return jsonResponse({ error: GRADE_OWNED_MESSAGE, grade_owned: ignored }, 409);
   // ถ้ามีการส่งชื่อแบบแยกส่วนมา ให้คำนวณ full_name ใหม่จากส่วนนั้นเสมอ
   if (body.name_prefix !== undefined || body.first_name !== undefined || body.last_name !== undefined) {
     body.full_name = composeFullName(body.name_prefix, body.first_name, body.last_name, body.full_name);
@@ -1440,12 +1374,18 @@ async function handleListStaff(request, env) {
   }
 
   await ensurePersonnelData(env);
+  // ครูประจำชั้นมาจากระบบรายงานผลการเรียน (gr_homerooms ของปีที่เปิดใช้) — ข้อความเดิมในทะเบียนบุคลากรใช้เมื่อยังไม่มีข้อมูล
+  const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
+  const homeroomSql = hasGrade
+    ? `COALESCE((SELECT group_concat(h.grade_level || '/' || h.classroom, ', ') FROM gr_homerooms h JOIN academic_years y ON y.id = h.academic_year_id
+         WHERE y.status = 'active' AND h.user_id = p.user_id), p.homeroom_classroom)`
+    : "p.homeroom_classroom";
 
   const { results } = await env.DB.prepare(
     `SELECT p.id, p.user_id, p.full_name, u.role,
             EXISTS(SELECT 1 FROM personnel_accounts pa WHERE pa.personnel_id=p.id AND pa.user_id=?) AS can_edit,
             p.personnel_type, p.position_number, p.position, p.academic_rank,
-            p.subjects, p.phone, p.homeroom_classroom,
+            p.subjects, p.phone, ${homeroomSql} AS homeroom_classroom,
             p.email, p.departments, p.responsible_projects, p.teaching_periods,
             p.appointment_date, p.service_start_date, p.education_level, p.major, p.institution,
             p.employment_status, p.retirement_date,
@@ -1490,7 +1430,6 @@ async function handleUpdateStaff(request, env, targetId) {
   const academic_rank = body.academic_rank || null;
   const subjects = body.subjects || null;
   const phone = body.phone || null;
-  const homeroom_classroom = body.homeroom_classroom || null;
   const departments = body.departments || null;
   const responsible_projects = body.responsible_projects || null;
   const rawPeriods = String(body.teaching_periods ?? "").trim();
@@ -1521,14 +1460,14 @@ async function handleUpdateStaff(request, env, targetId) {
   await env.DB.prepare(
     `UPDATE personnel_records SET
        personnel_type = ?, position_number = ?, position = ?, academic_rank = ?,
-       subjects = ?, phone = ?, homeroom_classroom = ?,
+       subjects = ?, phone = ?,
        departments = ?, responsible_projects = ?, teaching_periods = ?,
        appointment_date = ?, service_start_date = ?, education_level = ?, major = ?, institution = ?,
        employment_status = ?, retirement_date = ?,
        license_issue_date = ?, license_expiry_date = ?, updated_at = datetime('now')
      WHERE id = ?`
   )
-    .bind(personnel_type, position_number, position, academic_rank, subjects, phone, homeroom_classroom,
+    .bind(personnel_type, position_number, position, academic_rank, subjects, phone,
       departments, responsible_projects, teaching_periods, appointment_date, service_start_date,
       education_level, major, institution, employment_status, retirement_date,
       license_issue_date, license_expiry_date, targetId)
@@ -4031,150 +3970,8 @@ async function handleOverview(request, env) {
 
 // ---------- /api/students/import (POST) — นำเข้าจาก Excel/CSV แบบ upsert ตามเลขประจำตัว ----------
 async function handleImportStudents(request, env) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (!canManageStudents(user)) return jsonResponse({ error: "ไม่มีสิทธิ์นำเข้าข้อมูลนักเรียน" }, 403);
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  }
-  if (!body || !Array.isArray(body.rows) || body.rows.length === 0) {
-    return jsonResponse({ error: "ไม่พบรายการนักเรียนสำหรับนำเข้า" }, 400);
-  }
-  if (body.rows.length > 20) {
-    return jsonResponse({ error: "รับข้อมูลได้ครั้งละไม่เกิน 20 รายการ กรุณารีเฟรชหน้าเว็บเพื่อใช้ระบบแบ่งชุดอัตโนมัติ" }, 400);
-  }
-
-  const skipped = [];
-  const validRows = [];
-  const seenCodes = new Map();
-  const asText = (value) => {
-    const text = value == null ? "" : String(value).trim();
-    return ["-", "–", "—"].includes(text) ? "" : text;
-  };
-  const importDate = (value) => {
-    const text = asText(value);
-    if (!text) return "";
-    let match = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
-    if (match) {
-      let year = Number(match[3]);
-      if (year > 2400) year -= 543;
-      const month = Number(match[2]);
-      const day = Number(match[1]);
-      if (year >= 1900 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        return `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-      }
-    }
-    match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (match) {
-      let year = Number(match[1]);
-      if (year > 2400) year -= 543;
-      return `${year.toString().padStart(4, "0")}-${match[2]}-${match[3]}`;
-    }
-    return text;
-  };
-  body.rows.forEach((row, index) => {
-    if (!row || typeof row !== "object" || Array.isArray(row)) {
-      skipped.push({ row: index + 1, reason: "รูปแบบข้อมูลไม่ถูกต้อง" });
-      return;
-    }
-    const studentCode = asText(row.student_code);
-    const prefix = asText(row.name_prefix);
-    const first = asText(row.first_name);
-    const last = asText(row.last_name);
-    const fullName = composeFullName(prefix, first, last, row.full_name);
-    if (!studentCode || !fullName) {
-      skipped.push({ row: index + 1, reason: "ไม่มีเลขประจำตัวหรือชื่อ-นามสกุล" });
-      return;
-    }
-    if (seenCodes.has(studentCode)) {
-      skipped.push({ row: index + 1, reason: `เลขประจำตัว ${studentCode} ซ้ำกับรายการที่ ${seenCodes.get(studentCode)} ในชุดเดียวกัน` });
-      return;
-    }
-    seenCodes.set(studentCode, index + 1);
-    validRows.push({
-      rowNumber: index + 1,
-      baseValues: [
-        studentCode, fullName, asText(row.national_id) || null,
-        prefix || null, first || null, last || null, importDate(row.birth_date) || null,
-        asText(row.classroom) || null, asText(row.grade_level) || null,
-        asText(row.health_conditions) || null, asText(row.allergies) || null,
-        asText(row.photo_url) || null,
-      ],
-      details: getSubmittedStudentDetails(row),
-    });
-  });
-  if (!validRows.length) return jsonResponse({ created: 0, updated: 0, skipped });
-
-  try {
-    await ensureStudentDetailsSchema(env);
-    // One lookup plus at most two writes per student (ทะเบียนหลัก + ข้อมูลเพิ่มเติม).
-    const codes = [...new Set(validRows.map((row) => row.baseValues[0]))];
-    const { results } = await env.DB.prepare(
-      `SELECT student_code, full_name, status FROM students WHERE student_code IN (${codes.map(() => "?").join(",")})`
-    ).bind(...codes).all();
-    const existingByCode = new Map(results.map((row) => [String(row.student_code), row]));
-    const normalizeNameForMatch = (value) => String(value || "")
-      .normalize("NFKC")
-      .replace(/(?:^|\s)[\-–—](?=\s|$)/g, " ")
-      .replace(/[\s.]+/g, "")
-      .toLocaleLowerCase("th");
-    const rowsToWrite = validRows.filter(({ rowNumber, baseValues }) => {
-      const existing = existingByCode.get(String(baseValues[0]));
-      if (!existing || normalizeNameForMatch(existing.full_name) === normalizeNameForMatch(baseValues[1])) return true;
-      skipped.push({
-        row: rowNumber,
-        reason: `เลขประจำตัว ${baseValues[0]} มีอยู่แล้ว แต่ชื่อไม่ตรงกับ “${existing.full_name}” ระบบจึงไม่เขียนทับ`,
-      });
-      return false;
-    });
-    if (!rowsToWrite.length) return jsonResponse({ created: 0, updated: 0, skipped });
-    const knownCodes = new Set(existingByCode.keys());
-    let created = 0;
-    let updated = 0;
-    let reactivated = 0;
-    const statements = [];
-    rowsToWrite.forEach(({ baseValues: values, details }) => {
-      if (["transferred", "withdrawn"].includes(existingByCode.get(String(values[0]))?.status)) reactivated++;
-      if (knownCodes.has(values[0])) updated++;
-      else { created++; knownCodes.add(values[0]); }
-      // Retrying a committed batch updates the same student codes, without duplicates.
-      statements.push(env.DB.prepare(`INSERT INTO students
-        (student_code, full_name, national_id, name_prefix, first_name, last_name, birth_date,
-         classroom, grade_level, health_conditions, allergies, photo_url, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'enrolled')
-        ON CONFLICT(student_code) DO UPDATE SET
-          full_name = excluded.full_name,
-          national_id = COALESCE(excluded.national_id, students.national_id),
-          name_prefix = COALESCE(excluded.name_prefix, students.name_prefix),
-          first_name = COALESCE(excluded.first_name, students.first_name),
-          last_name = COALESCE(excluded.last_name, students.last_name),
-          birth_date = COALESCE(excluded.birth_date, students.birth_date),
-          classroom = COALESCE(excluded.classroom, students.classroom),
-          grade_level = COALESCE(excluded.grade_level, students.grade_level),
-          health_conditions = COALESCE(excluded.health_conditions, students.health_conditions),
-          allergies = COALESCE(excluded.allergies, students.allergies),
-          photo_url = COALESCE(excluded.photo_url, students.photo_url),
-          status = CASE WHEN students.status IN ('transferred','withdrawn') THEN 'enrolled' ELSE students.status END`).bind(...values));
-      const detailStatement = prepareStudentDetailsUpsert(env, values[0], details, true);
-      if (detailStatement) statements.push(detailStatement);
-    });
-    // D1 batch is transactional: an error rolls back every write in this batch.
-    await env.DB.batch(statements);
-    await writeAuditLog(env, user, "import", "student", null, {
-      created, updated, reactivated, skipped: skipped.length, submitted: body.rows.length,
-    }, request);
-    return jsonResponse({ created, updated, reactivated, skipped });
-  } catch (err) {
-    const message = String(err && err.message || "");
-    if (/no such column|has no column named/i.test(message)) {
-      return jsonResponse({ error: "ฐานข้อมูลนักเรียนยังขาดคอลัมน์ที่ระบบต้องใช้ กรุณาให้ผู้ดูแลตรวจและเพิ่มคอลัมน์ตามคู่มือก่อนนำเข้าต่อ" }, 500);
-    }
-    return jsonResponse({ error: "บันทึกชุดนี้ไม่สำเร็จ กรุณาลองนำเข้าต่อจากชุดที่ค้าง หากยังไม่สำเร็จให้ผู้ดูแลตรวจฐานข้อมูลและข้อจำกัดการใช้งาน" }, 500);
-  }
+  // นำเข้ารายชื่อนักเรียนทำที่ระบบรายงานผลการเรียน (นำเข้าจาก Excel → รายชื่อนักเรียน) ที่เดียว
+  return jsonResponse({ error: `นำเข้านักเรียนไม่ได้ที่ระบบนี้ — ${GRADE_OWNED_MESSAGE} (เมนู "นำเข้าจาก Excel" → รายชื่อนักเรียน)` }, 409);
 }
 
 // ---------- /api/staff/import (POST) — นำเข้าโปรไฟล์บุคลากรจาก Excel/CSV โดยจับคู่ด้วยอีเมล ----------

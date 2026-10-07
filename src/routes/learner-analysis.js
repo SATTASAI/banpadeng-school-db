@@ -1,3 +1,4 @@
+import { GRADE_OWNED_MESSAGE } from "../lib/grade-owned.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 
 const FIELDS = [
@@ -105,34 +106,7 @@ async function listAssignments(request, env) {
   return jsonResponse({ assignments:results },200,{ "Cache-Control":"private, no-store" });
 }
 
-async function addAssignment(request, env, user) {
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== "object" || Array.isArray(body)) return jsonResponse({ error:"ข้อมูลไม่ถูกต้อง" },400);
-  const term = await findTerm(env, Number(body.term_id));
-  if (!term) return jsonResponse({ error:"กรุณาเลือกภาคเรียนที่ถูกต้อง" },400);
-  const gradeLevel = typeof body.grade_level === "string" ? body.grade_level.trim() : "";
-  const classroom = typeof body.classroom === "string" ? body.classroom.trim() : "";
-  const teacherId = Number(body.teacher_user_id);
-  if (!gradeLevel || !classroom || gradeLevel.length > 80 || classroom.length > 80 ||
-      !Number.isSafeInteger(teacherId) || teacherId <= 0) return jsonResponse({ error:"ข้อมูลห้องหรือครูไม่ถูกต้อง" },400);
-  const room = await env.DB.prepare(`SELECT 1 FROM student_enrollments WHERE academic_term_id=?
-    AND grade_level=? AND classroom=? AND status='enrolled' LIMIT 1`)
-    .bind(term.id,gradeLevel,classroom).first();
-  if (!room) return jsonResponse({ error:"ไม่พบห้องเรียนในภาคเรียนที่เลือก" },404);
-  const teacher = await env.DB.prepare(`SELECT id FROM users
-    WHERE id=? AND status='active' AND role IN ('teacher','staff')`).bind(teacherId).first();
-  if (!teacher) return jsonResponse({ error:"กรุณาเลือกครูหรือบุคลากรที่ใช้งานอยู่" },400);
-  await env.DB.prepare(`INSERT OR IGNORE INTO learner_class_assignments
-    (academic_term_id,grade_level,classroom,teacher_user_id,assigned_by) VALUES (?,?,?,?,?)`)
-    .bind(term.id,gradeLevel,classroom,teacherId,user.id).run();
-  return jsonResponse({ ok:true },200,{ "Cache-Control":"private, no-store" });
-}
 
-async function removeAssignment(env, id) {
-  if (!Number.isSafeInteger(id) || id <= 0) return jsonResponse({ error:"รายการไม่ถูกต้อง" },400);
-  await env.DB.prepare("DELETE FROM learner_class_assignments WHERE id=?").bind(id).run();
-  return jsonResponse({ ok:true },200,{ "Cache-Control":"private, no-store" });
-}
 
 async function listClassroom(request, env, user) {
   const url = new URL(request.url);
@@ -259,9 +233,9 @@ export async function handleLearnerAnalysisRoute(request, env, pathname, method)
     if (!isAdmin(user)) return jsonResponse({ error:"เฉพาะผู้บริหารหรือผู้ดูแลระบบ" },403);
     await ensureSchema(env);
     if (pathname === "/api/learner-analysis/assignments" && method === "GET") return listAssignments(request,env);
-    if (pathname === "/api/learner-analysis/assignments" && method === "POST") return addAssignment(request,env,user);
-    const match = pathname.match(/^\/api\/learner-analysis\/assignments\/(\d+)$/);
-    if (match && method === "DELETE") return removeAssignment(env,Number(match[1]));
+    // ครูประจำชั้นกำหนดที่ระบบรายงานผลการเรียนที่เดียว (ระบบนั้นส่งรายชื่อมาที่ตารางนี้ให้อัตโนมัติ)
+    if ((pathname === "/api/learner-analysis/assignments" && method === "POST") || (/^\/api\/learner-analysis\/assignments\/\d+$/.test(pathname) && method === "DELETE"))
+      return jsonResponse({ error:`กำหนดครูประจำชั้นที่นี่ไม่ได้ — ${GRADE_OWNED_MESSAGE} (เมนู "ครูประจำชั้น")` },409);
     return jsonResponse({ error:"ไม่พบ endpoint นี้" },404);
   }
   if (pathname === "/api/learner-analysis/grades" && method === "GET") return listGrades(request,env,user);

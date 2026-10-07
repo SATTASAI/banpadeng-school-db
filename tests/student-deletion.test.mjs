@@ -12,33 +12,34 @@ async function setup(){
  await ensureLeaveData(env);
  const json=async(r)=>({status:r.status,data:await r.json().catch(()=>null)});
  const api=async(path,method,body,user=1)=>json(await call(env,path,method,body,user));
- const created=await api('/api/students','POST',{student_code:'90001',name_prefix:'เด็กชาย',first_name:'ย้าย',last_name:'ไปแล้ว',national_id:'1100000000001',grade_level:'ป.4',classroom:'2'});
- assert.equal(created.status,201);
- return {env,api,id:created.data.id};
+ // นักเรียนเพิ่มที่ระบบรายงานผลการเรียน (ตารางเดียวกัน) — จำลองด้วยการเขียนตรง
+ await api('/api/students','GET');
+ env.raw.exec(`INSERT INTO students(id,student_code,full_name,national_id,name_prefix,first_name,last_name,grade_level,classroom,status)
+  VALUES(50,'90001','เด็กชายย้าย ไปแล้ว','1100000000001','เด็กชาย','ย้าย','ไปแล้ว','ป.4','2','enrolled')`);
+ const setStatus=(st)=>env.raw.prepare('UPDATE students SET status=? WHERE id=50').run(st);
+ return {env,api,id:50,setStatus};
 }
 
-test('ย้ายออก: ยังค้นหาได้ ลบตรงไม่ได้ เพิ่มซ้ำไม่ได้ และรับกลับด้วยเลขประจำตัวเดิม',async()=>{
- const {api,id}=await setup();
+test('ข้อมูลที่ระบบรายงานผลการเรียนเป็นเจ้าของ แก้/เพิ่ม/นำเข้าที่ระบบทะเบียนไม่ได้ · ข้อมูลอื่นแก้ได้ · ลบตรงไม่ได้',async()=>{
+ const {api,id,setStatus}=await setup();
  assert.equal((await api(`/api/students/${id}`,'DELETE')).status,409);
- assert.equal((await api(`/api/students/${id}`,'PATCH',{status:'transferred'})).status,200);
- const list=(await api('/api/students','GET')).data.students;
- assert.equal(list.find(s=>s.id===id).status,'transferred');
- // เพิ่มใหม่ด้วยเลขเดิม/เลขบัตรเดิม → แนะนำให้รับกลับ
- const dupCode=await api('/api/students','POST',{student_code:'90001',first_name:'ก',last_name:'ข'});
- assert.equal(dupCode.status,409);assert.match(dupCode.data.error,/รับกลับเข้าเรียน/);assert.equal(dupCode.data.existing_student_id,id);
- const dupNid=await api('/api/students','POST',{student_code:'90002',first_name:'ก',last_name:'ข',national_id:'1100000000001'});
- assert.equal(dupNid.status,409);assert.equal(dupNid.data.existing_student_id,id);
- // นำเข้าซ้ำ (ย้ายกลับมา) → สถานะกลับเป็นกำลังศึกษา
- const imp=await api('/api/students/import','POST',{rows:[{student_code:'90001',name_prefix:'เด็กชาย',first_name:'ย้าย',last_name:'ไปแล้ว',grade_level:'ป.5',classroom:'1'}]});
- assert.equal(imp.status,200);assert.equal(imp.data.reactivated,1);assert.equal(imp.data.updated,1);
- const back=(await api(`/api/students/${id}`,'GET')).data.student;
- assert.equal(back.status,'enrolled');assert.equal(back.student_code,'90001');assert.equal(back.grade_level,'ป.5');
+ const add=await api('/api/students','POST',{student_code:'90002',first_name:'ก',last_name:'ข'});
+ assert.equal(add.status,409);assert.match(add.data.error,/ระบบรายงานผลการเรียน/);
+ assert.equal((await api('/api/students/import','POST',{rows:[{student_code:'90003',first_name:'ก',last_name:'ข'}]})).status,409);
+ // แก้เฉพาะช่องของระบบเกรด → 409 · ปนกับช่องอื่น → บันทึกเฉพาะช่องอื่น
+ assert.equal((await api(`/api/students/${id}`,'PATCH',{status:'transferred',first_name:'เปลี่ยน'})).status,409);
+ assert.equal((await api(`/api/students/${id}`,'PATCH',{first_name:'เปลี่ยน',allergies:'แพ้ถั่ว',weight_kg:99,religion:'พุทธ'})).status,200);
+ const st=(await api(`/api/students/${id}`,'GET')).data.student;
+ assert.equal(st.first_name,'ย้าย');assert.equal(st.allergies,'แพ้ถั่ว');assert.notEqual(st.weight_kg,99);
+ // ย้ายออก (ทำที่ระบบเกรด) แล้วยังค้นหาเจอพร้อมสถานะ
+ setStatus('transferred');
+ assert.equal((await api('/api/students','GET')).data.students.find(s=>s.id===id).status,'transferred');
 });
 
 test('ลบถาวร: ต้องย้ายออกก่อน → ยื่นคำขอ → เฉพาะผู้อำนวยการอนุมัติ',async()=>{
- const {env,api,id}=await setup();
+ const {env,api,id,setStatus}=await setup();
  assert.equal((await api(`/api/students/${id}/delete-request`,'POST',{reason:'ข้อมูลซ้ำ'})).status,409); // ยังกำลังศึกษา
- await api(`/api/students/${id}`,'PATCH',{status:'withdrawn'});
+ setStatus('withdrawn');
  assert.equal((await api(`/api/students/${id}/delete-request`,'POST',{reason:''})).status,400);
  assert.equal((await api(`/api/students/${id}/delete-request`,'POST',{reason:'x'},2)).status,403); // ครู
  const req=await api(`/api/students/${id}/delete-request`,'POST',{reason:'บันทึกซ้ำโดยผิดพลาด'});
@@ -64,8 +65,8 @@ test('ลบถาวร: ต้องย้ายออกก่อน → ย�
 });
 
 test('ไม่อนุมัติ / ยกเลิกคำขอ: ข้อมูลยังอยู่',async()=>{
- const {api,id}=await setup();
- await api(`/api/students/${id}`,'PATCH',{status:'transferred'});
+ const {api,id,setStatus}=await setup();
+ setStatus('transferred');
  const a=(await api(`/api/students/${id}/delete-request`,'POST',{reason:'ทดสอบ'})).data.id;
  assert.equal((await api(`/api/student-delete-requests/${a}/reject`,'POST',{note:'เก็บไว้'},4)).status,200);
  const b=(await api(`/api/students/${id}/delete-request`,'POST',{reason:'ทดสอบ 2'})).data.id;

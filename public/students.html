@@ -121,13 +121,17 @@
       </div>
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <a class="btn btn-ghost" style="width:auto;" href="/learner-analysis.html">งานวิเคราะห์ผู้เรียนรายบุคคล</a>
-        <a class="btn btn-ghost" style="width:auto;" href="/import-center.html?template=students&amp;download=1">ดาวน์โหลด Template นักเรียน</a>
+        
         <button class="btn btn-ghost" style="width:auto;" id="exportStudentsBtn" disabled>ดาวน์โหลดข้อมูลนักเรียน</button>
-        <button class="btn btn-ghost" style="width:auto;" id="importBtn">นำเข้าจาก Excel/CSV</button>
-        <button class="btn btn-primary" style="width:auto;" id="newStudentBtn">+ เพิ่มนักเรียน</button>
+        <button class="btn btn-ghost" id="importBtn" style="width:auto;display:none">นำเข้าจาก Excel/CSV</button>
+        <button class="btn btn-primary" id="newStudentBtn" style="width:auto;display:none">+ เพิ่มนักเรียน</button>
+        <a class="btn btn-primary" style="width:auto;" href="https://grades.banpadengschool.ac.th/admin.html#students" target="_blank" rel="noopener">เพิ่ม/ย้ายนักเรียน (ระบบรายงานผลการเรียน)</a>
       </div>
     </div>
 
+    <p class="grade-owned-note" style="margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--color-surface-2, #eef2fb);color:var(--color-text-muted);font-size:14px">
+      ชื่อ เลขประจำตัว วันเกิด เพศ ห้องเรียน สถานะ (ย้ายเข้า/ย้ายออก) และน้ำหนักส่วนสูง แก้ได้ที่<b>ระบบรายงานผลการเรียน</b>ที่เดียว — หน้านี้แก้ได้เฉพาะข้อมูลสุขภาพ ที่อยู่ ผู้ปกครอง และข้อมูลอื่น ๆ
+    </p>
     <section class="delete-requests" id="deleteRequestsPanel" hidden aria-label="คำขอลบข้อมูลนักเรียนถาวร">
       <div class="delete-requests-head">
         <h3>คำขอลบข้อมูลนักเรียนถาวร</h3>
@@ -204,37 +208,37 @@
       </div>
       <div class="field">
         <label>เลขประจำตัวประชาชน (13 หลัก)</label>
-        <input type="text" id="fNationalId" maxlength="13" placeholder="เช่น 1760800075805" />
+        <input type="text" id="fNationalId" disabled title="แก้ที่ระบบรายงานผลการเรียน" maxlength="13" placeholder="เช่น 1760800075805" />
       </div>
     </div>
     <div class="field-row" style="grid-template-columns:110px 1fr 1fr;">
       <div class="field">
         <label>คำนำหน้าชื่อ</label>
-        <input type="text" id="fPrefix" placeholder="เด็กชาย" />
+        <input type="text" id="fPrefix" disabled title="แก้ที่ระบบรายงานผลการเรียน" placeholder="เด็กชาย" />
       </div>
       <div class="field">
         <label>ชื่อ</label>
-        <input type="text" id="fFirstName" />
+        <input type="text" id="fFirstName" disabled title="แก้ที่ระบบรายงานผลการเรียน" />
       </div>
       <div class="field">
         <label>นามสกุล</label>
-        <input type="text" id="fLastName" />
+        <input type="text" id="fLastName" disabled title="แก้ที่ระบบรายงานผลการเรียน" />
       </div>
     </div>
     <div class="field-row">
       <div class="field">
         <label>ระดับชั้น</label>
-        <input type="text" id="fGrade" placeholder="เช่น อ.1 หรือ ประถมศึกษาปีที่ 4" />
+        <input type="text" id="fGrade" disabled title="แก้ที่ระบบรายงานผลการเรียน" placeholder="เช่น อ.1 หรือ ประถมศึกษาปีที่ 4" />
       </div>
       <div class="field">
         <label>ห้อง</label>
-        <input type="text" id="fClassroom" placeholder="เช่น 1" />
+        <input type="text" id="fClassroom" disabled title="แก้ที่ระบบรายงานผลการเรียน" placeholder="เช่น 1" />
       </div>
     </div>
     <div class="field-row">
       <div class="field">
         <label>วันเกิด</label>
-        <input type="date" id="fBirthDate" />
+        <input type="date" id="fBirthDate" disabled title="แก้ที่ระบบรายงานผลการเรียน" />
       </div>
       <div class="field">
         <label>อายุ</label>
@@ -255,7 +259,7 @@
     </div>
     <div class="field" id="statusField" style="display:none;">
       <label>สถานะ</label>
-      <select class="plain" id="fStatus">
+      <select class="plain" id="fStatus" disabled title="ย้ายเข้า/ย้ายออกที่ระบบรายงานผลการเรียน">
         <option value="enrolled">กำลังศึกษาอยู่</option>
         <option value="transferred">ย้ายโรงเรียน</option>
         <option value="graduated">จบการศึกษา</option>
@@ -367,21 +371,21 @@
     { title: "ข้อมูลทะเบียนนักเรียน", fields: [
       { key: "student_code", label: "เลขประจำตัวนักเรียน", readOnly: true },
       { key: "full_name", label: "ชื่อ–นามสกุลในทะเบียน", readOnly: true, wide: true },
-      { key: "national_id", label: "เลขประจำตัวประชาชน" },
-      { key: "name_prefix", label: "คำนำหน้าชื่อ" },
-      { key: "first_name", label: "ชื่อ" },
-      { key: "last_name", label: "นามสกุล" },
-      { key: "birth_date", label: "วันเกิด", type: "date" },
-      { key: "grade_level", label: "ระดับชั้น" },
-      { key: "classroom", label: "ห้องเรียน" },
+      { key: "national_id", label: "เลขประจำตัวประชาชน", readOnly: true },
+      { key: "name_prefix", label: "คำนำหน้าชื่อ", readOnly: true },
+      { key: "first_name", label: "ชื่อ", readOnly: true },
+      { key: "last_name", label: "นามสกุล", readOnly: true },
+      { key: "birth_date", label: "วันเกิด", type: "date", readOnly: true },
+      { key: "grade_level", label: "ระดับชั้น", readOnly: true },
+      { key: "classroom", label: "ห้องเรียน", readOnly: true },
       { key: "status", label: "สถานภาพนักเรียน", readOnly: true },
     ] },
     { title: "สุขภาพ ร่างกาย และข้อมูลทั่วไป", fields: [
       { key: "health_conditions", label: "โรคประจำตัว", wide: true },
       { key: "allergies", label: "การแพ้ยา/อาหาร", wide: true },
-      { key: "gender", label: "เพศ" },
-      { key: "weight_kg", label: "น้ำหนัก", type: "number", suffix: "กก." },
-      { key: "height_cm", label: "ส่วนสูง", type: "number", suffix: "ซม." },
+      { key: "gender", label: "เพศ", readOnly: true },
+      { key: "weight_kg", label: "น้ำหนัก", type: "number", suffix: "กก.", readOnly: true },
+      { key: "height_cm", label: "ส่วนสูง", type: "number", suffix: "ซม.", readOnly: true },
       { key: "blood_type", label: "กลุ่มเลือด" },
       { key: "religion", label: "ศาสนา" },
       { key: "ethnicity", label: "เชื้อชาติ" },
@@ -840,7 +844,7 @@
       const leftSchool = ["transferred", "withdrawn"].includes(student.status);
       // soft delete: ย้ายออก/ออกกลางคันยังค้นหาได้ รับกลับได้ ลบถาวรต้องให้ ผอ. อนุมัติ
       document.getElementById("deleteStudentBtn").style.display = leftSchool && currentUser.is_admin ? "inline-flex" : "none";
-      document.getElementById("reenrollBtn").style.display = leftSchool ? "inline-flex" : "none";
+      document.getElementById("reenrollBtn").style.display = "none"; // รับกลับเข้าเรียนทำที่ระบบรายงานผลการเรียน
       renderGuardians(student.guardians);
     } else {
       document.getElementById("fCode").value = "";
@@ -939,14 +943,11 @@
     const health_conditions = document.getElementById("fHealth").value.trim();
     const allergies = document.getElementById("fAllergy").value.trim();
 
-    if (!first_name && !last_name) return alert("กรุณากรอกชื่อและนามสกุลอย่างน้อยอย่างใดอย่างหนึ่ง");
-    if (national_id && national_id.length !== 13) return alert("เลขประจำตัวประชาชนต้องมี 13 หลัก");
-
-    const body = { national_id, name_prefix, first_name, last_name, birth_date, classroom, grade_level, photo_url, health_conditions, allergies };
+    // ชื่อ เลขบัตร วันเกิด ห้อง สถานะ แก้ที่ระบบรายงานผลการเรียน — ส่งเฉพาะข้อมูลที่หน้านี้แก้ได้
+    const body = { photo_url, health_conditions, allergies };
 
     try {
       if (editingStudentId) {
-        body.status = document.getElementById("fStatus").value;
         await apiRequest(`/api/students/${editingStudentId}`, { method: "PATCH", body });
       } else {
         const student_code = document.getElementById("fCode").value.trim();

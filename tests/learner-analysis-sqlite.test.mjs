@@ -38,6 +38,12 @@ function environment({legacy=false}={}){
       async all(){return {results:stmt.all(...values)};},async run(){const r=stmt.run(...values);return {meta:{changes:r.changes,last_row_id:r.lastInsertRowid}};}};
   }}};
 }
+// ครูประจำชั้นกำหนดที่ระบบรายงานผลการเรียน แล้วระบบนั้นเขียนลงตารางนี้ — จำลองการเขียนตรง (API ของระบบนี้แก้ไม่ได้แล้ว)
+async function assign(env,{term_id,grade_level,classroom,teacher_user_id}){
+  await env.DB.prepare("SELECT 1").first().catch(()=>null);
+  await api(env,20,"assignments?term_id="+term_id+"&grade_level="+encodeURIComponent(grade_level)+"&classroom="+encodeURIComponent(classroom)); // สร้างตาราง
+  await env.DB.prepare("INSERT OR IGNORE INTO learner_class_assignments (academic_term_id,grade_level,classroom,teacher_user_id,assigned_by) VALUES (?,?,?,?,20)").bind(term_id,grade_level,classroom,teacher_user_id).run();
+}
 async function api(env,userId,path,method="GET",body){
   const token=await signJWT({sub:userId},secret);
   const request=new Request(`https://school.example/api/learner-analysis/${path}`,{
@@ -50,11 +56,11 @@ async function api(env,userId,path,method="GET",body){
 
 test("real SQLite: room printing uses period enrollment, blanks for missing analysis, and teacher isolation",async()=>{
   const env=environment();
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:8});
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"2",teacher_user_id:7});
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
-  await api(env,20,"assignments","POST",{term_id:5,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
+  await assign(env,{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  await assign(env,{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:8});
+  await assign(env,{term_id:4,grade_level:"ป.4",classroom:"2",teacher_user_id:7});
+  await assign(env,{term_id:4,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
+  await assign(env,{term_id:5,grade_level:"ป.5",classroom:"1",teacher_user_id:7});
   const rosterPath="roster?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1&print=1";
   const before=await api(env,7,rosterPath);
   assert.deepEqual(before.students.map(s=>s.id),[9,10]);
@@ -82,7 +88,7 @@ test("real SQLite: room printing uses period enrollment, blanks for missing anal
 
 test("legacy learner table gains five domain ratings and preserves saved observations",async()=>{
   const env=environment({legacy:true});
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  await assign(env,{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
   await api(env,7,"records/9","PUT",{
     term_id:4,learner_interests:"ชอบวาดภาพ",learner_expectations:"อยากอ่านคล่อง",
     knowledge_result:"ปานกลาง",knowledge_evidence:"แบบทดสอบก่อนเรียน",
@@ -119,12 +125,16 @@ test("unassigned users cannot list, read, save or print students; revocation tak
   assert.equal((await raw("records/9?term_id=4")).status,403);
   assert.equal((await raw("records/9","PUT",{term_id:4,reading_result:"ไม่ควรบันทึก"})).status,403);
   assert.equal((await raw("assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7})).status,403);
-  await api(env,20,"assignments","POST",{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
+  // ผู้บริหารก็เพิ่ม/ลบที่ระบบนี้ไม่ได้แล้ว (409 — กำหนดที่ระบบรายงานผลการเรียน)
+  { const token=await signJWT({sub:20},secret);
+    const r=await handleLearnerAnalysisRoute(new Request("https://school.example/api/learner-analysis/assignments",{method:"POST",headers:{Cookie:`bpd_session=${token}`,"Content-Type":"application/json"},body:JSON.stringify({term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7})}),env,"/api/learner-analysis/assignments","POST");
+    assert.equal(r.status,409); }
+  await assign(env,{term_id:4,grade_level:"ป.4",classroom:"1",teacher_user_id:7});
   assert.equal((await raw(roomPath)).status,200);
   await api(env,7,"records/9","PUT",{term_id:4,reading_result:"อ่านได้"});
   const { assignments }=await api(env,20,"assignments?term_id=4&grade_level="+encodeURIComponent("ป.4")+"&classroom=1");
   assert.equal(assignments.length,1);
-  await api(env,20,`assignments/${assignments[0].id}`,"DELETE");
+  await env.DB.prepare("DELETE FROM learner_class_assignments WHERE id=?").bind(assignments[0].id).run();
   assert.equal((await raw(roomPath)).status,403);
   assert.equal((await raw("records/9?term_id=4")).status,403);
   assert.equal((await raw("records/9","PUT",{term_id:4,reading_result:"ห้ามแก้"})).status,403);

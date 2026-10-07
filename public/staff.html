@@ -86,7 +86,8 @@
     </div>
     <div class="field">
       <label>ครูประจำชั้น/ที่ปรึกษาห้อง</label>
-      <input type="text" id="fHomeroom" placeholder="เช่น ป.4/1 (เว้นว่างถ้าไม่ได้เป็น)" />
+      <input type="text" id="fHomeroom" disabled title="กำหนดที่ระบบรายงานผลการเรียน เมนู ครูประจำชั้น" />
+      <small style="color:var(--color-text-muted)">กำหนดที่ระบบรายงานผลการเรียน (เมนู "ครูประจำชั้น") ที่เดียว</small>
     </div>
     <div class="field"><label>ฝ่ายงาน</label><input type="text" id="fDepartments" placeholder="วิชาการ; บุคคล" /></div>
     <div class="field"><label>โครงการที่รับผิดชอบ</label><input type="text" id="fProjects" placeholder="โครงการอ่านออกเขียนได้; โครงการห้องสมุด" /></div>
@@ -270,7 +271,6 @@
           institution: document.getElementById("fInstitution").value.trim(),
           subjects: document.getElementById("fSubjects").value.trim(),
           phone: document.getElementById("fPhone").value.trim(),
-          homeroom_classroom: document.getElementById("fHomeroom").value.trim(),
           departments: document.getElementById("fDepartments").value.trim(),
           responsible_projects: document.getElementById("fProjects").value.trim(),
           teaching_periods: document.getElementById("fPeriods").value.trim(),
