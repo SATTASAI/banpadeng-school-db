@@ -16,14 +16,14 @@ jobs:
         shell: bash
         run: |
           set +e
-          (timeout 150 npx -y wrangler@3.114.0 tail banpadeng-school-db --format json > tail.json 2> tail.err) &
-          sleep 25
-          {
-          for p in /api/students /api/overview /api/auth/me; do
-            echo "== $p"; curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" --max-time 60 "https://system.banpadengschool.ac.th$p"
+                    {
+          for p in /api/students /api/students /api/students /api/staff /api/staff /api/auth/me; do
+            echo "== $p $(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 60 "https://system.banpadengschool.ac.th$p")"
           done
+          for i in 1 2 3; do echo "== grades /api/me $(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 60 https://grades.banpadengschool.ac.th/api/me)"; done
+          echo "== colo $(curl -s https://system.banpadengschool.ac.th/cdn-cgi/trace | grep colo)"
           wait
-          echo "--- tail stderr"; tail -20 tail.err
+          true
           echo "--- tail events"
           python3 - <<'PY'
           import json,re
