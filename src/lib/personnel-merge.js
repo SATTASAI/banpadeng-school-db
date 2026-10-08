@@ -2,15 +2,19 @@
 const CONFIRMED_NAMES = [
   'จิราพร สุขวงศ์', 'ประทุม ทองมี', 'ปิยลักษณ์ เอมรื่น', 'รพีภรณ์ สร้อยดอกไม้',
   'ราชาวดี สังข์ทอง', 'วรรณมาศ จันทร์ชัง',
+  // 8 ต.ค. 2569: ผู้ดูแลระบบยืนยันให้รวม (สมัครเองพิมพ์นามสกุลผิด / มี 2 บัญชี — ผู้ดูแลระบบกับครู)
+  'นางสาวผกาแก้ว จงเจริญ', 'นายศตวรรต อิ่มเจริญ',
 ];
 export function personnelIdentity(value) {
   const cleaned = String(value || '').normalize('NFC').replace(/[\u200b-\u200f\u2060\ufeff\s.]+/g, '').toLowerCase();
   const corrected = cleaned.replace(/^นางสานางสาวราชาวดีสังขสังข์ทอง$/, 'ราชาวดีสังข์ทอง')
-    .replace(/^นางสาววรรวรรณมาศจันทร์ชัง$/, 'วรรณมาศจันทร์ชัง');
+    .replace(/^นางสาววรรวรรณมาศจันทร์ชัง$/, 'วรรณมาศจันทร์ชัง')
+    .replace(/^นางสาวผกาแก้วจงจงเจริญ$/, 'ผกาแก้วจงเจริญ');
   return corrected.replace(/^(?:ว่าที่ร้อยตรีหญิง|ว่าที่รตหญิง|ว่าที่ร้อยตรี|ว่าที่รต|นางสาว|นาง|นาย)/, '');
 }
-export function keepPersonnelSeparate(name) {
-  return personnelIdentity(name) === personnelIdentity('ศตวรรต อิ่มเจริญ');
+// เดิมแยก "ศตวรรต อิ่มเจริญ" ไว้ 2 รายการ — ผู้ดูแลระบบยืนยันให้รวมแล้ว (8 ต.ค. 2569) จึงไม่มีชื่อที่ต้องแยกอีก
+export function keepPersonnelSeparate() {
+  return false;
 }
 export async function ensurePersonnelAccounts(env) {
   await env.DB.batch([
