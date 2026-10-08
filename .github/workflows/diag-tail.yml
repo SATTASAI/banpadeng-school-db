@@ -1,0 +1,42 @@
+name: diag tail (temporary)
+on:
+  push:
+    branches: [diag-api-hang]
+permissions:
+  contents: read
+jobs:
+  tail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN }}
+    steps:
+      - name: tail while calling API
+        shell: bash
+        run: |
+          set +e
+          (timeout 150 npx -y wrangler@3.114.0 tail banpadeng-school-db --format json > tail.json 2> tail.err) &
+          sleep 25
+          for p in /api/students /api/overview /api/auth/me; do
+            echo "== $p"; curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" --max-time 60 "https://system.banpadengschool.ac.th$p"
+          done
+          wait
+          echo "--- tail stderr"; tail -20 tail.err
+          echo "--- tail events"
+          python3 - <<'PY'
+          import json,re
+          raw=open('tail.json').read()
+          dec=json.JSONDecoder(); i=0; n=0
+          while i < len(raw):
+              while i < len(raw) and raw[i].isspace(): i+=1
+              if i>=len(raw): break
+              try: obj,j=dec.raw_decode(raw,i)
+              except Exception: break
+              i=j; n+=1
+              ev=obj.get('event') or {}; req=ev.get('request') or {}
+              print('EVENT', obj.get('outcome'), req.get('method'), re.sub(r'\?.*','',str(req.get('url'))), 'cpu', obj.get('cpuTime'), 'wall', obj.get('wallTime'))
+              for e in obj.get('exceptions') or []: print('  EXC', e.get('name'), str(e.get('message'))[:500])
+              for l in obj.get('logs') or []: print('  LOG', l.get('level'), str(l.get('message'))[:500])
+          print('events', n)
+          PY
