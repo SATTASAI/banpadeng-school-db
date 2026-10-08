@@ -149,9 +149,15 @@ async function linkExistingAccounts(env) {
     "SELECT id, user_id, full_name FROM personnel_records WHERE status = 'active'"
   ).all();
   const peopleByName = new Map(people.map((person) => [comparableName(person.full_name), person]));
+  // บุคลากรที่ผู้ดูแลลบแล้ว (inactive แต่ยังผูกบัญชีไว้) — ห้ามสร้างทะเบียนใหม่ให้บัญชีนั้นซ้ำ
+  const { results: removed } = await env.DB.prepare(
+    "SELECT user_id FROM personnel_records WHERE status <> 'active' AND user_id IS NOT NULL"
+  ).all();
+  const removedUsers = new Set(removed.map((row) => row.user_id));
   const statements = [];
 
   for (const user of users) {
+    if (removedUsers.has(user.id)) continue;
     const person = peopleByName.get(comparableName(user.full_name));
     if (person && (!person.user_id || person.user_id === user.id)) {
       statements.push(env.DB.prepare(

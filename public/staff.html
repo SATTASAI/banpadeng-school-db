@@ -28,6 +28,10 @@
   .import-summary .skip-item { color:var(--color-danger); font-size:13px; }
   .toolbar { display:flex; justify-content:space-between; align-items:center; }
   .summary-line { margin:16px 0 0; color:var(--color-text-muted); font-size:14px; }
+  .staff-acts { display:flex; gap:14px; align-items:center; flex-shrink:0; }
+  .deleted-staff { margin-top:16px; padding:14px 18px; }
+  .deleted-staff summary { cursor:pointer; font-weight:600; }
+  .deleted-note { color:var(--color-text-muted); font-size:13px; margin:8px 0 4px; }
 </style>
 </head>
 <body>
@@ -53,6 +57,11 @@
     <div class="error-box" id="errorBox"></div>
     <div class="summary-line" id="personnelSummary">กำลังโหลดทะเบียนบุคลากร...</div>
     <div class="panel staff-panel" id="staffPanel"></div>
+    <details class="panel deleted-staff" id="deletedPanel" hidden>
+      <summary>บุคลากรที่ลบแล้ว <span id="deletedCount"></span></summary>
+      <p class="deleted-note">ลบแล้วจะไม่แสดงในทะเบียนและตัวเลือกต่าง ๆ แต่ประวัติเดิม (ตารางสอน การลา สอนแทน) ยังอยู่ — กู้คืนได้ทุกเมื่อ</p>
+      <div id="deletedList"></div>
+    </details>
   </div>
 </div>
 
@@ -190,7 +199,10 @@
               <div class="staff-name">${esc(s.full_name)} ${s.role ? `<span class="role-chip">${esc(ROLE_LABELS[s.role] || s.role)}</span>` : ""}</div>
               <div class="staff-sub">${esc(details || "ยังไม่มีข้อมูลเพิ่มเติม")}</div>
             </div>
+            <div class="staff-acts">
             ${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
+            ${currentUser.role === "superadmin" ? `<button class="icon-btn" data-delete="${s.id}" style="background:none; border:none; color:var(--color-danger); cursor:pointer; text-decoration:underline; font-size:13px;">ลบ</button>` : ""}
+            </div>
           </div>`;
       })
       .join("");
@@ -200,6 +212,9 @@
         const s = staff.find((x) => x.id == btn.getAttribute("data-edit"));
         openModal(s);
       });
+    });
+    panel.querySelectorAll("[data-delete]").forEach((btn) => {
+      btn.addEventListener("click", () => deleteStaff(staff.find((x) => x.id == btn.getAttribute("data-delete"))));
     });
     if (requestedStaffId) {
       const target = panel.querySelector(`[data-staff-id="${requestedStaffId}"]`);
@@ -223,6 +238,47 @@
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
     }
+  }
+
+  // ---------- ลบ / กู้คืนบุคลากร (เฉพาะผู้ดูแลระบบ) ----------
+  async function deleteStaff(person, confirmed = false) {
+    if (!person) return;
+    if (!confirmed && !confirm(`ลบ "${person.full_name}" ออกจากทะเบียนบุคลากร?\n\nจะไม่แสดงในทะเบียนและตัวเลือกต่าง ๆ และถูกถอดออกจากฝ่ายงาน — ประวัติเดิมยังอยู่ และกู้คืนได้ภายหลัง`)) return;
+    try {
+      const result = await apiRequest(`/api/staff/${person.id}`, { method: "DELETE", body: confirmed ? { confirm: true } : {} });
+      if (result.account_email) alert(`ลบ "${person.full_name}" แล้ว\n\nบัญชีเข้าสู่ระบบ ${result.account_email} ยังใช้งานได้ — ถ้าต้องการปิดบัญชีด้วย ให้ลบที่หน้าจัดการผู้ใช้`);
+      await Promise.all([loadStaff(), loadDeleted()]);
+    } catch (err) {
+      if (err.status === 409 && err.data?.needs_confirm) {
+        if (confirm(`${err.message}\n\nยืนยันลบหรือไม่?`)) return deleteStaff(person, true);
+        return;
+      }
+      alert(err.message);
+    }
+  }
+
+  async function loadDeleted() {
+    const box = document.getElementById("deletedPanel");
+    if (currentUser?.role !== "superadmin") { box.hidden = true; return; }
+    try {
+      const { staff } = await apiRequest("/api/staff/deleted");
+      box.hidden = !staff.length;
+      document.getElementById("deletedCount").textContent = staff.length ? `(${staff.length})` : "";
+      document.getElementById("deletedList").innerHTML = staff.map((p) => `
+        <div class="staff-row">
+          <div>
+            <div class="staff-name">${esc(p.full_name)}</div>
+            <div class="staff-sub">${esc([p.position, `ลบเมื่อ ${String(p.deleted_at || "").slice(0, 10)}`, p.deleted_by_name ? `โดย ${p.deleted_by_name}` : ""].filter(Boolean).join(" · "))}</div>
+          </div>
+          <button class="btn btn-ghost" style="width:auto; padding:6px 12px;" data-restore="${p.id}">กู้คืน</button>
+        </div>`).join("");
+      box.querySelectorAll("[data-restore]").forEach((btn) => btn.addEventListener("click", async () => {
+        try {
+          await apiRequest(`/api/staff/${btn.dataset.restore}/restore`, { method: "POST", body: {} });
+          await Promise.all([loadStaff(), loadDeleted()]);
+        } catch (err) { alert(err.message); }
+      }));
+    } catch { box.hidden = true; }
   }
 
   function openModal(staffMember) {
@@ -295,6 +351,7 @@
       document.getElementById("templateBtn").style.display = "inline-flex";
     }
     await loadStaff();
+    await loadDeleted();
   })();
 
   // ---------- นำเข้าจาก Excel/CSV ----------

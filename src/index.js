@@ -6,6 +6,7 @@ import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
+import { handleStaffDeletionRoute } from './routes/staff-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
 import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
@@ -4159,6 +4160,8 @@ export default {
       if (guardianMatch && method === "PATCH") return await handleUpdateGuardian(request, env, Number(guardianMatch[1]));
       if (guardianMatch && method === "DELETE") return await handleDeleteGuardian(request, env, Number(guardianMatch[1]));
 
+      const staffDeletionResponse = await handleStaffDeletionRoute(request, env, pathname, method);
+      if (staffDeletionResponse) return staffDeletionResponse;
       if (pathname === "/api/staff" && method === "GET") return await handleListStaff(request, env);
       if (pathname === "/api/staff/import" && method === "POST") return await handleImportStaff(request, env);
       if (pathname === "/api/projects/import" && method === "POST") return await handleImportProjects(request, env);
