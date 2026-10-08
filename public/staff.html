@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ข้อมูลครู/บุคลากร — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .staff-panel { margin-top:20px; }
   .staff-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); }
@@ -49,8 +48,6 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <a class="btn btn-ghost" style="width:auto;" href="/personnel.html">ศูนย์บริหารงานบุคคล</a>
-        <a class="btn btn-ghost" style="width:auto; display:none;" id="templateBtn" href="/templates/teacher-import.xlsx" download="template_teacher_import_banpadeng.xlsx">ดาวน์โหลดแม่แบบข้อมูลครู</a>
-        <button class="btn btn-ghost" style="width:auto; display:none;" id="importBtn">นำเข้าจาก Excel/CSV</button>
       </div>
     </div>
 
@@ -117,40 +114,7 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="importModal" style="display:none;">
-  <div class="modal import-modal">
-    <h2>นำเข้าข้อมูลบุคลากรจาก Excel/CSV</h2>
-    <div class="error-box" id="importErrorBox"></div>
-
-    <div id="importStep1">
-      <p style="color:var(--color-text-muted); font-size:14px;">กรอกชื่อครูและอีเมลเพื่อเพิ่มหรืออัปเดตทะเบียนบุคลากร การนำเข้านี้ไม่สร้างบัญชีเข้าสู่ระบบให้ครู</p>
-      <p><a href="/templates/teacher-import.xlsx" download="template_teacher_import_banpadeng.xlsx">ดาวน์โหลดแม่แบบ Excel สำหรับกรอกข้อมูลครู</a></p>
-      <input type="file" id="importFileInput" accept=".xlsx,.xls,.csv" />
-      <div class="field" id="headerRowField" style="display:none; margin-top:14px;">
-        <label>แถวไหนคือหัวตาราง?</label>
-        <select class="plain" id="headerRowSelect"></select>
-        <p style="color:var(--color-text-muted); font-size:12px; margin-top:4px;">ถ้าไฟล์มีข้อความอื่นอยู่ก่อนหัวตารางจริง เลือกแถวที่ถูกต้องตรงนี้</p>
-      </div>
-    </div>
-
-    <div id="importStep2" style="display:none;">
-      <p style="font-weight:600; margin-top:16px;">ตรวจสอบการจับคู่คอลัมน์</p>
-      <div id="mappingContainer"></div>
-      <p style="font-weight:600; margin-top:16px;">ตัวอย่างข้อมูล (3 แถวแรก)</p>
-      <div class="preview-table-wrap"><table id="previewTable"></table></div>
-    </div>
-
-    <div id="importSummary" class="import-summary" style="display:none;"></div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cancelImportBtn">ปิด</button>
-      <button class="btn btn-primary" id="confirmImportBtn" style="display:none;">ยืนยันนำเข้า</button>
-    </div>
-  </div>
-</div>
-
 <script src="/js/api.js"></script>
-<script src="/js/import.js"></script>
 <script>
   if (window.parent && window.parent !== window) {
     const backLink = document.getElementById("backHomeLink");
@@ -346,172 +310,10 @@
     if (!user) { window.location.href = "/login.html"; return; }
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
-    if (user.is_admin) {
-      document.getElementById("importBtn").style.display = "inline-flex";
-      document.getElementById("templateBtn").style.display = "inline-flex";
-    }
     await loadStaff();
     await loadDeleted();
   })();
 
-  // ---------- นำเข้าจาก Excel/CSV ----------
-  const STAFF_IMPORT_FIELDS = [
-    { key: "full_name", label: "ชื่อ-นามสกุลครู", synonyms: ["ชื่อ-นามสกุลครู", "ชื่อครู", "ชื่อ-นามสกุล", "full_name"] },
-    { key: "email", label: "อีเมล", synonyms: ["อีเมล", "email", "e-mail"] },
-    { key: "personnel_type", label: "ประเภทบุคลากร", synonyms: ["ประเภทบุคลากร", "ประเภท", "personnel_type"] },
-    { key: "position_number", label: "เลขที่ตำแหน่ง", synonyms: ["เลขที่ตำแหน่ง", "position_number"] },
-    { key: "position", label: "ตำแหน่ง", synonyms: ["ตำแหน่ง", "position"] },
-    { key: "academic_rank", label: "วิทยฐานะ/ระดับ", synonyms: ["วิทยฐานะ/ระดับ", "วิทยฐานะ", "ระดับ", "academic_rank"] },
-    { key: "subjects", label: "วิชาที่สอน", synonyms: ["วิชาที่สอน", "วิชา", "subject", "subjects"] },
-    { key: "phone", label: "เบอร์ติดต่อ", synonyms: ["เบอร์ติดต่อ", "เบอร์โทร", "โทรศัพท์", "phone", "tel"] },
-    { key: "homeroom_classroom", label: "ครูประจำชั้น", synonyms: ["ครูประจำชั้น", "ประจำชั้น", "homeroom"] },
-    { key: "departments", label: "ฝ่ายงาน", synonyms: ["ฝ่ายงาน", "ฝ่าย", "departments"] },
-    { key: "responsible_projects", label: "โครงการที่รับผิดชอบ", synonyms: ["โครงการที่รับผิดชอบ", "โครงการ", "responsible_projects"] },
-    { key: "teaching_periods", label: "จำนวนคาบสอนต่อสัปดาห์", synonyms: ["จำนวนคาบสอนต่อสัปดาห์", "จำนวนคาบ", "teaching_periods"] },
-    { key: "appointment_date", label: "วันที่บรรจุ/แต่งตั้ง", synonyms: ["วันที่บรรจุ/แต่งตั้ง", "วันที่บรรจุ", "appointment_date"] },
-    { key: "service_start_date", label: "วันที่เริ่มรับราชการ/เริ่มงาน", synonyms: ["วันที่เริ่มรับราชการ/เริ่มงาน", "วันที่เริ่มงาน", "service_start_date"] },
-    { key: "education_level", label: "วุฒิการศึกษาสูงสุด", synonyms: ["วุฒิการศึกษาสูงสุด", "วุฒิการศึกษา", "education_level"] },
-    { key: "major", label: "วิชาเอก", synonyms: ["วิชาเอก", "major"] },
-    { key: "institution", label: "สถาบันการศึกษา", synonyms: ["สถาบันการศึกษา", "institution"] },
-    { key: "employment_status", label: "สถานะการปฏิบัติงาน", synonyms: ["สถานะการปฏิบัติงาน", "สถานะบุคลากร", "employment_status"] },
-    { key: "retirement_date", label: "วันเกษียณ", synonyms: ["วันเกษียณ", "retirement_date"] },
-    { key: "license_issue_date", label: "วันที่ออกใบประกอบวิชาชีพ", synonyms: ["วันที่ออกใบประกอบวิชาชีพ", "license_issue_date"] },
-    { key: "license_expiry_date", label: "วันหมดอายุใบประกอบวิชาชีพ", synonyms: ["วันหมดอายุใบประกอบวิชาชีพ", "ใบประกอบวิชาชีพ", "license", "licenseexpiry"] },
-  ];
-
-  let importRaw = null;
-  let importHeaderRowIndex = 0;
-  let importParsed = null;
-  let importMapping = null;
-
-  function openImportModal() {
-    importRaw = null;
-    importHeaderRowIndex = 0;
-    importParsed = null;
-    importMapping = null;
-    document.getElementById("importFileInput").value = "";
-    document.getElementById("headerRowField").style.display = "none";
-    document.getElementById("importStep1").style.display = "block";
-    document.getElementById("importStep2").style.display = "none";
-    document.getElementById("importSummary").style.display = "none";
-    document.getElementById("confirmImportBtn").style.display = "none";
-    document.getElementById("importErrorBox").classList.remove("visible");
-    document.getElementById("importModal").style.display = "flex";
-  }
-
-  document.getElementById("importBtn").addEventListener("click", openImportModal);
-  document.getElementById("cancelImportBtn").addEventListener("click", () => {
-    document.getElementById("importModal").style.display = "none";
-  });
-
-  function renderMapping() {
-    const container = document.getElementById("mappingContainer");
-    container.innerHTML = STAFF_IMPORT_FIELDS.map((field) => {
-      const options = importParsed.headers
-        .map((h, i) => `<option value="${i}" ${importMapping[field.key] === i ? "selected" : ""}>${esc(columnOptionLabel(h, i, importParsed.rows))}</option>`)
-        .join("");
-      return `<div class="mapping-row">
-        <label>${esc(field.label)}${["email", "full_name"].includes(field.key) ? " *" : ""}</label>
-        <select class="plain" data-field="${field.key}">
-          <option value="">— ไม่นำเข้า —</option>
-          ${options}
-        </select>
-      </div>`;
-    }).join("");
-
-    container.querySelectorAll("select[data-field]").forEach((sel) => {
-      sel.value = importMapping[sel.getAttribute("data-field")] ?? "";
-      sel.addEventListener("change", () => {
-        const key = sel.getAttribute("data-field");
-        importMapping[key] = sel.value === "" ? null : Number(sel.value);
-        renderPreview();
-      });
-    });
-  }
-
-  function renderPreview() {
-    const table = document.getElementById("previewTable");
-    const sampleRows = buildImportRows(importParsed.rows.slice(0, 3), importMapping, STAFF_IMPORT_FIELDS);
-    const headRow = `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<th>${esc(f.label)}</th>`).join("")}</tr>`;
-    const bodyRows = sampleRows
-      .map((r) => `<tr>${STAFF_IMPORT_FIELDS.map((f) => `<td>${esc(r[f.key] || "")}</td>`).join("")}</tr>`)
-      .join("");
-    table.innerHTML = `<thead>${headRow}</thead><tbody>${bodyRows}</tbody>`;
-  }
-
-  function populateHeaderRowSelect() {
-    const select = document.getElementById("headerRowSelect");
-    const scanCount = Math.min(10, importRaw.length);
-    const opts = [];
-    for (let i = 0; i < scanCount; i++) {
-      const preview = (importRaw[i] || []).filter((c) => String(c || "").trim() !== "").slice(0, 3).join(", ");
-      opts.push(`<option value="${i}" ${i === importHeaderRowIndex ? "selected" : ""}>แถวที่ ${i + 1}: ${esc(preview || "(ว่าง)")}</option>`);
-    }
-    select.innerHTML = opts.join("");
-    document.getElementById("headerRowField").style.display = "block";
-  }
-
-  function applyHeaderRow() {
-    importParsed = extractHeadersAndRows(importRaw, importHeaderRowIndex);
-    importMapping = fuzzyMatchColumns(importParsed.headers, STAFF_IMPORT_FIELDS);
-    renderMapping();
-    renderPreview();
-    document.getElementById("importStep2").style.display = "block";
-    document.getElementById("confirmImportBtn").style.display = "inline-flex";
-  }
-
-  document.getElementById("headerRowSelect").addEventListener("change", (e) => {
-    importHeaderRowIndex = Number(e.target.value);
-    applyHeaderRow();
-  });
-
-  document.getElementById("importFileInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const errorBox = document.getElementById("importErrorBox");
-    errorBox.classList.remove("visible");
-    try {
-      importRaw = await parseSpreadsheetRaw(file);
-      if (importRaw.length === 0) throw new Error("ไม่พบข้อมูลในไฟล์นี้");
-      importHeaderRowIndex = guessHeaderRowIndex(importRaw);
-      populateHeaderRowSelect();
-      applyHeaderRow();
-      if (importParsed.rows.length === 0) throw new Error("ไม่พบแถวข้อมูลหลังหัวตารางที่เลือก ลองเลือกแถวหัวตารางใหม่");
-    } catch (err) {
-      errorBox.textContent = err.message;
-      errorBox.classList.add("visible");
-    }
-  });
-
-  document.getElementById("confirmImportBtn").addEventListener("click", async () => {
-    if (!importParsed) return;
-    if (importMapping.email === null || importMapping.full_name === null) {
-      alert("กรุณาจับคู่คอลัมน์ชื่อครูและอีเมล");
-      return;
-    }
-    const rows = buildImportRows(importParsed.rows, importMapping, STAFF_IMPORT_FIELDS);
-    const btn = document.getElementById("confirmImportBtn");
-    btn.disabled = true;
-    btn.textContent = "กำลังนำเข้า...";
-    try {
-      const result = await apiRequest("/api/staff/import", { method: "POST", body: { rows } });
-      const summary = document.getElementById("importSummary");
-      summary.style.display = "block";
-      summary.innerHTML = `
-        <p>นำเข้าสำเร็จ: เพิ่ม ${Number(result.created || 0)} คน อัปเดต ${Number(result.updated || 0)} คน${result.skipped.length ? `, ข้าม ${result.skipped.length} แถว` : ""}</p>
-        ${result.skipped.map((s) => `<div class="skip-item">แถวที่ ${Number(s.row) + importHeaderRowIndex + 1}: ${esc(s.reason)}</div>`).join("")}
-      `;
-      document.getElementById("importStep1").style.display = "none";
-      document.getElementById("importStep2").style.display = "none";
-      btn.style.display = "none";
-      await loadStaff();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "ยืนยันนำเข้า";
-    }
-  });
 </script>
 </body>
 </html>

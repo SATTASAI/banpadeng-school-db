@@ -1,9 +1,9 @@
 /* Canonical menu destinations. Legacy module pages use these same routes. */
 (function(root){
  'use strict';
- const labels={overview:'ภาพรวม',students:'นักเรียน',staff:'บุคลากร','academic-periods':'ปีการศึกษา',academic:'ฝ่ายวิชาการ',early_childhood:'ฝ่ายปฐมวัย',budget:'ฝ่ายงบประมาณ',personnel:'ฝ่ายบุคคล',general:'ฝ่ายทั่วไป',administration:'ฝ่ายบริหาร',maintenance:'อาคารและแจ้งซ่อม','student-support':'ดูแลนักเรียน',documents:'เอกสาร',reports:'รายงาน',users:'ผู้ใช้และสิทธิ์',security:'สำรองและตรวจสอบ','system-status':'สถานะระบบ','line-settings':'ตั้งค่า LINE','admin-cleanup':'ล้างข้อมูลทดสอบ',tasks:'งานมอบหมาย',leave:'การลา',substitutes:'จัดสอนแทน'};
+ const labels={overview:'ภาพรวม',imports:'นำเข้าข้อมูล',students:'นักเรียน',staff:'บุคลากร','academic-periods':'ปีการศึกษา',academic:'ฝ่ายวิชาการ',early_childhood:'ฝ่ายปฐมวัย',budget:'ฝ่ายงบประมาณ',personnel:'ฝ่ายบุคคล',general:'ฝ่ายทั่วไป',administration:'ฝ่ายบริหาร',maintenance:'อาคารและแจ้งซ่อม','student-support':'ดูแลนักเรียน',documents:'เอกสาร',reports:'รายงาน',users:'ผู้ใช้และสิทธิ์',security:'สำรองและตรวจสอบ','system-status':'สถานะระบบ','line-settings':'ตั้งค่า LINE','admin-cleanup':'ล้างข้อมูลทดสอบ',tasks:'งานมอบหมาย',leave:'การลา',substitutes:'จัดสอนแทน'};
  const directory=dept=>'/department-staff.html?dept='+dept;
- const routes={students:'/students.html',staff:'/staff.html','academic-periods':'/academic-years.html',academic:directory('academic'),early_childhood:directory('early_childhood'),budget:directory('budget'),personnel:directory('personnel'),general:directory('general'),administration:directory('administration'),maintenance:'/maintenance.html','student-support':'/support.html',documents:'/documents.html',reports:'/reports.html',users:'/admin-users.html',security:'/security.html','system-status':'/system-status.html','line-settings':'/line-settings.html','admin-cleanup':'/admin-cleanup.html',tasks:'/tasks.html',leave:'/leave.html',substitutes:'/substitutes.html'};
+ const routes={imports:'/import-center.html',students:'/students.html',staff:'/staff.html','academic-periods':'/academic-years.html',academic:directory('academic'),early_childhood:directory('early_childhood'),budget:directory('budget'),personnel:directory('personnel'),general:directory('general'),administration:directory('administration'),maintenance:'/maintenance.html','student-support':'/support.html',documents:'/documents.html',reports:'/reports.html',users:'/admin-users.html',security:'/security.html','system-status':'/system-status.html','line-settings':'/line-settings.html','admin-cleanup':'/admin-cleanup.html',tasks:'/tasks.html',leave:'/leave.html',substitutes:'/substitutes.html'};
  const workScopes={
   'personnel-duties':{label:'คำสั่งและเวร',area:'personnel',topic:'1,3',contexts:{personnel:['1','3'],staff:['3','5']}},
   'personnel-development':{label:'พัฒนาและผลงาน',area:'personnel',topic:'6,7',contexts:{personnel:['6','7'],staff:['4','7','8']}}
@@ -18,7 +18,13 @@
   budget:[item('คำขอใช้งบ','/budget.html?view=requests'),item('เบิกจ่าย','/budget.html?view=disbursements'),item('โครงการในฝ่าย','/budget.html?view=plans'),item('โครงการฝ่ายอื่น','/budget.html?view=otherProjects'),item('แหล่งเงินและรายรับ','/budget.html?view=income'),item('รายงานการเงิน','/budget.html?view=reports'),item('ประวัติตรวจสอบ','/budget.html?view=audit'),{label:'ตั้งค่าผู้อนุมัติ',url:'/budget.html?view=roles',adminOnly:true},item('พัสดุและครุภัณฑ์','/inventory.html')],
   personnel:[item('ภาพรวมงานบุคคล','/personnel.html'),item('โครงการ','/department.html?dept=personnel'),item('คำสั่งและเวร',scopeUrl('personnel-duties')),item('งานมอบหมาย','/tasks.html'),item('ประเมิน PA','/work-center.html?area=personnel&topic=5'),item('พัฒนาและผลงาน',scopeUrl('personnel-development'))],
   general:[item('โครงการ','/department.html?dept=general'),item('สารบรรณ','/correspondence.html'),item('อาคารและแจ้งซ่อม','/maintenance.html'),item('ยานพาหนะ','/work-center.html?area=general&topic=5'),item('ประชาสัมพันธ์','/work-center.html?area=general&topic=6,7')],
-  documents:[item('เอกสารเบิกจ่าย','/project-documents.html'),item('นำเข้าข้อมูล','/import-center.html')]
+  documents:[item('เอกสารเบิกจ่าย','/project-documents.html')],
+  // งานนำเข้าข้อมูลหลักทั้งหมดอยู่ที่เมนูเดียว (ศูนย์นำเข้าข้อมูล) — นักเรียนนำเข้าที่ระบบรายงานผลการเรียน
+  imports:[item('ทะเบียนครูและบุคลากร','/import-center.html?template=staff'),item('โครงการ','/import-center.html?template=projects'),
+   item('คำขอใช้งบประมาณ','/import-center.html?template=budget_requests'),item('แหล่งเงินและรายรับ','/import-center.html?template=budget_income'),
+   item('พัสดุและครุภัณฑ์','/import-center.html?template=inventory'),item('อาคารและสถานที่','/import-center.html?template=facilities'),
+   item('ดูแลช่วยเหลือนักเรียน','/import-center.html?template=support'),
+   {label:'นักเรียน (ระบบผลการเรียน)',url:'https://grades.banpadengschool.ac.th/admin.html#import',external:true}]
  };
  const parents={maintenance:'general',tasks:'personnel'};
  function canonicalUrl(url){const u=new URL(url,'https://school.invalid');if(u.pathname==='/modules.html'||u.pathname==='/modules'){const route=routes[u.searchParams.get('module')];if(route)return route;}if(u.pathname==='/work-center.html'){const scope=workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic'));if(scope){const target=new URL(scopeUrl(scope),'https://school.invalid');for(const [key,value] of u.searchParams)if(!target.searchParams.has(key))target.searchParams.set(key,value);return target.pathname+'?'+target.searchParams.toString()+u.hash;}}return url;}
@@ -26,7 +32,7 @@
   const u=new URL(url||routes[key]||'/','https://school.invalid'),path=u.pathname.replace(/\.html$/,'');
   if(path==='/department'||path==='/department-staff'){const dept=u.searchParams.get('dept');if(routes[dept])return dept;}
   if(path==='/work-center'){if(workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic')))return 'personnel';const area=u.searchParams.get('area');if(routes[area])return area;}
-  const owners={'/maintenance':'general','/tasks':'personnel','/leave':'leave','/project-documents':'documents','/import-center':'documents','/inventory':'budget','/school-bank':'budget','/budget':'budget','/correspondence':'general','/timetable':'academic','/substitutes':'substitutes','/learner-analysis':'students','/personnel':'personnel'};
+  const owners={'/maintenance':'general','/tasks':'personnel','/leave':'leave','/project-documents':'documents','/import-center':'imports','/inventory':'budget','/school-bank':'budget','/budget':'budget','/correspondence':'general','/timetable':'academic','/substitutes':'substitutes','/learner-analysis':'students','/personnel':'personnel'};
   if(owners[path])return owners[path];
   return Object.entries(routes).find(([,route])=>new URL(route,'https://school.invalid').pathname.replace(/\.html$/,'')===path)?.[0]||parents[key]||key;
  }
