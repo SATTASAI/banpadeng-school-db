@@ -16,16 +16,10 @@ jobs:
         shell: bash
         run: |
           set +e
-                    {
-          for p in /api/students /api/students /api/students /api/staff /api/staff /api/auth/me; do
-            echo "== $p $(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 60 "https://system.banpadengschool.ac.th$p")"
-          done
-          for i in 1 2 3; do echo "== grades /api/me $(curl -s -o /dev/null -w "%{http_code} %{time_total}s" --max-time 60 https://grades.banpadengschool.ac.th/api/me)"; done
-          echo "== colo $(curl -s https://system.banpadengschool.ac.th/cdn-cgi/trace | grep colo)"
-          wait
-          true
-          echo "--- tail events"
-          python3 - <<'PY'
+          timeout 100 npx -y wrangler@3.112.0 tail banpadeng-school-db --format json > tail.json 2> tail.err
+          {
+          echo "--- stderr"; grep -v "npm warn" tail.err | tail -8
+          python3 - <<'PY2'
           import json,re
           raw=open('tail.json').read()
           dec=json.JSONDecoder(); i=0; n=0
@@ -35,15 +29,14 @@ jobs:
               try: obj,j=dec.raw_decode(raw,i)
               except Exception: break
               i=j; n+=1
-              ev=obj.get('event') or {}; req=ev.get('request') or {}
-              print('EVENT', obj.get('outcome'), req.get('method'), re.sub(r'\?.*','',str(req.get('url'))), 'cpu', obj.get('cpuTime'), 'wall', obj.get('wallTime'))
-              for e in obj.get('exceptions') or []: print('  EXC', e.get('name'), str(e.get('message'))[:500])
-              for l in obj.get('logs') or []: print('  LOG', l.get('level'), str(l.get('message'))[:500])
+              ev=obj.get('event') or {}; req=ev.get('request') or {}; resp=ev.get('response') or {}
+              print('EV', obj.get('outcome'), req.get('method'), re.sub(r'\?.*','',str(req.get('url'))).replace('https://system.banpadengschool.ac.th',''), resp.get('status'), 'wall', obj.get('wallTime'))
+              for e in obj.get('exceptions') or []: print('  EXC', e.get('name'), str(e.get('message'))[:400])
+              for l in obj.get('logs') or []: print('  LOG', l.get('level'), str(l.get('message'))[:400])
           print('events', n)
-          PY
+          PY2
           } > out.txt 2>&1
           python3 -c "
-          import sys
           L=open('out.txt').read().splitlines()
           for k in range(0,len(L),25):
               print('::warning title=part'+str(k//25)+'::'+'%0A'.join(x.replace('%','%25') for x in L[k:k+25]))
