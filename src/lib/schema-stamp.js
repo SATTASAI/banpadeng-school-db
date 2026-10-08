@@ -1,13 +1,18 @@
 // ตั้งค่าโครงสร้างฐานข้อมูล (สร้างตาราง/trigger/index) เพียงครั้งเดียวต่อการ deploy
 // เดิมทุก instance ใหม่ของ Worker ต้องรันคำสั่งตั้งค่า ~140 คำสั่งก่อนตอบ API แรก — แต่ละคำสั่งวิ่งไปฐานข้อมูลที่สิงคโปร์
 // และหลาย instance แย่งล็อกกัน ทำให้คำขอแรกช้า 20–25 วินาที (หน้าเว็บเหมือนโหลดไม่ขึ้น)
-// ตอนนี้: instance แรกของ deploy ใหม่ตั้งค่าแล้วบันทึกรหัสเวอร์ชันไว้ instance ต่อไปเช็ก 1 คำสั่งแล้วข้าม
+// ตอนนี้: ตั้งค่าครั้งเดียวต่อป้ายเวอร์ชัน (REGISTRY_SCHEMA) แล้วบันทึกไว้ instance ต่อไปเช็ก 1 คำสั่งแล้วข้าม
 // ไม่มี binding CF_VERSION_METADATA (เช่น ตอนทดสอบ) → ตั้งค่าทุกครั้งเหมือนเดิม
 const KEY = "registry_schema_version";
 let current;
 
+// ป้ายเวอร์ชันโครงสร้างฐานข้อมูล: เปลี่ยนค่านี้ทุกครั้งที่แก้คำสั่งตั้งค่าโครงสร้าง (ensure*) เพื่อให้รันใหม่ 1 รอบ
+// (เดิมใช้รหัส deploy — ทุก deploy ต้องตั้งค่าใหม่ และถ้ามีคนเปิดหลายหน้าพร้อมกัน ทุก instance ตั้งค่าซ้ำพร้อมกันจนฐานข้อมูลหนัก)
+export const REGISTRY_SCHEMA = "registry-2026-10-08a";
+
 export function deployVersion(env) {
-  return env?.CF_VERSION_METADATA?.id || null;
+  // ไม่มี binding เวอร์ชัน (ตอนทดสอบ) → ตั้งค่าทุกครั้งเหมือนเดิม
+  return env?.CF_VERSION_METADATA ? REGISTRY_SCHEMA : null;
 }
 
 export function schemaIsCurrent(env) {

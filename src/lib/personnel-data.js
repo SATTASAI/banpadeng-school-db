@@ -156,8 +156,11 @@ async function linkExistingAccounts(env) {
   const removedUsers = new Set(removed.map((row) => row.user_id));
   const statements = [];
 
+  // บัญชีที่ผูกกับทะเบียนบุคลากรอยู่แล้ว ไม่ต้องจับคู่ซ้ำ (ชื่อซ้ำ/สะกดต่างกันที่รอรวม ทำให้ผูกบัญชีเดียวซ้ำ 2 รายการ → user_id ชนกัน)
+  const linkedUsers = new Set(people.filter((person) => person.user_id).map((person) => person.user_id));
+
   for (const user of users) {
-    if (removedUsers.has(user.id)) continue;
+    if (removedUsers.has(user.id) || linkedUsers.has(user.id)) continue;
     const person = peopleByName.get(comparableName(user.full_name));
     if (person && (!person.user_id || person.user_id === user.id)) {
       statements.push(env.DB.prepare(

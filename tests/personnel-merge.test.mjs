@@ -69,3 +69,13 @@ test('merge confirmed identities (incl. Sattawat and the misspelled Phakakaew) p
  assert.equal((await unrelatedUpdate(new Request('https://school.example/api/staff/'+person.id,{method:'PATCH',body:'{}'}),env,person.id)).status,403);
 
 });
+
+test('บัญชีที่ผูกกับทะเบียนแล้ว ไม่ถูกจับคู่ซ้ำกับรายการชื่อเดียวกันที่รอรวม (เคยทำให้ทุกหน้าโหลดไม่ขึ้น)',async()=>{
+ const env=environment();await ensurePersonnelData(env);
+ env.raw.prepare("INSERT INTO users VALUES(32,'phaka@example.invalid','นางสาวผกาแก้ว จงจงเจริญ','teacher','active',NULL)").run();
+ env.raw.prepare("INSERT INTO personnel_records(user_id,full_name,normalized_name,email,phone,position) VALUES(32,'นางสาวผกาแก้ว จงจงเจริญ','นางสาวผกาแก้วจงจงเจริญ','phaka@example.invalid','0833152563','ครูชำนาการ')").run();
+ const fresh={raw:env.raw,DB:{prepare:env.DB.prepare,batch:env.DB.batch}};
+ await ensurePersonnelData(fresh);
+ const active=env.raw.prepare("SELECT * FROM personnel_records WHERE status='active'").all().filter(p=>personnelIdentity(p.full_name)===personnelIdentity('ผกาแก้ว จงเจริญ'));
+ assert.equal(active.length,1);assert.equal(active[0].user_id,32);assert.ok(active[0].license_expiry_date);assert.equal(active[0].phone,'0833152563');
+});
