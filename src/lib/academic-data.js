@@ -1,3 +1,4 @@
+import { schemaIsCurrent } from "./schema-stamp.js";
 const PERIOD_TABLES = ["tasks", "projects", "work_topics", "leave_requests"];
 
 let initializationPromise;
@@ -231,6 +232,7 @@ async function backfillCurrentPeriod(db) {
 }
 
 export async function ensureAcademicData(env) {
+  if (await schemaIsCurrent(env)) return;
   if (!initializationPromise) {
     initializationPromise = (async () => {
       await createCoreTables(env.DB);

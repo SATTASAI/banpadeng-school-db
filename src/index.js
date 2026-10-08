@@ -7,6 +7,7 @@ import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
+import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
 import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
 import {
   generateSalt,
@@ -342,6 +343,7 @@ async function ensureWorkRecordSchema(env) {
 
 async function ensureExtendedSchema(env) {
   if (extendedSchemaReady) return;
+  if (await schemaIsCurrent(env)) { extendedSchemaReady = true; return; }
   await ensureUserDeletionSchema(env);
   await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS student_support_cases (
@@ -4065,6 +4067,7 @@ export default {
       if (pathname.startsWith("/api/")) {
         await ensureAcademicData(env);
         await ensureExtendedSchema(env);
+        await markSchemaCurrent(env);
       }
 
       const publicMaintenanceImageMatch = pathname.match(/^\/api\/public\/maintenance-image\/(\d+)$/);
