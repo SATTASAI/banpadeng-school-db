@@ -18,6 +18,7 @@ jobs:
           set +e
           (timeout 150 npx -y wrangler@3.114.0 tail banpadeng-school-db --format json > tail.json 2> tail.err) &
           sleep 25
+          {
           for p in /api/students /api/overview /api/auth/me; do
             echo "== $p"; curl -s -o /dev/null -w "%{http_code} %{time_total}s\n" --max-time 60 "https://system.banpadengschool.ac.th$p"
           done
@@ -40,3 +41,10 @@ jobs:
               for l in obj.get('logs') or []: print('  LOG', l.get('level'), str(l.get('message'))[:500])
           print('events', n)
           PY
+          } > out.txt 2>&1
+          python3 -c "
+          import sys
+          L=open('out.txt').read().splitlines()
+          for k in range(0,len(L),25):
+              print('::warning title=part'+str(k//25)+'::'+'%0A'.join(x.replace('%','%25') for x in L[k:k+25]))
+          "
