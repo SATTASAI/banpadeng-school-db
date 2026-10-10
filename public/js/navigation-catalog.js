@@ -24,6 +24,8 @@
    item('คำขอใช้งบประมาณ','/import-center.html?template=budget_requests'),item('แหล่งเงินและรายรับ','/import-center.html?template=budget_income'),
    item('พัสดุและครุภัณฑ์','/import-center.html?template=inventory'),item('อาคารและสถานที่','/import-center.html?template=facilities'),
    item('ดูแลช่วยเหลือนักเรียน','/import-center.html?template=support'),
+   item('ประกันอุบัติเหตุ (Excel)','/import-center.html?template=insurance'),item('ประกันอุบัติเหตุ — กรอกทั้งห้อง','/import-center.html?template=insurance_room'),
+   item('ประกันอุบัติเหตุ — กรอกรายคน','/import-center.html?template=insurance_person'),
    {label:'นักเรียน (ระบบผลการเรียน)',url:'https://grades.banpadengschool.ac.th/admin.html#import',external:true}]
  };
  const parents={maintenance:'general',tasks:'personnel'};

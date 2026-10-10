@@ -13,14 +13,14 @@
   function style() {
     if (styled) return; styled = true;
     const s = document.createElement('style');
-    s.textContent = `.ins-modal{max-width:980px}.ins-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.ins-grid label{display:block;font-size:12px;color:var(--color-text-muted);margin-bottom:4px}.ins-grid input,.ins-grid select,.ins-grid textarea,.ins-table input,.ins-table select{width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:8px;font-family:var(--font-body);background:var(--color-surface);color:var(--color-text)}.ins-wide{grid-column:1/-1}.ins-box{padding:14px;border:1px solid var(--color-border);border-radius:var(--radius-md,12px);background:var(--color-bg);margin:12px 0}.ins-box h3{margin:0 0 10px;font-size:15px;color:var(--color-primary)}.ins-quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ins-quick .btn{width:auto;padding:7px 12px;font-size:13px}.ins-table-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:10px;max-height:46vh}.ins-table{width:100%;border-collapse:collapse;min-width:720px}.ins-table th,.ins-table td{padding:6px 8px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}.ins-table th{position:sticky;top:0;background:var(--color-surface);z-index:1}.ins-table tr.ins-yes td:first-child{box-shadow:inset 3px 0 0 #2e9d6a}.ins-table tr.ins-no td:first-child{box-shadow:inset 3px 0 0 #c4505f}.ins-summary{color:var(--color-text-muted);font-size:13px;margin:8px 0}.ins-chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}.ins-chip.yes{background:rgba(46,157,106,.13);color:#1f7a50}.ins-chip.no{background:rgba(196,80,95,.12);color:#a33a49}.ins-chip.none{background:var(--color-surface-2,#eef2f7);color:var(--color-text-muted)}.ins-years{display:grid;gap:8px}.ins-year{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.ins-year .meta{font-size:13px;color:var(--color-text-muted)}@media(max-width:700px){.ins-grid{grid-template-columns:1fr}}`;
+    s.textContent = `.ins-backdrop{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;z-index:60;overflow-y:auto;background:rgba(21,35,50,.32)}.ins-modal{width:100%;max-width:980px;max-height:92vh;overflow-y:auto;padding:24px;background:var(--color-surface,#fff);border-radius:20px;box-shadow:0 20px 60px rgba(20,40,70,.22)}.ins-modal h2{margin:0 0 12px}.ins-modal .modal-actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}.ins-modal .modal-actions .btn{width:auto}.ins-pick-list{display:grid;gap:6px;margin-top:10px;max-height:52vh;overflow:auto}.ins-pick{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface);cursor:pointer;text-align:left;font:inherit;color:inherit;width:100%}.ins-pick:hover{border-color:#70afe3;background:#f2f9ff}.ins-pick small{color:var(--color-text-muted)}.ins-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.ins-grid label{display:block;font-size:12px;color:var(--color-text-muted);margin-bottom:4px}.ins-grid input,.ins-grid select,.ins-grid textarea,.ins-table input,.ins-table select{width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:8px;font-family:var(--font-body);background:var(--color-surface);color:var(--color-text)}.ins-wide{grid-column:1/-1}.ins-box{padding:14px;border:1px solid var(--color-border);border-radius:var(--radius-md,12px);background:var(--color-bg);margin:12px 0}.ins-box h3{margin:0 0 10px;font-size:15px;color:var(--color-primary)}.ins-quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ins-quick .btn{width:auto;padding:7px 12px;font-size:13px}.ins-table-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:10px;max-height:46vh}.ins-table{width:100%;border-collapse:collapse;min-width:720px}.ins-table th,.ins-table td{padding:6px 8px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}.ins-table th{position:sticky;top:0;background:var(--color-surface);z-index:1}.ins-table tr.ins-yes td:first-child{box-shadow:inset 3px 0 0 #2e9d6a}.ins-table tr.ins-no td:first-child{box-shadow:inset 3px 0 0 #c4505f}.ins-summary{color:var(--color-text-muted);font-size:13px;margin:8px 0}.ins-chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}.ins-chip.yes{background:rgba(46,157,106,.13);color:#1f7a50}.ins-chip.no{background:rgba(196,80,95,.12);color:#a33a49}.ins-chip.none{background:var(--color-surface-2,#eef2f7);color:var(--color-text-muted)}.ins-years{display:grid;gap:8px}.ins-year{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--color-border);border-radius:10px;background:var(--color-surface)}.ins-year .meta{font-size:13px;color:var(--color-text-muted)}@media(max-width:700px){.ins-grid{grid-template-columns:1fr}}`;
     document.head.append(s);
   }
 
   function modal(html) {
     style();
     const backdrop = document.createElement('div');
-    backdrop.className = 'modal-backdrop'; backdrop.style.display = 'flex';
+    backdrop.className = 'modal-backdrop ins-backdrop'; backdrop.style.display = 'flex';
     backdrop.innerHTML = html;
     const previous = document.activeElement;
     const api = { backdrop, $: (sel) => backdrop.querySelector(sel), onEscape: null };
@@ -34,6 +34,7 @@
 
   // ---------- สรุปในหน้าข้อมูลนักเรียน + กรอกรายบุคคล ----------
   async function renderSummary(container, student, onChange) {
+    style();
     const section = document.createElement('section');
     section.className = 'detail-section'; section.id = 'insuranceSection';
     section.innerHTML = '<h3>ประกันอุบัติเหตุ</h3><div class="detail-loading" style="padding:8px 0">กำลังโหลด…</div>';
@@ -46,13 +47,8 @@
       section.innerHTML = `<h3>ประกันอุบัติเหตุ</h3><div class="ins-years">${rows.map((r) => `
         <div class="ins-year"><div><strong>ปีการศึกษา ${esc(r.academic_year)}</strong> <span class="ins-chip ${r._empty ? 'none' : Number(r.insured) ? 'yes' : 'no'}">${status(r._empty ? null : r)}</span>
           ${r._empty ? '' : `<div class="meta">${esc([r.company, r.plan_name, r.policy_no ? 'กรมธรรม์ ' + r.policy_no : '', r.premium != null ? 'เบี้ย ' + money(r.premium) + ' บาท' : '', r.coverage_amount != null ? 'คุ้มครอง ' + money(r.coverage_amount) + ' บาท' : '', r.start_date || r.end_date ? `${thaiDate(r.start_date)} – ${thaiDate(r.end_date)}` : '', r.notes].filter(Boolean).join(' · ') || '-')}</div>`}</div>
-          ${data.can_edit ? `<button type="button" class="btn btn-ghost" style="width:auto;padding:6px 12px;font-size:13px" data-ins-edit="${esc(r.academic_year)}">${r._empty ? 'บันทึกข้อมูล' : 'แก้ไข'}</button>` : ''}
         </div>`).join('')}</div>
-        ${data.can_edit ? '<button type="button" class="btn btn-ghost" style="width:auto;margin-top:8px;font-size:13px" data-ins-edit="">+ บันทึกปีอื่น</button>' : ''}`;
-      section.querySelectorAll('[data-ins-edit]').forEach((btn) => btn.addEventListener('click', () => {
-        const year = btn.dataset.insEdit;
-        openStudent(student, { year: year || data.current_year, record: records.find((r) => String(r.academic_year) === String(year)), askYear: !year, onSaved: () => { section.remove(); renderSummary(container, student, onChange); onChange?.(); } });
-      }));
+        ${data.can_edit ? `<a class="btn btn-ghost" style="width:auto;margin-top:8px;font-size:13px;display:inline-flex" href="/import-center.html?template=insurance_person&student=${encodeURIComponent(student.id)}">บันทึก/แก้ไขที่เมนูนำเข้าข้อมูล</a>` : ''}`;
     } catch (err) {
       section.innerHTML = `<h3>ประกันอุบัติเหตุ</h3><div class="student-cell-muted">${esc(err.message)}</div>`;
     }
@@ -90,6 +86,44 @@
       } catch (err) { showError(m.$('#insErr'), err.message); } finally { button.disabled = false; button.textContent = 'บันทึก'; }
     };
     m.$('#ins-insured').focus();
+  }
+
+  // ---------- เลือกนักเรียนเพื่อกรอกรายคน (หน้า นำเข้าข้อมูล) ----------
+  async function openStudentPicker(students, o = {}) {
+    const m = modal(`<div class="modal ins-modal" style="max-width:640px" role="dialog" aria-modal="true" aria-labelledby="insPickTitle">
+      <h2 id="insPickTitle">ประกันอุบัติเหตุ — กรอกรายคน</h2>
+      <div class="error-box" id="insErr"></div>
+      <input type="search" id="insPickSearch" class="search-input" placeholder="ค้นหาชื่อ เลขประจำตัว หรือห้อง เช่น ป.4/2" autocomplete="off" style="width:100%">
+      <div class="ins-pick-list" id="insPickList"></div>
+      <div class="modal-actions"><button type="button" class="btn btn-ghost" id="insCancel">ปิด</button></div></div>`);
+    m.$('#insCancel').onclick = m.close;
+    let info;
+    try { info = await apiRequest('/api/student-insurance'); } catch (err) { showError(m.$('#insErr'), err.message); return; }
+    const perms = info.permissions || {};
+    const allowed = perms.manage_all ? null : new Set(perms.homerooms || []);
+    const list = students.filter((s) => (!s.status || s.status === 'enrolled') && (!allowed || allowed.has(`${String(s.grade_level ?? '').trim()}|${String(s.classroom ?? '').trim()}`)))
+      .sort((a, b) => compare(a.grade_level, b.grade_level) || compare(a.classroom, b.classroom) || compare(a.full_name, b.full_name));
+    const records = new Map((info.records || []).map((r) => [r.student_id, r]));
+    const pick = async (s) => {
+      try {
+        const d = await apiRequest(`/api/student-insurance/student/${s.id}`);
+        const rec = (d.records || []).find((r) => Number(r.academic_year) === Number(d.current_year));
+        m.close();
+        openStudent(s, { year: d.current_year, record: rec, askYear: true, onSaved: () => o.onSaved?.(s) });
+      } catch (err) { showError(m.$('#insErr'), err.message); }
+    };
+    const render = () => {
+      const q = m.$('#insPickSearch').value.trim().toLowerCase();
+      const found = list.filter((s) => !q || [s.full_name, s.student_code, `${s.grade_level}/${s.classroom}`].join(' ').toLowerCase().includes(q)).slice(0, 60);
+      m.$('#insPickList').innerHTML = found.length ? found.map((s) => { const r = records.get(s.id);
+        return `<button type="button" class="ins-pick" data-id="${s.id}"><span>${esc(s.full_name)}<br><small>${esc([s.student_code, `${s.grade_level || ''}/${s.classroom || ''}`].join(' · '))}</small></span><span class="ins-chip ${r ? (Number(r.insured) ? 'yes' : 'no') : 'none'}">${status(r)}</span></button>`; }).join('')
+        : `<div class="ins-summary">${list.length ? 'ไม่พบนักเรียนที่ค้นหา' : 'ท่านไม่มีนักเรียนที่บันทึกได้ (บันทึกได้เฉพาะผู้ดูแล/เจ้าหน้าที่ และครูประจำชั้นของห้องตนเอง)'}</div>`;
+      m.backdrop.querySelectorAll('[data-id]').forEach((b) => b.onclick = () => pick(list.find((s) => s.id === Number(b.dataset.id))));
+    };
+    m.$('#insPickSearch').addEventListener('input', render);
+    render();
+    const preset = o.studentId && list.find((s) => s.id === Number(o.studentId));
+    if (preset) pick(preset); else m.$('#insPickSearch').focus();
   }
 
   // ---------- กรอกทั้งห้อง ----------
@@ -189,5 +223,5 @@
       return { ...s, insurance_status: r ? (Number(r.insured) ? 'insured' : 'not_insured') : 'none', insurance_company: r?.company ?? '', insurance_plan: r?.plan_name ?? '', insurance_policy: r?.policy_no ?? '', insurance_premium: r?.premium ?? '', insurance_coverage: r?.coverage_amount ?? '', insurance_period: r && (r.start_date || r.end_date) ? `${thaiDate(r.start_date)} – ${thaiDate(r.end_date)}` : '', insurance_notes: r?.notes ?? '' }; });
   }
 
-  root.StudentInsurance = { renderSummary, openStudent, openClassroom, attach, status };
+  root.StudentInsurance = { renderSummary, openStudent, openStudentPicker, openClassroom, attach, status };
 })(typeof window === 'undefined' ? globalThis : window);

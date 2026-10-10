@@ -16,7 +16,7 @@
 <body>
 <main class="app-main import-page">
   <a class="page-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
-  <div class="page-head"><div><h2>ศูนย์แบบฟอร์มนำเข้าข้อมูล</h2><p>ดาวน์โหลด Template Excel กรอกข้อมูล ตรวจสอบ และนำเข้าฐานข้อมูลของโรงเรียน</p></div></div>
+  <div class="page-head"><div><h2>ศูนย์แบบฟอร์มนำเข้าข้อมูล</h2><p>ทุกงานที่นำข้อมูลเข้าระบบอยู่ที่นี่ — นำเข้าจาก Template Excel หรือกรอกบนหน้าเว็บ</p></div></div>
   <section class="catalog" id="catalog"></section>
   <section class="panel workspace" id="workspace">
     <div class="workspace-head"><div><h3 id="workspaceTitle"></h3><p id="workspaceDescription"></p></div><div class="actions"><button class="btn btn-ghost" id="downloadBtn">ดาวน์โหลด Template Excel</button></div></div>
@@ -27,6 +27,7 @@
   </section>
 </main>
 <script src="/js/api.js"></script>
+<script src="/js/student-insurance.js"></script>
 <script>
 const FIELD=(key,label,required=false,example="",options=[])=>({key,label,required,example,options});
 const TEMPLATES={
@@ -39,12 +40,29 @@ const TEMPLATES={
   insurance:{title:"ประกันอุบัติเหตุนักเรียน",description:"การทำประกันอุบัติเหตุรายปีการศึกษา อ้างอิงเลขประจำตัวนักเรียน — นำเข้าซ้ำจะอัปเดตข้อมูลปีเดียวกัน",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("academic_year","ปีการศึกษา (พ.ศ.)",false,"2569"),FIELD("insured","การทำประกัน",true,"ทำ",["ทำ","ไม่ทำ"]),FIELD("company","บริษัทประกัน",false,"บริษัท ตัวอย่างประกันภัย จำกัด"),FIELD("plan_name","แผน/ประเภทความคุ้มครอง",false,"อุบัติเหตุ 24 ชม."),FIELD("policy_no","เลขกรมธรรม์/เลขที่บัตร",false,"PA-0001"),FIELD("premium","เบี้ยประกัน (บาท)",false,250),FIELD("coverage_amount","วงเงินคุ้มครอง (บาท)",false,100000),FIELD("start_date","วันเริ่มคุ้มครอง",false,"2026-05-16"),FIELD("end_date","วันสิ้นสุดคุ้มครอง",false,"2027-05-15"),FIELD("notes","หมายเหตุ")],endpoint:"insurance"},
   support:{title:"ระบบดูแลช่วยเหลือนักเรียน",description:"คัดกรอง เยี่ยมบ้าน ทุน กลุ่มเสี่ยง พฤติกรรม การช่วยเหลือ และส่งต่อ",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("case_type","ประเภทข้อมูล",true,"screening",["screening","home_visit","scholarship","risk","behavior","assistance","referral"]),FIELD("risk_level","ระดับความเสี่ยง",false,"normal",["normal","watch","high","urgent"]),FIELD("summary","สรุปข้อมูล",true,"ผลการคัดกรอง"),FIELD("action_taken","การช่วยเหลือ/การดำเนินการ"),FIELD("follow_up_date","วันติดตาม",false,"2026-06-30"),FIELD("status","สถานะ",false,"open",["open","monitoring","closed"]),FIELD("referred_to","ส่งต่อ/ประสานไปยัง")],endpoint:"support"}
 };
+// งานกรอกข้อมูลบนหน้าเว็บ (ไม่ต้องใช้ไฟล์ Excel) — ทุกอย่างที่นำข้อมูลเข้าระบบอยู่ที่หน้านี้
+const FORMS={
+  insurance_room:{title:"ประกันอุบัติเหตุ — กรอกทั้งห้อง",description:"เลือกปี ชั้น ห้อง ใส่ข้อมูลที่เหมือนกันครั้งเดียว แล้วกำหนดทำ/ไม่ทำประกันรายคนในตาราง"},
+  insurance_person:{title:"ประกันอุบัติเหตุ — กรอกรายคน",description:"ค้นหานักเรียนทีละคน บันทึกหรือแก้ไขบริษัท เลขกรมธรรม์ เบี้ย และวันคุ้มครอง"}
+};
+let studentCache=null;
+async function loadStudentsForForms(){if(!studentCache){const data=await apiRequest("/api/students");studentCache=data.students||[]}return studentCache}
+async function openForm(key,params=new URLSearchParams()){
+  document.querySelectorAll("[data-template],[data-form]").forEach(x=>x.classList.toggle("active",x.dataset.form===key));
+  $("workspace").classList.remove("open");selectedKey=null;
+  history.replaceState(null,"",`?template=${encodeURIComponent(key)}`);
+  try{
+    const students=await loadStudentsForForms();
+    if(key==="insurance_room")StudentInsurance.openClassroom(students);
+    else StudentInsurance.openStudentPicker(students,{studentId:params.get("student")});
+  }catch(e){alert(e.message)}
+}
 const $=id=>document.getElementById(id);const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 let selectedKey=null,parsedRows=[],checkedRows=[];
 function insuredValue(v){const t=String(v??"").trim().toLowerCase();if(["1","y","yes","true","มี","ทำ","ทำประกัน","ทำแล้ว","ซื้อ","✓","/","x","ใช่"].includes(t))return 1;if(["0","n","no","false","ไม่มี","ไม่ทำ","ไม่ทำประกัน","ไม่ซื้อ","ไม่","-"].includes(t))return 0;return null}
 function normalize(v){return String(v??"").trim().toLocaleLowerCase("th").replace(/[\s_\-–—./()]+/g,"")}
-function renderCatalog(){$("catalog").innerHTML=Object.entries(TEMPLATES).map(([key,t])=>`<article class="template-card" data-template="${key}"><span class="template-type">EXCEL → DATABASE</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p></article>`).join("")+`<a class="template-card" href="https://grades.banpadengschool.ac.th/admin.html#import" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="template-type">ระบบรายงานผลการเรียน ↗</span><h3>ทะเบียนนักเรียน</h3><p>เพิ่ม/ปรับรายชื่อ ห้องเรียน ย้ายเข้า-ออก นำเข้าที่ระบบรายงานผลการเรียนที่เดียว แล้วข้อมูลจะมาที่ระบบนี้เอง</p></a>`;document.querySelectorAll("[data-template]").forEach(card=>card.onclick=()=>selectTemplate(card.dataset.template))}
-function selectTemplate(key){selectedKey=key;parsedRows=[];checkedRows=[];document.querySelectorAll("[data-template]").forEach(x=>x.classList.toggle("active",x.dataset.template===key));const t=TEMPLATES[key];$("workspaceTitle").textContent=t.title;$("workspaceDescription").textContent=t.description;$("workspace").classList.add("open");$("fileInput").value="";resetPreview();history.replaceState(null,"",`?template=${encodeURIComponent(key)}`);$("workspace").scrollIntoView({behavior:"smooth",block:"start"})}
+function renderCatalog(){$("catalog").innerHTML=Object.entries(TEMPLATES).map(([key,t])=>`<article class="template-card" data-template="${key}"><span class="template-type">EXCEL → DATABASE</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p></article>`).join("")+Object.entries(FORMS).map(([key,f])=>`<article class="template-card" data-form="${key}" tabindex="0" role="button"><span class="template-type" style="background:#e9f7ef;color:#1f7a50">กรอกบนหน้าเว็บ</span><h3>${esc(f.title)}</h3><p>${esc(f.description)}</p></article>`).join("")+`<a class="template-card" href="https://grades.banpadengschool.ac.th/admin.html#import" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="template-type">ระบบรายงานผลการเรียน ↗</span><h3>ทะเบียนนักเรียน</h3><p>เพิ่ม/ปรับรายชื่อ ห้องเรียน ย้ายเข้า-ออก นำเข้าที่ระบบรายงานผลการเรียนที่เดียว แล้วข้อมูลจะมาที่ระบบนี้เอง</p></a>`;document.querySelectorAll("[data-template]").forEach(card=>card.onclick=()=>selectTemplate(card.dataset.template));document.querySelectorAll("[data-form]").forEach(card=>{card.onclick=()=>openForm(card.dataset.form);card.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openForm(card.dataset.form)}}})}
+function selectTemplate(key){selectedKey=key;parsedRows=[];checkedRows=[];document.querySelectorAll("[data-template],[data-form]").forEach(x=>x.classList.toggle("active",x.dataset.template===key));const t=TEMPLATES[key];$("workspaceTitle").textContent=t.title;$("workspaceDescription").textContent=t.description;$("workspace").classList.add("open");$("fileInput").value="";resetPreview();history.replaceState(null,"",`?template=${encodeURIComponent(key)}`);$("workspace").scrollIntoView({behavior:"smooth",block:"start"})}
 function resetPreview(){$("totalCount").textContent=$("validCount").textContent=$("invalidCount").textContent="0";$("preview").innerHTML='<div class="empty">เลือกไฟล์เพื่อดูตัวอย่างและตรวจสอบข้อมูล</div>';$("importBtn").disabled=true;$("progressBar").style.width="0";$("resultBox").style.display="none"}
 function downloadTemplate(){const t=TEMPLATES[selectedKey];if(!t)return;if(selectedKey==="staff"){const link=document.createElement("a");link.href="/templates/teacher-import.xlsx";link.download="template_teacher_import_banpadeng.xlsx";link.click();return}if(typeof XLSX==="undefined"){showResult("ไม่สามารถโหลดเครื่องมือสร้างไฟล์ Excel กรุณาลองใหม่อีกครั้ง",true);return}const headers=t.fields.map(f=>f.label);const dataSheet=XLSX.utils.aoa_to_sheet([headers]);dataSheet["!cols"]=t.fields.map(f=>({wch:Math.min(32,Math.max(14,f.label.length+5))}));const guide=[["ชื่อคอลัมน์","รหัสระบบ","จำเป็น","รูปแบบ/ค่าที่รองรับ","ตัวอย่าง"],...t.fields.map(f=>[f.label,f.key,f.required?"จำเป็น":"ไม่บังคับ",f.options.length?f.options.join(" / "):f.key.includes("date")||f.key.includes("expiry")?"YYYY-MM-DD":"ข้อความหรือตัวเลขตามหัวข้อ",f.example??""])];const guideSheet=XLSX.utils.aoa_to_sheet(guide);guideSheet["!cols"]=[{wch:30},{wch:28},{wch:12},{wch:54},{wch:35}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,dataSheet,"ข้อมูล");XLSX.utils.book_append_sheet(wb,guideSheet,"คำอธิบาย");XLSX.writeFile(wb,`Template-${selectedKey}-${t.title}.xlsx`)}
 function readFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>{try{const wb=XLSX.read(reader.result,{type:"array",cellDates:false});const sheet=wb.Sheets[wb.SheetNames[0]];resolve(XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:false}))}catch(e){reject(e)}};reader.onerror=()=>reject(new Error("อ่านไฟล์ไม่สำเร็จ"));reader.readAsArrayBuffer(file)})}
@@ -132,7 +150,7 @@ async function importData(){
 }
 function showResult(text,error){const box=$("resultBox");box.textContent=text;box.className=`result${error?" error":""}`;box.style.display="block"}
 $("downloadBtn").onclick=downloadTemplate;$("importBtn").onclick=importData;$("fileInput").onchange=async()=>{const file=$("fileInput").files[0];if(!file)return resetPreview();try{validateRows(await readFile(file))}catch(e){showResult("อ่านไฟล์ไม่สำเร็จ: "+e.message,true)}};
-(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}renderCatalog();const params=new URLSearchParams(location.search),requested=params.get("template");if(TEMPLATES[requested]){selectTemplate(requested);if(params.get("download")==="1")downloadTemplate()}})().catch(e=>showResult(e.message,true));
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}renderCatalog();const params=new URLSearchParams(location.search),requested=params.get("template");if(TEMPLATES[requested]){selectTemplate(requested);if(params.get("download")==="1")downloadTemplate()}else if(FORMS[requested])openForm(requested,params)})().catch(e=>showResult(e.message,true));
 </script>
 </body>
 </html>
