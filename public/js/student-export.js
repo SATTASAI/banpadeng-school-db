@@ -2,7 +2,16 @@
 (function (root) {
   'use strict';
   const statuses = { enrolled: 'กำลังศึกษาอยู่', transferred: 'ย้ายโรงเรียน', graduated: 'จบการศึกษา', withdrawn: 'ออกกลางคัน' };
-  const columns = [['number','ลำดับ'],['student_code','เลขประจำตัว'],['national_id','เลขบัตรประชาชน'],['full_name','ชื่อ–นามสกุล'],['gender','เพศ'],['grade_level','ชั้น'],['classroom','ห้อง'],['status','สถานะ']];
+  const insuranceStatuses = { insured: 'ทำประกัน', not_insured: 'ไม่ทำประกัน', none: 'ยังไม่บันทึก' };
+  const baseColumns = [['number','ลำดับ'],['student_code','เลขประจำตัว'],['national_id','เลขบัตรประชาชน'],['full_name','ชื่อ–นามสกุล'],['gender','เพศ'],['grade_level','ชั้น'],['classroom','ห้อง'],['status','สถานะ']];
+  const insuranceColumns = [['insurance_status','การทำประกันอุบัติเหตุ'],['insurance_company','บริษัทประกัน'],['insurance_plan','แผนความคุ้มครอง'],['insurance_policy','เลขกรมธรรม์'],['insurance_premium','เบี้ยประกัน (บาท)'],['insurance_coverage','วงเงินคุ้มครอง (บาท)'],['insurance_period','ระยะเวลาคุ้มครอง'],['insurance_notes','หมายเหตุประกัน']];
+  const columns = [...baseColumns, ...insuranceColumns];
+  const thaiDate = d => { if(!d) return ''; const x=new Date(d+'T00:00:00'); return Number.isNaN(x.getTime()) ? d : new Intl.DateTimeFormat('th-TH',{day:'numeric',month:'short',year:'numeric'}).format(x); };
+  // ติดข้อมูลประกันของปีการศึกษาที่เลือกเข้ากับรายชื่อ (คนที่ไม่มีข้อมูล = ยังไม่บันทึก)
+  function withInsurance(rows,records,year) {
+    const map=new Map((records||[]).filter(r=>String(r.academic_year)===String(year)).map(r=>[r.student_id,r]));
+    return rows.map(s=>{const r=map.get(s.id);return {...s,insurance_status:r?(Number(r.insured)?'insured':'not_insured'):'none',insurance_company:r?.company??'',insurance_plan:r?.plan_name??'',insurance_policy:r?.policy_no??'',insurance_premium:r?.premium??'',insurance_coverage:r?.coverage_amount??'',insurance_period:r&&(r.start_date||r.end_date)?`${thaiDate(r.start_date)} – ${thaiDate(r.end_date)}`:'',insurance_notes:r?.notes??''};});
+  }
   const compare = (a,b) => String(a ?? '').localeCompare(String(b ?? ''),'th',{numeric:true});
   function gender(value) {
     const v=String(value ?? '').trim().toLowerCase();
@@ -12,7 +21,7 @@
   }
   function select(rows,o={}) {
     const q=String(o.query||'').trim().toLowerCase();
-    const list=rows.filter(s => (!o.grade||String(s.grade_level||'').trim()===o.grade) && (!o.classroom||String(s.classroom||'').trim()===o.classroom) && (!o.gender||gender(s.gender)===o.gender) && (!o.status||s.status===o.status) && (!q||[s.full_name,s.student_code,s.grade_level,s.classroom].join(' ').toLowerCase().includes(q)));
+    const list=rows.filter(s => (!o.grade||String(s.grade_level||'').trim()===o.grade) && (!o.classroom||String(s.classroom||'').trim()===o.classroom) && (!o.gender||gender(s.gender)===o.gender) && (!o.status||s.status===o.status) && (!o.insurance||(o.insurance==='recorded'?(s.insurance_status&&s.insurance_status!=='none'):(s.insurance_status||'none')===o.insurance)) && (!q||[s.full_name,s.student_code,s.grade_level,s.classroom].join(' ').toLowerCase().includes(q)));
     const keys={name:['full_name','student_code'],code:['student_code','full_name'],status:['status','full_name'],grade:['grade_level','classroom','full_name']}[o.sort]||['grade_level','classroom','full_name'];
     return list.sort((a,b) => {
       for(const k of keys) { const d=k==='status' ? Object.keys(statuses).indexOf(a[k])-Object.keys(statuses).indexOf(b[k]) : compare(a[k],b[k]); if(d) return o.direction==='desc'?-d:d; }
@@ -22,10 +31,10 @@
   function groups(rows,key) {
     if(!key) return [['รายชื่อนักเรียน',rows]];
     const map=new Map();
-    for(const s of rows) { const name=key==='gender'?gender(s.gender):key==='classroom'?`${s.grade_level||'ไม่ระบุชั้น'} / ${s.classroom||'ไม่ระบุห้อง'}`:String(s[key]||'ไม่ระบุ'); if(!map.has(name)) map.set(name,[]); map.get(name).push(s); }
+    for(const s of rows) { const name=key==='gender'?gender(s.gender):key==='insurance_status'?insuranceStatuses[s.insurance_status||'none']:key==='classroom'?`${s.grade_level||'ไม่ระบุชั้น'} / ${s.classroom||'ไม่ระบุห้อง'}`:String(s[key]||'ไม่ระบุ'); if(!map.has(name)) map.set(name,[]); map.get(name).push(s); }
     return [...map].sort((a,b)=>compare(a[0],b[0]));
   }
-  function table(rows,keys) { return [keys.map(k=>columns.find(c=>c[0]===k)[1]),...rows.map((s,i)=>keys.map(k=>k==='number'?String(i+1):k==='gender'?gender(s.gender):k==='status'?(statuses[s.status]||s.status||'ไม่ระบุ'):String(s[k]??'')))]; }
+  function table(rows,keys) { return [keys.map(k=>columns.find(c=>c[0]===k)[1]),...rows.map((s,i)=>keys.map(k=>k==='number'?String(i+1):k==='gender'?gender(s.gender):k==='status'?(statuses[s.status]||s.status||'ไม่ระบุ'):k==='insurance_status'?insuranceStatuses[s.insurance_status||'none']:String(s[k]??'')))]; }
   const xml=v=>String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
   function docxFiles(data,keys) {
     const p=(text,bold=false)=>`<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="TH SarabunPSK" w:hAnsi="TH SarabunPSK" w:cs="TH SarabunPSK"/>${bold?'<w:b/>':''}<w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr><w:t xml:space="preserve">${xml(text)}</w:t></w:r></w:p>`;
@@ -67,16 +76,25 @@
       download(blob,name+'.pdf');
     }
   }
-  function open(rows,defaults={}) {
+  function open(sourceRows,defaults={},insurance=null) {
+    const insuranceYears=insurance?[...new Set([insurance.current_year,...(insurance.years||[])].filter(Boolean))].sort((a,b)=>b-a):[];
+    let rows=sourceRows;
     const backdrop=document.createElement('div');backdrop.className='modal-backdrop';backdrop.style.display='flex';
     backdrop.innerHTML='<div class="modal" role="dialog" aria-modal="true" aria-labelledby="exportTitle" style="max-width:760px;max-height:90vh;overflow:auto"><h2 id="exportTitle">ดาวน์โหลดข้อมูลนักเรียน</h2><p>เลือกตัวกรองและรูปแบบไฟล์ จะส่งออกทุกคนที่ตรงเงื่อนไข</p><form><div class="student-filter-grid" id="exportFields"></div><fieldset style="margin:16px 0"><legend>ข้อมูลที่ต้องการ</legend><div id="exportColumns" style="display:flex;gap:14px;flex-wrap:wrap"></div></fieldset><p id="exportCount" aria-live="polite"></p><p id="exportError" role="alert" style="color:#b42318"></p><div class="modal-actions"><button type="button" class="btn btn-ghost" id="exportClose">ยกเลิก</button><button type="submit" class="btn btn-primary" id="exportDownload">ดาวน์โหลด</button></div></form></div>';
     const fields=backdrop.querySelector('#exportFields');
     const options=(values)=>values.map(v=>[v,v]);
     const unique=k=>[...new Set(rows.map(s=>String(s[k]||'').trim()).filter(Boolean))].sort(compare);
-    const configs=[['query','ค้นหา',null],['grade','ชั้น',[['','ทุกชั้น'],...options(unique('grade_level'))]],['classroom','ห้อง',[['','ทุกห้อง'],...options(unique('classroom'))]],['gender','เพศ',[['','ทุกเพศ'],...options(['ชาย','หญิง','อื่นๆ','ไม่ระบุ'])]],['status','สถานะ',[['','ทุกสถานะ'],...Object.entries(statuses)]],['sort','เรียงตาม',[['grade','ชั้น ห้อง และชื่อ'],['name','ชื่อ'],['code','เลขประจำตัว'],['status','สถานะ']]],['direction','ลำดับ',[['asc','น้อยไปมาก / ก–ฮ'],['desc','มากไปน้อย / ฮ–ก']]],['group','แยกรายการ',[['','รวมรายการ'],['grade_level','แยกชั้น'],['classroom','แยกห้อง'],['gender','แยกเพศ']]],['format','รูปแบบไฟล์',[['xlsx','Excel (.xlsx)'],['docx','Word (.docx)'],['pdf','PDF (.pdf)']]]];
+    const configs=[['query','ค้นหา',null],['grade','ชั้น',[['','ทุกชั้น'],...options(unique('grade_level'))]],['classroom','ห้อง',[['','ทุกห้อง'],...options(unique('classroom'))]],['gender','เพศ',[['','ทุกเพศ'],...options(['ชาย','หญิง','อื่นๆ','ไม่ระบุ'])]],['status','สถานะ',[['','ทุกสถานะ'],...Object.entries(statuses)]],['sort','เรียงตาม',[['grade','ชั้น ห้อง และชื่อ'],['name','ชื่อ'],['code','เลขประจำตัว'],['status','สถานะ']]],['direction','ลำดับ',[['asc','น้อยไปมาก / ก–ฮ'],['desc','มากไปน้อย / ฮ–ก']]],...(insurance?[['insurance_year','ปีการศึกษา (ประกัน)',insuranceYears.map(y=>[String(y),String(y)])],['insurance','การทำประกันอุบัติเหตุ',[['','ทุกคน'],['insured','ทำประกัน'],['not_insured','ไม่ทำประกัน'],['recorded','บันทึกแล้ว (ทำ/ไม่ทำ)'],['none','ยังไม่บันทึก']]]]:[]),['group','แยกรายการ',[['','รวมรายการ'],['grade_level','แยกชั้น'],['classroom','แยกห้อง'],['gender','แยกเพศ'],...(insurance?[['insurance_status','แยกตามการทำประกัน']]:[])]],['format','รูปแบบไฟล์',[['xlsx','Excel (.xlsx)'],['docx','Word (.docx)'],['pdf','PDF (.pdf)']]]];
     for(const [key,label,choices] of configs) {const box=document.createElement('div');box.className='filter-field';const l=document.createElement('label');l.textContent=label;l.htmlFor='export-'+key;const input=document.createElement(choices?'select':'input');input.id='export-'+key;input.name=key;input.className='filter-select';if(choices) choices.forEach(([v,t])=>input.add(new Option(t,v)));else input.type='search';if(defaults[key]!=null)input.value=defaults[key];box.append(l,input);fields.append(box);}
-    columns.forEach(([key,label])=>{const l=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.name='column';input.value=key;input.checked=true;l.append(input,document.createTextNode(' '+label));backdrop.querySelector('#exportColumns').append(l);});
-    const form=backdrop.querySelector('form'),read=()=>Object.fromEntries(new FormData(form)),update=()=>{const count=select(rows,read()).length;backdrop.querySelector('#exportCount').textContent=`พบ ${count} คน • Excel แยกเป็นชีต / Word และ PDF แยกเป็นหัวข้อ`;backdrop.querySelector('#exportDownload').disabled=!count||!form.querySelector('[name=column]:checked');};
+    const addColumn=([key,label],checked,box)=>{const l=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.name='column';input.value=key;input.checked=checked;l.append(input,document.createTextNode(' '+label));box.append(l);};
+    baseColumns.forEach(c=>addColumn(c,true,backdrop.querySelector('#exportColumns')));
+    if(insurance){const fs=document.createElement('fieldset');fs.style.margin='0 0 16px';fs.innerHTML='<legend>ข้อมูลประกันอุบัติเหตุ</legend><div id="exportInsuranceColumns" style="display:flex;gap:14px;flex-wrap:wrap"></div>';backdrop.querySelector('#exportColumns').parentElement.after(fs);insuranceColumns.forEach(c=>addColumn(c,false,fs.querySelector('div')));}
+    const form=backdrop.querySelector('form'),read=()=>Object.fromEntries(new FormData(form));
+    const refreshInsurance=()=>{if(insurance)rows=withInsurance(sourceRows,insurance.records,form.elements.insurance_year?.value);};
+    if(insurance&&!defaults.insurance_year)form.elements.insurance_year.value=String(insurance.current_year);
+    if(insurance){form.elements.insurance_year.addEventListener('change',refreshInsurance);form.elements.insurance.addEventListener('change',()=>{const status=form.querySelector('[name=column][value=insurance_status]');if(form.elements.insurance.value&&status)status.checked=true;});}
+    refreshInsurance();
+    const update=()=>{const count=select(rows,read()).length;backdrop.querySelector('#exportCount').textContent=`พบ ${count} คน • Excel แยกเป็นชีต / Word และ PDF แยกเป็นหัวข้อ`;backdrop.querySelector('#exportDownload').disabled=!count||!form.querySelector('[name=column]:checked');};
     const previous=document.activeElement,close=()=>{backdrop.remove();previous?.focus();};
     backdrop.querySelector('#exportClose').onclick=close;
     backdrop.addEventListener('keydown',e=>{if(e.key==='Escape')close();if(e.key==='Tab'){const controls=[...backdrop.querySelectorAll('input,select,button')].filter(c=>!c.disabled),first=controls[0],last=controls.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
@@ -84,5 +102,5 @@
     form.onsubmit=async e=>{e.preventDefault();const button=backdrop.querySelector('#exportDownload'),error=backdrop.querySelector('#exportError');button.disabled=true;button.textContent='กำลังสร้างไฟล์…';error.textContent='';try{const o=read(),keys=[...form.querySelectorAll('[name=column]:checked')].map(c=>c.value);await exportFile(select(rows,o),o,keys);}catch(err){error.textContent=err.message||'สร้างไฟล์ไม่สำเร็จ กรุณาลองอีกครั้ง';}finally{button.textContent='ดาวน์โหลด';update();}};
     document.body.append(backdrop);update();backdrop.querySelector('input').focus();
   }
-  root.StudentExport={open,select,gender,groups,table,docxFiles,pdfDefinition};
+  root.StudentExport={open,select,gender,groups,table,docxFiles,pdfDefinition,withInsurance};
 })(typeof window==='undefined'?globalThis:window);

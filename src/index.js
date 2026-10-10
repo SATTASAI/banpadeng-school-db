@@ -6,6 +6,7 @@ import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
+import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
 import { handleStaffDeletionRoute } from './routes/staff-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
@@ -4140,6 +4141,8 @@ export default {
       if (taskMatch && method === "PATCH") return await handleUpdateTask(request, env, Number(taskMatch[1]));
       if (taskMatch && method === "DELETE") return await handleDeleteTask(request, env, Number(taskMatch[1]));
 
+      const studentInsuranceResponse = await handleStudentInsuranceRoute(request, env, pathname, method);
+      if (studentInsuranceResponse) return studentInsuranceResponse;
       const studentDeletionResponse = await handleStudentDeletionRoute(request, env, pathname, method);
       if (studentDeletionResponse) return studentDeletionResponse;
       if (pathname === "/api/students/export" && method === "GET") return await handleListStudents(request, env, true);

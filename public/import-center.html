@@ -36,10 +36,12 @@ const TEMPLATES={
   budget_income:{title:"แหล่งเงินและรายรับ",description:"เงินอุดหนุน เงินรายได้ เงินบริจาค และแหล่งเงินอื่น",fields:[FIELD("received_date","วันที่รับเงิน",true,"2026-10-01"),FIELD("fiscal_year","ปีงบประมาณ",true,"2570"),FIELD("document_no","เลขที่เอกสาร"),FIELD("source_name","ชื่อแหล่งเงิน",true,"เงินอุดหนุนรายหัว"),FIELD("source_type","ประเภท",true,"subsidy",["subsidy","school_income","donation","other"]),FIELD("amount","จำนวนเงิน",true,100000),FIELD("notes","หมายเหตุ")],endpoint:"budget_income"},
   inventory:{title:"พัสดุและครุภัณฑ์",description:"ทะเบียนวัสดุ ครุภัณฑ์ จำนวนคงเหลือ ราคา สถานที่ และผู้รับผิดชอบ",fields:[FIELD("item_code","รหัสพัสดุ/ครุภัณฑ์",true,"EQ-001"),FIELD("name","ชื่อรายการ",true,"คอมพิวเตอร์"),FIELD("item_type","ประเภท",true,"equipment",["material","equipment"]),FIELD("category","หมวด",false,"คอมพิวเตอร์"),FIELD("unit","หน่วย",false,"เครื่อง"),FIELD("department","ฝ่ายงาน",false,"budget",["academic","early_childhood","budget","personnel","general"]),FIELD("location","สถานที่",false,"ห้องคอมพิวเตอร์"),FIELD("custodian","ผู้รับผิดชอบ",false,"นายตัวอย่าง"),FIELD("opening_quantity","ยอดยกมา",false,1),FIELD("minimum_quantity","จุดสั่งซื้อ",false,0),FIELD("unit_price","ราคาต่อหน่วย",false,15000),FIELD("brand_model","ยี่ห้อ/รุ่น"),FIELD("serial_number","Serial Number"),FIELD("purchase_date","วันที่จัดซื้อ",false,"2026-05-20"),FIELD("fiscal_year","ปีงบประมาณ",false,"2569"),FIELD("budget_source","แหล่งงบประมาณ"),FIELD("vendor","ผู้จำหน่าย"),FIELD("warranty_expiry","วันหมดประกัน",false,"2029-05-20"),FIELD("item_condition","สภาพ",false,"good",["good","fair","damaged","lost"]),FIELD("status","สถานะ",false,"active",["active","repair","disposed","lost"]),FIELD("notes","หมายเหตุ")],endpoint:"inventory"},
   facilities:{title:"อาคาร สถานที่ และห้องเรียน",description:"ข้อมูลสถานที่สำหรับการแจ้งซ่อมและบริหารอาคาร",fields:[FIELD("facility_code","รหัสสถานที่",true,"BLD-A-101"),FIELD("name","ชื่อสถานที่",true,"ห้องเรียน ป.4/1"),FIELD("facility_type","ประเภท",true,"classroom",["building","classroom","office","restroom","utility","grounds","other"]),FIELD("building_name","อาคาร",false,"อาคาร 1"),FIELD("floor","ชั้น",false,"1"),FIELD("location_detail","รายละเอียดตำแหน่ง"),FIELD("responsible_person","ผู้รับผิดชอบ"),FIELD("status","สถานะ",false,"active",["active","maintenance","closed"]),FIELD("notes","หมายเหตุ")],endpoint:"facilities"},
+  insurance:{title:"ประกันอุบัติเหตุนักเรียน",description:"การทำประกันอุบัติเหตุรายปีการศึกษา อ้างอิงเลขประจำตัวนักเรียน — นำเข้าซ้ำจะอัปเดตข้อมูลปีเดียวกัน",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("academic_year","ปีการศึกษา (พ.ศ.)",false,"2569"),FIELD("insured","การทำประกัน",true,"ทำ",["ทำ","ไม่ทำ"]),FIELD("company","บริษัทประกัน",false,"บริษัท ตัวอย่างประกันภัย จำกัด"),FIELD("plan_name","แผน/ประเภทความคุ้มครอง",false,"อุบัติเหตุ 24 ชม."),FIELD("policy_no","เลขกรมธรรม์/เลขที่บัตร",false,"PA-0001"),FIELD("premium","เบี้ยประกัน (บาท)",false,250),FIELD("coverage_amount","วงเงินคุ้มครอง (บาท)",false,100000),FIELD("start_date","วันเริ่มคุ้มครอง",false,"2026-05-16"),FIELD("end_date","วันสิ้นสุดคุ้มครอง",false,"2027-05-15"),FIELD("notes","หมายเหตุ")],endpoint:"insurance"},
   support:{title:"ระบบดูแลช่วยเหลือนักเรียน",description:"คัดกรอง เยี่ยมบ้าน ทุน กลุ่มเสี่ยง พฤติกรรม การช่วยเหลือ และส่งต่อ",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("case_type","ประเภทข้อมูล",true,"screening",["screening","home_visit","scholarship","risk","behavior","assistance","referral"]),FIELD("risk_level","ระดับความเสี่ยง",false,"normal",["normal","watch","high","urgent"]),FIELD("summary","สรุปข้อมูล",true,"ผลการคัดกรอง"),FIELD("action_taken","การช่วยเหลือ/การดำเนินการ"),FIELD("follow_up_date","วันติดตาม",false,"2026-06-30"),FIELD("status","สถานะ",false,"open",["open","monitoring","closed"]),FIELD("referred_to","ส่งต่อ/ประสานไปยัง")],endpoint:"support"}
 };
 const $=id=>document.getElementById(id);const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");
 let selectedKey=null,parsedRows=[],checkedRows=[];
+function insuredValue(v){const t=String(v??"").trim().toLowerCase();if(["1","y","yes","true","มี","ทำ","ทำประกัน","ทำแล้ว","ซื้อ","✓","/","x","ใช่"].includes(t))return 1;if(["0","n","no","false","ไม่มี","ไม่ทำ","ไม่ทำประกัน","ไม่ซื้อ","ไม่","-"].includes(t))return 0;return null}
 function normalize(v){return String(v??"").trim().toLocaleLowerCase("th").replace(/[\s_\-–—./()]+/g,"")}
 function renderCatalog(){$("catalog").innerHTML=Object.entries(TEMPLATES).map(([key,t])=>`<article class="template-card" data-template="${key}"><span class="template-type">EXCEL → DATABASE</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p></article>`).join("")+`<a class="template-card" href="https://grades.banpadengschool.ac.th/admin.html#import" target="_blank" rel="noopener" style="text-decoration:none;color:inherit"><span class="template-type">ระบบรายงานผลการเรียน ↗</span><h3>ทะเบียนนักเรียน</h3><p>เพิ่ม/ปรับรายชื่อ ห้องเรียน ย้ายเข้า-ออก นำเข้าที่ระบบรายงานผลการเรียนที่เดียว แล้วข้อมูลจะมาที่ระบบนี้เอง</p></a>`;document.querySelectorAll("[data-template]").forEach(card=>card.onclick=()=>selectTemplate(card.dataset.template))}
 function selectTemplate(key){selectedKey=key;parsedRows=[];checkedRows=[];document.querySelectorAll("[data-template]").forEach(x=>x.classList.toggle("active",x.dataset.template===key));const t=TEMPLATES[key];$("workspaceTitle").textContent=t.title;$("workspaceDescription").textContent=t.description;$("workspace").classList.add("open");$("fileInput").value="";resetPreview();history.replaceState(null,"",`?template=${encodeURIComponent(key)}`);$("workspace").scrollIntoView({behavior:"smooth",block:"start"})}
@@ -55,7 +57,13 @@ function validateRows(matrix){
     .map(({row,cells})=>{
       const data={};t.fields.forEach((f,i)=>data[f.key]=String(cells[indexes[i]]??"").trim());
       const errors=[];
-      t.fields.forEach(f=>{const v=data[f.key];if(f.required&&!v)errors.push(`ไม่มี ${f.label}`);if(v&&f.options.length&&!f.options.includes(v))errors.push(`${f.label} ต้องเป็น ${f.options.join("/")}`)});
+      t.fields.forEach(f=>{const v=data[f.key];if(f.required&&!v)errors.push(`ไม่มี ${f.label}`);if(v&&f.options.length&&!(selectedKey==="insurance"&&f.key==="insured")&&!f.options.includes(v))errors.push(`${f.label} ต้องเป็น ${f.options.join("/")}`)});
+      if(selectedKey==="insurance"){
+        if(data.insured&&insuredValue(data.insured)===null)errors.push("การทำประกันต้องเป็น ทำ/ไม่ทำ");
+        if(data.academic_year&&!/^\d{4}$/.test(data.academic_year))errors.push("ปีการศึกษาต้องเป็นตัวเลข 4 หลัก เช่น 2569");
+        ["premium","coverage_amount"].forEach(k=>{const n=data[k].replace(/[,\s]/g,"");if(n&&(!Number.isFinite(Number(n))||Number(n)<0))errors.push(`${k==="premium"?"เบี้ยประกัน":"วงเงินคุ้มครอง"}ต้องเป็นตัวเลข`)});
+        const key=`${data.student_code}|${data.academic_year}`;if(seenEmails.has(key))errors.push("เลขประจำตัวและปีซ้ำในไฟล์");seenEmails.add(key);
+      }
       if(selectedKey==="staff"){
         const email=data.email.toLowerCase();
         if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))errors.push("อีเมลไม่ถูกต้อง");
@@ -87,6 +95,13 @@ async function importData(){
       for(let i=0;i<rows.length;i+=50){
         const batch=rows.slice(i,i+50),result=await apiRequest("/api/staff/import",{method:"POST",body:{rows:batch}});
         created+=Number(result.created||0);updated+=Number(result.updated||0);
+        failed.push(...(result.skipped||[]).map(x=>`แถว ${valid[i+Number(x.row)-1]?.row||"?"}: ${x.reason}`));
+        $("progressBar").style.width=`${Math.min(100,(i+batch.length)/rows.length*100)}%`;
+      }
+    }else if(t.endpoint==="insurance"){
+      for(let i=0;i<rows.length;i+=200){
+        const batch=rows.slice(i,i+200),result=await apiRequest("/api/student-insurance/import",{method:"POST",body:{rows:batch}});
+        created+=Number(result.saved||0);
         failed.push(...(result.skipped||[]).map(x=>`แถว ${valid[i+Number(x.row)-1]?.row||"?"}: ${x.reason}`));
         $("progressBar").style.width=`${Math.min(100,(i+batch.length)/rows.length*100)}%`;
       }

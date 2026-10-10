@@ -1036,3 +1036,18 @@ CREATE TABLE IF NOT EXISTS notification_reads (
 CREATE TABLE IF NOT EXISTS admin_cleanup_archive(id TEXT PRIMARY KEY,user_id INTEGER NOT NULL,scope TEXT NOT NULL,reason TEXT NOT NULL,snapshot TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')));
 CREATE TABLE IF NOT EXISTS admin_cleanup_assert(valid INTEGER NOT NULL CHECK(valid=1));
 CREATE TABLE IF NOT EXISTS admin_cleanup_sessions(token TEXT PRIMARY KEY,user_id INTEGER NOT NULL,expires_at INTEGER NOT NULL);
+
+-- ประกันอุบัติเหตุนักเรียน (1 คน 1 รายการต่อปีการศึกษา) — route สร้างตารางนี้เองเมื่อเริ่มใช้งาน
+CREATE TABLE IF NOT EXISTS student_insurance (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  academic_year INTEGER NOT NULL CHECK (academic_year BETWEEN 2500 AND 2700),
+  insured INTEGER NOT NULL DEFAULT 1 CHECK (insured IN (0,1)),
+  company TEXT, policy_no TEXT, plan_name TEXT,
+  premium REAL, coverage_amount REAL,
+  start_date TEXT, end_date TEXT, notes TEXT,
+  updated_by INTEGER,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (student_id, academic_year)
+);
+CREATE INDEX IF NOT EXISTS idx_student_insurance_year ON student_insurance(academic_year, student_id);

@@ -122,6 +122,7 @@
       <div style="display:flex; gap:10px; flex-wrap:wrap;">
         <a class="btn btn-ghost" style="width:auto;" href="/learner-analysis.html">งานวิเคราะห์ผู้เรียนรายบุคคล</a>
         
+        <button class="btn btn-ghost" style="width:auto;" id="insuranceRoomBtn" disabled>ประกันอุบัติเหตุ (กรอกทั้งห้อง)</button>
         <button class="btn btn-ghost" style="width:auto;" id="exportStudentsBtn" disabled>ดาวน์โหลดข้อมูลนักเรียน</button>
         <button class="btn btn-ghost" id="importBtn" style="width:auto;display:none">นำเข้าจาก Excel/CSV</button>
         <button class="btn btn-primary" id="newStudentBtn" style="width:auto;display:none">+ เพิ่มนักเรียน</button>
@@ -130,7 +131,7 @@
     </div>
 
     <p class="grade-owned-note" style="margin:0 0 14px;padding:10px 14px;border-radius:12px;background:var(--color-surface-2, #eef2fb);color:var(--color-text-muted);font-size:14px">
-      ชื่อ เลขประจำตัว วันเกิด เพศ ห้องเรียน สถานะ (ย้ายเข้า/ย้ายออก) และน้ำหนักส่วนสูง แก้ได้ที่<b>ระบบรายงานผลการเรียน</b>ที่เดียว — หน้านี้แก้ได้เฉพาะข้อมูลสุขภาพ ที่อยู่ ผู้ปกครอง และข้อมูลอื่น ๆ
+      ชื่อ เลขประจำตัว วันเกิด เพศ ห้องเรียน สถานะ (ย้ายเข้า/ย้ายออก) และน้ำหนักส่วนสูง แก้ได้ที่<b>ระบบรายงานผลการเรียน</b>ที่เดียว — หน้านี้แก้ได้เฉพาะข้อมูลสุขภาพ ที่อยู่ ผู้ปกครอง ประกันอุบัติเหตุ และข้อมูลอื่น ๆ
     </p>
     <section class="delete-requests" id="deleteRequestsPanel" hidden aria-label="คำขอลบข้อมูลนักเรียนถาวร">
       <div class="delete-requests-head">
@@ -343,6 +344,7 @@
 </div>
 
 <script src="/js/student-export.js"></script>
+<script src="/js/student-insurance.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/import.js"></script>
 <script src="/js/student-import-batches.js"></script>
@@ -567,8 +569,11 @@
     button.disabled = true;
     button.textContent = "กำลังเตรียมข้อมูล…";
     try {
-      const { students } = await apiRequest("/api/students/export");
-      StudentExport.open(students, { query: document.getElementById("searchInput").value, grade: document.getElementById("gradeFilter").value, classroom: document.getElementById("classroomFilter").value, status: document.getElementById("statusFilter").value, sort: document.getElementById("sortSelect").value });
+      const [{ students }, insurance] = await Promise.all([
+        apiRequest("/api/students/export"),
+        apiRequest("/api/student-insurance?all_years=1").catch(() => null),
+      ]);
+      StudentExport.open(students, { query: document.getElementById("searchInput").value, grade: document.getElementById("gradeFilter").value, classroom: document.getElementById("classroomFilter").value, status: document.getElementById("statusFilter").value, sort: document.getElementById("sortSelect").value }, insurance);
     } catch (err) {
       const errorBox = document.getElementById("errorBox");
       errorBox.textContent = err.message;
@@ -579,6 +584,10 @@
     }
   });
 
+  document.getElementById("insuranceRoomBtn").addEventListener("click", () => {
+    StudentInsurance.openClassroom(allStudents, { grade: document.getElementById("gradeFilter").value, classroom: document.getElementById("classroomFilter").value });
+  });
+
   async function loadStudents() {
     const errorBox = document.getElementById("errorBox");
     errorBox.classList.remove("visible");
@@ -586,6 +595,7 @@
       const { students } = await apiRequest("/api/students");
       allStudents = students;
       document.getElementById("exportStudentsBtn").disabled = false;
+      document.getElementById("insuranceRoomBtn").disabled = false;
       populateStudentFilters();
       renderList({ resetPage: true });
     } catch (err) {
@@ -700,6 +710,7 @@
         `มีข้อมูล ${studentCompleteness(student)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง`,
       ].filter(Boolean).join(" · ");
       renderStudentDetails(student);
+      StudentInsurance.renderSummary(content, student);
     } catch (err) {
       content.textContent = "ไม่สามารถโหลดข้อมูลเพิ่มเติมได้";
       errorBox.textContent = err.message;
@@ -717,7 +728,7 @@
   document.getElementById("closeStudentDetailsTopBtn").addEventListener("click", closeStudentDetails);
   document.getElementById("editStudentDetailsBtn").addEventListener("click", () => setStudentDetailsEditMode(true));
   document.getElementById("cancelStudentDetailsEditBtn").addEventListener("click", () => {
-    if (detailStudent) renderStudentDetails(detailStudent);
+    if (detailStudent) { renderStudentDetails(detailStudent); StudentInsurance.renderSummary(document.getElementById("studentDetailsContent"), detailStudent); }
   });
   document.getElementById("saveStudentDetailsBtn").addEventListener("click", async () => {
     if (!detailStudent) return;
@@ -738,6 +749,7 @@
       await apiRequest(`/api/students/${detailStudent.id}`, { method: "PATCH", body });
       Object.assign(detailStudent, body);
       renderStudentDetails(detailStudent);
+      StudentInsurance.renderSummary(document.getElementById("studentDetailsContent"), detailStudent);
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
