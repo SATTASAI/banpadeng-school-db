@@ -85,6 +85,7 @@
     <div class="field">
       <label>วิชาที่สอน</label>
       <input type="text" id="fSubjects" placeholder="เช่น คณิตศาสตร์, วิทยาศาสตร์" />
+      <small id="teachingHint" hidden style="color:#5d6685">วิชาที่สอนและคาบสอนดึงจากฝ่ายวัดผล (ระบบรายงานผลการเรียน) อัตโนมัติ</small>
     </div>
     <div class="field">
       <label>เบอร์ติดต่อ</label>
@@ -264,6 +265,15 @@
     document.getElementById("fDepartments").value = staffMember.departments || "";
     document.getElementById("fProjects").value = staffMember.responsible_projects || "";
     document.getElementById("fPeriods").value = staffMember.teaching_periods ?? "";
+    // วิชาที่สอน/คาบสอนมาจากฝ่ายวัดผล (ระบบรายงานผลการเรียน) — แสดงอย่างเดียว
+    const fromGrade = staffMember.teaching_source === "grade-system";
+    for (const id of ["fSubjects", "fPeriods"]) {
+      const el = document.getElementById(id);
+      el.readOnly = fromGrade;
+      el.title = fromGrade ? "ฝ่ายวัดผลกำหนดวิชาที่สอนในระบบรายงานผลการเรียน — แก้ที่นั่นที่เดียว" : "";
+    }
+    const hint = document.getElementById("teachingHint");
+    if (hint) hint.hidden = !fromGrade;
     document.getElementById("fLicenseIssue").value = staffMember.license_issue_date || "";
     document.getElementById("fLicenseExpiry").value = staffMember.license_expiry_date || "";
     document.getElementById("staffModal").style.display = "flex";

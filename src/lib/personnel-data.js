@@ -135,7 +135,8 @@ async function seedLicenseRows(env) {
   ).bind(LICENSE_IMPORT_KEY, "งานบุคคลรวม69 (1).xlsx", LICENSE_ROWS.length).run();
 }
 
-async function linkExistingAccounts(env) {
+// เรียกซ้ำได้: ผูก/สร้างทะเบียนบุคลากรให้บัญชีที่มีบทบาทแล้ว (เช่น ครูที่ฝ่ายวัดผลเพิ่งมอบหมายวิชา)
+export async function linkExistingAccounts(env) {
   const { results: users } = await env.DB.prepare(
     `SELECT u.id, u.full_name, u.email,
             sp.position, sp.subjects, sp.phone, sp.homeroom_classroom, sp.license_expiry_date

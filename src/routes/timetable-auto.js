@@ -1,5 +1,6 @@
 import {solveTimetable} from '../lib/timetable-solver.js';
 import {jsonResponse} from '../lib/auth.js';
+import {masterIssues} from '../lib/teaching-master-check.js';
 const reply=(data,status=200)=>jsonResponse(data,status,{'Cache-Control':'private, no-store'});
 export async function ensureAutoSchema(env){
  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS timetable_auto_config(academic_term_id INTEGER PRIMARY KEY REFERENCES academic_terms(id),config_json TEXT NOT NULL,updated_by INTEGER NOT NULL REFERENCES users(id),updated_at TEXT NOT NULL DEFAULT(datetime('now')))` ).run();
@@ -21,6 +22,9 @@ export async function handleAuto(request,env,term,user,pathname,method,helpers){
  const roomKey=a=>JSON.stringify([a.grade_level,a.classroom]);
  const known=new Set(setup.classes.map(roomKey)),teachers=new Set(setup.teachers.map(t=>t.id));
  if(config.classes.some(c=>!known.has(roomKey(c)))||config.assignments.some(a=>!teachers.has(a.teacher_id))||config.unavailable.some(a=>!teachers.has(a.teacher_id))||(config.fixed||[]).some(a=>!known.has(roomKey(a))||!teachers.has(a.teacher_id)))return reply({error:'ห้องเรียนหรือครูไม่อยู่ในทะเบียนของภาคเรียนนี้'},400);
+ // ภาระสอนต้องตรงกับที่ฝ่ายวัดผลกำหนด (วิชา ครู จำนวนคาบ) — แถวกิจกรรมที่ไม่ใช่รายวิชาเพิ่มเองได้
+ const issues=masterIssues(config,setup.master);
+ if(issues.length)return reply({error:issues.slice(0,8).join('\n')+(issues.length>8?`\n… อีก ${issues.length-8} รายการ`:''),master_issues:issues},409);
  const chosen=await helpers.plan(env,term.id,'draft')||await helpers.plan(env,term.id,'published');
  const before=chosen?await env.DB.prepare('SELECT revision FROM timetable_plans WHERE id=?').bind(chosen.id).first():null;
  const existing=chosen?(await env.DB.prepare('SELECT * FROM timetable_entries WHERE plan_id=? ORDER BY id').bind(chosen.id).all()).results:[];

@@ -4,7 +4,8 @@ import {handleAuto} from "./timetable-auto.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
-import { ensurePersonnelData } from "../lib/personnel-data.js";
+import { ensurePersonnelData, linkExistingAccounts } from "../lib/personnel-data.js";
+import { teachingMaster, subjectsOfRoom, normalizeSubject } from "../lib/teaching-master.js";
 
 const noStore = { "Cache-Control": "private, no-store" };
 const reply = (data, status=200) => jsonResponse(data,status,noStore);
@@ -78,6 +79,9 @@ async function draft(env,termId,userId){
   return row;
 }
 async function setup(env,term,canManage=false){
+  // ภาระสอน (วิชา × ห้อง × ครู) จากฝ่ายวัดผล — ข้อมูลกลางที่ตารางสอนต้องยึด
+  let master=await teachingMaster(env,{termId:term.id});
+  if(master.unlinked.length){await linkExistingAccounts(env);master=await teachingMaster(env,{termId:term.id});}
   const [classes,teachers,published,draftPlan]=await Promise.all([
     env.DB.prepare(`SELECT grade_level,classroom,COUNT(*) AS students FROM student_enrollments
       WHERE academic_term_id=? AND status='enrolled' AND TRIM(COALESCE(grade_level,''))<>'' AND TRIM(COALESCE(classroom,''))<>''
@@ -87,7 +91,7 @@ async function setup(env,term,canManage=false){
       ORDER BY p.full_name`).all(),
     plan(env,term.id,"published"),plan(env,term.id,"draft")
   ]);
-  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan,can_manage:canManage});
+  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan,can_manage:canManage,master});
 }
 async function entries(env,term,view){
   const chosen=await plan(env,term.id,view);
@@ -109,6 +113,11 @@ async function saveSlot(request,env,term,user){
       WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).bind(teacherId).first()
   ]);
   if(!knownRoom||!teacher)return reply({error:"ไม่พบห้องเรียนหรือครูในทะเบียน กรุณานำเข้าข้อมูลก่อน"},400);
+  // วิชาที่ฝ่ายวัดผลกำหนดครูผู้สอนไว้แล้ว ต้องลงด้วยครูผู้สอนของวิชานั้นเท่านั้น (กิจกรรม เช่น แนะแนว ลูกเสือ ลงได้อิสระ)
+  const master=await teachingMaster(env,{termId:term.id});
+  const course=subjectsOfRoom(master,grade,room).get(normalizeSubject(subject));
+  if(course&&!course.teachers.some(t=>t.personnel_id===teacherId))
+    return reply({error:`วิชา${course.subject} ห้อง ${grade}/${room} ฝ่ายวัดผลกำหนดครูผู้สอนเป็น ${course.teachers.map(t=>t.full_name).join(", ")} — แก้ครูผู้สอนได้ที่ระบบรายงานผลการเรียน`},409);
   const current=await draft(env,term.id,user.id);
   try{
     await env.DB.prepare(`INSERT INTO timetable_entries(plan_id,grade_level,classroom,weekday,period,subject,teacher_id,room_name)

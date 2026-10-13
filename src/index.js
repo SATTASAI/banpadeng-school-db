@@ -46,6 +46,7 @@ import { handleProjectWorkflowRoute, projectWorkflowSnapshots, canAccessBudgetSu
 import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
+import { teachingMaster, loadByPersonnel } from "./lib/teaching-master.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -1400,7 +1401,23 @@ async function handleListStaff(request, env) {
      ORDER BY p.first_name, p.full_name`
   ).bind(user.id).all();
 
-  return jsonResponse({ staff: results });
+  // วิชาที่สอนและคาบ/สัปดาห์มาจากฝ่ายวัดผล (ระบบรายงานผลการเรียน) ของปีการศึกษาที่เปิดใช้ — แก้ที่นั่นที่เดียว
+  const master = await activeTeachingMaster(env);
+  if (master.available) {
+    const load = loadByPersonnel(master);
+    for (const s of results) {
+      const l = load.get(Number(s.id));
+      s.teaching_source = "grade-system";
+      s.subjects = l ? l.subjects.join(", ") : null;
+      s.teaching_periods = l ? l.periods_per_week : null;
+    }
+  }
+  return jsonResponse({ staff: results, teaching_source: master.available ? "grade-system" : "manual" });
+}
+
+async function activeTeachingMaster(env) {
+  const year = await env.DB.prepare("SELECT id FROM academic_years ORDER BY (status = 'active') DESC, year_be DESC LIMIT 1").first().catch(() => null);
+  return year ? teachingMaster(env, { yearId: year.id }) : { available: false, courses: [], unlinked: [] };
 }
 
 // ---------- /api/staff/:id (PATCH) — แก้ไขข้อมูลตำแหน่ง/วิชา/ติดต่อ ----------
@@ -1432,11 +1449,14 @@ async function handleUpdateStaff(request, env, targetId) {
   const personnel_type = body.personnel_type || null;
   const position_number = body.position_number || null;
   const academic_rank = body.academic_rank || null;
-  const subjects = body.subjects || null;
+  // วิชาที่สอน/คาบสอน: ถ้าฝ่ายวัดผลกำหนดภาระสอนแล้ว แก้ที่นี่ไม่ได้ (คงค่าเดิมไว้)
+  const fromGrade = await gradeTeachingActive(env);
+  const keep = fromGrade ? await env.DB.prepare("SELECT subjects, teaching_periods FROM personnel_records WHERE id = ?").bind(targetId).first() : null;
+  const subjects = fromGrade ? keep.subjects : (body.subjects || null);
   const phone = body.phone || null;
   const departments = body.departments || null;
   const responsible_projects = body.responsible_projects || null;
-  const rawPeriods = String(body.teaching_periods ?? "").trim();
+  const rawPeriods = fromGrade ? String(keep.teaching_periods ?? "") : String(body.teaching_periods ?? "").trim();
   const teaching_periods = rawPeriods === "" ? null : Number(rawPeriods);
   if (rawPeriods && (!Number.isInteger(teaching_periods) || teaching_periods < 0 || teaching_periods > 100)) {
     return jsonResponse({ error: "จำนวนคาบต้องเป็นจำนวนเต็ม 0–100" }, 400);
@@ -1479,6 +1499,15 @@ async function handleUpdateStaff(request, env, targetId) {
 
   await writeAuditLog(env, user, "update", "staff", targetId, { fields: Object.keys(body) }, request);
   return jsonResponse({ ok: true });
+}
+
+// ฝ่ายวัดผลกำหนดครูผู้สอนในระบบรายงานผลการเรียนแล้วหรือยัง (ปีการศึกษาที่เปิดใช้) — SQL ล้วน ไม่พึ่งโมดูลอื่น
+async function gradeTeachingActive(env) {
+  const ready = await env.DB.prepare("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name IN ('gr_subjects','gr_courses','gr_course_teachers')").first().catch(() => null);
+  if (!ready || ready.n < 3) return false;
+  const row = await env.DB.prepare(`SELECT 1 AS ok FROM gr_course_teachers ct JOIN gr_courses c ON c.id = ct.course_id JOIN gr_subjects s ON s.id = c.subject_id
+    WHERE s.academic_year_id = (SELECT id FROM academic_years ORDER BY (status = 'active') DESC, year_be DESC LIMIT 1) LIMIT 1`).first();
+  return !!row;
 }
 
 // ---------- รายงาน ----------

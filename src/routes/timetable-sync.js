@@ -1,4 +1,5 @@
 import {jsonResponse} from '../lib/auth.js';
+import {teachingMaster,loadByPersonnel} from '../lib/teaching-master.js';
 const TERM_RE=/^(\d{4})-([12])$/;
 const SCHEMA=[
   `CREATE TABLE IF NOT EXISTS academic_teaching_assignments (
@@ -78,6 +79,18 @@ export async function handleTimetableSyncRoute(request,env,pathname,method){
     ).bind(period.academic_term_id).all()
   ]);
 
+  // ข้อมูลกลางจากฝ่ายวัดผล: วิชา × ห้อง × ครู (แทนภาระสอนที่กรอกมือ) — ภาระสอนเดิมใช้เฉพาะวิชา/กิจกรรมที่ฝ่ายวัดผลไม่มี
+  const master=await teachingMaster(env,{termId:period.academic_term_id});
+  const load=loadByPersonnel(master);
+  const roomOf=(g,r)=>normalized(String(r).includes('/')?r:`${g}/${r}`);
+  const masterKeys=new Set(master.courses.map(c=>`${roomOf(c.grade_level,c.classroom)}|${c.subject}`));
+  const masterRows=master.courses.flatMap(c=>{const t=c.teachers.find(x=>x.personnel_id);return t?[{id:`grade-course-${c.course_id}`,personnel_id:t.personnel_id,classroom:roomOf(c.grade_level,c.classroom),subject_name:c.subject,periods_per_week:c.periods_per_week,max_per_day:null}]:[];});
+  const legacyRows=assignmentResult.results.filter(r=>!masterKeys.has(`${normalized(r.classroom)}|${normalized(r.subject_name)}`));
+  const known=new Set(teacherResult.results.map(r=>Number(r.id)));
+  const extraIds=[...new Set(masterRows.map(r=>r.personnel_id))].filter(id=>!known.has(id));
+  if(extraIds.length){const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,p.subjects,p.homeroom_classroom,p.teaching_periods,u.role FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.id IN (${extraIds.map(()=>'?').join(',')})`).bind(...extraIds).all();teacherResult.results.push(...results);}
+  for(const row of teacherResult.results){const l=load.get(Number(row.id));if(l){row.subjects=[...l.subject_names].join(', ');row.teaching_periods=l.periods_per_week;}}
+  for(const row of masterRows)classResult.results.push({classroom:row.classroom});
   const teachers=teacherResult.results.map(row=>({
     id:`school-teacher-${row.id}`,name:normalized(row.full_name),maxPerDay:6,maxConsecutive:4,
     source:{personnelId:row.id,subjects:subjectNames(row.subjects),homeroom:normalized(row.homeroom_classroom),teachingPeriods:Number(row.teaching_periods||0)}
@@ -88,17 +101,17 @@ export async function handleTimetableSyncRoute(request,env,pathname,method){
   const classIds=new Map(classes.map(row=>[row.name,row.id]));
   const subjectSet=new Set();
   teacherResult.results.forEach(row=>subjectNames(row.subjects).forEach(name=>subjectSet.add(name)));
-  assignmentResult.results.forEach(row=>subjectSet.add(normalized(row.subject_name)));
+  [...masterRows,...legacyRows].forEach(row=>subjectSet.add(normalized(row.subject_name)));
   const subjects=[...subjectSet].sort((a,b)=>a.localeCompare(b,'th')).map(name=>({id:stableId('school-subject',name),name}));
   const subjectIds=new Map(subjects.map(row=>[row.name,row.id]));
-  const assignments=assignmentResult.results.map(row=>({
-    id:`school-assignment-${row.id}`,classId:classIds.get(normalized(row.classroom)),
+  const assignments=[...masterRows,...legacyRows].map(row=>({
+    id:String(row.id).startsWith('grade-course-')?`school-${row.id}`:`school-assignment-${row.id}`,classId:classIds.get(normalized(row.classroom)),
     subjectId:subjectIds.get(normalized(row.subject_name)),teacherId:teacherIds.get(Number(row.personnel_id)),
     periodsPerWeek:Number(row.periods_per_week),maxPerDay:Number(row.max_per_day||2)
   })).filter(row=>row.classId&&row.subjectId&&row.teacherId);
 
   return jsonResponse({
-    termKey,period:{...period},classes,teachers,subjects,assignments,
+    termKey,period:{...period},classes,teachers,subjects,assignments,teaching_source:master.available?'grade-system':'manual',
     counts:{classes:classes.length,teachers:teachers.length,subjects:subjects.length,assignments:assignments.length},
     syncedAt:new Date().toISOString()
   });
