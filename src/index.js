@@ -682,7 +682,7 @@ async function handleAdminListUsers(request, env) {
 const VALID_ROLES = ["teacher", "executive", "staff", "superadmin"];
 const VALID_STATUSES = ["active", "disabled"];
 
-async function handleAdminUpdateUser(request, env, targetId) {
+export async function handleAdminUpdateUser(request, env, targetId) {
   const admin = await getCurrentUser(request, env);
   if (!isAdmin(admin)) {
     return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
@@ -691,7 +691,7 @@ async function handleAdminUpdateUser(request, env, targetId) {
   if (!targetId) {
     return jsonResponse({ error: "รหัสผู้ใช้ไม่ถูกต้อง" }, 400);
   }
-  const target = await env.DB.prepare("SELECT id FROM users WHERE id = ? AND deleted_at IS NULL").bind(targetId).first();
+  const target = await env.DB.prepare("SELECT id, full_name FROM users WHERE id = ? AND deleted_at IS NULL").bind(targetId).first();
   if (!target) return jsonResponse({ error: "ไม่พบบัญชีผู้ใช้นี้" }, 404);
 
   let body;
@@ -727,6 +727,17 @@ async function handleAdminUpdateUser(request, env, targetId) {
     values.push(body.status);
   }
 
+  // ผู้ดูแลแก้ชื่อ–นามสกุลที่แสดงของผู้ใช้ได้ (เช่น แก้คำผิด หรือเปลี่ยนนามสกุล)
+  let newName = null;
+  if (body.full_name !== undefined) {
+    newName = typeof body.full_name === "string" ? body.full_name.normalize("NFC").replace(/\s+/g, " ").trim() : "";
+    if (newName.length < 2 || newName.length > 120 || /[\u0000-\u001f<>]/.test(newName)) {
+      return jsonResponse({ error: "ชื่อ–นามสกุลต้องยาว 2–120 ตัวอักษร และไม่มีอักขระพิเศษ < >" }, 400);
+    }
+    updates.push("full_name = ?");
+    values.push(newName);
+  }
+
   if (updates.length === 0) {
     return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
   }
@@ -736,6 +747,19 @@ async function handleAdminUpdateUser(request, env, targetId) {
     .bind(...values)
     .run();
 
+  // ทะเบียนบุคลากรที่ผูกกับบัญชีนี้และใช้ชื่อเดิมเดียวกัน ให้เปลี่ยนตาม (ตารางสอน/มอบหมายงานแสดงชื่อเดียวกัน)
+  // ถ้าทะเบียนบุคลากรตั้งชื่อต่างไว้เอง (เช่น มีคำนำหน้า) จะไม่แตะต้อง
+  if (newName && newName !== target.full_name) {
+    try {
+      await env.DB.prepare(
+        `UPDATE personnel_records SET full_name = ?
+         WHERE full_name = ? AND id IN (SELECT personnel_id FROM personnel_accounts WHERE user_id = ?)`
+      ).bind(newName, target.full_name, targetId).run();
+    } catch (error) {
+      if (!/no such table/i.test(String(error))) throw error;
+    }
+  }
+
   const updated = await env.DB.prepare(
     "SELECT id, email, full_name, role, status, created_at, approved_at FROM users WHERE id = ?"
   )
@@ -744,6 +768,7 @@ async function handleAdminUpdateUser(request, env, targetId) {
 
   await writeAuditLog(env, admin, "update", "user", targetId, {
     fields: Object.keys(body), role: updated.role, status: updated.status,
+    ...(newName && newName !== target.full_name ? { previous_full_name: target.full_name, full_name: newName } : {}),
   }, request);
   return jsonResponse({ user: updated });
 }

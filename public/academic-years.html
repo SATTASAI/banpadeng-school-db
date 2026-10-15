@@ -169,7 +169,7 @@
     create_term: "เพิ่มภาคเรียน", update_term: "แก้ไขภาคเรียน", activate_year: "เปิดใช้งานปีการศึกษา",
     reopen_year: "เปิดปีการศึกษาเก่าอีกครั้ง", close_year: "ปิดปีการศึกษา", activate_term: "เปิดใช้งานภาคเรียน",
     reopen_term: "เปิดภาคเรียนเก่าอีกครั้ง", close_term: "ปิดภาคเรียน", advance_term: "ปิดและเลื่อนไปภาคเรียนถัดไป",
-    rollover_year: "สร้างปีการศึกษาถัดไป",
+    rollover_year: "สร้างปีการศึกษาถัดไป", copy_students: "เตรียมทะเบียน/เลื่อนชั้นนักเรียน",
   };
 
   const escapeHtml = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
@@ -301,7 +301,7 @@
   document.getElementById("rolloverForm").addEventListener("submit", async (event) => {
     event.preventDefault(); const sourceId = document.getElementById("rolloverSourceId").value;
     const copy = document.getElementById("copyStudents").checked;
-    try { const result = await apiRequest(`/api/academic-years/${sourceId}/rollover`, { method:"POST", body:JSON.stringify({ copy_students:copy, promotion_mode:document.getElementById("promotionMode").value }) }); document.getElementById("rolloverDialog").close(); await loadData(`สร้างปีการศึกษา ${result.year_be} แล้ว${copy ? ` · คัดลอกนักเรียน ${result.copied_students} คน · ข้าม ${result.skipped_students} คน` : ""}`); }
+    try { const result = await apiRequest(`/api/academic-years/${sourceId}/rollover`, { method:"POST", body:JSON.stringify({ copy_students:copy, promotion_mode:document.getElementById("promotionMode").value }) }); document.getElementById("rolloverDialog").close(); await loadData(`สร้างปีการศึกษา ${result.year_be} แล้ว${copy ? ` · คัดลอกนักเรียน ${result.copied_students} คน · จบการศึกษา ${result.skipped_students} คน${result.retained_unknown_grade ? ` · ไม่ได้เลื่อนชั้น ${result.retained_unknown_grade} คน เพราะชื่อระดับชั้นไม่ตรงรูปแบบ กรุณาตรวจ` : ""}` : ""}`); }
     catch (error) { showNotice(error.message, "error"); }
   });
 
@@ -312,7 +312,16 @@
     if (action === "add-term") return openTermDialog(findYear(id));
     if (action === "edit-term") { const term = findTerm(id); return openTermDialog(findYear(term.academic_year_id), term); }
     if (action === "rollover") { const year = findYear(id); document.getElementById("rolloverSourceId").value = id; document.getElementById("rolloverTargetYear").textContent = Number(year.year_be) + 1; document.getElementById("copyStudents").checked = false; document.getElementById("promotionField").style.display = "none"; return document.getElementById("rolloverDialog").showModal(); }
-    if (action === "activate-year") { if (!confirm("ยืนยันเปิดใช้งานปีนี้? ปีและภาคเรียนปัจจุบันจะถูกปิดและข้อมูลใหม่จะผูกกับปีที่เลือก")) return; return postAction(`/api/academic-years/${id}/activate`, { reopen:button.dataset.reopen === "true" }, "เปลี่ยนปีการศึกษาปัจจุบันแล้ว"); }
+    if (action === "activate-year") {
+      if (!confirm("ยืนยันเปิดใช้งานปีนี้? ปีและภาคเรียนปัจจุบันจะถูกปิดและข้อมูลใหม่จะผูกกับปีที่เลือก")) return;
+      const reopen = button.dataset.reopen === "true";
+      try { await apiRequest(`/api/academic-years/${id}/activate`, { method:"POST", body:JSON.stringify({ reopen }) }); return loadData("เปลี่ยนปีการศึกษาปัจจุบันแล้ว"); }
+      catch (error) {
+        // ปีใหม่ยังไม่มีทะเบียน: ให้เลือกเลื่อนชั้นอัตโนมัติได้ทันที (เดิมข้อความบอกให้ยืนยัน แต่ไม่มีปุ่มให้ยืนยัน)
+        if (!/ยังไม่มีทะเบียนนักเรียน/.test(error.message) || !confirm("ปีนี้ยังไม่มีทะเบียนนักเรียน ต้องการคัดลอกนักเรียนจากปีปัจจุบันและเลื่อนชั้นอัตโนมัติก่อนเปิดใช้งานหรือไม่? (ป.6 จะบันทึกเป็นจบการศึกษา)")) return showNotice(error.message, "error");
+        return postAction(`/api/academic-years/${id}/activate`, { reopen, auto_prepare_students:true, promotion_mode:"promote" }, "เลื่อนชั้นนักเรียนและเปิดใช้งานปีการศึกษาใหม่แล้ว");
+      }
+    }
     if (action === "copy-students") { if (!confirm("เตรียมทะเบียนนักเรียนจากปีที่ผ่านมาและเลื่อนชั้นให้อัตโนมัติหรือไม่? นักเรียน ป.6 จะถูกบันทึกเป็นจบการศึกษา")) return; return postAction(`/api/academic-years/${id}/copy-students`, { promotion_mode:"promote" }, "เตรียมทะเบียนนักเรียนสำหรับปีใหม่แล้ว"); }
     if (action === "activate-term") { if (!confirm("ยืนยันเปิดใช้งานภาคเรียนนี้? ภาคเรียนปัจจุบันจะถูกปิด")) return; return postAction(`/api/academic-terms/${id}/activate`, { reopen:button.dataset.reopen === "true" }, "เปลี่ยนภาคเรียนปัจจุบันแล้ว"); }
     if (action === "close-term") { if (!confirm("ยืนยันปิดภาคเรียนนี้และเปิดภาคเรียนถัดไป?")) return; return postAction(`/api/academic-terms/${id}/close`, {}, "ปิดภาคเรียนและเลื่อนไปภาคเรียนถัดไปแล้ว"); }

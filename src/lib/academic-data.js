@@ -225,8 +225,9 @@ async function backfillCurrentPeriod(db) {
   await db.prepare(
     `INSERT INTO student_enrollments
        (student_id, academic_year_id, academic_term_id, grade_level, classroom, status)
-     SELECT id, ?, ?, grade_level, classroom, status FROM students
-     WHERE 1 = 1
+     SELECT id, ?, ?, grade_level, classroom, status FROM students s
+     -- เติมเฉพาะนักเรียนที่ยังไม่เคยมีทะเบียนรายภาคเลย (กันแถวค้างของคนจบ/ย้ายออกในปีก่อนๆ ถูกเติมเข้าภาคปัจจุบันทุกครั้งที่ตั้งค่าระบบ)
+     WHERE NOT EXISTS (SELECT 1 FROM student_enrollments e WHERE e.student_id = s.id)
      ON CONFLICT(student_id, academic_term_id) DO NOTHING`
   ).bind(current.academic_year_id, current.academic_term_id).run();
 }
@@ -246,6 +247,11 @@ export async function ensureAcademicData(env) {
     });
   }
   return initializationPromise;
+}
+
+// สำหรับชุดทดสอบที่สร้างฐานข้อมูลใหม่หลายครั้งใน process เดียว
+export function resetAcademicDataInitialization() {
+  initializationPromise = undefined;
 }
 
 export async function getCurrentAcademicPeriod(env) {

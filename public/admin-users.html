@@ -120,6 +120,32 @@
     return btn;
   }
 
+  // ผู้ดูแลแก้ชื่อ–นามสกุลของผู้ใช้
+  function buildRenameButton(user) {
+    const btn = document.createElement("button");
+    btn.className = "btn btn-ghost";
+    btn.style.padding = "2px 10px";
+    btn.style.fontSize = "12px";
+    btn.style.width = "auto";
+    btn.style.marginTop = "4px";
+    btn.textContent = "แก้ไขชื่อ";
+    btn.addEventListener("click", async () => {
+      const value = prompt(`แก้ไขชื่อ–นามสกุลของ ${user.email}`, user.full_name || "");
+      if (value === null) return;
+      const name = value.replace(/\s+/g, " ").trim();
+      if (!name || name === user.full_name) return;
+      btn.disabled = true;
+      try {
+        await apiRequest(`/api/admin/users/${user.id}`, { method: "PATCH", body: { full_name: name } });
+        await loadUsers();
+      } catch (err) {
+        alert(err.message);
+        btn.disabled = false;
+      }
+    });
+    return btn;
+  }
+
   function buildDeleteButton(user) {
     const btn = document.createElement("button");
     btn.className = "btn btn-danger";
@@ -162,7 +188,11 @@
       const tr = document.createElement("tr");
 
       const nameTd = document.createElement("td");
-      nameTd.textContent = user.full_name;
+      const nameText = document.createElement("span");
+      nameText.textContent = user.full_name;
+      nameTd.appendChild(nameText);
+      nameTd.appendChild(document.createElement("br"));
+      nameTd.appendChild(buildRenameButton(user));
       tr.appendChild(nameTd);
 
       const emailTd = document.createElement("td");

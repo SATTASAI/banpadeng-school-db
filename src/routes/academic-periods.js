@@ -280,9 +280,15 @@ async function activateYear(request, env, yearId) {
        ORDER BY term_number LIMIT 1`
     ).bind(yearId).first();
   }
-  if (!term && body.reopen === true) {
+  if (year.status === "closed") {
+    // เปิดปีเก่าอีกครั้ง: กลับไปภาคเรียนล่าสุดที่มีทะเบียนนักเรียน (ไม่ใช่ภาค 1 เสมอ)
+    // ไม่เช่นนั้นข้อมูลนักเรียนหลักจะถูกย้อนกลับเป็นของภาค 1 เช่น คนที่ย้ายออกภาค 2 กลับเป็นกำลังเรียน
     term = await env.DB.prepare(
-      `SELECT * FROM academic_terms WHERE academic_year_id = ? ORDER BY term_number LIMIT 1`
+      `SELECT t.* FROM academic_terms t WHERE t.academic_year_id = ?
+       AND EXISTS (SELECT 1 FROM student_enrollments e WHERE e.academic_term_id = t.id)
+       ORDER BY t.term_number DESC LIMIT 1`
+    ).bind(yearId).first() || await env.DB.prepare(
+      `SELECT * FROM academic_terms WHERE academic_year_id = ? ORDER BY term_number DESC LIMIT 1`
     ).bind(yearId).first();
   }
   if (!term) return jsonResponse({ error: "ปีการศึกษานี้ยังไม่มีภาคเรียนที่เปิดใช้งานได้" }, 400);
@@ -297,7 +303,8 @@ async function activateYear(request, env, yearId) {
   ).bind(term.id).first();
   if (Number(targetRoster?.count || 0) === 0 && current?.academic_year_id && current.academic_year_id !== yearId) {
     if (body.auto_prepare_students === true) {
-      await copyStudentsBetweenYears(env, current.academic_year_id, yearId, body.promotion_mode || "promote");
+      const copied = await copyStudentsBetweenYears(env, current.academic_year_id, yearId, body.promotion_mode || "promote", term.id);
+      await audit(env, "copy_students", yearId, term.id, auth.user.id, { source_year_id: current.academic_year_id, ...copied });
     } else {
       return jsonResponse({ error: "ปีใหม่นี้ยังไม่มีทะเบียนนักเรียน กรุณาเตรียมทะเบียนหรือยืนยันการเลื่อนชั้นอัตโนมัติก่อนเปิดใช้งาน" }, 400);
     }
@@ -405,17 +412,14 @@ async function closeTerm(request, env, termId) {
   return jsonResponse({ ok: true, current: await getCurrentAcademicPeriod(env) });
 }
 
-function normalizeGrade(value) {
+export function normalizeGrade(value) {
+  // รองรับ "อนุบาล 2", "อนุบาลปีที่ 2", "ประถมศึกษาปีที่ ๓", "ประถมศึกษา 3", "ป 3", "ป.3"
   return String(value || "")
     .trim()
-    .replaceAll("๑", "1").replaceAll("๒", "2").replaceAll("๓", "3")
-    .replaceAll("๔", "4").replaceAll("๕", "5").replaceAll("๖", "6")
+    .replace(/[๐-๙]/g, (d) => String("๐๑๒๓๔๕๖๗๘๙".indexOf(d)))
     .replace(/\s+/g, "")
-    .replace("อนุบาล", "อ.")
-    .replace("ประถมศึกษาปีที่", "ป.")
-    .replace("ประถม", "ป.")
-    .replace("ป..", "ป.")
-    .replace("อ..", "อ.");
+    .replace(/^(อนุบาล(ปีที่)?|อ\.?)(?=\d)/, "อ.")
+    .replace(/^(ประถมศึกษา(ปีที่)?|ประถม(ปีที่)?|ป\.?)(?=\d)/, "ป.");
 }
 
 export function promoteGradeLevel(value) {
@@ -445,11 +449,11 @@ function promoteClassroom(classroom, originalGrade, promotedGrade) {
   return value;
 }
 
-async function copyStudentsBetweenYears(env, sourceYearId, targetYearId, promotionMode = "promote") {
-  const targetTerm = await env.DB.prepare(
-    "SELECT id FROM academic_terms WHERE academic_year_id = ? AND term_number = 1"
-  ).bind(targetYearId).first();
-  if (!targetTerm) throw new Error("ปีปลายทางยังไม่มีภาคเรียนที่ 1");
+export async function copyStudentsBetweenYears(env, sourceYearId, targetYearId, promotionMode = "promote", targetTermId = null) {
+  const targetTerm = targetTermId
+    ? await env.DB.prepare("SELECT id FROM academic_terms WHERE id = ? AND academic_year_id = ?").bind(targetTermId, targetYearId).first()
+    : await env.DB.prepare("SELECT id FROM academic_terms WHERE academic_year_id = ? ORDER BY term_number LIMIT 1").bind(targetYearId).first();
+  if (!targetTerm) throw new Error("ปีปลายทางยังไม่มีภาคเรียน");
   const targetCount = await env.DB.prepare(
     "SELECT COUNT(*) AS count FROM student_enrollments WHERE academic_term_id = ?"
   ).bind(targetTerm.id).first();
@@ -457,13 +461,15 @@ async function copyStudentsBetweenYears(env, sourceYearId, targetYearId, promoti
     return { copied: 0, skipped: 0, retained_unknown_grade: 0, already_prepared: true };
   }
 
+  // ใช้สถานะ "ล่าสุด" ของนักเรียนแต่ละคนในปีต้นทาง (ภาคเรียนสุดท้ายที่มีชื่อ) ไม่ว่าสถานะใด
+  // แล้วคัดลอกเฉพาะคนที่ล่าสุดยังกำลังเรียน — คนที่ย้ายออก/ลาออกในภาคหลังต้องไม่ถูกเลื่อนชั้นไปปีใหม่
   const { results: enrollments } = await env.DB.prepare(
     `SELECT e.* FROM student_enrollments e
      JOIN academic_terms t ON t.id = e.academic_term_id
      JOIN (
        SELECT e2.student_id, MAX(t2.term_number) AS max_term
        FROM student_enrollments e2 JOIN academic_terms t2 ON t2.id = e2.academic_term_id
-       WHERE e2.academic_year_id = ? AND e2.status = 'enrolled'
+       WHERE e2.academic_year_id = ?
        GROUP BY e2.student_id
      ) latest ON latest.student_id = e.student_id AND latest.max_term = t.term_number
      WHERE e.academic_year_id = ? AND e.status = 'enrolled'`
