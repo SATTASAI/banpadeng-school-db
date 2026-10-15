@@ -1,6 +1,7 @@
 import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable} from "../lib/timetable-permissions.js";
 import {handleAuto} from "./timetable-auto.js";
+import {normalizeRoomName,roomNameKey} from "../lib/timetable-solver.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
@@ -102,9 +103,9 @@ async function entries(env,term,view){
 }
 async function saveSlot(request,env,term,user){
   const body=await request.json().catch(()=>null);
-  const grade=text(body?.grade_level,80),room=text(body?.classroom,80),subject=text(body?.subject,120),roomName=text(body?.room_name,100);
+  const grade=text(body?.grade_level,80),room=text(body?.classroom,80),subject=text(body?.subject,120),rawRoomName=text(body?.room_name,100);
   const day=Number(body?.weekday),period=Number(body?.period),teacherId=validId(body?.teacher_id);
-  if(!grade||!room||!subject||subject.length>120||grade.length>80||room.length>80||roomName.length>100||
+  if(!grade||!room||!subject||subject.length>120||grade.length>80||room.length>80||rawRoomName.length>100||
     !Number.isInteger(day)||day<1||day>5||!Number.isInteger(period)||period<1||period>6||!teacherId)
     return reply({error:"กรอกชั้น ห้อง วัน คาบ วิชา และครูให้ถูกต้อง"},400);
   const [knownRoom,teacher]=await Promise.all([
@@ -119,6 +120,12 @@ async function saveSlot(request,env,term,user){
   if(course&&!course.teachers.some(t=>t.personnel_id===teacherId))
     return reply({error:`วิชา${course.subject} ห้อง ${grade}/${room} ฝ่ายวัดผลกำหนดครูผู้สอนเป็น ${course.teachers.map(t=>t.full_name).join(", ")} — แก้ครูผู้สอนได้ที่ระบบรายงานผลการเรียน`},409);
   const current=await draft(env,term.id,user.id);
+  // ห้องสอนเฉพาะ: ใช้ตัวสะกดเดิมที่มีในร่างแล้ว ("ห้อง คอม" = "ห้องคอม") เพื่อให้ตรวจห้องชนได้จริง
+  let roomName=normalizeRoomName(rawRoomName);
+  if(roomName){
+    const {results:names}=await env.DB.prepare("SELECT DISTINCT room_name FROM timetable_entries WHERE plan_id=? AND TRIM(COALESCE(room_name,''))<>''").bind(current.id).all();
+    roomName=names.map(r=>r.room_name).find(n=>roomNameKey(n)===roomNameKey(roomName))||roomName;
+  }
   try{
     await env.DB.prepare(`INSERT INTO timetable_entries(plan_id,grade_level,classroom,weekday,period,subject,teacher_id,room_name)
       VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(plan_id,grade_level,classroom,weekday,period)

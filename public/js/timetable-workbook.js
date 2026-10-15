@@ -3,8 +3,10 @@
  const clean=v=>String(v??'').normalize('NFC').trim().replace(/\s+/g,' ');
  const grade=v=>clean(v).replace(/\s|\./g,'');
  const person=v=>clean(v).replace(/^(นางสาว|นาง|นาย|ครู)\s*/,'');
- const fields={grade_level:['ชั้น','ระดับชั้น','grade_level'],classroom:['ห้อง','ห้องเรียน','ชั้น/ห้อง','classroom'],subject:['วิชา','รายวิชา','subject'],teacher:['ครูผู้สอน','ชื่อครู','ครู','teacher_name'],teacher_id:['รหัสครู','teacher_id'],periods_per_week:['คาบ/สัปดาห์','จำนวนคาบต่อสัปดาห์','จำนวนคาบ','periods_per_week'],max_per_day:['สูงสุด/วัน','สูงสุดต่อวัน','max_per_day'],block_size:['คาบต่อเนื่อง','block_size'],room_name:['ห้องสอนเฉพาะ','room_name']};
- const headers=['ชั้น','ห้อง','วิชา','ครูผู้สอน','คาบ/สัปดาห์','สูงสุด/วัน','ห้องสอนเฉพาะ','คาบต่อเนื่อง'];
+ const fields={grade_level:['ชั้น','ระดับชั้น','grade_level'],classroom:['ห้อง','ห้องเรียน','ชั้น/ห้อง','classroom'],subject:['วิชา','รายวิชา','subject'],teacher:['ครูผู้สอน','ชื่อครู','ครู','teacher_name'],teacher_id:['รหัสครู','teacher_id'],periods_per_week:['คาบ/สัปดาห์','จำนวนคาบต่อสัปดาห์','จำนวนคาบ','periods_per_week'],max_per_day:['สูงสุด/วัน','สูงสุดต่อวัน','max_per_day'],block_size:['คาบต่อเนื่อง','block_size'],prefer:['ช่วงเวลา','ช่วงที่ควรสอน','prefer'],room_name:['ห้องสอนเฉพาะ','room_name']};
+ const headers=['ชั้น','ห้อง','วิชา','ครูผู้สอน','คาบ/สัปดาห์','สูงสุด/วัน','ห้องสอนเฉพาะ','คาบต่อเนื่อง','ช่วงเวลา'];
+ const preferLabels={auto:'อัตโนมัติ',morning:'เช้า',afternoon:'บ่าย',any:'ไม่กำหนด'};
+ const preferOf=v=>{const t=clean(v).replace(/^ช่วง/,'');if(!t||t==='อัตโนมัติ'||t==='auto')return 'auto';if(t==='เช้า'||t==='morning')return 'morning';if(t==='บ่าย'||t==='afternoon')return 'afternoon';if(t==='ไม่กำหนด'||t==='any')return 'any';throw Error('ช่วงเวลาต้องเป็น อัตโนมัติ เช้า บ่าย หรือ ไม่กำหนด');};
  function parseRows(rows,setup){
   if(!Array.isArray(rows)||rows.length<2)throw Error('ไฟล์ไม่มีแถวภาระสอน');
   if(rows.length>1001)throw Error('รองรับภาระสอนไม่เกิน 1,000 แถว');
@@ -30,7 +32,7 @@
     if(!Number.isInteger(daily)||daily<1||daily>6)throw Error('สูงสุด/วันต้องเป็นจำนวนเต็ม 1–6');
     if(roomName.length>100)throw Error('ชื่อห้องสอนเฉพาะยาวเกินกำหนด');
     const block=Number(get('block_size')||1);if(!Number.isInteger(block)||block<1||block>3||weekly%block||daily<block)throw Error('คาบต่อเนื่องต้องเป็น 1–3 หารคาบ/สัปดาห์ลงตัว และไม่เกินสูงสุด/วัน');
-    const c=classes[0],a={grade_level:c.grade_level,classroom:c.classroom,subject,teacher_id:teachers[0].id,periods_per_week:weekly,max_per_day:daily,room_name:roomName,block_size:block},k=JSON.stringify([a.grade_level,a.classroom,a.subject,a.teacher_id]);
+    const c=classes[0],a={grade_level:c.grade_level,classroom:c.classroom,subject,teacher_id:teachers[0].id,periods_per_week:weekly,max_per_day:daily,room_name:roomName,block_size:block,prefer:preferOf(get('prefer'))},k=JSON.stringify([a.grade_level,a.classroom,a.subject,a.teacher_id]);
     if(seen.has(k))throw Error('ภาระสอนครู–วิชา–ห้องซ้ำ');seen.add(k);selected.set(JSON.stringify([c.grade_level,c.classroom]),{grade_level:c.grade_level,classroom:c.classroom});assignments.push(a);
    }catch(e){errors.push(`แถว ${i+2}: ${e.message}`);}
   });
@@ -51,5 +53,5 @@
     return {grade_level:a.grade_level,classroom:a.classroom,subject:a.subject,teacher_id:a.teacher_id,room_name:a.room_name,weekday:d,period:p};
   });
  }
- root.TimetableWorkbook={headers,parseRows,parseFixedRows};
+ root.TimetableWorkbook={headers,parseRows,parseFixedRows,preferLabels};
 })(typeof window==='undefined'?globalThis:window);
