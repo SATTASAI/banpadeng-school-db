@@ -15,27 +15,29 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
  await ensureLeaveData(env);
  const head=await isPersonnelHead(env,user),admin=user.role==='superadmin',id=Number(match[1]);
+ // ผู้พิจารณาต้องยังเป็นบัญชีผู้บริหาร (ผู้บริหารที่ได้สิทธิ์ผู้ดูแลระบบด้วยก็ได้) — ถ้าถูกเปลี่ยนเป็นบัญชีครูจะหมดสิทธิ์ทันที
+ const execAccount=['executive','superadmin'].includes(user.role);
  const people=await executives(env);
  const deputyChoices=people.filter(isDeputy).map(({user_ids,...p})=>p);
  if(!id&&method==='GET') {
   const {results}=await env.DB.prepare(`${select} WHERE ?=1 OR ?=1 OR r.user_id=? OR
-   (?='executive' AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?))
-   ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC,r.id DESC`).bind(admin?1:0,head?1:0,user.id,user.role,user.id).all();
+   (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?))
+   ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC,r.id DESC`).bind(admin?1:0,head?1:0,user.id,execAccount?1:0,user.id).all();
   const {results:assigned}=await env.DB.prepare('SELECT leave_id,kind FROM leave_reviewers WHERE user_id=?').bind(user.id).all();
   const assignments=new Map(assigned.map(r=>[r.leave_id,r.kind]));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
   return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&r.workflow_stage==='submitted',
    can_record:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',can_forward:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',
-   can_review:user.role==='executive'&&assignments.get(r.id)==='deputy'&&r.status==='pending'&&r.workflow_stage==='forwarded',
-   can_decide:user.role==='executive'&&assignments.get(r.id)==='director'&&r.status==='pending'&&r.workflow_stage==='forwarded',
+   can_review:execAccount&&assignments.get(r.id)==='deputy'&&r.status==='pending'&&r.workflow_stage==='forwarded',
+   can_decide:execAccount&&assignments.get(r.id)==='director'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
    is_personnel_head:head,can_view_pending:head||admin||assigned.length>0,deputy_choices:head?deputyChoices:[],
    default_deputy_id:setting?.deputy_personnel_id||null,profile:profile||{}});
  }
  if(id&&method==='GET') {
   const row=await env.DB.prepare(`${select} WHERE r.id=?`).bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
-  const assigned=user.role==='executive'&&await env.DB.prepare('SELECT 1 FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
+  const assigned=execAccount&&await env.DB.prepare('SELECT 1 FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
   if(row.user_id!==user.id&&!head&&!admin&&!assigned)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
   const {results:events}=await env.DB.prepare(`SELECT e.action,e.note,e.created_at,u.full_name FROM leave_events e JOIN users u ON u.id=e.actor_id WHERE e.leave_id=? ORDER BY e.id`).bind(id).all();
   return json({leave_request:await leaveForm(env,row),events});
@@ -89,6 +91,9 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    if(directors.length!==1)return fail('ต้องมีผู้อำนวยการหนึ่งท่านที่มีบัญชีผู้บริหารใช้งานอยู่ กรุณาตรวจทะเบียนบุคลากร',409);
    if(!deputy)return fail('กรุณาเลือกรองผู้บริหารที่รับผิดชอบฝ่ายบุคลากรและมีบัญชีผู้บริหารใช้งานอยู่');
    const director=directors[0],token=crypto.randomUUID();
+   // ผู้ยื่นลาพิจารณาคำขอของตนเองไม่ได้: การลาของ ผอ. ต้องเสนอผู้บังคับบัญชาเหนือขึ้นไป (บันทึกผลผ่านปุ่ม "บันทึก") และรองฯ ผู้กลั่นกรองต้องไม่ใช่ผู้ลา
+   if(director.user_ids.map(Number).includes(Number(row.user_id)))return fail('คำขอนี้เป็นการลาของผู้อำนวยการ ไม่สามารถส่งให้ผู้อำนวยการพิจารณาเองได้ — เสนอผู้บังคับบัญชาเหนือขึ้นไป แล้วบันทึกผลในระบบ',409);
+   if(deputy.user_ids.map(Number).includes(Number(row.user_id)))return fail('รองผู้บริหารที่เลือกเป็นผู้ยื่นลาเอง กรุณาเลือกผู้กลั่นกรองท่านอื่น',409);
    const results=await env.DB.batch([
     env.DB.prepare(`UPDATE leave_requests SET workflow_stage='forwarded',forwarded_by=?,forwarded_at=?,forward_token=?,personnel_note=?,
      deputy_personnel_id=?,deputy_name=?,deputy_position=?,director_name=?,director_position=?
@@ -102,7 +107,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
   }
   if(action==='review'||action==='decide') {
-   const assignment=user.role==='executive'&&await env.DB.prepare('SELECT kind FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
+   const assignment=execAccount&&await env.DB.prepare('SELECT kind FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
    if(!assignment||assignment.kind!==(action==='review'?'deputy':'director'))return fail(action==='review'?'เฉพาะรองผู้บริหารที่รับผิดชอบคำขอนี้':'เฉพาะผู้อำนวยการที่ได้รับคำขอนี้',403);
    if(row.status!=='pending'||row.workflow_stage!=='forwarded')return fail('คำขอยังไม่ถูกส่งต่อ หรือมีผลพิจารณาแล้ว',409);
    const person=people.find(p=>p.user_ids.includes(user.id));

@@ -66,7 +66,7 @@ function visibleSql(user, alias = "c") {
 }
 
 async function nextRegisterNo(env, type, dateValue) {
-  const parsed = dateValue ? new Date(`${dateValue}T00:00:00Z`) : new Date();
+  const parsed = dateValue ? new Date(`${dateValue}T00:00:00Z`) : new Date(Date.now() + 7 * 3600 * 1000);
   const yearBe = (Number.isNaN(parsed.getTime()) ? new Date() : parsed).getUTCFullYear() + 543;
   const row = await env.DB.prepare(`INSERT INTO correspondence_counters(buddhist_year,register_type,last_number)
     VALUES (?,?,1) ON CONFLICT(buddhist_year,register_type) DO UPDATE SET last_number=last_number+1
@@ -92,7 +92,7 @@ async function list(request, env, user) {
     .bind(...where.binds,type,type,status,status,q,pattern,pattern,pattern,pattern,pattern).all();
   const summary = await env.DB.prepare(`SELECT COUNT(*) total,
     SUM(CASE WHEN status NOT IN ('completed','archived') THEN 1 ELSE 0 END) open_count,
-    SUM(CASE WHEN due_date<date('now') AND status NOT IN ('completed','archived') THEN 1 ELSE 0 END) overdue_count
+    SUM(CASE WHEN due_date<date('now','+7 hours') AND status NOT IN ('completed','archived') THEN 1 ELSE 0 END) overdue_count
     FROM correspondence_records c WHERE ${where.sql}`).bind(...where.binds).first();
   return reply({ records: results, summary, can_manage: canManage(user) });
 }

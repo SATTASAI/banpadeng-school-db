@@ -23,7 +23,7 @@ function feed(env,user,personnelHead,director){
  FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE
  (?=1 AND r.status='pending') OR (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR
  (r.user_id=? AND r.status IN ('approved','rejected')) OR
- (?='executive' AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
+ (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
  SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND (v.kind='director' OR r.reviewer_at IS NULL)))
  UNION ALL
  SELECT 'task:'||t.id,'งานที่ได้รับมอบหมาย',t.title,t.created_at,'/tasks.html',NULL
@@ -38,7 +38,7 @@ function feed(env,user,personnelHead,director){
  COALESCE(d.decided_at,d.requested_at),'/students.html?delete_requests=1',NULL
  FROM student_delete_requests d WHERE (?=1 AND d.status='pending') OR (d.requested_by=? AND d.status IN ('approved','rejected'))
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,user.role,user.id,user.id,user.id,director?1:0,user.id,user.id]};
+ return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id]};
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;

@@ -1,5 +1,6 @@
 import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
+import { executives, isDirector } from "../lib/leave-data.js";
 
 const ready = new WeakSet();
 const clean = (v, max = 1500) => String(v ?? "").trim().slice(0, max) || null;
@@ -87,6 +88,16 @@ export async function canManageProjectFinance(env, user) {
   return Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE role_key='finance_review' AND department='' AND user_id=?").bind(user.id).first());
 }
 
+// ผู้อำนวยการผู้อนุมัติการเบิกจ่าย: ผู้ที่ตั้งไว้ในหน้าที่ "ผู้อำนวยการอนุมัติ" ของระบบงบประมาณ
+// ถ้ายังไม่ได้ตั้ง ใช้บัญชีของผู้อำนวยการตามทะเบียนบุคลากร
+export async function budgetDirectorIds(env) {
+  const assigned = await env.DB.prepare(`SELECT a.user_id FROM budget_role_assignments a JOIN users u ON u.id=a.user_id
+    WHERE a.role_key='director_approval' AND a.department='' AND u.status='active'`).first().catch(() => null);
+  if (assigned) return [Number(assigned.user_id)];
+  const people = await executives(env).catch(() => []);
+  return people.filter(isDirector).flatMap((p) => p.user_ids.map(Number));
+}
+
 async function ownsProject(env, user, id) {
   return isAdmin(user) || Boolean(await env.DB.prepare("SELECT 1 FROM project_owners WHERE project_id=? AND user_id=?").bind(id, user.id).first());
 }
@@ -121,9 +132,11 @@ function eventStatements(env, token, expenseId, eventType, message, user, audien
     .bind(token, eventType, message, user.id, expenseId,...conditionValues)];
   const recipients = audience === "finance"
     ? `SELECT u.id FROM users u WHERE u.status='active' AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key='finance_review' AND a.department=''))`
-    : `SELECT u.id FROM users u WHERE u.status='active' AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
+    : Array.isArray(audience)
+      ? `SELECT u.id FROM users u WHERE u.status='active' AND u.id IN (${audience.map((id) => Number(id) || 0).join(",") || "0"})`
+      : `SELECT u.id FROM users u WHERE u.status='active' AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
   statements.push(env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
-    SELECT e.token,u.id,? FROM project_workflow_events e JOIN users u ON u.id IN (${recipients}) WHERE e.token=?`).bind(audience, token));
+    SELECT e.token,u.id,? FROM project_workflow_events e JOIN users u ON u.id IN (${recipients}) WHERE e.token=?`).bind(Array.isArray(audience) ? "director" : audience, token));
   statements.push(env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details)
     SELECT actor_id,event_type,'budget_request',expense_id,message FROM project_workflow_events WHERE token=?`).bind(token));
   return statements;
@@ -167,18 +180,19 @@ export async function projectWorkflowSnapshots(env, user, department = null, fis
 async function overview(request, env, user) {
   const url = new URL(request.url), year = Number(url.searchParams.get("fiscal_year")) || null, department = url.searchParams.get("department") || null;
   const finance = await canManageProjectFinance(env, user);
+  const director = (await budgetDirectorIds(env)).includes(Number(user.id));
   await ensureFinanceQueueNotifications(env,user);
   const financialRows=await projectFinancialRows(env,year);
   const fundingSummary = await projectFundingSummary(env,year,financialRows);
   const projects = await projectWorkflowSnapshots(env, user, department, year,financialRows);
   const ids = projects.map(p => p.id);
-  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance, can_balance_edit: isAdmin(user) } });
+  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) } });
   const placeholders = ids.map(() => "?").join(",");
   const { results: requests } = await env.DB.prepare(`SELECT e.*,p.name AS project_name,COALESCE(p.management_area,p.department) AS department,u.full_name AS requester_name
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
-    WHERE e.workflow_version=2 AND e.project_id IN (${placeholders}) ${finance ? "" : "AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?))"}
+    WHERE e.workflow_version=2 AND e.project_id IN (${placeholders}) ${finance || director ? "" : "AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?))"}
     ORDER BY CASE e.current_step WHEN 'finance_queue' THEN 0 WHEN 'finance_processing' THEN 1 WHEN 'finance_ready' THEN 2 ELSE 3 END,
-      CASE e.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,COALESCE(e.needed_date,'9999-12-31'),e.submitted_at,e.id`).bind(...ids, ...(finance ? [] : [user.id, user.id])).all();
+      CASE e.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,COALESCE(e.needed_date,'9999-12-31'),e.submitted_at,e.id`).bind(...ids, ...(finance || director ? [] : [user.id, user.id])).all();
   const { results: items } = await env.DB.prepare(`SELECT i.* FROM budget_request_items i JOIN project_expenses e ON e.id=i.expense_id WHERE e.project_id IN (${placeholders}) ORDER BY i.line_no`).bind(...ids).all();
   const { results: docs } = await env.DB.prepare(`SELECT d.*,a.id AS attachment_id,a.file_name,a.file_size FROM budget_supporting_documents d
     JOIN project_expenses e ON e.id=d.expense_id LEFT JOIN file_attachments a ON a.entity_type='document' AND a.entity_id=d.native_document_id
@@ -189,7 +203,8 @@ async function overview(request, env, user) {
   const { results: notifications } = await env.DB.prepare(`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
     JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id
     WHERE n.user_id=? AND v.project_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`).bind(user.id,...ids).all();
-  return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
+  return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
+    can_director_approve: director && e.status === "pending" && e.current_step === "director_approval" && Number(e.created_by) !== Number(user.id),
     items: items.filter(i => i.expense_id === e.id), documents: docs.filter(d => d.expense_id === e.id), can_edit: e.status === "draft" && Number(e.created_by) === Number(user.id),
     can_attach: finance || projects.find(p => p.id === e.project_id)?.can_request || Number(e.created_by) === Number(user.id) })) });
 }
@@ -251,15 +266,32 @@ async function action(request, env, user, id) {
     if (!item.n || round(item.total) !== round(row.amount)) return jsonResponse({ error: "รายการค่าใช้จ่ายไม่ครบ กรุณาบันทึกใหม่" },409);
     sql = "UPDATE project_expenses SET status='pending',current_step='finance_queue',submitted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='draft'";
     args = [id]; audience = "finance"; message = "มีคำขอเบิกจ่ายใหม่ รอเจ้าหน้าที่รับเรื่อง";
+  } else if (kind === "approve" || (["return","reject"].includes(kind) && row.current_step === "director_approval")) {
+    // ขั้นผู้อำนวยการอนุมัติ: หลังเจ้าหน้าที่การเงินตรวจเอกสารเสร็จ ก่อนยืนยันการจ่าย
+    if (!(await budgetDirectorIds(env)).includes(Number(user.id))) return jsonResponse({ error: "เฉพาะผู้อำนวยการเท่านั้นที่อนุมัติขั้นนี้ได้" },403);
+    if (Number(row.created_by) === Number(user.id)) return jsonResponse({ error: "อนุมัติคำขอของตนเองไม่ได้" },403);
+    if (kind === "approve") {
+      sql = "UPDATE project_expenses SET status='approved',current_step='finance_ready',approved_by=?,approved_at=datetime('now'),workflow_completed_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='director_approval'";
+      args = [user.id,id]; message = "ผู้อำนวยการอนุมัติแล้ว รอเจ้าหน้าที่ยืนยันการเบิกจ่าย"; audience = "finance";
+    } else {
+      const note = clean(body.review_note);
+      if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);
+      sql = "UPDATE project_expenses SET status=?,current_step=?,review_note=?,returned_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='director_approval'";
+      args = [kind === "return" ? "draft" : "rejected",kind === "return" ? "returned" : "rejected",note,id]; message = `ผู้อำนวยการ${kind === "return" ? "ส่งกลับให้แก้ไข" : "ไม่อนุมัติ"}: ${note}`;
+    }
   } else {
     if (!await canManageProjectFinance(env,user)) return jsonResponse({ error: "เฉพาะเจ้าหน้าที่การเงินที่ได้รับมอบหมายหรือผู้บริหาร" },403);
     if (kind === "receive") {
       sql = "UPDATE project_expenses SET current_step='finance_processing',finance_received_by=?,finance_received_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='finance_queue'";
       args = [user.id,id]; message = "เจ้าหน้าที่การเงินรับเรื่องแล้ว";
     } else if (kind === "complete") {
-      sql = "UPDATE project_expenses SET status='approved',current_step='finance_ready',approved_by=?,approved_at=datetime('now'),workflow_completed_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='finance_processing'";
-      args = [user.id,id]; message = "ดำเนินการเอกสารเสร็จสิ้น รอยืนยันการเบิกจ่าย";
+      // ตรวจเอกสารเสร็จ → เสนอผู้อำนวยการอนุมัติ (ยังไม่อนุมัติจนกว่า ผอ. ลงนาม)
+      const directors = await budgetDirectorIds(env);
+      if (!directors.length) return jsonResponse({ error: "ยังไม่มีบัญชีผู้อำนวยการสำหรับอนุมัติ กรุณาตั้งหน้าที่ \"ผู้อำนวยการอนุมัติ\" ในระบบงบประมาณ" },409);
+      sql = "UPDATE project_expenses SET current_step='director_approval',updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='finance_processing'";
+      args = [id]; message = "เจ้าหน้าที่ตรวจเอกสารแล้ว เสนอผู้อำนวยการอนุมัติ"; audience = directors;
     } else if (["return","reject"].includes(kind)) {
+      if (row.current_step === "director_approval") return jsonResponse({ error: "รายการนี้รอผู้อำนวยการพิจารณา" },409);
       const note = clean(body.review_note);
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);
       sql = "UPDATE project_expenses SET status=?,current_step=?,review_note=?,returned_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status IN ('pending','approved')";
@@ -274,7 +306,7 @@ async function action(request, env, user, id) {
   }
   const token = crypto.randomUUID();
   const conditions={submit:"e.status='draft'",receive:"e.status='pending' AND e.current_step='finance_queue'",
-    complete:"e.status='pending' AND e.current_step='finance_processing'",return:"e.status IN ('pending','approved')",
+    complete:"e.status='pending' AND e.current_step='finance_processing'",approve:"e.status='pending' AND e.current_step='director_approval'",return:"e.status IN ('pending','approved')",
     reject:"e.status IN ('pending','approved')",pay:"e.status='approved' AND e.current_step='finance_ready'"};
   const events=eventStatements(env,token,id,kind,message,user,audience,conditions[kind]);
   // The event is the transaction marker. Do not depend on changes() across D1 statements.

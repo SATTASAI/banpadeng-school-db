@@ -12,12 +12,12 @@ async function fixture(){
   const raw=new DatabaseSync(':memory:');raw.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
     (1,'admin@test','x','x','ผู้ดูแล','superadmin'),(2,'owner@test','x','x','เจ้าของ','teacher'),
-    (3,'finance@test','x','x','การเงิน','staff'),(4,'other@test','x','x','ครูอื่น','teacher'),(5,'co-owner@test','x','x','เจ้าของร่วม','teacher');
+    (3,'finance@test','x','x','การเงิน','staff'),(4,'other@test','x','x','ครูอื่น','teacher'),(5,'co-owner@test','x','x','เจ้าของร่วม','teacher'),(6,'director@test','x','x','ผู้อำนวยการ','executive');
     INSERT INTO projects(id,department,name,budget_amount,fiscal_year,created_by,funding_type) VALUES
     (10,'academic','อ่านคล่อง',1000,2570,1,'subsidy'),(11,'general','เรียนฟรี',2000,2570,1,'free_education'),
     (12,'budget','งานรายได้',3000,2570,1,'school_income'),(13,'personnel','โครงการเดิม',400,2570,1,NULL);
     INSERT INTO project_owners(project_id,user_id) VALUES(10,2),(10,5),(11,2),(12,2);
-    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_review','',3,1);`);
+    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_review','',3,1),('director_approval','',6,1);`);
   function prepare(sql){let values=[];return {bind(...v){values=v;return this;},async first(){return raw.prepare(sql).get(...values)||null;},async all(){return {results:raw.prepare(sql).all(...values)};},async run(){const r=raw.prepare(sql).run(...values);return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};}};}
   let tail=Promise.resolve();
   const env={raw,JWT_SECRET:secret,DB:{prepare,batch(statements){const task=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out;}catch(e){raw.exec('ROLLBACK');throw e;}});tail=task.catch(()=>{});return task;}}};
@@ -40,6 +40,12 @@ test('document workflow reserves funds, notifies both sides, and confirms paymen
   assert.equal((await action(env,3,id,'pay',payment)).status,409);
   assert.equal((await action(env,3,id,'receive')).status,200);
   assert.equal((await action(env,3,id,'complete')).status,200);
+  // ต้องผ่านผู้อำนวยการก่อนจ่าย: การเงินจ่ายเอง/อนุมัติเองไม่ได้
+  assert.equal(env.raw.prepare('SELECT current_step FROM project_expenses WHERE id=?').get(id).current_step,'director_approval');
+  assert.equal((await action(env,3,id,'pay',payment)).status,409);
+  assert.equal((await action(env,3,id,'approve')).status,403);
+  assert.ok((await call(env,6,'overview?fiscal_year=2570')).body.requests.find(e=>e.id===id).can_director_approve);
+  assert.equal((await action(env,6,id,'approve')).status,200);
   assert.equal((await action(env,3,id,'pay',payment)).status,200);
   assert.equal((await action(env,3,id,'pay',payment)).status,409);
   const owner=(await call(env,2,'overview?department=academic&fiscal_year=2570')).body;
@@ -75,7 +81,7 @@ test('returning a request releases reservation and allows an edited resubmission
 
 test('supplemental documents preserve every attachment and notify finance only after upload succeeds',async()=>{
   const env=await fixture();const saved=await call(env,2,'requests','POST',payload());const id=saved.body.id;
-  await action(env,2,id,'submit');await action(env,3,id,'receive');await action(env,3,id,'complete');await action(env,3,id,'pay',payment);
+  await action(env,2,id,'submit');await action(env,3,id,'receive');await action(env,3,id,'complete');await action(env,6,id,'approve');await action(env,3,id,'pay',payment);
   const first=await call(env,2,`requests/${id}/supporting-documents`,'POST',{title:'ใบเสร็จ'}),second=await call(env,5,`requests/${id}/supporting-documents`,'POST',{title:'หลักฐานเพิ่มเติม'});
   assert.equal(first.status,201);assert.equal(second.status,201);
   assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_workflow_events WHERE event_type='attachment_added'").get().n,0);

@@ -86,7 +86,8 @@ export async function handleDepartmentStaffRoute(request,env,pathname,method){
  const isHead=dept==='administration'?0:body.is_head===undefined?Number(currentMember?.is_head||0):Number(body.is_head);
  await env.DB.batch([
  ...(isHead?[env.DB.prepare('UPDATE department_staff SET is_head=0 WHERE department=? AND is_head=1 AND personnel_id<>?').bind(dept,personId)]:[]),
- env.DB.prepare(`UPDATE personnel_records SET position=?,homeroom_classroom=?,updated_at=datetime('now') WHERE id=?`).bind(position||null,classroom||null,personId),
+ // ช่องที่เว้นว่างไม่ลบค่าเดิมในทะเบียนบุคลากร
+ env.DB.prepare(`UPDATE personnel_records SET position=COALESCE(?,position),homeroom_classroom=COALESCE(?,homeroom_classroom),updated_at=datetime('now') WHERE id=?`).bind(position||null,classroom||null,personId),
  env.DB.prepare(`INSERT INTO department_staff(department,personnel_id,updated_by,is_head) VALUES(?,?,?,?) ON CONFLICT(department,personnel_id)
  DO UPDATE SET is_head=excluded.is_head,updated_by=excluded.updated_by,updated_at=datetime('now')`).bind(dept,personId,user.id,isHead)
  ]);

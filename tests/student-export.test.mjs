@@ -28,7 +28,7 @@ test('national ID is exported as text with all 13 digits in each format',()=>{
  assert.equal(e.pdfDefinition(data,keys).content[2].table.body[1][0].text,'0123456789012');
 });
 
-test('authenticated export includes national ID while normal list excludes it, including term rosters',async()=>{
+test('export includes national ID for staff/homeroom only while normal list excludes it, including term rosters',async()=>{
  const {DatabaseSync}=await import('node:sqlite');const db=new DatabaseSync(':memory:');
  db.exec(`CREATE TABLE students(id INTEGER,student_code TEXT,full_name TEXT,national_id TEXT,grade_level TEXT,classroom TEXT,status TEXT);
  CREATE TABLE student_details(student_id INTEGER,gender TEXT);
@@ -36,15 +36,21 @@ test('authenticated export includes national ID while normal list excludes it, i
  INSERT INTO students VALUES(1,'0012','ทดสอบ','0123456789012','ป.1','1','enrolled');
  INSERT INTO student_details VALUES(1,'หญิง');
  INSERT INTO student_enrollments VALUES(1,'ป.2','2','enrolled',1,2);`);
- let user={role:'teacher'};
+ let user={id:5,role:'staff'};
  const worker=fs.readFileSync('src/index.js','utf8');const a=worker.indexOf('async function handleListStudents('),b=worker.indexOf('// ---------- /api/students/:id',a);
- const context=vm.createContext({URL,getCurrentUser:async()=>user,ensureStudentDetailsSchema:async()=>{},getCurrentAcademicPeriod:async()=>({}),jsonResponse:(body,status=200)=>({body,status})});vm.runInContext(worker.slice(a,b),context);
+ let rooms=new Set();
+ const context=vm.createContext({URL,getCurrentUser:async()=>user,canManageAllStudents:(u)=>['staff','superadmin','executive'].includes(u?.role),homeroomRooms:async()=>rooms,roomKey:(g,r)=>`${g}|${r}`,ensureStudentDetailsSchema:async()=>{},getCurrentAcademicPeriod:async()=>({}),jsonResponse:(body,status=200)=>({body,status})});vm.runInContext(worker.slice(a,b),context);
  const env={DB:{prepare(sql){let args=[];return {bind(...values){args=values;return this;},async all(){return {results:db.prepare(sql).all(...args)};}};}}};
  for(const term of ['', '?academic_term_id=2']) {
   const request={url:'https://school.test/api/students'+term};
   const normal=await context.handleListStudents(request,env);assert.equal(Object.hasOwn(normal.body.students[0],'national_id'),false);
   const exported=await context.handleListStudents(request,env,true);assert.equal(exported.body.students[0].national_id,'0123456789012');assert.equal(exported.body.students[0].grade_level,term?'ป.2':'ป.1');
  }
+ // ครูที่ไม่ใช่ครูประจำชั้นของห้องนั้นไม่เห็นเลขบัตร · ครูประจำชั้นเห็น
+ user={id:7,role:'teacher'};
+ assert.equal((await context.handleListStudents({url:'https://school.test/api/students'},env,true)).body.students[0].national_id,null);
+ rooms=new Set(['ป.1|1']);
+ assert.equal((await context.handleListStudents({url:'https://school.test/api/students'},env,true)).body.students[0].national_id,'0123456789012');
  user=null;assert.equal((await context.handleListStudents({url:'https://school.test/api/students/export'},env,true)).status,401);
  assert.match(worker,/pathname === "\/api\/students\/export" && method === "GET"\) return await handleListStudents\(request, env, true\)/);
  db.close();

@@ -20,6 +20,7 @@ import {
   buildClearCookie,
 } from "./lib/crypto.js";
 import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
+import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { importStaffRows } from "./lib/staff-import.js";
 import { importProjectRows, upsertProjectRow, findDuplicateProject } from "./lib/project-import.js";
@@ -41,7 +42,7 @@ import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
-import { handleProjectWorkflowRoute, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
+import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
 
 import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
@@ -117,7 +118,7 @@ async function ensureProjectExpenseSchema(env) {
   await env.DB.prepare(
     `INSERT OR IGNORE INTO project_expenses
        (project_id, expense_date, document_no, category, description, amount, status, notes, created_by, approved_by, approved_at, paid_at)
-     SELECT p.id, date('now'), 'OPENING-' || p.id, 'opening_balance',
+     SELECT p.id, date('now','+7 hours'), 'OPENING-' || p.id, 'opening_balance',
             'ยอดใช้จริงยกมาก่อนเปิดทะเบียนเบิกจ่าย', p.spent_amount, 'paid',
             'ระบบสร้างอัตโนมัติเพื่อรักษายอดเดิม', p.created_by, p.created_by, datetime('now'), datetime('now')
      FROM projects p
@@ -678,6 +679,14 @@ async function handleAdminListUsers(request, env) {
   return jsonResponse({ users: results });
 }
 
+// ผู้ใช้นี้เป็นผู้ดูแลระบบที่ใช้งานอยู่คนสุดท้ายหรือไม่ (ป้องกันระบบไม่มีผู้ดูแลเหลือ)
+async function isLastActiveSuperadmin(env, userId) {
+  const row = await env.DB.prepare(`SELECT
+      (SELECT role FROM users WHERE id = ?) AS role,
+      (SELECT COUNT(*) FROM users WHERE role = 'superadmin' AND status = 'active' AND deleted_at IS NULL) AS n`).bind(userId).first();
+  return row?.role === "superadmin" && Number(row.n) <= 1;
+}
+
 // ---------- /api/admin/users/:id (PATCH) ----------
 const VALID_ROLES = ["teacher", "executive", "staff", "superadmin"];
 const VALID_STATUSES = ["active", "disabled"];
@@ -703,6 +712,16 @@ export async function handleAdminUpdateUser(request, env, targetId) {
 
   const updates = [];
   const values = [];
+
+  // เปลี่ยนบทบาท/ระงับบัญชี: เฉพาะผู้ดูแลระบบ (superadmin) — ผู้บริหารแก้ชื่อได้อย่างเดียว
+  if ((body.role !== undefined || body.status !== undefined) && admin.role !== "superadmin") {
+    return jsonResponse({ error: "เปลี่ยนบทบาทหรือระงับบัญชีได้เฉพาะผู้ดูแลระบบ" }, 403);
+  }
+  // ต้องมีผู้ดูแลระบบที่ใช้งานอยู่อย่างน้อย 1 คนเสมอ
+  const removesSuperadmin = (body.role !== undefined && body.role !== "superadmin") || body.status === "disabled";
+  if (removesSuperadmin && await isLastActiveSuperadmin(env, targetId)) {
+    return jsonResponse({ error: "บัญชีนี้เป็นผู้ดูแลระบบคนสุดท้าย ตั้งผู้ดูแลระบบคนอื่นก่อน" }, 409);
+  }
 
   if (body.role !== undefined) {
     if (body.role !== null && !VALID_ROLES.includes(body.role)) {
@@ -778,8 +797,10 @@ export async function handleAdminUpdateUser(request, env, targetId) {
 export async function handleAdminDeleteUser(request, env, targetId) {
   const admin = await getCurrentUser(request, env);
   if (!isAdmin(admin)) return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
+  if (admin.role !== "superadmin") return jsonResponse({ error: "ลบบัญชีผู้ใช้ได้เฉพาะผู้ดูแลระบบ" }, 403);
   if (!targetId) return jsonResponse({ error: "รหัสผู้ใช้ไม่ถูกต้อง" }, 400);
   if (targetId === Number(admin.id)) return jsonResponse({ error: "ไม่สามารถลบบัญชีของตัวเองได้" }, 400);
+  if (await isLastActiveSuperadmin(env, targetId)) return jsonResponse({ error: "บัญชีนี้เป็นผู้ดูแลระบบคนสุดท้าย ตั้งผู้ดูแลระบบคนอื่นก่อน" }, 409);
 
   await ensureUserDeletionSchema(env);
   const target = await env.DB.prepare(
@@ -945,6 +966,15 @@ async function handleListTasks(request, env) {
   return jsonResponse({ tasks: enriched });
 }
 
+// ผู้รับผิดชอบงาน: ตัดซ้ำ/ค่าไม่ถูกต้อง และต้องเป็นบัญชีที่ใช้งานอยู่จริง
+async function validTaskAssignees(env, raw) {
+  const ids = [...new Set((Array.isArray(raw) ? raw : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return [];
+  const { results } = await env.DB.prepare(`SELECT id FROM users WHERE id IN (${ids.map(() => "?").join(",")}) AND COALESCE(status,'active')='active'`).bind(...ids).all();
+  const found = new Set(results.map((r) => Number(r.id)));
+  return ids.filter((id) => found.has(id));
+}
+
 // ---------- /api/tasks (POST) ----------
 async function handleCreateTask(request, env) {
   const user = await getCurrentUser(request, env);
@@ -963,7 +993,7 @@ async function handleCreateTask(request, env) {
   const description = (body.description || "").trim();
   const priority = ["low", "normal", "high"].includes(body.priority) ? body.priority : "normal";
   const dueDate = body.due_date || null;
-  const assigneeIds = Array.isArray(body.assignee_ids) ? body.assignee_ids.map(Number) : [];
+  const assigneeIds = await validTaskAssignees(env, body.assignee_ids);
 
   if (!title) {
     return jsonResponse({ error: "กรุณากรอกชื่องาน" }, 400);
@@ -1018,8 +1048,10 @@ async function handleUpdateTask(request, env, taskId) {
   const updates = [];
   const values = [];
   if (body.title !== undefined) {
+    const title = String(body.title ?? "").trim();
+    if (!title) return jsonResponse({ error: "กรุณากรอกชื่องาน" }, 400);
     updates.push("title = ?");
-    values.push(String(body.title).trim());
+    values.push(title);
   }
   if (body.description !== undefined) {
     updates.push("description = ?");
@@ -1038,24 +1070,28 @@ async function handleUpdateTask(request, env, taskId) {
     values.push(body.status);
   }
 
+  let assigneeIds;
+  if (Array.isArray(body.assignee_ids)) {
+    assigneeIds = await validTaskAssignees(env, body.assignee_ids);
+    if (!assigneeIds.length) return jsonResponse({ error: "กรุณาเลือกผู้รับผิดชอบอย่างน้อย 1 คน" }, 400);
+  }
+
   if (updates.length > 0) {
     values.push(taskId);
     await env.DB.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
   }
 
-  if (Array.isArray(body.assignee_ids)) {
-    const assigneeIds = body.assignee_ids.map(Number);
-    await env.DB.prepare("DELETE FROM task_assignees WHERE task_id = ?").bind(taskId).run();
-    if (assigneeIds.length > 0) {
-      const inserts = assigneeIds.map((uid) =>
-        env.DB.prepare("INSERT INTO task_assignees (task_id, user_id) VALUES (?, ?)").bind(taskId, uid)
-      );
-      await env.DB.batch(inserts);
-    }
+  if (assigneeIds) {
+    // คงสถานะรายบุคคลของผู้ที่ยังอยู่ — ลบเฉพาะคนที่ถูกถอด เพิ่มเฉพาะคนใหม่
+    const marks = assigneeIds.map(() => "?").join(",");
+    await env.DB.batch([
+      env.DB.prepare(`DELETE FROM task_assignees WHERE task_id = ? AND user_id NOT IN (${marks})`).bind(taskId, ...assigneeIds),
+      ...assigneeIds.map((uid) => env.DB.prepare("INSERT OR IGNORE INTO task_assignees (task_id, user_id) VALUES (?, ?)").bind(taskId, uid)),
+    ]);
   }
 
   await writeAuditLog(env, user, "update", "task", taskId, {
-    fields: Object.keys(body), assignee_ids: Array.isArray(body.assignee_ids) ? body.assignee_ids.map(Number) : undefined,
+    fields: Object.keys(body), assignee_ids: assigneeIds,
   }, request);
   return jsonResponse({ ok: true });
 }
@@ -1206,6 +1242,11 @@ async function handleListStudents(request, env, includeNationalId = false) {
     ).all());
   }
 
+  // เลขบัตรประชาชน: เฉพาะผู้บริหาร/เจ้าหน้าที่ และครูประจำชั้นของห้องนั้น
+  if (includeNationalId && !canManageAllStudents(user)) {
+    const rooms = await homeroomRooms(env, user.id);
+    for (const row of results) if (!rooms.has(roomKey(row.grade_level, row.classroom))) row.national_id = null;
+  }
   return jsonResponse({ students: results, current_academic_period: await getCurrentAcademicPeriod(env) });
 }
 
@@ -1227,7 +1268,10 @@ async function handleGetStudent(request, env, studentId) {
     env.DB.prepare("SELECT * FROM student_details WHERE student_id = ?").bind(studentId).first(),
   ]);
 
-  return jsonResponse({ student: { ...student, ...(details || {}), guardians: guardianResult.results } });
+  const full = { ...student, ...(details || {}), guardians: guardianResult.results };
+  // ข้อมูลส่วนบุคคล (เลขบัตร วันเกิด สุขภาพ ที่อยู่ ครอบครัว ผู้ปกครอง): เฉพาะผู้บริหาร/เจ้าหน้าที่ และครูประจำชั้นของห้องนั้น
+  if (!(await canSeeStudentPrivate(env, user, student))) return jsonResponse({ student: basicStudent(full) });
+  return jsonResponse({ student: full });
 }
 
 // ---------- /api/students (POST) ----------
@@ -1546,13 +1590,13 @@ async function handleReportsSummary(request, env) {
 
   const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
   const overdueTasks = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now')"
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now','+7 hours')"
   ).first();
 
   const { results: tasksByAssignee } = await env.DB.prepare(
     `SELECT u.full_name,
             SUM(CASE WHEN ta.status != 'done' THEN 1 ELSE 0 END) as pending_count,
-            SUM(CASE WHEN ta.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < date('now') THEN 1 ELSE 0 END) as overdue_count
+            SUM(CASE WHEN ta.status != 'done' AND t.due_date IS NOT NULL AND t.due_date < date('now','+7 hours') THEN 1 ELSE 0 END) as overdue_count
      FROM task_assignees ta
      JOIN users u ON u.id = ta.user_id
      JOIN tasks t ON t.id = ta.task_id
@@ -1566,11 +1610,17 @@ async function handleReportsSummary(request, env) {
     "SELECT status, COUNT(*) as count FROM students GROUP BY status"
   ).all();
 
-  const { results: studentsByClassroom } = await env.DB.prepare(
-    `SELECT COALESCE(classroom, 'ไม่ระบุห้อง') as classroom, COUNT(*) as count
+  // ห้องเก็บเป็นเลข (1, 2, …) ต้องจัดกลุ่มคู่กับชั้น ไม่อย่างนั้นห้อง 1 ของทุกชั้นรวมเป็นแถวเดียว
+  const { results: classroomRows } = await env.DB.prepare(
+    `SELECT grade_level, classroom, COUNT(*) as count
      FROM students WHERE status = 'enrolled'
-     GROUP BY classroom ORDER BY classroom`
+     GROUP BY grade_level, classroom`
   ).all();
+  const gradeRank = (g) => { const m = String(g || "").match(/^(อ|ป)\.(\d+)/); return m ? (m[1] === "อ" ? 0 : 10) + Number(m[2]) : 99; };
+  const studentsByClassroom = classroomRows
+    .sort((a, b) => gradeRank(a.grade_level) - gradeRank(b.grade_level) || String(a.grade_level || "").localeCompare(String(b.grade_level || ""), "th")
+      || String(a.classroom || "").localeCompare(String(b.classroom || ""), "th", { numeric: true }))
+    .map((r) => ({ classroom: r.grade_level && r.classroom ? `${r.grade_level}/${r.classroom}` : (r.grade_level || r.classroom || "ไม่ระบุห้อง"), count: r.count }));
 
   const staffCount = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM users WHERE status = 'active' AND role IS NOT NULL"
@@ -1656,7 +1706,7 @@ async function handleCreateProject(request, env, department) {
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
     return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
   }
-  const now = new Date();
+  const now = new Date(Date.now() + 7 * 3600 * 1000); // เวลาไทย
   const defaultFiscalYear = now.getUTCFullYear() + (now.getUTCMonth() + 1 >= 10 ? 544 : 543);
   const fiscalYear = body.fiscal_year === "" || body.fiscal_year == null ? defaultFiscalYear : Number(body.fiscal_year);
   if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
@@ -1773,10 +1823,17 @@ async function handleDeleteProject(request, env, projectId) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่ลบโครงการได้" }, 403);
 
+  const project = await env.DB.prepare("SELECT id, name, fiscal_year, budget_amount FROM projects WHERE id=?").bind(projectId).first();
+  if (!project) return jsonResponse({ error: "ไม่พบโครงการ" }, 404);
   if (await env.DB.prepare("SELECT 1 FROM project_expenses WHERE project_id=? AND status='paid' LIMIT 1").bind(projectId).first()) return jsonResponse({ error: "โครงการมีรายการจ่ายแล้ว ลบไม่ได้ กรุณาเก็บประวัติโครงการ" },409);
+  // คำขอเบิกที่รออนุมัติหรืออนุมัติแล้วเป็นภาระผูกพัน ต้องยกเลิก/ไม่อนุมัติก่อน ไม่ลบทิ้งเงียบ ๆ
+  const committed = await env.DB.prepare("SELECT COUNT(*) AS n FROM project_expenses WHERE project_id=? AND status IN ('pending','approved')").bind(projectId).first();
+  if (Number(committed?.n || 0) > 0) return jsonResponse({ error: `โครงการมีคำขอเบิกที่รออนุมัติหรืออนุมัติแล้ว ${committed.n} รายการ ต้องยกเลิกหรือไม่อนุมัติก่อนจึงลบได้` }, 409);
+  const { results: removed } = await env.DB.prepare("SELECT id, request_no, status, amount FROM project_expenses WHERE project_id=?").bind(projectId).all();
   await env.DB.prepare("DELETE FROM project_expenses WHERE project_id = ?").bind(projectId).run();
   await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
   await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
+  await writeAuditLog(env, user, "delete", "project", projectId, { name: project.name, fiscal_year: project.fiscal_year, budget_amount: project.budget_amount, removed_expenses: removed }, request);
   return jsonResponse({ ok: true });
 }
 
@@ -1924,6 +1981,10 @@ async function handleUpdateProjectExpense(request, env, expenseId) {
     if (!isAdmin(user) && !["draft", "pending"].includes(body.status)) {
       return jsonResponse({ error: "เฉพาะผู้บริหารเท่านั้นที่อนุมัติหรือยืนยันการจ่ายได้" }, 403);
     }
+    // อนุมัติ/จ่าย ต้องผ่านผู้อำนวยการ
+    if (["approved", "paid"].includes(body.status) && !(await budgetDirectorIds(env)).includes(Number(user.id))) {
+      return jsonResponse({ error: "อนุมัติหรือยืนยันการจ่ายได้เฉพาะผู้อำนวยการ" }, 403);
+    }
     updates.push("status = ?"); values.push(body.status);
     if (["approved", "paid"].includes(body.status)) {
       updates.push("approved_by = ?", "approved_at = COALESCE(approved_at, datetime('now'))"); values.push(user.id);
@@ -2051,11 +2112,17 @@ async function handleListSupportCases(request, env) {
   await ensureExtendedSchema(env);
   const url = new URL(request.url);
   const studentId = Number(url.searchParams.get("student_id"));
-  const query = `SELECT c.*, s.student_code, s.full_name AS student_name, u.full_name AS creator_name
+  const query = `SELECT c.*, s.student_code, s.full_name AS student_name, s.grade_level, s.classroom, u.full_name AS creator_name
     FROM student_support_cases c JOIN students s ON s.id=c.student_id LEFT JOIN users u ON u.id=c.created_by
     ${studentId > 0 ? "WHERE c.student_id = ?" : ""} ORDER BY c.risk_level DESC, c.updated_at DESC`;
   const result = studentId > 0 ? await env.DB.prepare(query).bind(studentId).all() : await env.DB.prepare(query).all();
-  return jsonResponse({ cases: result.results });
+  // ข้อมูลอ่อนไหว: ผู้บริหาร/เจ้าหน้าที่เห็นทุกกรณี ครูเห็นเฉพาะกรณีที่ตนบันทึกหรือนักเรียนในห้องที่เป็นครูประจำชั้น
+  let cases = result.results;
+  if (!canManageAllStudents(user)) {
+    const rooms = await homeroomRooms(env, user.id);
+    cases = cases.filter((c) => c.created_by === user.id || rooms.has(roomKey(c.grade_level, c.classroom)));
+  }
+  return jsonResponse({ cases });
 }
 async function handleCreateSupportCase(request, env) {
   const user = await getCurrentUser(request, env);
@@ -2064,6 +2131,10 @@ async function handleCreateSupportCase(request, env) {
   await ensureExtendedSchema(env);
   const body = await request.json().catch(() => null);
   if (!body || !body.student_id || !SUPPORT_TYPES.includes(body.case_type) || !body.summary) return jsonResponse({ error: "กรุณากรอกข้อมูลกรณีช่วยเหลือให้ครบถ้วน" }, 400);
+  const supportStudent = await env.DB.prepare("SELECT id, grade_level, classroom FROM students WHERE id=?").bind(Number(body.student_id)).first();
+  if (!supportStudent) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
+  if (!(await canSeeStudentPrivate(env, user, supportStudent))) return jsonResponse({ error: "บันทึกได้เฉพาะนักเรียนในห้องที่เป็นครูประจำชั้น" }, 403);
+  if (body.follow_up_date && !isIsoDate(body.follow_up_date)) return jsonResponse({ error: "วันที่ติดตามไม่ถูกต้อง" }, 400);
   const level = SUPPORT_LEVELS.includes(body.risk_level) ? body.risk_level : "normal";
   const result = await env.DB.prepare(`INSERT INTO student_support_cases
     (student_id, case_type, risk_level, summary, action_taken, follow_up_date, status, referred_to, created_by)
@@ -2079,8 +2150,15 @@ async function handleUpdateSupportCase(request, env, caseId) {
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!isAdmin(user) && user.role !== "staff" && user.role !== "teacher") return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขข้อมูล" }, 403);
   await ensureExtendedSchema(env);
+  const supportCase = await env.DB.prepare(`SELECT c.id, c.created_by, s.grade_level, s.classroom FROM student_support_cases c
+    JOIN students s ON s.id=c.student_id WHERE c.id=?`).bind(caseId).first();
+  if (!supportCase) return jsonResponse({ error: "ไม่พบกรณีช่วยเหลือ" }, 404);
+  if (supportCase.created_by !== user.id && !(await canSeeStudentPrivate(env, user, supportCase))) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขกรณีนี้" }, 403);
   const body = await request.json().catch(() => null);
   if (!body) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+  if (body.risk_level !== undefined && !SUPPORT_LEVELS.includes(body.risk_level)) return jsonResponse({ error: "ระดับความเสี่ยงไม่ถูกต้อง" }, 400);
+  if (body.status !== undefined && !SUPPORT_STATUS.includes(body.status)) return jsonResponse({ error: "สถานะไม่ถูกต้อง" }, 400);
+  if (body.summary !== undefined && !String(body.summary || "").trim()) return jsonResponse({ error: "กรุณาระบุสรุปกรณี" }, 400);
   const allowed = ["risk_level", "summary", "action_taken", "follow_up_date", "status", "referred_to"];
   const updates = [], values = [];
   for (const field of allowed) if (body[field] !== undefined) { updates.push(`${field} = ?`); values.push(body[field] || null); }
@@ -2174,7 +2252,7 @@ async function handleListWorkRecords(request, env) {
         SUM(CASE WHEN w.status='in_progress' THEN 1 ELSE 0 END) AS in_progress,
         SUM(CASE WHEN w.status='waiting' THEN 1 ELSE 0 END) AS waiting,
         SUM(CASE WHEN w.status='completed' THEN 1 ELSE 0 END) AS completed,
-        SUM(CASE WHEN w.status NOT IN ('completed','cancelled') AND w.due_date < date('now') THEN 1 ELSE 0 END) AS overdue
+        SUM(CASE WHEN w.status NOT IN ('completed','cancelled') AND w.due_date < date('now','+7 hours') THEN 1 ELSE 0 END) AS overdue
       FROM work_records w WHERE ${baseConditions.join(" AND ")}`).bind(...baseBinds).first(),
     getCurrentAcademicPeriod(env),
   ]);
@@ -2278,16 +2356,16 @@ async function handleInventorySummary(request, env) {
   const totals = await env.DB.prepare(`SELECT COUNT(*) AS item_count,
       SUM(CASE WHEN item_type='material' THEN 1 ELSE 0 END) AS material_count,
       SUM(CASE WHEN item_type='equipment' THEN 1 ELSE 0 END) AS equipment_count,
-      COALESCE(SUM(current_quantity * unit_price), 0) AS total_value,
+      COALESCE(SUM(CASE WHEN status IN ('lost','disposed') THEN 0 ELSE current_quantity * unit_price END), 0) AS total_value, -- ไม่นับของสูญหาย/จำหน่ายแล้ว
       SUM(CASE WHEN status='active' AND minimum_quantity > 0 AND current_quantity <= minimum_quantity THEN 1 ELSE 0 END) AS low_stock_count,
       SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
     FROM inventory_items`).first();
   const overdue = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
-    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now')
+    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now','+7 hours')
       AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
         WHERE r.transaction_type='return' AND r.related_transaction_id=b.id), 0)`).first();
   const inspectionsDue = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_inspections i
-    WHERE i.next_inspection_date IS NOT NULL AND i.next_inspection_date <= date('now', '+30 day')
+    WHERE i.next_inspection_date IS NOT NULL AND i.next_inspection_date <= date('now','+7 hours','+30 day')
       AND i.id = (SELECT i2.id FROM inventory_inspections i2 WHERE i2.item_id=i.item_id ORDER BY i2.inspection_date DESC, i2.id DESC LIMIT 1)`).first();
   return jsonResponse({
     item_count: Number(totals?.item_count || 0),
@@ -2364,7 +2442,7 @@ async function handleCreateInventoryItem(request, env) {
     if (openingQuantity > 0) {
       await env.DB.prepare(`INSERT INTO inventory_transactions
         (item_id,transaction_type,transaction_date,document_no,quantity,quantity_change,unit_price,to_location,notes,created_by)
-        VALUES (?, 'opening', date('now'), ?, ?, ?, ?, ?, ?, ?)`)
+        VALUES (?, 'opening', date('now','+7 hours'), ?, ?, ?, ?, ?, ?, ?)`)
         .bind(itemId, `OPENING-${itemCode}`, openingQuantity, openingQuantity, unitPrice, cleanText(body.location, 160), "ยอดยกมาเมื่อสร้างทะเบียน", user.id).run();
     }
     await writeAuditLog(env, user, "create", "inventory_item", itemId, { item_code: itemCode, opening_quantity: openingQuantity }, request);
@@ -2494,8 +2572,11 @@ async function handleCreateInventoryInspection(request, env, itemId) {
     (item_id,inspection_date,quantity_found,item_condition,result,location,inspector,notes,next_inspection_date,created_by)
     VALUES (?,?,?,?,?,?,?,?,?,?)`).bind(itemId,body.inspection_date,quantityFound,body.item_condition,result,
       cleanText(body.location,160) || item.location,cleanText(body.inspector,160) || user.full_name,cleanText(body.notes,1000),body.next_inspection_date || null,user.id).run();
-  await env.DB.prepare("UPDATE inventory_items SET item_condition=?,location=COALESCE(?,location),updated_at=datetime('now') WHERE id=?")
-    .bind(body.item_condition,cleanText(body.location,160),itemId).run();
+  // ตรวจแล้วสภาพดี/พอใช้ → ปลดสถานะ "ซ่อม" กลับเป็นใช้งาน; ตรวจพบสูญหาย → ตั้งสถานะสูญหาย
+  await env.DB.prepare(`UPDATE inventory_items SET item_condition=?,location=COALESCE(?,location),
+      status=CASE WHEN ? IN ('good','fair') AND status='repair' THEN 'active' WHEN ?='lost' AND status IN ('active','repair') THEN 'lost' ELSE status END,
+      updated_at=datetime('now') WHERE id=?`)
+    .bind(body.item_condition,cleanText(body.location,160),body.item_condition,body.item_condition,itemId).run();
   await writeAuditLog(env,user,"create","inventory_inspection",inserted.meta.last_row_id,{item_id:itemId,result,quantity_found:quantityFound},request);
   return jsonResponse({ id: inserted.meta.last_row_id, result },201);
 }
@@ -2790,7 +2871,7 @@ async function getMaintenanceRequest(env, requestId) {
 }
 
 async function nextMaintenanceNumber(env) {
-  const yearBe = new Date().getUTCFullYear() + 543;
+  const yearBe = new Date(Date.now() + 7 * 3600 * 1000).getUTCFullYear() + 543; // เวลาไทย
   const row = await env.DB.prepare(`INSERT INTO maintenance_counters (buddhist_year,last_number) VALUES (?,1)
     ON CONFLICT(buddhist_year) DO UPDATE SET last_number=last_number+1 RETURNING last_number`)
     .bind(yearBe).first();
@@ -2888,7 +2969,7 @@ async function handleMaintenanceSummary(request, env) {
       SUM(CASE WHEN status='in_progress' THEN 1 ELSE 0 END) AS in_progress_count,
       SUM(CASE WHEN status='waiting_parts' THEN 1 ELSE 0 END) AS waiting_parts_count,
       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS awaiting_verification_count,
-      SUM(CASE WHEN status NOT IN ('verified','cancelled') AND due_date IS NOT NULL AND due_date < date('now') THEN 1 ELSE 0 END) AS overdue_count,
+      SUM(CASE WHEN status NOT IN ('verified','cancelled') AND due_date IS NOT NULL AND due_date < date('now','+7 hours') THEN 1 ELSE 0 END) AS overdue_count,
       SUM(CASE WHEN priority='urgent' AND status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS urgent_count,
       COALESCE(SUM(CASE WHEN strftime('%Y-%m',completed_at)=strftime('%Y-%m','now') THEN actual_cost ELSE 0 END),0) AS month_cost
     FROM maintenance_requests m WHERE ${visibility.sql}`).bind(...visibility.binds).first();
@@ -3562,6 +3643,13 @@ async function handleDownloadAttachment(request, env, attachmentId) {
     if (!maintenance) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
     if (!canManageMaintenance(user) && maintenance.reported_by!==user.id && maintenance.assigned_to!==user.id) return jsonResponse({ error:"ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
   }
+  if (attachment.entity_type === "project_expense") {
+    // หลักฐานการเบิกจ่าย: ผู้ขอ ผู้รับผิดชอบโครงการ และเจ้าหน้าที่การเงิน/ผู้บริหาร
+    const expense = await env.DB.prepare("SELECT project_id, created_by FROM project_expenses WHERE id=?").bind(attachment.entity_id).first();
+    if (!expense) return jsonResponse({ error: "ไม่พบรายการเบิกจ่าย" },404);
+    const allowed = Number(expense.created_by) === Number(user.id) || await isProjectOwner(env, user, expense.project_id) || await canManageProjectFinance(env, user);
+    if (!allowed) return jsonResponse({ error: "ไม่มีสิทธิ์เปิดไฟล์นี้" },403);
+  }
   let body;
   try { body = await readStoredAttachment(env,attachment); }
   catch (error) { return jsonResponse({ error:error.message||"เปิดไฟล์ไม่สำเร็จ" },502); }
@@ -3589,7 +3677,7 @@ async function handleStorageStatus(request, env) {
 }
 
 // ---------- สถานะระบบสำหรับผู้บริหาร/ผู้ดูแลระบบ ----------
-const DEFAULT_D1_DATABASE_LIMIT_BYTES = 500 * 1024 * 1024;
+const DEFAULT_D1_DATABASE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024; // แผน Workers Paid: 10 GB ต่อฐานข้อมูล
 const DEFAULT_R2_FREE_LIMIT_BYTES = 10 * 1024 * 1024 * 1024;
 
 function numericEnv(value, fallback) {
@@ -3915,7 +4003,7 @@ async function handleOverview(request, env) {
   ).first();
   const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
   const overdueTasks = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now')"
+    "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now','+7 hours')"
   ).first();
   const ongoingProjects = await env.DB.prepare(
     "SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing'"
@@ -3929,7 +4017,7 @@ async function handleOverview(request, env) {
     SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
     FROM inventory_items`).first();
   const overdueInventoryBorrows = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
-    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now')
+    WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now','+7 hours')
       AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
         WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`).first();
   const { results: departmentRows } = await env.DB.prepare(
@@ -3964,7 +4052,7 @@ async function handleOverview(request, env) {
 
   const { results: licensesExpiring } = await env.DB.prepare(
     `SELECT full_name, license_expiry_date,
-            CAST(julianday(license_expiry_date) - julianday(date('now')) AS INTEGER) AS days_remaining
+            CAST(julianday(license_expiry_date) - julianday(date('now','+7 hours')) AS INTEGER) AS days_remaining
      FROM personnel_records
      WHERE status = 'active'
        AND license_expiry_date IS NOT NULL

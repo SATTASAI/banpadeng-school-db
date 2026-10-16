@@ -1,7 +1,7 @@
 import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
-import { ensureProjectWorkflowSchema, projectFundingSummary } from "./project-workflow.js";
+import { ensureProjectWorkflowSchema, projectFundingSummary, canManageProjectFinance } from "./project-workflow.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
 const CATEGORIES = ["materials", "equipment", "services", "compensation", "utilities", "travel", "food", "opening_balance", "other"];
@@ -29,7 +29,7 @@ function validDate(value) {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
-function fiscalYear(date = new Date().toISOString().slice(0, 10)) {
+function fiscalYear(date = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)) {
   const [year, month] = date.split("-").map(Number);
   return year + (month >= 10 ? 544 : 543);
 }
@@ -230,6 +230,15 @@ async function overview(request, env) {
     isAdmin(user) ? env.DB.prepare(`SELECT id,full_name,email,role FROM users WHERE status='active' AND role IS NOT NULL AND deleted_at IS NULL ORDER BY full_name`).all() : Promise.resolve({ results: [] }),
   ]);
 
+  // ครูทั่วไปเห็นเฉพาะคำขอของตน/โครงการที่รับผิดชอบ และคำขอที่ตนต้องลงนาม — รายรับและประวัติการเงินเฉพาะเจ้าหน้าที่การเงิน/ผู้บริหาร
+  const financeView = await canManageProjectFinance(env, user);
+  if (!financeView) {
+    const { results: mine } = await env.DB.prepare("SELECT project_id FROM project_owners WHERE user_id=?").bind(user.id).all();
+    const owned = new Set(mine.map((r) => Number(r.project_id)));
+    const signer = new Set(approvalRows.results.filter((a) => Number(a.assigned_user_id) === Number(user.id)).map((a) => Number(a.expense_id)));
+    requests.results = requests.results.filter((r) => Number(r.created_by) === Number(user.id) || owned.has(Number(r.project_id)) || signer.has(Number(r.id)));
+    incomes.results = []; audits.results = [];
+  }
   const approvalsByRequest = new Map(), itemsByRequest = new Map();
   for (const row of approvalRows.results) { if (!approvalsByRequest.has(row.expense_id)) approvalsByRequest.set(row.expense_id, []); approvalsByRequest.get(row.expense_id).push(row); }
   for (const row of itemRows.results) { if (!itemsByRequest.has(row.expense_id)) itemsByRequest.set(row.expense_id, []); itemsByRequest.get(row.expense_id).push(row); }
@@ -254,7 +263,7 @@ async function overview(request, env) {
     projects: projects.results.map((row) => ({ ...row, budget_amount: number(row.budget_amount), spent_amount: number(row.spent_amount), pending_amount: number(row.pending_amount), approved_amount: number(row.approved_amount), can_request: isAdmin(user) || Boolean(row.can_request) })),
     requests: requestData, incomes: incomes.results.map((row) => ({ ...row, amount: number(row.amount) })), audit: audits.results,
     role_assignments: roleRows.results, assignable_users: users.results, workflow_steps: WORKFLOW_STEPS,
-    permissions: { can_manage_roles: isAdmin(user), can_manage_income: isAdmin(user), role: user.role } });
+    permissions: { can_manage_roles: isAdmin(user), can_manage_income: isAdmin(user), can_view_finance: financeView, role: user.role } });
 }
 
 async function createRequest(request, env) {
@@ -434,7 +443,34 @@ async function createIncome(request, env) {
   const year = Number(body.fiscal_year) || fiscalYear(body.received_date);
   const result = await env.DB.prepare("INSERT INTO budget_income(fiscal_year,received_date,document_no,source_name,source_type,amount,notes,created_by) VALUES(?,?,?,?,?,?,?,?)")
     .bind(year, body.received_date, clean(body.document_no, 100), clean(body.source_name, 300), SOURCE_TYPES.includes(body.source_type) ? body.source_type : "other", amount, clean(body.notes, 1000), user.id).run();
+  await env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details,ip_address) VALUES(?,?,?,?,?,?)`)
+    .bind(user.id, "create", "budget_income", result.meta.last_row_id, JSON.stringify({ amount, source_name: clean(body.source_name, 300) }), request.headers.get("CF-Connecting-IP") || null).run();
   return jsonResponse({ id: result.meta.last_row_id }, 201);
+}
+
+async function updateIncome(request, env, id) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้น" }, 403);
+  const row = await env.DB.prepare("SELECT * FROM budget_income WHERE id=?").bind(id).first();
+  if (!row) return jsonResponse({ error: "ไม่พบรายการรายรับ" }, 404);
+  if (request.method === "DELETE") {
+    const body = await request.json().catch(() => ({}));
+    const reason = clean(body?.reason, 500);
+    if (!reason) return jsonResponse({ error: "กรุณาระบุเหตุผลที่ลบรายการรายรับ" }, 400);
+    await env.DB.prepare("DELETE FROM budget_income WHERE id=?").bind(id).run();
+    await env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details,ip_address) VALUES(?,?,?,?,?,?)`)
+      .bind(user.id, "delete", "budget_income", id, JSON.stringify({ reason, previous: row }), request.headers.get("CF-Connecting-IP") || null).run();
+    return jsonResponse({ ok: true });
+  }
+  const body = await request.json().catch(() => null), amount = moneyValue(body?.amount);
+  if (!body || !validDate(body.received_date) || !clean(body.source_name, 300) || !Number.isFinite(amount) || amount <= 0) return jsonResponse({ error: "กรุณากรอกวันที่ แหล่งเงิน และจำนวนเงิน" }, 400);
+  const year = Number(body.fiscal_year) || fiscalYear(body.received_date);
+  await env.DB.prepare(`UPDATE budget_income SET fiscal_year=?,received_date=?,document_no=?,source_name=?,source_type=?,amount=?,notes=?,updated_at=datetime('now') WHERE id=?`)
+    .bind(year, body.received_date, clean(body.document_no, 100), clean(body.source_name, 300), SOURCE_TYPES.includes(body.source_type) ? body.source_type : "other", amount, clean(body.notes, 1000), id).run();
+  await env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details,ip_address) VALUES(?,?,?,?,?,?)`)
+    .bind(user.id, "update", "budget_income", id, JSON.stringify({ previous: row }), request.headers.get("CF-Connecting-IP") || null).run();
+  return jsonResponse({ ok: true });
 }
 
 function reportQuery(url) {
@@ -465,6 +501,11 @@ async function reportRows(request, env) {
   const user = await currentUser(request, env);
   if (!user) return { response: jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401) };
   const filters = reportQuery(new URL(request.url));
+  if (!(await canManageProjectFinance(env, user))) {
+    // ครูทั่วไป: รายงานเฉพาะคำขอของตนและโครงการที่รับผิดชอบ
+    filters.where += " AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?))";
+    filters.bindings.push(user.id, user.id);
+  }
   const { results } = await env.DB.prepare(`SELECT e.id,e.request_no,e.expense_date,e.fiscal_year,e.status,e.source_type,
     e.request_purpose,e.description,e.amount,e.payment_no,e.payment_date,e.payment_method,e.payment_reference,
     e.payment_recipient,e.withholding_tax,e.net_paid,e.created_by,p.name project_name,COALESCE(p.management_area,p.department) AS department,
@@ -488,7 +529,12 @@ async function financialReport(request, env) {
   return jsonResponse({ fiscal_year: report.filters.year, summary: report.summary, rows: report.rows });
 }
 
-function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+// กันสูตร Excel: ข้อความที่ขึ้นต้นด้วย = + - @ (หรือแท็บ/ขึ้นบรรทัด) ใส่ ' นำหน้า — ตัวเลขจริงคงไว้
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (typeof value !== "number" && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return `"${text.replaceAll('"', '""')}"`;
+}
 
 async function exportFinancialReport(request, env) {
   const report = await reportRows(request, env);
@@ -534,6 +580,11 @@ async function printableDocument(request, env, id) {
   const departments = { academic: "ฝ่ายบริหารงานวิชาการ", early_childhood: "ฝ่ายปฐมวัย (งานอนุบาล)", budget: "ฝ่ายบริหารงานงบประมาณ", personnel: "ฝ่ายบริหารงานบุคคล", general: "ฝ่ายบริหารงานทั่วไป" };
   const categories = { materials: "วัสดุ", equipment: "ครุภัณฑ์", services: "ค่าใช้สอย/จ้างบริการ", compensation: "ค่าตอบแทน", utilities: "สาธารณูปโภค", travel: "ค่าเดินทาง", food: "อาหาร/อาหารว่าง", other: "อื่น ๆ" };
   const itemHtml = items.length ? items.map((item) => `<tr><td>${item.line_no}</td><td>${escapeHtml(categories[item.category] || item.category)}</td><td>${escapeHtml(item.description)}</td><td class="num">${money(item.quantity)} ${escapeHtml(item.unit || "")}</td><td class="num">${money(item.unit_price)}</td><td class="num">${money(item.amount)}</td></tr>`).join("") : `<tr><td>1</td><td>${escapeHtml(categories[row.category] || row.category)}</td><td>${escapeHtml(row.description)}</td><td class="num">1</td><td class="num">${money(row.amount)}</td><td class="num">${money(row.amount)}</td></tr>`;
+  // คำขอผ่านระบบเอกสารโครงการ (ไม่มีขั้นลงนามหลายขั้น): แสดงลายมือชื่อผู้อำนวยการที่อนุมัติ
+  if (!approvals.length && row.approved_by) {
+    const approver = await env.DB.prepare("SELECT full_name FROM users WHERE id=?").bind(row.approved_by).first();
+    approvals.push({ signed_name: approver?.full_name || "", step_label: "ผู้อำนวยการอนุมัติ", signed_at: row.approved_at });
+  }
   const signatureHtml = approvals.map((step) => `<div class="signature"><div class="signed">ลงนามอิเล็กทรอนิกส์แล้ว</div><strong>${escapeHtml(step.signed_name || step.assigned_name)}</strong><span>${escapeHtml(step.step_label)}</span><small>${thaiDate(step.signed_at)}</small></div>`).join("");
   const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${escapeHtml(row.request_no)}</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:"TH Sarabun New","Sarabun",sans-serif;color:#111;font-size:16pt;line-height:1.28;margin:0}h1{text-align:center;font-size:20pt;margin:0}h2{text-align:center;font-size:17pt;margin:2px 0 14px}.meta{display:grid;grid-template-columns:1fr 1fr;gap:5px 20px;margin-bottom:12px}.line{border-bottom:1px dotted #555;padding:2px 4px}table{width:100%;border-collapse:collapse;font-size:14pt}th,td{border:1px solid #555;padding:5px 6px;vertical-align:top}th{background:#eef3f7}.num{text-align:right;white-space:nowrap}.total{font-weight:bold;text-align:right}.section{margin:12px 0}.section strong{display:block}.box{min-height:48px;border:1px solid #777;padding:7px;margin-top:3px}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}.signature{text-align:center;min-height:105px;padding-top:8px;border-top:1px solid #999}.signature span,.signature small{display:block}.signed{display:inline-block;padding:2px 7px;border:1px solid #25845f;border-radius:12px;color:#187054;font-size:10pt;margin-bottom:5px}.actions{position:fixed;right:16px;top:12px}@media print{.actions{display:none}}button{font:14px sans-serif;padding:8px 14px;border:0;border-radius:8px;background:#0879e5;color:white;cursor:pointer}</style></head><body><div class="actions"><button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button></div><h1>แบบขอใช้งบประมาณเพื่อดำเนินโครงการ</h1><h2>โรงเรียนบ้านป่าเด็ง</h2><div class="meta"><div class="line"><strong>เลขที่คำขอ:</strong> ${escapeHtml(row.request_no)}</div><div class="line"><strong>วันที่:</strong> ${thaiDate(row.expense_date)}</div><div class="line"><strong>ผู้ขอ:</strong> ${escapeHtml(row.requester_name)}</div><div class="line"><strong>ฝ่ายงาน:</strong> ${escapeHtml(departments[row.department])}</div><div class="line"><strong>โครงการ:</strong> ${escapeHtml(row.project_name)}</div><div class="line"><strong>ปีงบประมาณ:</strong> ${escapeHtml(row.fiscal_year)}</div></div><div class="section"><strong>วัตถุประสงค์</strong><div class="box">${escapeHtml(row.request_purpose || row.description)}</div></div><div class="section"><strong>เหตุผลและความจำเป็น</strong><div class="box">${escapeHtml(row.necessity || "")}</div></div><table><thead><tr><th style="width:7%">ลำดับ</th><th style="width:16%">หมวด</th><th>รายการ</th><th style="width:15%">จำนวน</th><th style="width:15%">ราคาต่อหน่วย</th><th style="width:15%">รวม</th></tr></thead><tbody>${itemHtml}<tr><td colspan="5" class="total">รวมทั้งสิ้น</td><td class="num"><strong>${money(row.amount)}</strong></td></tr></tbody></table><div class="section"><strong>ผู้รับเงิน/ร้านค้า:</strong> ${escapeHtml(row.payee || "")}&nbsp;&nbsp; <strong>วันที่ต้องการใช้เงิน:</strong> ${thaiDate(row.needed_date)}</div><div class="signatures">${signatureHtml}</div><div class="section"><small>เอกสารนี้สร้างจากระบบบริหารงานโรงเรียนบ้านป่าเด็ง การลงนามอ้างอิงบัญชีผู้ใช้และวันเวลาที่บันทึกในระบบ</small></div></body></html>`;
   return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
@@ -563,7 +614,9 @@ export async function handleBudgetRoute(request, env, pathname, method) {
   if (pathname === "/api/budget/reports" && method === "GET") return financialReport(request, env);
   if (pathname === "/api/budget/reports/export" && method === "GET") return exportFinancialReport(request, env);
   if (pathname === "/api/budget/reports/print" && method === "GET") return printableFinancialReport(request, env);
-  let match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/document$/);
+  let match = pathname.match(/^\/api\/budget\/income\/(\d+)$/);
+  if (match && (method === "PATCH" || method === "DELETE")) return updateIncome(request, env, Number(match[1]));
+  match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/document$/);
   if (match && method === "GET") return printableDocument(request, env, Number(match[1]));
   match = pathname.match(/^\/api\/budget\/requests\/(\d+)\/payment-document$/);
   if (match && method === "GET") return paymentDocument(request, env, Number(match[1]));

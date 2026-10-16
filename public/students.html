@@ -701,9 +701,14 @@
         student.student_code ? `เลขประจำตัว ${student.student_code}` : "",
         student.grade_level || "",
         student.classroom ? `ห้อง ${student.classroom}` : "",
-        `มีข้อมูล ${studentCompleteness(student)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง`,
+        student.private_hidden ? "" : `มีข้อมูล ${studentCompleteness(student)}/${STUDENT_COMPLETENESS_FIELDS.length} ช่อง`,
       ].filter(Boolean).join(" · ");
       renderStudentDetails(student);
+      if (student.private_hidden) {
+        // ข้อมูลส่วนบุคคลเปิดได้เฉพาะครูประจำชั้นของห้องนั้น ผู้บริหาร และเจ้าหน้าที่
+        content.insertAdjacentHTML("afterbegin", '<p class="detail-loading" style="margin:0 0 12px">ข้อมูลส่วนบุคคล (เลขบัตร สุขภาพ ครอบครัว ผู้ปกครอง) ดูได้เฉพาะครูประจำชั้นของห้องนี้ ผู้บริหาร และเจ้าหน้าที่</p>');
+        return;
+      }
       StudentInsurance.renderSummary(content, student);
     } catch (err) {
       content.textContent = "ไม่สามารถโหลดข้อมูลเพิ่มเติมได้";

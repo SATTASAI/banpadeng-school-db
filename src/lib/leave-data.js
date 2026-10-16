@@ -39,7 +39,7 @@ export function isDeputy(p) {return /รองผู้อำนวยการ/
 export async function executives(env) {
  const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,p.position,a.user_id
   FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id
-  JOIN users u ON u.id=a.user_id WHERE p.status='active' AND u.status='active' AND u.role='executive'`).all();
+  JOIN users u ON u.id=a.user_id WHERE p.status='active' AND u.status='active' AND u.role IN ('executive','superadmin')`).all();
  const people=new Map();for (const p of results) {if(!people.has(p.id))people.set(p.id,{id:p.id,full_name:p.full_name,position:p.position,user_ids:[]});people.get(p.id).user_ids.push(p.user_id);}
  return [...people.values()];
 }

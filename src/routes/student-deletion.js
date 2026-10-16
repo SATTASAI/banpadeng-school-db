@@ -26,14 +26,24 @@ export async function ensureStudentDeletionSchema(env) {
 }
 
 export async function isSchoolDirector(env, user) {
-  if (!user || user.role !== "executive") return false;
+  if (!user || !["executive", "superadmin"].includes(user.role)) return false;
   const people = await executives(env).catch(() => []);
   return people.some((p) => isDirector(p) && p.user_ids.includes(user.id));
 }
 
 const STATUS_TH = { enrolled: "กำลังศึกษาอยู่", transferred: "ย้ายโรงเรียน", graduated: "จบการศึกษา", withdrawn: "ออกกลางคัน" };
 // ข้อมูลของระบบรายงานผลการเรียน (students-report) ที่อ้างถึงนักเรียน — ไม่มี FOREIGN KEY จึงต้องลบเอง
-const GRADE_TABLES = ["gr_scores", "gr_results", "gr_assessments", "gr_absences", "gr_comments", "gr_body", "gr_transfers", "gr_carryover"];
+const GRADE_TABLES = ["gr_scores", "gr_results", "gr_assessments", "gr_absences", "gr_comments", "gr_body", "gr_transfers", "gr_carryover",
+  "gr_attendance", "gr_roster_numbers", "gr_daily_logs", "gr_kinder_scores", "gr_kinder_comments"];
+
+// ระบบธนาคารโรงเรียนที่ใช้จริงเป็นอีกระบบ (BANK_DB) จับคู่ด้วยเลขประจำตัวนักเรียน — บัญชีที่ยังไม่ปิดห้ามลบนักเรียน
+// ผูก BANK_DB ไม่ได้ = ตรวจไม่ได้ → ไม่ลบ (กันเงินของนักเรียนหาย)
+export async function openBankAccount(env, studentCode) {
+  if (!env.BANK_DB) return { unknown: true };
+  const row = await env.BANK_DB.prepare(`SELECT a.account_no, a.balance FROM accounts a JOIN students s ON s.student_id = a.student_id
+    WHERE s.school_student_id = ? AND UPPER(COALESCE(a.status,'')) <> 'CLOSED' LIMIT 1`).bind(String(studentCode)).first();
+  return row ? { account_no: row.account_no, balance: Number(row.balance || 0) } : null;
+}
 
 async function audit(env, user, action, id, details, request) {
   await env.DB.prepare(`INSERT INTO audit_logs (user_id, action, resource, resource_id, details, ip_address) VALUES (?, ?, 'student', ?, ?, ?)`)
@@ -116,6 +126,10 @@ export async function handleStudentDeletionRoute(request, env, pathname, method)
     const bank = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'school_bank_accounts'").first()
       && await env.DB.prepare("SELECT id FROM school_bank_accounts WHERE student_id = ?").bind(row.student_id).first();
     if (bank) return jsonResponse({ error: "นักเรียนมีบัญชีธนาคารโรงเรียน ต้องปิดบัญชีและจัดการยอดเงินก่อนจึงลบได้" }, 409);
+    let realBank;
+    try { realBank = await openBankAccount(env, row.student_code); } catch { realBank = { unknown: true }; }
+    if (realBank?.unknown) return jsonResponse({ error: "ตรวจบัญชีธนาคารโรงเรียนไม่ได้ (ยังไม่ได้เชื่อมฐานข้อมูลธนาคาร) จึงยังลบไม่ได้" }, 503);
+    if (realBank) return jsonResponse({ error: `นักเรียนมีบัญชีธนาคารโรงเรียน ${realBank.account_no} ยังไม่ปิด (คงเหลือ ${realBank.balance.toLocaleString("th-TH")} บาท) ต้องปิดบัญชีในระบบธนาคารก่อนจึงลบได้` }, 409);
     const linked = [...GRADE_TABLES, "guardians", "student_details", "student_enrollments"];
     const { results: tables } = await env.DB.prepare(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${linked.map(() => "?").join(",")})`

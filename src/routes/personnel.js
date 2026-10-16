@@ -29,6 +29,9 @@ async function overview(request, env) {
   await ensurePersonnelData(env);
   await ensureLeaveData(env);
 
+  // วันที่ตามเวลาไทย และต้นปีงบประมาณ (1 ต.ค.)
+  const bkToday = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+  const fyStart = `${Number(bkToday.slice(5, 7)) >= 10 ? bkToday.slice(0, 4) : Number(bkToday.slice(0, 4)) - 1}-10-01`;
   const [staff, leaveSummary, recentLeaves, tasks, workSummary, positions, projects] = await Promise.all([
     env.DB.prepare(`SELECT id,user_id,full_name,email,personnel_type,position_number,position,academic_rank,phone,
       departments,service_start_date,education_level,major,institution,employment_status,retirement_date,
@@ -37,21 +40,21 @@ async function overview(request, env) {
     env.DB.prepare(`SELECT
       COUNT(*) AS total_count,
       SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending_count,
-      SUM(CASE WHEN status='approved' AND start_date<=date('now') AND end_date>=date('now') THEN 1 ELSE 0 END) AS absent_today,
-      SUM(CASE WHEN status='approved' AND start_date>=date('now','start of year') THEN julianday(end_date)-julianday(start_date)+1 ELSE 0 END) AS approved_days_ytd
-      FROM leave_requests`).first(),
+      SUM(CASE WHEN status='approved' AND start_date<=? AND end_date>=? THEN 1 ELSE 0 END) AS absent_today,
+      SUM(CASE WHEN status='approved' AND start_date>=? THEN COALESCE(leave_days,julianday(end_date)-julianday(start_date)+1) ELSE 0 END) AS approved_days_ytd
+      FROM leave_requests`).bind(bkToday, bkToday, fyStart).first(),
     env.DB.prepare(`SELECT lr.id,COALESCE(lr.leave_subtype,lr.leave_type) leave_type,lr.start_date,lr.end_date,lr.status,u.full_name
       FROM leave_requests lr JOIN users u ON u.id=lr.user_id
       ORDER BY CASE lr.status WHEN 'pending' THEN 0 ELSE 1 END,lr.created_at DESC LIMIT 8`).all(),
     env.DB.prepare(`SELECT
       SUM(CASE WHEN status='open' THEN 1 ELSE 0 END) AS open_count,
-      SUM(CASE WHEN status='open' AND due_date IS NOT NULL AND due_date<date('now') THEN 1 ELSE 0 END) AS overdue_count
-      FROM tasks`).first(),
+      SUM(CASE WHEN status='open' AND due_date IS NOT NULL AND due_date<? THEN 1 ELSE 0 END) AS overdue_count
+      FROM tasks`).bind(bkToday).first(),
     env.DB.prepare(`SELECT area,topic_key,
       COUNT(*) AS total_count,
       SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS completed_count,
-      SUM(CASE WHEN status NOT IN ('completed','cancelled') AND due_date IS NOT NULL AND due_date<date('now') THEN 1 ELSE 0 END) AS overdue_count
-      FROM work_records WHERE area IN ('personnel','staff') GROUP BY area,topic_key`).all(),
+      SUM(CASE WHEN status NOT IN ('completed','cancelled') AND due_date IS NOT NULL AND due_date<? THEN 1 ELSE 0 END) AS overdue_count
+      FROM work_records WHERE area IN ('personnel','staff') GROUP BY area,topic_key`).bind(bkToday).all(),
     env.DB.prepare(`SELECT COALESCE(NULLIF(TRIM(position),''),'ไม่ระบุตำแหน่ง') AS label,COUNT(*) AS count
       FROM personnel_records WHERE status='active' GROUP BY COALESCE(NULLIF(TRIM(position),''),'ไม่ระบุตำแหน่ง')
       ORDER BY count DESC,label LIMIT 12`).all(),
@@ -60,7 +63,7 @@ async function overview(request, env) {
       FROM projects WHERE COALESCE(management_area,department)='personnel'`).first(),
   ]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = bkToday;
   const people = staff.results.map((row) => ({
     id: row.id,
     user_id: row.user_id,

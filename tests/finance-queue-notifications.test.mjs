@@ -12,12 +12,12 @@ async function fixture(){
   const raw=new DatabaseSync(':memory:');raw.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
   raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
     (1,'admin@test','x','x','ผู้ดูแล','superadmin'),(2,'owner@test','x','x','เจ้าของ','teacher'),
-    (3,'finance@test','x','x','การเงิน','staff'),(4,'other@test','x','x','ครูอื่น','teacher'),(5,'co-owner@test','x','x','เจ้าของร่วม','teacher');
+    (3,'finance@test','x','x','การเงิน','staff'),(4,'other@test','x','x','ครูอื่น','teacher'),(5,'co-owner@test','x','x','เจ้าของร่วม','teacher'),(6,'director@test','x','x','ผู้อำนวยการ','executive');
     INSERT INTO projects(id,department,name,budget_amount,fiscal_year,created_by,funding_type) VALUES
     (10,'academic','อ่านคล่อง',1000,2570,1,'subsidy'),(11,'general','เรียนฟรี',2000,2570,1,'free_education'),
     (12,'budget','งานรายได้',3000,2570,1,'school_income'),(13,'personnel','โครงการเดิม',400,2570,1,NULL);
     INSERT INTO project_owners(project_id,user_id) VALUES(10,2),(10,5),(11,2),(12,2);
-    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_review','',3,1);`);
+    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_review','',3,1),('director_approval','',6,1);`);
   function prepare(sql){let values=[];return {bind(...v){values=v;return this;},async first(){return raw.prepare(sql).get(...values)||null;},async all(){return {results:raw.prepare(sql).all(...values)};},async run(){const r=raw.prepare(sql).run(...values);return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};}};}
   let tail=Promise.resolve();
   const env={raw,JWT_SECRET:secret,DB:{prepare,batch(statements){const task=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out;}catch(e){raw.exec('ROLLBACK');throw e;}});tail=task.catch(()=>{});return task;}}};
@@ -33,11 +33,11 @@ test('submit creates finance notifications without relying on SQL changes() conn
  const env=await fixture();env.raw.function('changes',()=>0);
  const draft=await call(env,2,'requests','POST',payload());assert.equal(draft.status,201);
  const sent=await action(env,2,draft.body.id,'submit');assert.equal(sent.status,200);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,2);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,3); // ผู้ดูแล + การเงิน + ผู้บริหาร (ผอ.)
  const overview=await call(env,3,'overview');assert.equal(overview.body.projects.find(p=>p.id===10).new_request_count,1);assert.equal(overview.body.notifications.length,1);
  assert.equal((await action(env,2,draft.body.id,'submit')).status,409);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,2);
- assert.equal((await action(env,3,draft.body.id,'receive')).status,200);assert.equal((await action(env,3,draft.body.id,'complete')).status,200);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,3); // ผู้ดูแล + การเงิน + ผู้บริหาร (ผอ.)
+ assert.equal((await action(env,3,draft.body.id,'receive')).status,200);assert.equal((await action(env,3,draft.body.id,'complete')).status,200);assert.equal((await action(env,6,draft.body.id,'approve')).status,200);
  assert.equal((await action(env,3,draft.body.id,'pay',payment)).status,200);
  assert.equal(env.raw.prepare('SELECT spent_amount FROM projects WHERE id=10').get().spent_amount,200);
 });

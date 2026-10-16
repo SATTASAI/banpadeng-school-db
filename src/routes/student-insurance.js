@@ -90,8 +90,8 @@ function canManageAll(user) { return isAdmin(user) || user.role === "staff"; }
 async function activeYear(env) {
   const row = await env.DB.prepare("SELECT id, year_be FROM academic_years WHERE status = 'active' ORDER BY year_be DESC LIMIT 1").first().catch(() => null);
   if (row?.year_be) return { id: row.id, year_be: Number(row.year_be) };
-  const now = new Date();
-  return { id: null, year_be: now.getFullYear() + 543 - (now.getMonth() < 4 ? 1 : 0) };
+  const now = new Date(Date.now() + 7 * 3600 * 1000);
+  return { id: null, year_be: now.getUTCFullYear() + 543 - (now.getUTCMonth() < 4 ? 1 : 0) };
 }
 
 // ห้องที่ครูคนนี้เป็นครูประจำชั้น (ปีที่เปิดใช้) เป็นชุด "ชั้น|ห้อง"

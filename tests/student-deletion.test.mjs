@@ -3,9 +3,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
 import {ensureLeaveData} from '../src/lib/leave-data.js';
+import {DatabaseSync} from 'node:sqlite';
+
+// ฐานข้อมูลระบบธนาคารโรงเรียน (แยกระบบ) — จำลองเฉพาะตารางที่ใช้ตรวจ
+function bankDb(){
+ const raw=new DatabaseSync(':memory:');
+ raw.exec(`CREATE TABLE students(student_id TEXT PRIMARY KEY,school_student_id TEXT);CREATE TABLE accounts(account_id TEXT PRIMARY KEY,account_no TEXT,student_id TEXT,status TEXT,balance REAL);`);
+ return {raw,prepare(sql){let v=[];return{bind(...a){v=a;return this},async first(){return raw.prepare(sql).get(...v)||null}}}};
+}
 
 async function setup(){
  const env=await fixture();
+ env.BANK_DB=bankDb();
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
   (4,'director@test','x','x','ผู้อำนวยการตัวอย่าง','executive'),(5,'deputy@test','x','x','รองผู้อำนวยการตัวอย่าง','executive');
   INSERT INTO staff_profiles(user_id,position) VALUES(4,'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),(5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');`);
@@ -56,8 +65,20 @@ test('ลบถาวร: ต้องย้ายออกก่อน → ย�
  const listed=(await api('/api/student-delete-requests','GET',undefined,4)).data;
  assert.equal(listed.can_decide,true);assert.equal(listed.requests[0].status,'pending');
  // ผู้อำนวยการอนุมัติ → ลบจริง พร้อมข้อมูลผลการเรียนที่อ้างถึง
- env.raw.exec(`CREATE TABLE IF NOT EXISTS gr_scores(item_id INTEGER, student_id INTEGER, score REAL); INSERT INTO gr_scores VALUES(1, ${id}, 10);`);
+ env.raw.exec(`CREATE TABLE IF NOT EXISTS gr_scores(item_id INTEGER, student_id INTEGER, score REAL); INSERT INTO gr_scores VALUES(1, ${id}, 10);
+  CREATE TABLE IF NOT EXISTS gr_attendance(student_id INTEGER, att_date TEXT, code TEXT); INSERT INTO gr_attendance VALUES(${id},'2026-11-03','ข');
+  CREATE TABLE IF NOT EXISTS gr_daily_logs(student_id INTEGER, log_type TEXT); INSERT INTO gr_daily_logs VALUES(${id},'milk');`);
+ // ยังมีบัญชีในระบบธนาคารโรงเรียน (ยังไม่ปิด) → ลบไม่ได้
+ env.BANK_DB.raw.exec(`INSERT INTO students VALUES('S1','90001');INSERT INTO accounts VALUES('A1','0001','S1','ACTIVE',150);`);
+ const blocked=await api(`/api/student-delete-requests/${rid}/approve`,'POST',{note:'อนุมัติ'},4);
+ assert.equal(blocked.status,409);assert.match(blocked.data.error,/0001/);
+ // เชื่อมฐานธนาคารไม่ได้ → ไม่ลบ
+ const bank=env.BANK_DB;delete env.BANK_DB;
+ assert.equal((await api(`/api/student-delete-requests/${rid}/approve`,'POST',{note:'อนุมัติ'},4)).status,503);
+ env.BANK_DB=bank;bank.raw.exec(`UPDATE accounts SET status='CLOSED',balance=0`);
  assert.equal((await api(`/api/student-delete-requests/${rid}/approve`,'POST',{note:'อนุมัติ'},4)).status,200);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM gr_attendance WHERE student_id=?').get(id).n,0);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM gr_daily_logs WHERE student_id=?').get(id).n,0);
  assert.equal((await api(`/api/students/${id}`,'GET')).status,404);
  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM gr_scores WHERE student_id=?').get(id).n,0);
  assert.equal((await api(`/api/student-delete-requests/${rid}/approve`,'POST',{},4)).status,409);

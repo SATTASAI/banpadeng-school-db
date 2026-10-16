@@ -19,6 +19,12 @@
       "binding": "DB",
       "database_name": "banpadeng_school_db",
       "database_id": "870fa9ec-122f-4161-a1ca-cc9979dcfa30"
+    },
+    // ฐานข้อมูลของระบบธนาคารโรงเรียน (แยกเป็นอีกระบบ) — ใช้อ่านอย่างเดียว: ตรวจว่านักเรียนยังมีบัญชีเปิดอยู่ก่อนลบถาวร
+    {
+      "binding": "BANK_DB",
+      "database_name": "banpadeng-school-bank-db",
+      "database_id": "899e0c19-96c0-48f6-ada8-b06c7b628aca"
     }
   ]
 }

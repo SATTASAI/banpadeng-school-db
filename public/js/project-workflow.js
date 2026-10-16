@@ -5,7 +5,7 @@ window.ProjectWorkflow = (() => {
   const today = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const departments = {academic:'วิชาการ',early_childhood:'ปฐมวัย',budget:'งบประมาณ',personnel:'บุคคล',general:'บริหารทั่วไป'};
   const fundingTypes={subsidy:'งบอุดหนุน',free_education:'งบเรียนฟรี 15 ปี',school_income:'งบรายได้สถานศึกษา'};
-  const states = {draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',finance_queue:'รอเจ้าหน้าที่รับเรื่อง',finance_processing:'รับเรื่องแล้ว กำลังดำเนินการ',finance_ready:'ดำเนินการเสร็จสิ้น รอยืนยัน',completed:'ยืนยันแล้ว สามารถเบิกจ่ายได้',rejected:'ไม่อนุมัติ'};
+  const states = {draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',finance_queue:'รอเจ้าหน้าที่รับเรื่อง',finance_processing:'รับเรื่องแล้ว กำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'ผู้อำนวยการอนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันแล้ว สามารถเบิกจ่ายได้',rejected:'ไม่อนุมัติ'};
   const opts = (entries, selected) => Object.entries(entries).map(([v,label])=>`<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(label)}</option>`).join('');
   const field = (label,content,wide=false) => `<label class="field ${wide?'wf-wide':''}"><span>${label}</span>${content}</label>`;
 
@@ -66,14 +66,18 @@ window.ProjectWorkflow = (() => {
           <div class="wf-files">${e.documents.filter(d=>d.attachment_id).map(d=>`<a href="/api/attachments/${d.attachment_id}" target="_blank" rel="noopener">${esc(d.title)} — ${esc(d.file_name)}</a>`).join('')||'<span class="wf-muted">ยังไม่มีไฟล์แนบ</span>'}</div>
           <div class="wf-actions">${e.can_edit?`<button class="btn btn-ghost" data-edit-request="${e.id}">แก้ไขร่าง</button><button class="btn btn-primary" data-request="${e.id}" data-action="submit">ส่งเอกสาร</button>`:''}
           ${e.can_attach?`<button class="btn btn-ghost" data-attach="${e.id}">+ แนบเอกสารเพิ่มเติม</button>`:''}
-          ${data.permissions.can_finance&&options.finance?financeButtons(e):''}
+          ${e.can_director_approve?directorButtons(e):data.permissions.can_finance&&options.finance?financeButtons(e):''}
           ${['approved','paid'].includes(e.status)?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/budget/requests/${e.id}/document">พิมพ์คำขอ</a>`:''}
           ${e.status==='paid'?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/budget/requests/${e.id}/payment-document">ใบสำคัญจ่าย</a>`:''}</div></article>`).join('')||'<p class="wf-muted">ยังไม่มีคำขอเบิกจ่ายที่คุณมีสิทธิ์ดูในโครงการนี้</p>'}</section>`;
     }
+    function directorButtons(e){
+      const button=(action,label,cls='btn-primary')=>`<button class="btn ${cls}" data-request="${e.id}" data-action="${action}">${label}</button>`;
+      return button('approve','ผู้อำนวยการอนุมัติ')+button('return','ส่งกลับแก้ไข','btn-ghost')+button('reject','ไม่อนุมัติ','btn-ghost');
+    }
     function financeButtons(e){
       const button=(action,label)=>`<button class="btn btn-primary" data-request="${e.id}" data-action="${action}">${label}</button>`;
-      const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ดำเนินการเสร็จสิ้น'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
-      return primary+(['pending','approved'].includes(e.status)?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
+      const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ตรวจแล้ว เสนอผู้อำนวยการ'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
+      return primary+(['pending','approved'].includes(e.status)&&e.current_step!=='director_approval'?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
     }
     async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();root.querySelector(`[data-project="${id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});}
     function newRequest(id){editRequest(null,id);}

@@ -64,6 +64,8 @@
   ];
   const DEPARTMENT_LABELS = { academic: "วิชาการ", early_childhood: "ปฐมวัย (งานอนุบาล)", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
   let currentAdminId = null;
+  let currentRole = null; // เปลี่ยนบทบาท ระงับ และลบบัญชี ทำได้เฉพาะผู้ดูแลระบบ (superadmin)
+  const ONLY_SUPER = "เปลี่ยนบทบาท ระงับ หรือลบบัญชีได้เฉพาะผู้ดูแลระบบ";
 
   function formatDate(iso) {
     const d = new Date(iso + "Z");
@@ -79,6 +81,7 @@
       if ((user.role || "") === opt.value) el.selected = true;
       select.appendChild(el);
     });
+    if (currentRole !== "superadmin") { select.disabled = true; select.title = ONLY_SUPER; }
     select.addEventListener("change", async () => {
       select.disabled = true;
       try {
@@ -102,6 +105,7 @@
     btn.style.fontSize = "13px";
     btn.style.width = "auto";
     btn.textContent = user.status === "active" ? "ระงับบัญชี" : "เปิดใช้งานอีกครั้ง";
+    if (currentRole !== "superadmin") { btn.disabled = true; btn.title = ONLY_SUPER; }
     btn.addEventListener("click", async () => {
       const nextStatus = user.status === "active" ? "disabled" : "active";
       if (nextStatus === "disabled" && !confirm(`ระงับบัญชีของ ${user.full_name}?`)) return;
@@ -153,6 +157,7 @@
     btn.style.fontSize = "13px";
     btn.style.width = "auto";
     btn.textContent = "ลบผู้ใช้";
+    if (currentRole !== "superadmin") { btn.disabled = true; btn.title = ONLY_SUPER; }
     if (Number(user.id) === Number(currentAdminId)) {
       btn.disabled = true;
       btn.title = "ไม่สามารถลบบัญชีของตัวเองได้";
@@ -259,6 +264,7 @@
       return;
     }
     currentAdminId = user.id;
+    currentRole = user.role;
     await loadUsers();
   })();
 </script>
