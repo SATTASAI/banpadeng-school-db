@@ -44,6 +44,18 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
   const selected = new Set(classes.map(key));
   if (selected.size !== classes.length) return { ok: false, errors: ['ห้องเรียนซ้ำ'] };
   const capacity = periods.reduce((n, p) => n + p, 0);
+  // คาบกิจกรรมพัฒนาผู้เรียนที่ฝ่ายวัดผลล็อกไว้ในโครงเวลาเรียน (ต่อห้อง) — ห้ามลงรายวิชา ไม่ต้องมีครู
+  const reserved = new Set(), reservedCount = new Map();
+  const cellKey = (a, d, p) => JSON.stringify([a.grade_level, a.classroom, d, p]);
+  if (input.class_activity !== undefined && (!Array.isArray(input.class_activity) || input.class_activity.length > 1800)) return { ok: false, errors: ['คาบกิจกรรมในโครงเวลาเรียนไม่ถูกต้อง'] };
+  for (const r of input.class_activity || []) {
+    if (!r || !Number.isInteger(r.weekday) || r.weekday < 1 || r.weekday > 5 || !Number.isInteger(r.period) || r.period < 1 || r.period > 6) return { ok: false, errors: ['คาบกิจกรรมในโครงเวลาเรียนไม่ถูกต้อง'] };
+    if (!selected.has(key(r)) || r.period > periods[r.weekday - 1]) continue;
+    const k = cellKey(r, r.weekday, r.period); if (reserved.has(k)) continue;
+    reserved.add(k); reservedCount.set(key(r), (reservedCount.get(key(r)) || 0) + 1);
+  }
+  const isReserved = (e) => reserved.has(cellKey(e, e.weekday, e.period));
+  const capOf = (c) => capacity - (reservedCount.get(key(c)) || 0);
 
   // ชื่อห้องสอนเฉพาะ: ใช้ตัวสะกดแรกที่พบ (ตารางเดิมก่อน) เป็นชื่อมาตรฐาน
   const roomDisplay = new Map();
@@ -64,7 +76,7 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
     const room_name = canonicalRoom(a.room_name);
     groups.set(k, { ...a, room_name, rk: room_name ? roomNameKey(room_name) : '', block_size: block, k, remaining: a.periods_per_week, prefer: resolvePrefer(a), daily: new Uint8Array(6), fails: 0 });
   }
-  for (const c of classes) { const total = assignments.filter((a) => key(a) === key(c)).reduce((n, a) => n + a.periods_per_week, 0); if (total > capacity) errors.push(`${c.grade_level}/${c.classroom}: ภาระสอนเกินช่องรายวิชา`); }
+  for (const c of classes) { const total = assignments.filter((a) => key(a) === key(c)).reduce((n, a) => n + a.periods_per_week, 0); if (total > capOf(c)) errors.push(`${c.grade_level}/${c.classroom}: ภาระสอน ${total} คาบ เกินช่องรายวิชา ${capOf(c)} คาบ (หักคาบกิจกรรมแล้ว)`); }
   if (!groups.size) errors.push('เพิ่มภาระสอนก่อนจัดตาราง');
 
   // ตารางการใช้งาน 5 วัน × 6 คาบ แบบตัวเลข (เร็วกว่าคีย์ข้อความหลายเท่า)
@@ -102,13 +114,15 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
   }
   for (const e of source) {
     if (selected.has(key(e)) && !input.keep_existing && !e._fixed && !fixed.some((f) => same(f, e)) && e.period <= periods[e.weekday - 1]) continue;
+    // ตารางเดิมที่ลงรายวิชาไว้ในช่องที่ตอนนี้เป็นคาบกิจกรรม: ไม่เก็บไว้ (ให้จัดรายวิชานั้นใหม่)
+    if (selected.has(key(e)) && isReserved(e) && !e._fixed && groups.has(groupKey(e))) continue;
     if (collides(e)) { errors.push('คาบเดิมมีครู ห้องเรียน หรือห้องสอนชนกัน'); continue; }
     occupy(e);
     if (!selected.has(key(e))) { context.push(e); continue; }
     const { _fixed, ...clean } = e; locked.push(clean);
     if (isBlocked(e.teacher_id, e.weekday, e.period)) errors.push(`คาบที่ล็อกตรงกับเวลาครูไม่ว่าง: ${e.subject}`);
     // คาบพัฒนาผู้เรียนหลังคาบรายวิชา ล็อกไว้แต่ไม่นับรวมภาระรายวิชา
-    if (e.period > periods[e.weekday - 1]) continue;
+    if (e.period > periods[e.weekday - 1] || isReserved(e)) continue;
     const g = groups.get(groupKey(e));
     if (!g || g.rk !== rk(e)) { errors.push(`คาบที่ล็อกไม่ตรงภาระสอน: ${e.subject}`); continue; }
     g.remaining--; g.daily[e.weekday]++;
@@ -129,6 +143,8 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
   errors.push(...blockErrors(locked));
   if (errors.length) return { ok: false, errors: [...new Set(errors)] };
 
+  // ปิดช่องคาบกิจกรรมของห้อง (ช่องที่ยังว่าง — ถ้ามีคาบล็อกพร้อมครูลงไว้แล้วก็ใช้ช่องนั้นอยู่แล้ว)
+  for (const k of reserved) { const [g0, c0, d, p] = JSON.parse(k); grid(classBusy, key({ grade_level: g0, classroom: c0 }))[si(d, p)] = 1; }
   const gList = [...groups.values()];
   for (const g of gList) {
     g.cls = grid(classBusy, key(g)); g.tch = grid(teacherBusy, g.teacher_id); g.blk = grid(blocked, g.teacher_id);
@@ -153,6 +169,7 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
     const r = { class_full: 0, teacher_other: 0, teacher_unavailable: 0, room_busy: 0 };
     for (let d = 1; d <= 5; d++) for (let p = 1; p <= periods[d - 1]; p++) {
       const i = si(d, p);
+      if (reserved.has(cellKey(g, d, p))) continue;
       if (g.blk[i]) r.teacher_unavailable++; else if (g.tch[i]) r.teacher_other++; else if (g.room && g.room[i]) r.room_busy++; else if (g.cls[i]) r.class_full++;
     }
     return r;
@@ -176,7 +193,7 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
     const summary = classes.map((c) => ({
       ...c,
       required: assignments.filter((a) => key(a) === key(c)).reduce((n, a) => n + a.periods_per_week, 0),
-      unfilled: capacity - entries.filter((e) => key(e) === key(c) && e.period <= periods[e.weekday - 1]).length,
+      unfilled: capOf(c) - entries.filter((e) => key(e) === key(c) && e.period <= periods[e.weekday - 1] && !isReserved(e)).length,
       missing: unplaced.filter((u) => key(u) === key(c)).reduce((n, u) => n + u.missing, 0)
     }));
     const involved = new Set(entries.map((e) => e.teacher_id));
@@ -197,7 +214,7 @@ export function solveTimetable(input, { maxNodes = 2000000, maxMs = 6000, names 
       if (!e || !selected.has(key(e)) || !Number.isInteger(e.weekday) || e.weekday < 1 || e.weekday > 5 || !Number.isInteger(e.period) || e.period < 1 || e.period > 6) { errors.push('ผลทดลองจัดไม่ถูกต้อง'); continue; }
       if (locked.some((l) => same(l, e))) continue;
       const g = groups.get(groupKey(e));
-      if (!g || g.rk !== rk(e) || e.period > periods[e.weekday - 1]) { errors.push(`ผลทดลองไม่ตรงภาระสอน: ${e.subject}`); continue; }
+      if (!g || g.rk !== rk(e) || e.period > periods[e.weekday - 1] || isReserved(e)) { errors.push(`ผลทดลองไม่ตรงภาระสอน: ${e.subject}`); continue; }
       if (!fits(g, e.weekday, e.period)) { errors.push(`ผลทดลองมีคาบชน: ${e.grade_level}/${e.classroom} ${e.subject}`); continue; }
       if (g.remaining < 1 || g.daily[e.weekday] + 1 > g.max_per_day) { errors.push(`ผลทดลองเกินภาระสอนหรือเพดานต่อวัน: ${e.subject}`); continue; }
       place(g, e.weekday, e.period, 1, 1);

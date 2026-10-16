@@ -1,6 +1,7 @@
 import {solveTimetable} from '../lib/timetable-solver.js';
 import {jsonResponse} from '../lib/auth.js';
 import {masterIssues} from '../lib/teaching-master-check.js';
+import {loadStructure,classActivityCells} from '../lib/timetable-structure.js';
 const reply=(data,status=200)=>jsonResponse(data,status,{'Cache-Control':'private, no-store'});
 // เวลา CPU ที่ให้ตัวจัดตารางต่อการทดลองจัดหนึ่งครั้ง (Workers แบบเสียเงินรองรับได้สบาย หน้าเว็บรอได้ 25 วินาที)
 const SEARCH_MS=7000;
@@ -20,7 +21,7 @@ export async function handleAuto(request,env,term,user,pathname,method,helpers){
   // ชื่อห้องสอนเฉพาะที่ใช้อยู่แล้ว ให้หน้าเว็บเสนอเป็นตัวเลือก ลดการพิมพ์ชื่อห้องเดียวกันคนละแบบ
   const chosen=await helpers.plan(env,term.id,'draft')||await helpers.plan(env,term.id,'published');
   const rooms=chosen?(await env.DB.prepare("SELECT DISTINCT room_name FROM timetable_entries WHERE plan_id=? AND TRIM(COALESCE(room_name,''))<>'' ORDER BY room_name").bind(chosen.id).all()).results.map(r=>r.room_name):[];
-  return reply({config:row?JSON.parse(row.config_json):null,room_names:rooms});
+  return reply({config:row?JSON.parse(row.config_json):null,room_names:rooms,structure:(await loadStructure(env,term.id)).structure});
  }
  const body=await request.json().catch(()=>null),config=body?.config;
  if(!config||!Array.isArray(config.classes)||!Array.isArray(config.assignments)||!Array.isArray(config.unavailable)||(config.fixed!==undefined&&!Array.isArray(config.fixed))||typeof config.keep_existing!=='boolean'||(config.allow_partial!==undefined&&typeof config.allow_partial!=='boolean')||JSON.stringify(config).length>200000)return reply({error:'ข้อมูลตั้งค่าจัดตารางไม่ถูกต้อง'},400);
@@ -43,10 +44,12 @@ export async function handleAuto(request,env,term,user,pathname,method,helpers){
  const names=new Map(setup.teachers.map(t=>[t.id,t.full_name||`รหัส ${t.id}`]));
  const applying=pathname==='/api/timetable/auto/apply'&&method==='POST';
  // บันทึกผล: ตรวจผลที่ทดลองจัดซ้ำ (ไม่ค้นหาใหม่) เพื่อให้สิ่งที่บันทึกตรงกับที่ผู้ใช้เห็น
- const input={...config,existing,...(applying&&body.entries?{proposed:body.entries}:{})};
+ // โครงเวลาเรียน: 6 คาบทุกวัน ช่องกิจกรรมที่ฝ่ายวัดผลล็อกไว้ในแม่แบบช่วงชั้นห้ามลงรายวิชา (อ่านจากฐานข้อมูล ไม่เชื่อค่าจากหน้าเว็บ)
+ const {structure}=await loadStructure(env,term.id);
+ const input={...config,periods_per_day:[6,6,6,6,6],class_activity:classActivityCells(structure,config.classes),existing,...(applying&&body.entries?{proposed:body.entries}:{})};
  const result=solveTimetable(input,{maxMs:SEARCH_MS,names});
  if(!result.ok)return reply({error:result.errors.join('\n'),...result},422);
- if(pathname==='/api/timetable/auto/preview'&&method==='POST')return reply({...result,fingerprint});
+ if(pathname==='/api/timetable/auto/preview'&&method==='POST')return reply({...result,fingerprint,structure});
  if(!applying)return reply({error:'ไม่พบ endpoint'},404);
  if(body.fingerprint!==fingerprint)return reply({error:'ตารางเปลี่ยนหลังทดลองจัด กรุณาทดลองจัดใหม่'},409);
  const current=await helpers.draft(env,term.id,user.id);

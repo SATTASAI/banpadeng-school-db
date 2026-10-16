@@ -1,3 +1,4 @@
+import {loadStructure,validateStructure,ensureStructureSchema,canEditStructure,BANDS} from "../lib/timetable-structure.js";
 import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable} from "../lib/timetable-permissions.js";
 import {handleAuto} from "./timetable-auto.js";
@@ -92,7 +93,11 @@ async function setup(env,term,canManage=false){
       ORDER BY p.full_name`).all(),
     plan(env,term.id,"published"),plan(env,term.id,"draft")
   ]);
-  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan,can_manage:canManage,master});
+  // ครูประจำชั้น (จากระบบรายงานผลการเรียน) — ใช้เป็นผู้สอนคาบกิจกรรมพัฒนาผู้เรียนตั้งต้น
+  const hasHomerooms=await env.DB.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first();
+  const homerooms=hasHomerooms?(await env.DB.prepare(`SELECT h.grade_level,h.classroom,p.id AS personnel_id FROM gr_homerooms h
+    JOIN personnel_records p ON p.user_id=h.user_id AND p.status='active' WHERE h.academic_year_id=(SELECT academic_year_id FROM academic_terms WHERE id=?) ORDER BY h.grade_level,h.classroom,p.full_name`).bind(term.id).all()).results:[];
+  return reply({term,classes:classes.results,teachers:teachers.results,published,draft:draftPlan,can_manage:canManage,master,homerooms});
 }
 async function entries(env,term,view){
   const chosen=await plan(env,term.id,view);
@@ -261,7 +266,7 @@ export async function handleTimetableReadRoute(request,env,pathname,method){
   if(pathname==="/api/timetable/setup")return setup(env,term,canManage);
   if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);
   const row=await env.DB.prepare('SELECT config_json FROM timetable_auto_config WHERE academic_term_id=?').bind(term.id).first();
-  return reply({config:row?JSON.parse(row.config_json):null});
+  return reply({config:row?JSON.parse(row.config_json):null,structure:(await loadStructure(env,term.id)).structure});
 }
 export async function timetablePeriods(env){
   const [years,terms]=await Promise.all([
@@ -291,6 +296,21 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/timetable/setup"&&method==="GET")return setup(env,term,canManage);
     if(pathname==="/api/timetable/auto/config"&&method==="GET"){if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);return handleAuto(request,env,term,user,pathname,method,{setup,plan,draft});}
     if(pathname==="/api/timetable/entries"&&method==="GET")return entries(env,term,url.searchParams.get("view")==="draft"?"draft":"published");
+    // โครงเวลาเรียน (แม่แบบ ป.ต้น / ป.ปลาย): ดูได้ทุกคน แก้ได้เฉพาะฝ่ายวัดผล ผู้จัดตาราง และผู้ดูแลระบบ
+    if(pathname==="/api/timetable/structure"){
+      const canEdit=await canEditStructure(env,user);
+      if(method==="GET")return reply({...(await loadStructure(env,term.id)),bands:BANDS,can_edit:canEdit,term});
+      if(method==="PUT"){
+        if(!canEdit)return reply({error:"เฉพาะฝ่ายวัดผล ฝ่ายวิชาการ หรือผู้ดูแลระบบที่แก้โครงเวลาเรียนได้"},403);
+        const body=await request.json().catch(()=>null),checked=validateStructure(body?.structure);
+        if(checked.error)return reply({error:checked.error},400);
+        await ensureStructureSchema(env);
+        await env.DB.prepare(`INSERT INTO timetable_structure(academic_term_id,config_json,updated_by) VALUES(?,?,?)
+          ON CONFLICT(academic_term_id) DO UPDATE SET config_json=excluded.config_json,updated_by=excluded.updated_by,updated_at=datetime('now')`).bind(term.id,JSON.stringify(checked.structure),user.id).run();
+        await env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) VALUES(?,?,?,?,?)").bind(user.id,"update","timetable_structure",term.id,JSON.stringify(checked.structure)).run().catch(()=>{});
+        return reply({ok:true,structure:checked.structure});
+      }
+    }
     if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบที่แก้ตารางสอนได้"},403);
     const autoResponse=await handleAuto(request,env,term,user,pathname,method,{setup,plan,draft});if(autoResponse)return autoResponse;
     if(pathname==="/api/timetable/slot"&&method==="PUT")return saveSlot(request,env,term,user);

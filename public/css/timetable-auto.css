@@ -15,3 +15,13 @@ tr.from-master { background: #f3f6ff; }
 .result-room th small{display:block;font-weight:400;color:#8aa0b2;font-size:11px}
 /* fieldset มี min-width: min-content โดยค่าเริ่มต้น ทำให้ตารางกว้างดันทั้งหน้าล้นจอมือถือ */
 .auto-page fieldset{min-width:0}.auto-page .panel{min-width:0}
+
+/* โครงเวลาเรียน */
+.structure{min-width:900px}.structure th,.structure td{padding:6px;vertical-align:middle;text-align:center}.structure th:first-child,.structure td:first-child{text-align:left}
+.structure .times{display:flex;gap:4px;align-items:center;justify-content:center}.structure .times input{padding:5px;font-size:12px;width:76px}
+.structure td.subj{color:#587991;background:#edf6fc;border-radius:8px;font-size:13px}.structure td.lunch,.structure th.lunch{background:#f3f5f7;color:#8aa0b2;font-size:12px}
+.structure td.act-cell{background:#fff7e9;color:#946c32;font-size:13px;border-radius:8px}.structure th small{display:block;font-weight:400;color:#8aa0b2;font-size:11px}
+.bands{display:grid;gap:16px}.band h4{margin:6px 0}
+.time-grid{display:flex;flex-wrap:wrap;gap:12px}.time-grid label{min-width:190px}.time-grid .times{display:flex;gap:4px;align-items:center}.time-grid .lunch-box{background:#f3f5f7;border-radius:10px;padding:6px 8px;color:#6b7c8c}
+.structure td.cell{padding:3px}.structure td.cell input{font-size:13px;padding:7px;background:#f6fafe;border-color:#dbe7f1;text-align:center}.structure td.cell input::placeholder{color:#a3b7c7}.structure td.cell.on input{background:#fff7e9;border-color:#ecd2a6;color:#7a5520;font-weight:600}
+.warn{color:#a03c32}
