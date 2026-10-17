@@ -48,6 +48,7 @@ import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
 import { teachingMaster, loadByPersonnel } from "./lib/teaching-master.js";
+import { ensureLinePersonalSchema, handleLinePersonalEvent, handleLinePersonalRoute, getLinkedLineUsers, maintenancePersonalRecipients, maintenancePersonalHeadline } from "./lib/line-personal.js";
 
 let extendedSchemaReady = false;
 let lineSchemaReady = false;
@@ -264,6 +265,14 @@ async function ensureMaintenanceSchema(env) {
   } catch (error) {
     if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
   }
+  // ผู้รับของแต่ละรายการแจ้งเตือน: กลุ่ม หรือ รายบุคคล
+  for (const column of ["recipient_type TEXT", "recipient_user_id INTEGER", "recipient_label TEXT"]) {
+    try {
+      await env.DB.prepare(`ALTER TABLE maintenance_notifications ADD COLUMN ${column}`).run();
+    } catch (error) {
+      if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error;
+    }
+  }
 }
 
 async function ensureLineSchema(env) {
@@ -295,6 +304,7 @@ async function ensureLineSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_targets_last_seen ON line_targets(last_seen_at DESC)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_webhook_events_received ON line_webhook_events(received_at DESC)"),
   ]);
+  await ensureLinePersonalSchema(env);
   lineSchemaReady = true;
 }
 
@@ -827,11 +837,14 @@ async function handleListUsers(request, env) {
     return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   }
 
+  await ensureLinePersonalSchema(env);
   const { results } = await env.DB.prepare(
-    "SELECT id, full_name, role FROM users WHERE status = 'active' AND role IS NOT NULL ORDER BY full_name"
+    `SELECT u.id, u.full_name, u.role, CASE WHEN l.status='active' THEN 1 ELSE 0 END AS line_linked
+     FROM users u LEFT JOIN line_user_links l ON l.user_id=u.id
+     WHERE u.status = 'active' AND u.role IS NOT NULL ORDER BY u.full_name`
   ).all();
 
-  return jsonResponse({ users: results });
+  return jsonResponse({ users: results.map((row) => ({ ...row, line_linked: !!row.line_linked })) });
 }
 
 // ---------- /api/search (GET) — ค้นหาทั่วทั้งระบบโดยคงสิทธิ์ของแต่ละโมดูล ----------
@@ -2632,6 +2645,11 @@ async function processLineWebhookEvents(env, events) {
   if (!Array.isArray(events) || events.length === 0) return;
   await ensureLineSchema(env);
   for (const event of events.slice(0, 100)) {
+    try {
+      await handleLinePersonalEvent(env, event);
+    } catch (error) {
+      console.error("LINE personal link failed", String(error?.message || error).slice(0, 300));
+    }
     const source = getLineSourceTarget(event?.source);
     const eventType = cleanText(event?.type, 50) || "unknown";
     const webhookEventId = cleanText(event?.webhookEventId, 160);
@@ -3059,7 +3077,7 @@ async function handleCreateMaintenanceRequest(request, env) {
   await env.DB.prepare(`INSERT INTO maintenance_updates(request_id,previous_status,new_status,comment,created_by)
     VALUES (?,NULL,'reported',?,?)`).bind(requestId,"สร้างใบแจ้งซ่อม",user.id).run();
   await writeAuditLog(env,user,"create","maintenance_request",requestId,{ request_no:requestNo,facility_id:facilityId,inventory_item_id:inventoryItemId,custom_location:customLocation },request);
-  if (!body.defer_notification) await sendMaintenanceLineNotification(request,env,requestId,"reported").catch(()=>{});
+  if (!body.defer_notification) await sendMaintenanceLineNotification(request,env,requestId,"reported",{ actorId:user.id }).catch(()=>{});
   return jsonResponse({ id:requestId,request_no:requestNo },201);
 }
 
@@ -3111,10 +3129,13 @@ async function handleUpdateMaintenanceRequest(request, env, requestId) {
   await writeAuditLog(env,user,"update","maintenance_request",requestId,{ previous_status:item.status,new_status:nextStatus,assigned_to:assignedTo,actual_cost:actualCost },request);
   const notificationEvent = assignedTo!==item.assigned_to ? "assigned" : statusChanged ? nextStatus : null;
   const automaticEvents = new Set(["reported","assigned","completed"]);
-  const shouldNotify = notificationEvent && (automaticEvents.has(notificationEvent) || body.notify_line === true);
-  const lineNotification = shouldNotify
-    ? await sendMaintenanceLineNotification(request,env,requestId,notificationEvent).catch((error)=>({delivery_status:"failed",error:cleanText(error?.message||error,500)}))
-    : notificationEvent ? { delivery_status:"not_requested" } : null;
+  const notifyGroup = !!notificationEvent && (automaticEvents.has(notificationEvent) || body.notify_line === true);
+  // รายบุคคล (ผู้รับผิดชอบ/ผู้แจ้ง) ส่งทุกครั้งที่สถานะหรือผู้รับผิดชอบเปลี่ยน — กลุ่มส่งตามเงื่อนไขเดิม
+  const lineNotification = notificationEvent
+    ? await sendMaintenanceLineNotification(request,env,requestId,notificationEvent,{ group:notifyGroup, actorId:user.id })
+        .catch((error)=>({delivery_status:"failed",error:cleanText(error?.message||error,500)}))
+    : null;
+  if (lineNotification && !notifyGroup && lineNotification.delivery_status === "no_recipient") lineNotification.delivery_status = "not_requested";
   return jsonResponse({ ok:true, line_notification:lineNotification });
 }
 
@@ -3127,68 +3148,115 @@ async function maintenanceImageSignature(env, attachmentId, expires) {
   return bytesToHex(await crypto.subtle.sign("HMAC",key,new TextEncoder().encode(`${attachmentId}:${expires}`)));
 }
 
-async function sendMaintenanceLineNotification(request, env, requestId, eventType) {
-  let deliveryStatus = "not_configured", errorMessage = null;
-  const recentDuplicate = await env.DB.prepare(`SELECT id FROM maintenance_notifications
-    WHERE request_id=? AND event_type=? AND delivery_status='sent'
-      AND datetime(created_at)>=datetime('now','-10 minutes')
-    ORDER BY id DESC LIMIT 1`).bind(requestId,eventType).first();
-  if (recentDuplicate) {
-    deliveryStatus="skipped_duplicate";
-    errorMessage="ป้องกันการส่งเหตุการณ์เดิมซ้ำภายใน 10 นาที";
-    await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
-      .bind(requestId,eventType,deliveryStatus,errorMessage).run();
-    return { delivery_status:deliveryStatus,error:errorMessage };
+async function recordMaintenanceNotification(env, requestId, eventType, status, error, recipient) {
+  await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message,recipient_type,recipient_user_id,recipient_label)
+    VALUES (?,?,?,?,?,?,?)`).bind(requestId,eventType,status,error||null,recipient?.type||"group",recipient?.user_id||null,recipient?.label||null).run();
+}
+
+function buildMaintenanceFlex(item, eventType, origin, requestId, headline) {
+  const eventLabels = {reported:"แจ้งซ่อมใหม่",assigned:"มอบหมายงาน",in_progress:"เริ่มดำเนินการ",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ รอตรวจรับ",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
+  const priorityLabels = {low:"ต่ำ",normal:"ปกติ",high:"สูง",urgent:"เร่งด่วน"};
+  const registeredLocation = [item.facility_name,item.building_name,item.floor?`ชั้น ${item.floor}`:null].filter(Boolean).join(" · ");
+  const location = [registeredLocation,item.custom_location].filter(Boolean).join(" · ") || item.inventory_name || "ไม่ระบุจุด";
+  const label = headline || eventLabels[eventType] || "อัปเดตงานซ่อม";
+  const rows = [
+    {type:"text",text:label,weight:"bold",size:"sm",color:"#2563EB",wrap:true},
+    {type:"text",text:item.title,weight:"bold",size:"xl",wrap:true,color:"#102A43"},
+    {type:"text",text:`${item.request_no} · ความสำคัญ ${priorityLabels[item.priority]||item.priority}`,size:"sm",color:item.priority==="urgent"?"#DC2626":"#52667A",wrap:true},
+    {type:"separator",margin:"md"},
+    {type:"text",text:`สถานที่: ${location}`,size:"sm",color:"#334E68",wrap:true},
+  ];
+  if (item.inventory_name) rows.push({type:"text",text:`ครุภัณฑ์: ${[item.item_code,item.inventory_name].filter(Boolean).join(" · ")}`,size:"sm",color:"#334E68",wrap:true});
+  rows.push(
+    {type:"text",text:`ผู้แจ้ง: ${item.reporter_name||"-"}`,size:"sm",color:"#334E68",wrap:true},
+    {type:"text",text:item.assignee_name?`ผู้รับผิดชอบ: ${item.assignee_name}`:"ยังไม่ได้มอบหมาย",size:"sm",color:"#334E68",wrap:true},
+  );
+  if (item.due_date && ["assigned","in_progress","waiting_parts"].includes(eventType)) rows.push({type:"text",text:`กำหนดเสร็จ: ${item.due_date}`,size:"sm",color:"#334E68",wrap:true});
+  return {
+    altText: `${label}: ${item.title}`.slice(0,390),
+    contents: { type:"bubble", body:{type:"box",layout:"vertical",spacing:"md",contents:rows},
+      footer:{type:"box",layout:"vertical",contents:[{type:"button",style:"primary",color:"#2563EB",action:{type:"uri",label:"เปิดใบแจ้งซ่อม",uri:`${origin}/maintenance.html?request=${requestId}`}}]} },
+  };
+}
+
+// ส่งแจ้งเตือนงานซ่อม: กลุ่ม LINE ที่เลือกไว้ (options.group) + รายบุคคล (ผู้รับผิดชอบ/ผู้แจ้ง ที่เชื่อม LINE แล้ว)
+async function sendMaintenanceLineNotification(request, env, requestId, eventType, options = {}) {
+  const sendGroup = options.group !== false, sendPersonal = options.personal !== false;
+  const item = await getMaintenanceRequest(env,requestId);
+  if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
+  const targets = [];
+  const lineTarget = sendGroup && env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
+  if (sendGroup && !lineTarget) {
+    targets.push({ type:"group", label:null, status:"not_configured" });
+  } else if (lineTarget) {
+    targets.push({ type:"group", target_id:lineTarget.target_id, label:lineTarget.display_name||"กลุ่ม LINE" });
   }
-  const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
-  if (env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget) {
-    try {
-      const lineMetrics = await getLineDeliveryMetrics(env,lineTarget);
-      if (lineMetrics.remaining !== null && lineMetrics.remaining <= 0) {
-        deliveryStatus="quota_exhausted";
-        errorMessage="โควตา LINE ประจำเดือนหมดแล้ว";
-      } else if (lineMetrics.remaining !== null && lineMetrics.recipient_count !== null && lineMetrics.recipient_count > lineMetrics.remaining) {
-        deliveryStatus="quota_exhausted";
-        errorMessage=`โควตา LINE คงเหลือ ${lineMetrics.remaining} ข้อความ ไม่พอสำหรับผู้รับประมาณ ${lineMetrics.recipient_count} คน`;
-      }
-      if (deliveryStatus === "quota_exhausted") {
-        await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
-          .bind(requestId,eventType,deliveryStatus,errorMessage).run();
-        return { delivery_status:deliveryStatus,error:errorMessage };
-      }
-      const item = await getMaintenanceRequest(env,requestId);
-      if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
-      const origin = new URL(request.url).origin;
-      const eventLabels = {reported:"แจ้งซ่อมใหม่",assigned:"มอบหมายงาน",in_progress:"เริ่มดำเนินการ",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ รอตรวจรับ",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
-      const priorityLabels = {low:"ต่ำ",normal:"ปกติ",high:"สูง",urgent:"เร่งด่วน"};
-      const registeredLocation = [item.facility_name,item.building_name,item.floor?`ชั้น ${item.floor}`:null].filter(Boolean).join(" · ");
-      const location = [registeredLocation,item.custom_location].filter(Boolean).join(" · ") || item.inventory_name || "ไม่ระบุจุด";
-      const contents = {
-        type:"bubble", body:{type:"box",layout:"vertical",spacing:"md",contents:[
-          {type:"text",text:eventLabels[eventType]||"อัปเดตงานซ่อม",weight:"bold",size:"sm",color:"#2563EB"},
-          {type:"text",text:item.title,weight:"bold",size:"xl",wrap:true,color:"#102A43"},
-          {type:"text",text:`${item.request_no} · ความสำคัญ ${priorityLabels[item.priority]||item.priority}`,size:"sm",color:item.priority==="urgent"?"#DC2626":"#52667A",wrap:true},
-          {type:"separator",margin:"md"},
-          {type:"text",text:`สถานที่: ${location}`,size:"sm",color:"#334E68",wrap:true},
-          {type:"text",text:`ผู้แจ้ง: ${item.reporter_name||"-"}`,size:"sm",color:"#334E68",wrap:true},
-          {type:"text",text:item.assignee_name?`ผู้รับผิดชอบ: ${item.assignee_name}`:"ยังไม่ได้มอบหมาย",size:"sm",color:"#334E68",wrap:true},
-        ]}, footer:{type:"box",layout:"vertical",contents:[{type:"button",style:"primary",color:"#2563EB",action:{type:"uri",label:"เปิดใบแจ้งซ่อม",uri:`${origin}/maintenance.html?request=${requestId}`}}]},
-      };
-      const previewId = eventType === "completed" || eventType === "verified" ? item.after_attachment_id : item.before_attachment_id;
-      if (previewId && env.JWT_SECRET) {
-        const expires = Math.floor(Date.now()/1000)+(7*24*60*60);
-        const sig = await maintenanceImageSignature(env,previewId,expires);
-        contents.hero={type:"image",url:`${origin}/api/public/maintenance-image/${previewId}?expires=${expires}&sig=${sig}`,size:"full",aspectRatio:"20:13",aspectMode:"cover"};
-      }
-      await pushLineMessages(env, lineTarget.target_id, [{type:"flex",altText:`${eventLabels[eventType]||"อัปเดตงานซ่อม"}: ${item.title}`,contents}]);
-      deliveryStatus="sent";
-    } catch (error) {
-      deliveryStatus="failed"; errorMessage=cleanText(error?.message||error,500);
+  if (sendPersonal) {
+    const recipients = maintenancePersonalRecipients(item, eventType, options.actorId);
+    const linked = await getLinkedLineUsers(env, recipients.map((recipient)=>recipient.user_id));
+    for (const recipient of recipients) {
+      const link = linked.get(recipient.user_id);
+      const name = recipient.role === "assignee" ? item.assignee_name : item.reporter_name;
+      targets.push(link && env.LINE_CHANNEL_ACCESS_TOKEN
+        ? { type:"user", user_id:recipient.user_id, target_id:link.line_user_id, label:name||link.full_name, headline:maintenancePersonalHeadline(eventType,recipient.role) }
+        : { type:"user", user_id:recipient.user_id, label:name, status: env.LINE_CHANNEL_ACCESS_TOKEN ? "not_linked" : "not_configured" });
     }
   }
-  await env.DB.prepare(`INSERT INTO maintenance_notifications(request_id,event_type,delivery_status,error_message) VALUES (?,?,?,?)`)
-    .bind(requestId,eventType,deliveryStatus,errorMessage).run();
-  return { delivery_status:deliveryStatus,error:errorMessage };
+  if (!targets.length) return { delivery_status:"no_recipient", results:[] };
+
+  const sendable = [];
+  const results = [];
+  for (const target of targets) {
+    if (target.status) { results.push({ ...target }); continue; }
+    const duplicate = await env.DB.prepare(`SELECT id FROM maintenance_notifications
+      WHERE request_id=? AND event_type=? AND delivery_status='sent' AND COALESCE(recipient_type,'group')=? AND COALESCE(recipient_user_id,0)=?
+        AND datetime(created_at)>=datetime('now','-10 minutes') ORDER BY id DESC LIMIT 1`)
+      .bind(requestId,eventType,target.type,target.user_id||0).first();
+    if (duplicate) results.push({ ...target, status:"skipped_duplicate", error:"ป้องกันการส่งเหตุการณ์เดิมซ้ำภายใน 10 นาที" });
+    else sendable.push(target);
+  }
+
+  if (sendable.length) {
+    let metrics = null;
+    try { metrics = await getLineDeliveryMetrics(env, lineTarget || { target_type:"user" }); } catch { metrics = null; }
+    let remaining = metrics?.remaining ?? null;
+    const groupCost = lineTarget ? (metrics?.recipient_count ?? 1) : 0;
+    const origin = new URL(request.url).origin;
+    const previewId = eventType === "completed" || eventType === "verified" ? item.after_attachment_id : item.before_attachment_id;
+    let hero = null;
+    if (previewId && env.JWT_SECRET) {
+      const expires = Math.floor(Date.now()/1000)+(7*24*60*60);
+      const sig = await maintenanceImageSignature(env,previewId,expires);
+      hero = {type:"image",url:`${origin}/api/public/maintenance-image/${previewId}?expires=${expires}&sig=${sig}`,size:"full",aspectRatio:"20:13",aspectMode:"cover"};
+    }
+    // ส่งรายบุคคลก่อน (ใช้โควตาน้อยและตรงตัวผู้รับ) แล้วจึงส่งกลุ่ม
+    sendable.sort((a,b)=>(a.type==="user"?0:1)-(b.type==="user"?0:1));
+    for (const target of sendable) {
+      const cost = target.type === "group" ? groupCost : 1;
+      if (remaining !== null && remaining < cost) {
+        results.push({ ...target, status:"quota_exhausted", error: remaining <= 0 ? "โควตา LINE ประจำเดือนหมดแล้ว" : `โควตา LINE คงเหลือ ${remaining} ข้อความ ไม่พอสำหรับผู้รับประมาณ ${cost} คน` });
+        continue;
+      }
+      try {
+        const flex = buildMaintenanceFlex(item, eventType, origin, requestId, target.headline);
+        if (hero) flex.contents.hero = hero;
+        await pushLineMessages(env, target.target_id, [{ type:"flex", altText:flex.altText, contents:flex.contents }]);
+        if (remaining !== null) remaining -= cost;
+        results.push({ ...target, status:"sent" });
+      } catch (error) {
+        results.push({ ...target, status:"failed", error:cleanText(error?.message||error,500) });
+      }
+    }
+  }
+
+  for (const result of results) await recordMaintenanceNotification(env, requestId, eventType, result.status, result.error, result);
+  const priority = ["sent","failed","quota_exhausted","not_linked","skipped_duplicate","not_configured"];
+  const deliveryStatus = priority.find((status)=>results.some((result)=>result.status===status)) || "not_configured";
+  return {
+    delivery_status: deliveryStatus,
+    error: results.find((result)=>result.status===deliveryStatus)?.error || null,
+    results: results.map((result)=>({ recipient_type:result.type, recipient_label:result.label||null, delivery_status:result.status, error:result.error||null })),
+  };
 }
 
 async function handleNotifyMaintenanceRequest(request, env, requestId) {
@@ -3197,7 +3265,7 @@ async function handleNotifyMaintenanceRequest(request, env, requestId) {
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
   if (!canManageMaintenance(user) && item.reported_by!==user.id && item.assigned_to!==user.id) return jsonResponse({ error:"ไม่มีสิทธิ์ส่งการแจ้งเตือน" },403);
-  const result = await sendMaintenanceLineNotification(request,env,requestId,item.status);
+  const result = await sendMaintenanceLineNotification(request,env,requestId,item.status,{ personal:false });
   return jsonResponse(result,result.delivery_status==="failed"?502:200);
 }
 
@@ -4244,6 +4312,8 @@ export default {
       const correspondenceResponse = await handleCorrespondenceRoute(request, env, pathname, method);
       if (correspondenceResponse) return correspondenceResponse;
 
+      const linePersonalResponse = await handleLinePersonalRoute(request, env, pathname, method);
+      if (linePersonalResponse) return linePersonalResponse;
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);
       const lineTargetMatch = pathname.match(/^\/api\/line\/targets\/(\d+)$/);

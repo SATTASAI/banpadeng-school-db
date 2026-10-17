@@ -11,13 +11,17 @@
     .account-card h2{margin:0 0 5px;font-size:19px}.account-card form{display:grid;gap:12px;margin-top:18px}.account-card label{display:grid;gap:6px;font-size:13px;font-weight:600}.account-card input{width:100%}
     .account-card .btn{width:auto;justify-self:start}.profile-row{display:grid;grid-template-columns:130px 1fr;gap:10px;padding:9px 0;border-bottom:1px solid var(--color-border);font-size:13px}.profile-row:last-child{border:0}.profile-row span{color:var(--color-text-muted)}
     .danger-card{grid-column:1/-1;border-color:#efc7cc;background:#fffafb}.danger-card .btn{background:#b33e4b;color:#fff;border-color:#b33e4b}.message{display:none;margin-top:13px;padding:10px 12px;border-radius:10px;background:#e8f6ee;color:#217248;font-size:13px}.message.error{background:#ffeded;color:#a9323f}.message.visible{display:block}
+    .line-card{grid-column:1/-1}.line-status{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:14px}.line-dot{width:10px;height:10px;border-radius:50%;background:#AAB7C3;flex:none}.line-dot.on{background:#06C755}.line-dot.warn{background:#D98A12}
+    .line-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.line-actions .btn{width:auto}.btn-line{background:#06C755;border-color:#06C755;color:#fff}
+    .line-steps{display:none;margin-top:16px;padding:16px;border:1px solid #BFE8CF;border-radius:14px;background:#F2FBF5}.line-steps.visible{display:block}.line-steps ol{margin:8px 0 0;padding-left:20px;line-height:1.8;font-size:14px}
+    .line-code{display:inline-flex;align-items:center;gap:8px;margin:6px 0;padding:8px 14px;border-radius:10px;background:#fff;border:1px dashed #06C755;font:700 22px/1.2 ui-monospace,Menlo,monospace;letter-spacing:2px;color:#0B5D33}
     @media(max-width:700px){.account-grid{grid-template-columns:1fr}.danger-card{grid-column:auto}.account-page{padding:18px 14px}.profile-row{grid-template-columns:1fr;gap:2px}}
   </style>
 </head>
 <body>
   <main class="app-main account-page">
     <a href="/dashboard.html">← กลับแดชบอร์ด</a>
-    <header class="account-head"><h1>บัญชีและความปลอดภัย</h1><p>ตรวจสอบบัญชี เปลี่ยนรหัสผ่าน และยกเลิกการเข้าสู่ระบบบนอุปกรณ์อื่น</p></header>
+    <header class="account-head"><h1>บัญชีและความปลอดภัย</h1><p>ตรวจสอบบัญชี เปลี่ยนรหัสผ่าน เชื่อมต่อ LINE และยกเลิกการเข้าสู่ระบบบนอุปกรณ์อื่น</p></header>
     <div class="account-grid">
       <section class="account-card">
         <h2>ข้อมูลบัญชี</h2><p class="muted">ข้อมูลที่ใช้เข้าสู่ระบบโรงเรียน</p>
@@ -32,6 +36,25 @@
           <button class="btn btn-primary" id="passwordButton">บันทึกรหัสผ่านใหม่</button>
         </form>
         <div class="message" id="passwordMessage" role="status"></div>
+      </section>
+      <section class="account-card line-card">
+        <h2>การแจ้งเตือน LINE ส่วนตัว</h2>
+        <p class="muted">เชื่อมบัญชี LINE เพื่อรับแจ้งเตือนงานที่เกี่ยวกับคุณโดยตรง เช่น งานซ่อมที่ได้รับมอบหมาย หรือความคืบหน้างานที่คุณแจ้ง</p>
+        <div class="line-status"><span class="line-dot" id="lineDot"></span><span id="lineStatusText">กำลังตรวจสอบ...</span></div>
+        <div class="line-actions">
+          <button class="btn btn-line" id="lineConnectButton" type="button">เชื่อมต่อ LINE</button>
+          <button class="btn" id="lineCheckButton" type="button" style="display:none">ตรวจสอบอีกครั้ง</button>
+          <button class="btn" id="lineUnlinkButton" type="button" style="display:none">ยกเลิกการเชื่อมต่อ</button>
+        </div>
+        <div class="line-steps" id="lineSteps">
+          <strong>ทำตาม 2 ขั้นตอนนี้ (รหัสใช้ได้ <span id="lineExpiry">15</span> นาที)</strong>
+          <ol>
+            <li id="lineFriendStep">เพิ่มเพื่อน LINE ของโรงเรียน</li>
+            <li>เปิดแชตกับ LINE ของโรงเรียน แล้วพิมพ์รหัสนี้ส่งไป<br><span class="line-code" id="lineCode">—</span> <button class="btn" id="lineCopyButton" type="button" style="width:auto;padding:6px 10px">คัดลอก</button></li>
+          </ol>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">เมื่อส่งรหัสแล้ว LINE จะตอบกลับว่าเชื่อมต่อสำเร็จ จากนั้นกด "ตรวจสอบอีกครั้ง"</p>
+        </div>
+        <div class="message" id="lineMessage" role="status"></div>
       </section>
       <section class="account-card danger-card">
         <h2>ออกจากระบบทุกอุปกรณ์</h2>
@@ -64,7 +87,35 @@
       if(!confirm("ต้องการออกจากระบบทุกอุปกรณ์ใช่หรือไม่?"))return;
       try{await apiRequest("/api/auth/logout-all",{method:"POST"});location="/login.html"}catch(error){message(error.message,true)}
     });
+    const lineMessage=(text,error=false)=>{const el=document.getElementById("lineMessage");el.textContent=text;el.className=`message visible${error?" error":""}`};
+    async function loadLine(){
+      const s=await apiRequest("/api/line/link"),dot=document.getElementById("lineDot"),text=document.getElementById("lineStatusText");
+      const connect=document.getElementById("lineConnectButton"),unlink=document.getElementById("lineUnlinkButton"),check=document.getElementById("lineCheckButton");
+      dot.className="line-dot"+(s.linked&&!s.blocked?" on":s.blocked?" warn":"");
+      if(!s.configured&&!s.linked){text.textContent="ผู้ดูแลระบบยังไม่ได้ตั้งค่า LINE ของโรงเรียน";connect.disabled=true;unlink.style.display="none";return}
+      connect.disabled=false;
+      if(s.linked&&s.blocked){text.textContent=`เชื่อมกับ ${s.display_name||"บัญชี LINE"} แล้ว แต่ไม่ได้รับข้อความ เพราะบล็อกหรือลบเพื่อน LINE โรงเรียน — เพิ่มเพื่อนกลับเพื่อรับแจ้งเตือน`}
+      else if(s.linked){text.innerHTML=`เชื่อมต่อแล้วกับ <strong>${escapeHtml(s.display_name||"บัญชี LINE")}</strong>`;document.getElementById("lineSteps").classList.remove("visible");check.style.display="none"}
+      else text.textContent="ยังไม่ได้เชื่อมต่อ";
+      connect.textContent=s.linked?"เปลี่ยนบัญชี LINE":"เชื่อมต่อ LINE";unlink.style.display=s.linked?"inline-flex":"none";
+      return s;
+    }
+    document.getElementById("lineConnectButton").addEventListener("click",async()=>{
+      const button=document.getElementById("lineConnectButton");button.disabled=true;
+      try{
+        const r=await apiRequest("/api/line/link/code",{method:"POST"});
+        document.getElementById("lineCode").textContent=r.code;document.getElementById("lineExpiry").textContent=r.expires_in_minutes;
+        const oa=r.official_account,step=document.getElementById("lineFriendStep");
+        step.innerHTML=oa?.add_friend_url?`เพิ่มเพื่อน LINE ของโรงเรียน: <a href="${escapeHtml(oa.add_friend_url)}" target="_blank" rel="noopener"><strong>${escapeHtml(oa.name||"LINE โรงเรียน")}</strong> (${escapeHtml(oa.basic_id)})</a> — ถ้าเป็นเพื่อนอยู่แล้วข้ามได้`:"เพิ่มเพื่อน LINE ของโรงเรียน (ถ้าเป็นเพื่อนอยู่แล้วข้ามได้)";
+        document.getElementById("lineSteps").classList.add("visible");document.getElementById("lineCheckButton").style.display="inline-flex";
+        document.getElementById("lineMessage").className="message";
+      }catch(error){lineMessage(error.message,true)}finally{button.disabled=false}
+    });
+    document.getElementById("lineCopyButton").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(document.getElementById("lineCode").textContent);lineMessage("คัดลอกรหัสแล้ว วางในแชต LINE ของโรงเรียนได้เลย")}catch{lineMessage("คัดลอกไม่ได้ กรุณาพิมพ์รหัสเอง",true)}});
+    document.getElementById("lineCheckButton").addEventListener("click",async()=>{try{const s=await loadLine();lineMessage(s?.linked?"เชื่อมต่อ LINE สำเร็จแล้ว":"ยังไม่พบการเชื่อมต่อ ตรวจสอบว่าส่งรหัสในแชต LINE ของโรงเรียนแล้ว",!s?.linked)}catch(error){lineMessage(error.message,true)}});
+    document.getElementById("lineUnlinkButton").addEventListener("click",async()=>{if(!confirm("ยกเลิกการเชื่อมต่อ LINE? คุณจะไม่ได้รับแจ้งเตือนส่วนตัวอีก"))return;try{await apiRequest("/api/line/link",{method:"DELETE"});await loadLine();lineMessage("ยกเลิกการเชื่อมต่อแล้ว")}catch(error){lineMessage(error.message,true)}});
     load().catch(error=>message(error.message,true));
+    loadLine().catch(error=>lineMessage(error.message,true));
   </script>
 </body>
 </html>

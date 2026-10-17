@@ -70,6 +70,11 @@
         </div>
       </div>
       <div class="settings-card">
+        <h3>แจ้งเตือนรายบุคคล</h3><p id="personalSummary">กำลังโหลด...</p>
+        <p style="font-size:12px">ครูแต่ละคนเชื่อมเองที่เมนู บัญชีของฉัน → เชื่อมต่อ LINE (ได้รหัสไปพิมพ์ในแชต LINE โรงเรียน) งานซ่อมจะแจ้งผู้รับผิดชอบและผู้แจ้งโดยตรง</p>
+        <div id="personalList" style="display:grid;gap:6px;max-height:260px;overflow:auto;font-size:13px"></div>
+      </div>
+      <div class="settings-card">
         <h3>ข้อควรทราบ</h3><p>LINE อาจใช้เวลาสองสามวินาทีในการส่งเหตุการณ์ หลังส่งข้อความในกลุ่มแล้วให้รอสักครู่ก่อนรีเฟรช</p>
       </div>
     </aside>
@@ -97,7 +102,8 @@ function renderStatus(){
   $("webhookUrl").value=lineStatus.webhook_url;
 }
 function renderTargets(){
-  const targets=lineStatus.targets;
+  // แชต 1:1 ของครูที่เชื่อม LINE ส่วนตัวไม่ใช่ปลายทางกลุ่ม จึงไม่แสดงในรายการนี้ (ยกเว้นที่ถูกเลือกไว้เดิม)
+  const targets=lineStatus.targets.filter(target=>target.target_type!=="user"||target.is_default);
   if(!targets.length){$("targetList").innerHTML='<div class="empty"><strong>ยังไม่พบกลุ่ม LINE</strong>หลัง Verify สำเร็จ ให้เชิญบัญชีทางการเข้ากลุ่มและส่งข้อความหนึ่งครั้ง</div>';return}
   $("targetList").innerHTML=targets.map(target=>`<article class="target-card ${target.is_default?"selected":""}">
     <div><div class="target-name">${esc(target.display_name||`${TYPE_LABEL[target.target_type]||"ปลายทาง"}ที่ตรวจพบ`)} <span class="target-badge ${target.is_default?"active":""}">${target.is_default?"กำลังใช้งาน":esc(TYPE_LABEL[target.target_type]||target.target_type)}</span></div>
@@ -106,9 +112,15 @@ function renderTargets(){
   </article>`).join("");
   $("targetList").querySelectorAll("[data-action]").forEach(button=>button.onclick=()=>updateTarget(Number(button.dataset.id),button.dataset.action));
 }
+async function loadPersonal(){
+  try{const r=await apiRequest("/api/line/linked-users");const active=r.users.filter(u=>u.status==="active");
+    $("personalSummary").textContent=`เชื่อมแล้ว ${active.length.toLocaleString("th-TH")} จาก ${Number(r.active_user_count).toLocaleString("th-TH")} คน`;
+    $("personalList").innerHTML=r.users.map(u=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border)"><span>${esc(u.full_name)}<br><small style="color:var(--color-text-muted)">LINE: ${esc(u.display_name||"-")}</small></span><small style="color:${u.status==="active"?"#17A668":"#B56A0A"}">${u.status==="active"?"รับแจ้งเตือน":"บล็อก OA"}</small></div>`).join("")||'<small style="color:var(--color-text-muted)">ยังไม่มีผู้ใช้เชื่อม LINE</small>';
+  }catch(error){$("personalSummary").textContent=error.message}
+}
 async function loadStatus(showMessage=false){
   $("refreshBtn").disabled=true;
-  try{lineStatus=await apiRequest("/api/line/status");renderStatus();renderTargets();if(showMessage)toast("ตรวจสอบสถานะล่าสุดแล้ว")}
+  try{lineStatus=await apiRequest("/api/line/status");renderStatus();renderTargets();loadPersonal();if(showMessage)toast("ตรวจสอบสถานะล่าสุดแล้ว")}
   catch(error){if(error.status===403){document.querySelector("main").innerHTML='<div class="panel"><h2>ไม่มีสิทธิ์เข้าถึง</h2><p>หน้านี้สำหรับผู้บริหารหรือผู้ดูแลระบบเท่านั้น</p><a class="btn btn-primary" href="/maintenance.html" style="width:auto">กลับระบบแจ้งซ่อม</a></div>'}else toast(error.message,true)}
   finally{$("refreshBtn")&&($("refreshBtn").disabled=false)}
 }

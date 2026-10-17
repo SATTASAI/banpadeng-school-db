@@ -804,6 +804,9 @@ CREATE TABLE IF NOT EXISTS maintenance_notifications (
   event_type TEXT NOT NULL,
   delivery_status TEXT NOT NULL,
   error_message TEXT,
+  recipient_type TEXT,
+  recipient_user_id INTEGER,
+  recipient_label TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -846,6 +849,31 @@ CREATE TABLE IF NOT EXISTS line_webhook_events (
 CREATE INDEX IF NOT EXISTS idx_line_targets_default ON line_targets(is_default, status);
 CREATE INDEX IF NOT EXISTS idx_line_targets_last_seen ON line_targets(last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_line_webhook_events_received ON line_webhook_events(received_at DESC);
+
+-- LINE รายบุคคล: ผู้ใช้เชื่อมบัญชีด้วยรหัสชั่วคราวที่พิมพ์ในแชต LINE OA
+CREATE TABLE IF NOT EXISTS line_user_links (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  line_user_id TEXT NOT NULL UNIQUE,
+  display_name TEXT,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','blocked')),
+  linked_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS line_link_codes (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS line_link_failures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  line_user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_line_link_failures_user ON line_link_failures(line_user_id, created_at);
 
 -- ศูนย์ปฏิบัติงานกลางสำหรับหัวข้องานที่ยังไม่มีระบบเฉพาะ
 CREATE TABLE IF NOT EXISTS work_records (
