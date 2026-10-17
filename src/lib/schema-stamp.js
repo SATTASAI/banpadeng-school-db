@@ -8,7 +8,7 @@ let current;
 
 // ป้ายเวอร์ชันโครงสร้างฐานข้อมูล: เปลี่ยนค่านี้ทุกครั้งที่แก้คำสั่งตั้งค่าโครงสร้าง (ensure*) เพื่อให้รันใหม่ 1 รอบ
 // (เดิมใช้รหัส deploy — ทุก deploy ต้องตั้งค่าใหม่ และถ้ามีคนเปิดหลายหน้าพร้อมกัน ทุก instance ตั้งค่าซ้ำพร้อมกันจนฐานข้อมูลหนัก)
-export const REGISTRY_SCHEMA = "registry-2026-10-08a";
+export const REGISTRY_SCHEMA = "registry-2026-10-17a";
 
 export function deployVersion(env) {
   // ไม่มี binding เวอร์ชัน (ตอนทดสอบ) → ตั้งค่าทุกครั้งเหมือนเดิม

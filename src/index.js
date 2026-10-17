@@ -3300,7 +3300,8 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
     }
   }
 
-  for (const result of results) await recordMaintenanceNotification(env, requestId, eventType, result.status, result.error, result);
+  // บันทึกประวัติไม่สำเร็จต้องไม่ทำให้ผลการส่งที่ส่งไปแล้วกลายเป็น "ส่งไม่สำเร็จ"
+  for (const result of results) await recordMaintenanceNotification(env, requestId, eventType, result.status, result.error, result).catch((error)=>console.error("maintenance notification log", error));
   const priority = ["sent","failed","quota_exhausted","not_linked","skipped_duplicate","not_configured"];
   const deliveryStatus = priority.find((status)=>results.some((result)=>result.status===status)) || "not_configured";
   return {
