@@ -95,3 +95,27 @@ test("quota reserve stops general pushes and a saved request triggers delivery r
     assert.match(ok.pushes[0].messages[0].text, /งานด่วน/);
   } finally { ok.restore(); }
 });
+
+test("LINE goes only to the person who must act: finance queue to the finance officer, never one's own action", async () => {
+  const env = await setup();
+  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'exec@test','x','x','รองผอ','executive');
+    INSERT INTO line_user_links(user_id,line_user_id) VALUES(4,'U-exec'),(1,'U-admin');
+    INSERT OR REPLACE INTO budget_role_assignments(role_key,department,user_id) VALUES('finance_review','',3);`);
+  const line = mockLine();
+  try {
+    await dispatchLineNotifications(env);
+    env.raw.exec(`INSERT INTO project_expenses(id,project_id,fiscal_year,expense_date,description,amount,status,created_by) VALUES(900,10,2569,'2026-10-01','x',1,'pending',2);
+      INSERT INTO project_workflow_events(token,expense_id,project_id,event_type,message,actor_id) VALUES('q1',900,10,'submit','มีคำขอเบิกจ่ายใหม่',2),('r1',900,10,'receive','การเงินรับเรื่องแล้ว',3);
+      INSERT INTO project_notifications(event_token,user_id,audience) VALUES('q1',1,'finance'),('q1',3,'finance'),('q1',4,'finance'),('r1',2,'owners'),('r1',3,'owners');`);
+    unlock(env);
+    await dispatchLineNotifications(env);
+    const to = line.pushes.map((p) => p.to).sort();
+    assert.deepEqual(to, ["U-other", "U-teacher"], "finance officer gets the queue; owner gets receipt; executive/admin and the actor do not");
+    const finance = line.pushes.find((p) => p.to === "U-other").messages[0].text;
+    assert.match(finance, /มีคำขอเบิกจ่ายใหม่/);
+    assert.doesNotMatch(finance, /รับเรื่องแล้ว/);
+    const bell = await (await call(env, "/api/notifications", "GET", undefined, 4)).json();
+    assert(bell.notifications.some((n) => n.message === "มีคำขอเบิกจ่ายใหม่"), "executives still see it in the in-app bell");
+    assert(!("line_ok" in bell.notifications[0]));
+  } finally { line.restore(); }
+});

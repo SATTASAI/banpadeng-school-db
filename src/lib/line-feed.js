@@ -89,6 +89,9 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
     let rows;
     try { rows = await unreadNotificationsFor(env, { id: Number(person.user_id), role: person.role }, 50); }
     catch { failures++; continue; }
+    // ส่ง LINE เฉพาะผู้ที่ต้องลงมือ: ไม่ส่งเรื่องที่ตัวเองเป็นคนทำ และไม่ส่งรายการที่เห็นเพื่อกำกับดูแลเท่านั้น
+    // (เช่น คิวการเงินที่ผู้บริหารเห็นในระบบ หรือใบลาทั้งหมดที่ผู้ดูแลระบบเห็น) — ยังเห็นที่กระดิ่งในระบบตามเดิม
+    rows = rows.filter((r) => Number(r.line_ok ?? 1) === 1 && Number(r.actor_id || 0) !== Number(person.user_id));
     // คนที่เพิ่งเชื่อม LINE: จดรายการที่ค้างอยู่ไว้เฉยๆ ไม่ส่งย้อนหลัง
     const fresh = await env.DB.prepare("INSERT OR IGNORE INTO line_feed_users(user_id) VALUES(?)").bind(person.user_id).run();
     if (fresh.meta.changes) {

@@ -18,7 +18,7 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  if(['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records'].every(t=>tables.has(t))){
   extra.push(`SELECT 'substitute:'||a.id,'สอนแทน',
   'วันที่ '||a.absence_date||' คาบ '||a.period||' · '||COALESCE(e.classroom,'')||' '||COALESCE(e.subject,'')||COALESCE(' (แทน '||ap.full_name||')',''),
-  a.created_at,'/substitutes.html',NULL
+  a.created_at,'/substitutes.html',NULL,a.created_by,1
   FROM substitute_assignments a JOIN personnel_accounts pa ON pa.personnel_id=a.substitute_teacher_id
   LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN substitute_absences ab ON ab.id=a.absence_id
   LEFT JOIN personnel_records ap ON ap.id=ab.teacher_id
@@ -26,45 +26,52 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  }
  if(tables.has('correspondence_records')){
   extra.push(`SELECT 'correspondence:'||c.id||':'||c.assigned_to,'หนังสือราชการ'||CASE WHEN c.urgency<>'normal' THEN ' (ด่วน)' ELSE '' END,
-  c.subject||CASE WHEN c.due_date IS NOT NULL THEN ' · กำหนด '||c.due_date ELSE '' END,c.updated_at,'/correspondence.html?record='||c.id,NULL
+  c.subject||CASE WHEN c.due_date IS NOT NULL THEN ' · กำหนด '||c.due_date ELSE '' END,c.updated_at,'/correspondence.html?record='||c.id,NULL,NULL,1
   FROM correspondence_records c WHERE c.assigned_to=? AND c.created_by<>? AND c.status NOT IN ('completed','archived')`);extraValues.push(user.id,user.id);
  }
  const sql=`WITH messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
- CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at
+ CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
+ v.actor_id actor_id,
+ CASE WHEN n.audience<>'finance' THEN 1
+  WHEN EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key='finance_review' AND f.department='' AND f.user_id=n.user_id) THEN 1
+  WHEN NOT EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key='finance_review' AND f.department='') AND ?=1 THEN 1 ELSE 0 END line_ok
  FROM project_notifications n JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id WHERE n.user_id=?
  UNION ALL
  SELECT 'balance:'||r.id||':'||r.status,'คำขอแก้ยอด: '||p.name,
  CASE r.status WHEN 'pending' THEN 'มีคำขอแก้ไขยอดใช้ไปแล้ว รอพิจารณา' WHEN 'approved' THEN 'อนุมัติและปรับยอดใช้ไปแล้วเรียบร้อย' ELSE 'คำขอแก้ไขยอดไม่ได้รับอนุมัติ' END,
- COALESCE(r.reviewed_at,r.created_at),CASE WHEN ?=1 THEN '/dashboard.html' ELSE '/department.html?dept='||COALESCE(p.management_area,p.department) END,n.read_at
+ COALESCE(r.reviewed_at,r.created_at),CASE WHEN ?=1 THEN '/dashboard.html' ELSE '/department.html?dept='||COALESCE(p.management_area,p.department) END,n.read_at,CASE WHEN r.status='pending' THEN r.requested_by ELSE r.reviewed_by END,1
  FROM project_balance_notifications n JOIN project_balance_requests r ON r.id=n.request_id JOIN projects p ON p.id=r.project_id WHERE n.user_id=?
  UNION ALL
  SELECT 'leave:'||r.id||':'||CASE WHEN r.status<>'pending' THEN r.status WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'reviewed' ELSE 'forwarded' END ELSE 'pending' END,'การลา: '||u.full_name,
  CASE r.status WHEN 'pending' THEN CASE WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'รองผู้บริหารบันทึกความเห็นแล้ว รอคำสั่งผู้อำนวยการ' ELSE 'หัวหน้าฝ่ายบุคลากรส่งใบลาให้พิจารณา' END ELSE 'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ' END WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
- COALESCE(r.approved_at,r.reviewer_at,r.forwarded_at,r.created_at),'/leave.html?request='||r.id,NULL
+ COALESCE(r.approved_at,r.reviewer_at,r.forwarded_at,r.created_at),'/leave.html?request='||r.id,NULL,NULL,
+ CASE WHEN (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR (r.user_id=? AND r.status IN ('approved','rejected')) OR
+ (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
+ SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND ((v.kind='deputy' AND r.reviewer_at IS NULL) OR (v.kind='director' AND r.reviewer_at IS NOT NULL)))) THEN 1 ELSE 0 END
  FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE
  (?=1 AND r.status='pending') OR (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR
  (r.user_id=? AND r.status IN ('approved','rejected')) OR
  (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
  SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND (v.kind='director' OR r.reviewer_at IS NULL)))
  UNION ALL
- SELECT 'task:'||t.id,'งานที่ได้รับมอบหมาย',t.title,t.created_at,'/tasks.html',NULL
+ SELECT 'task:'||t.id,'งานที่ได้รับมอบหมาย',t.title,t.created_at,'/tasks.html',NULL,t.created_by,1
  FROM tasks t JOIN task_assignees a ON a.task_id=t.id WHERE a.user_id=? AND a.status<>'done' AND t.status='open'
  UNION ALL
- SELECT 'approval:'||a.id,'เอกสารเบิกจ่ายรอลงนาม',p.name||' · '||a.step_label,a.updated_at,'/budget.html?view=requests',NULL
+ SELECT 'approval:'||a.id,'เอกสารเบิกจ่ายรอลงนาม',p.name||' · '||a.step_label,a.updated_at,'/budget.html?view=requests',NULL,NULL,1
  FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
  WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
  UNION ALL
  SELECT 'student-delete:'||d.id||':'||d.status,'ขอลบข้อมูลนักเรียนถาวร: '||d.student_name,
  CASE d.status WHEN 'pending' THEN 'รอผู้อำนวยการพิจารณา — '||d.reason WHEN 'approved' THEN 'ผู้อำนวยการอนุมัติ ลบข้อมูลแล้ว' ELSE 'ผู้อำนวยการไม่อนุมัติการลบ' END,
- COALESCE(d.decided_at,d.requested_at),'/students.html?delete_requests=1',NULL
+ COALESCE(d.decided_at,d.requested_at),'/students.html?delete_requests=1',NULL,CASE WHEN d.status='pending' THEN d.requested_by ELSE NULL END,1
  FROM student_delete_requests d WHERE (?=1 AND d.status='pending') OR (d.requested_by=? AND d.status IN ('approved','rejected'))
  UNION ALL
- SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at
+ SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
+ return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50){
@@ -80,7 +87,7 @@ export async function handleNotifications(request,env,pathname,method){
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();
-  return jsonResponse({unread_count:Number(results[0]?.unread_count||0),notifications:results.map(({unread_count,read_at,...r})=>r)},200,{'Cache-Control':'no-store'});
+  return jsonResponse({unread_count:Number(results[0]?.unread_count||0),notifications:results.map(({unread_count,read_at,actor_id,line_ok,...r})=>r)},200,{'Cache-Control':'no-store'});
  }
  if(pathname==='/api/notifications/read'&&method==='POST'){
   const body=await request.json().catch(()=>null);if(body?.all!==true&&!body?.message_key)return jsonResponse({error:'ระบุข้อความที่จะอ่าน'},400);
