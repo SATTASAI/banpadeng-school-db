@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>งานจัดซื้อจัดจ้าง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.pc-page{max-width:1240px}.pc-page .btn,.pc-sheet .btn{width:auto}.pc-table th.num{text-align:right}.pc-sheet .pc-table table{min-width:560px}
+.pc-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin:12px 0 16px}.pc-head h1{margin:0;font-size:24px;color:var(--color-forest-900)}.pc-head p{margin:4px 0 0;color:var(--color-text-muted);font-size:13px}
+.pc-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.pc-actions select{width:auto;min-width:120px;padding:9px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);background:#fff}
+.pc-flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:16px;padding:12px 14px;border:1px solid #CFE0F1;border-radius:var(--radius-lg);background:#F2F8FE;font-size:12px;color:#315C86}
+.pc-flow span{padding:4px 10px;border-radius:999px;background:#fff;border:1px solid #D6E5F4}.pc-flow i{font-style:normal;color:#8AA4BF}
+.pc-notice{padding:12px 14px;border-radius:var(--radius-md);background:#FFF6E6;border:1px solid #F1D9A8;color:#7A5410;font-size:13px;margin-bottom:14px}
+.pc-error{display:none;padding:12px 14px;border-radius:var(--radius-md);background:var(--color-danger-bg);color:var(--color-danger);margin-bottom:14px;font-size:13px}.pc-error.visible{display:block}
+.pc-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}.pc-chip{border:1px solid var(--color-border);background:var(--color-surface);border-radius:999px;padding:8px 14px;font:600 13px var(--font-body);color:var(--color-text);cursor:pointer}
+.pc-chip b{margin-left:6px;color:var(--color-ocean-700)}.pc-chip.active{background:#1671D7;color:#fff;border-color:#1671D7}.pc-chip.active b{color:#fff}
+.pc-todo{margin-bottom:16px;padding:14px;border:1px solid #F3C9A0;border-radius:var(--radius-lg);background:#FFF8F1}.pc-todo h2{margin:0 0 8px;font-size:15px;color:#8A4B12}.pc-todo button{display:block;width:100%;text-align:left;border:0;background:#fff;border-radius:10px;padding:10px 12px;margin-top:6px;font:13px var(--font-body);cursor:pointer;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.pc-panel{padding:16px;border:1px solid var(--color-border);border-radius:var(--radius-lg);background:rgba(255,255,255,.6)}
+.pc-toolbar{display:flex;gap:8px;margin-bottom:12px}.pc-toolbar input{flex:1;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md)}
+.pc-table{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff}.pc-table table{width:100%;min-width:860px;border-collapse:collapse;font-size:13px}
+.pc-table th{background:#F4F7FA;text-align:left;padding:10px;color:var(--color-text-muted);font-weight:600;white-space:nowrap}.pc-table td{padding:10px;border-top:1px solid var(--color-border);vertical-align:top}
+.pc-table tr.click{cursor:pointer}.pc-table tr.click:hover td{background:#F6FAFE}.num{text-align:right;white-space:nowrap}.muted{color:var(--color-text-muted);font-size:12px}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:#EEF2F6;color:#4A5B6D}
+.pill.draft{background:#EEF2F6}.pill.head_review,.pill.director_review{background:#FFF1DC;color:#8A5A0B}.pill.approved{background:#E6F0FC;color:#1A5FAE}.pill.ordered{background:#E9E6FB;color:#4B3BA5}.pill.accepted{background:#E1F5EE;color:#176B53}.pill.cancelled{background:#FBE9EB;color:#A33B45}
+.empty{padding:34px;text-align:center;color:var(--color-text-muted)}
+.pc-modal{position:fixed;inset:0;background:rgba(17,37,60,.38);display:none;align-items:flex-start;justify-content:center;padding:24px 14px;z-index:60;overflow:auto}.pc-modal.open{display:flex}
+.pc-sheet{width:min(980px,100%);background:#F9FCFF;border-radius:var(--radius-xl);padding:20px;box-shadow:0 24px 60px rgba(17,37,60,.25)}
+.pc-sheet-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.pc-sheet-head h2{margin:0;font-size:19px;color:var(--color-forest-900)}.pc-close{border:0;background:#EAF0F6;border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer;flex:none}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px}.grid .span2{grid-column:span 2}.grid .span3{grid-column:1/-1}
+.f label{display:block;font-size:12px;font-weight:600;color:var(--color-text-muted);margin-bottom:4px}.f input,.f select,.f textarea{width:100%;padding:9px 11px;border:1px solid var(--color-border);border-radius:10px;background:#fff;font:14px var(--font-body)}
+.f textarea{min-height:64px;resize:vertical}
+.sec{margin:16px 0 8px;font-size:14px;font-weight:700;color:var(--color-forest-700)}
+.items td{padding:6px}.items input,.items select{width:100%;padding:7px 8px;border:1px solid var(--color-border);border-radius:8px;font:13px var(--font-body)}.items .x{border:0;background:none;color:var(--color-danger);font-size:18px;cursor:pointer}
+.people{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;max-height:210px;overflow:auto;padding:8px;border:1px solid var(--color-border);border-radius:12px;background:#fff}
+.people label{display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border-radius:8px;cursor:pointer}.people label:hover{background:#F2F7FC}.people input{width:auto}
+.hint{font-size:12px;color:var(--color-text-muted);margin-top:4px}.hint.warn{color:#9A5B0C}
+.form-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
+.steps{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:6px 0 16px}.step{padding:8px 6px;border-radius:10px;background:#EEF2F6;font-size:11px;text-align:center;color:#6B7C8E}.step.done{background:#E1F5EE;color:#176B53}.step.now{background:#1671D7;color:#fff;font-weight:700}
+.info{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.cell{padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;background:#fff}.cell span{display:block;font-size:11px;color:var(--color-text-muted)}.cell strong{font-size:14px;word-break:break-word}
+.docs{display:flex;gap:8px;flex-wrap:wrap}.docs a{text-decoration:none}.docs .off{opacity:.45;pointer-events:none}
+.log{font-size:12px;border-left:2px solid #D6E5F4;padding-left:12px}.log div{margin-bottom:8px}.log b{color:var(--color-forest-900)}
+.act{display:flex;gap:8px;flex-wrap:wrap;padding:12px;border-radius:14px;background:#EEF5FD;margin-top:14px;align-items:flex-end}.act .f{min-width:160px}
+.btn-danger{background:#fff;color:var(--color-danger);border:1px solid #EBC3C7}
+html.embedded .pc-back{display:none}html.embedded body{background:transparent}
+@media(max-width:820px){.grid,.info{grid-template-columns:1fr 1fr}.steps{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.pc-table table.list{min-width:0}.hide-sm{display:none}.pc-head{flex-direction:column;align-items:flex-start}.grid,.info{grid-template-columns:1fr}.grid .span2{grid-column:auto}.pc-sheet{padding:14px}}
+</style>
+</head>
+<body>
+<main class="app-main pc-page">
+  <a class="pc-back" href="/dashboard.html">← กลับแดชบอร์ด</a>
+  <div class="pc-head">
+    <div><h1>งานจัดซื้อจัดจ้าง</h1><p>รายงานขอซื้อ/ขอจ้าง · แต่งตั้งผู้ตรวจรับ · ใบสั่งซื้อ/สั่งจ้าง · ตรวจรับ · เข้าทะเบียนพัสดุ</p></div>
+    <div class="pc-actions"><select id="year" aria-label="ปีงบประมาณ"></select><button class="btn btn-primary" id="newBtn" style="display:none">+ เริ่มจัดซื้อจากคำขอเบิก</button></div>
+  </div>
+  <div class="pc-flow"><span>คำขอเบิกถึงฝ่ายงบประมาณ</span><i>→</i><span>รายงานขอซื้อ/จ้าง</span><i>→</i><span>หัวหน้าเจ้าหน้าที่เห็นชอบ</span><i>→</i><span>ผอ. อนุมัติ + แต่งตั้งผู้ตรวจรับ</span><i>→</i><span>ใบสั่งซื้อ/จ้าง</span><i>→</i><span>ตรวจรับ</span><i>→</i><span>เข้าทะเบียนพัสดุ → เบิกจ่าย</span></div>
+  <div class="pc-error" id="error"></div>
+  <div id="notice"></div>
+  <div id="todo"></div>
+  <div class="pc-chips" id="chips"></div>
+  <section class="pc-panel">
+    <div class="pc-toolbar"><input type="search" id="search" placeholder="ค้นหาเลขที่ เรื่อง โครงการ หรือผู้ขาย" autocomplete="off"></div>
+    <div class="pc-table" id="list"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+  </section>
+</main>
+
+<div class="pc-modal" id="formModal"><div class="pc-sheet">
+  <div class="pc-sheet-head"><div><h2 id="formTitle">เริ่มจัดซื้อจัดจ้าง</h2><div class="muted" id="formSub"></div></div><button class="pc-close" data-close="formModal" aria-label="ปิด">×</button></div>
+  <form id="caseForm">
+    <div class="grid">
+      <div class="f span3" id="expenseField"><label>คำขอเบิกจ่ายที่ส่งถึงฝ่ายงบประมาณ *</label><select id="fExpense"></select><div class="hint" id="expenseHint"></div></div>
+      <div class="f"><label>ประเภท *</label><select id="fType"><option value="purchase">จัดซื้อ</option><option value="hire">จัดจ้าง</option></select></div>
+      <div class="f"><label>วิธีจัดซื้อจัดจ้าง *</label><select id="fMethod"></select></div>
+      <div class="f"><label>วันที่รายงาน</label><input type="date" id="fReportDate"></div>
+      <div class="f span3"><label>เรื่อง (ซื้อ/จ้างอะไร) *</label><input id="fSubject" maxlength="300" required></div>
+      <div class="f span3"><label>เหตุผลความจำเป็น *</label><textarea id="fNecessity"></textarea></div>
+      <div class="f span3"><label>เหตุผลที่ใช้วิธีนี้</label><textarea id="fMethodReason"></textarea></div>
+      <div class="f"><label>ราคากลาง/ราคาอ้างอิง (บาท)</label><input type="number" min="0" step="0.01" id="fReference"></div>
+      <div class="f span2"><label>ที่มาของราคากลาง</label><input id="fReferenceSource" placeholder="เช่น สืบราคาจากท้องตลาด / ราคาที่เคยซื้อครั้งล่าสุด"></div>
+      <div class="f"><label>กำหนดส่งมอบ (วัน)</label><input type="number" min="0" step="1" id="fDays" value="7"></div>
+      <div class="f span2"><label>สถานที่ส่งมอบ</label><input id="fPlace" placeholder="เช่น ห้องสมุดโรงเรียน"></div>
+    </div>
+    <div class="sec">ผู้ขาย / ผู้รับจ้าง</div>
+    <div class="grid">
+      <div class="f span2"><label>ชื่อร้าน/บริษัท/บุคคล *</label><input id="fVendor"></div>
+      <div class="f"><label>เลขประจำตัวผู้เสียภาษี</label><input id="fTax" inputmode="numeric" maxlength="13"></div>
+      <div class="f span2"><label>ที่อยู่</label><input id="fAddress"></div>
+      <div class="f"><label>โทรศัพท์</label><input id="fPhone"></div>
+    </div>
+    <div class="sec">รายการพัสดุ</div>
+    <div class="pc-table"><table class="items"><thead><tr><th style="min-width:220px">รายการ</th><th>ประเภท</th><th>หมวด (ทะเบียนพัสดุ)</th><th style="width:90px">จำนวน</th><th style="width:90px">หน่วย</th><th style="width:120px">ราคา/หน่วย</th><th class="num">รวม</th><th></th></tr></thead><tbody id="itemRows"></tbody></table></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-ghost" id="addItem">+ เพิ่มรายการ</button><div><b>รวม <span id="totalText">0.00</span> บาท</b> <span class="muted" id="limitText"></span></div></div>
+    <div class="hint">วัสดุ: รวมยอดเข้ากับทะเบียนเดิมที่ชื่อและหน่วยตรงกัน · ครุภัณฑ์: สร้างทะเบียนแยกทีละหน่วย · งานจ้าง/บริการ: ไม่เข้าทะเบียนพัสดุ</div>
+    <div class="sec">ผู้ตรวจรับพัสดุ</div>
+    <div class="f"><input type="search" id="peopleSearch" placeholder="ค้นหาชื่อ"></div>
+    <div class="people" id="people"></div>
+    <div class="hint" id="inspectorHint"></div>
+    <div class="sec">เลขที่เอกสาร (ไม่บังคับ)</div>
+    <div class="grid">
+      <div class="f"><label>เลขที่รายงานขอซื้อ/จ้าง</label><input id="fReportNo"></div>
+      <div class="f"><label>เลขที่คำสั่งแต่งตั้งผู้ตรวจรับ</label><input id="fCommitteeNo"></div>
+      <div class="f"><label>เลขที่โครงการ e-GP</label><input id="fEgp"></div>
+    </div>
+    <div class="form-foot"><button type="button" class="btn btn-ghost" data-close="formModal">ยกเลิก</button><button class="btn btn-primary" id="saveBtn">บันทึกร่าง</button></div>
+  </form>
+</div></div>
+
+<div class="pc-modal" id="detailModal"><div class="pc-sheet">
+  <div class="pc-sheet-head"><div><h2 id="dTitle"></h2><div class="muted" id="dSub"></div></div><button class="pc-close" data-close="detailModal" aria-label="ปิด">×</button></div>
+  <div id="dBody"></div>
+</div></div>
+
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+const money=v=>Number(v||0).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const date=v=>v?new Date(String(v).slice(0,10)+"T00:00:00").toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"numeric"}):"-";
+const todayIso=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok"}).format(new Date());
+const fy=()=>{const [y,m]=todayIso().split("-").map(Number);return y+(m>=10?544:543)};
+const TYPES={material:"วัสดุ",equipment:"ครุภัณฑ์",service:"งานจ้าง/บริการ"};
+const CATEGORY_TYPE={materials:"material",equipment:"equipment"};
+const DEFAULT_REASON="ตามมาตรา 56 วรรคหนึ่ง (2) (ข) แห่งพระราชบัญญัติการจัดซื้อจัดจ้างและการบริหารพัสดุภาครัฐ พ.ศ. 2560 เนื่องจากเป็นพัสดุที่มีการผลิต จำหน่าย หรือให้บริการทั่วไป และมีวงเงินไม่เกินวงเงินที่กำหนดในกฎกระทรวง";
+const STEP_ORDER=["draft","head_review","director_review","approved","ordered","accepted"];
+const STEP_LABEL={draft:"จัดทำรายงาน",head_review:"หัวหน้าเห็นชอบ",director_review:"ผอ. อนุมัติ",approved:"ออกใบสั่ง",ordered:"ตรวจรับ",accepted:"เข้าทะเบียนแล้ว"};
+let meId=0,data=null,filter="all",editingId=null,editingExpense=null,currentCase=null;
+
+function error(msg=""){$("error").textContent=msg;$("error").classList.toggle("visible",Boolean(msg));if(msg)window.scrollTo({top:0,behavior:"smooth"})}
+function openModal(id){$(id).classList.add("open")}function closeModal(id){$(id).classList.remove("open")}
+document.addEventListener("click",e=>{const c=e.target.closest("[data-close]");if(c)closeModal(c.dataset.close)});
+
+async function load(){
+  error();
+  data=await apiRequest(`/api/procurement/overview?fiscal_year=${$("year").value}`);
+  $("newBtn").style.display=data.permissions.can_create?"":"none";
+  const notices=[];
+  if(data.permissions.is_officer&&!data.roles.procurement_officer)notices.push("ยังไม่ได้กำหนด <b>เจ้าหน้าที่พัสดุ</b> — ผู้ดูแลระบบตั้งได้ที่ ฝ่ายงบประมาณ › ตั้งค่าผู้อนุมัติ (ระหว่างนี้ผู้บริหาร/ผู้ดูแลระบบดำเนินการแทนได้)");
+  if(data.permissions.is_officer&&!data.roles.procurement_head)notices.push("ยังไม่ได้กำหนด <b>หัวหน้าเจ้าหน้าที่พัสดุ</b> — รายงานจะส่งถึงผู้อำนวยการโดยตรง");
+  $("notice").innerHTML=notices.map(n=>`<div class="pc-notice">${n}</div>`).join("");
+  renderTodo();renderChips();renderList();
+  const q=new URLSearchParams(location.search);
+  if(q.get("case")){openCase(Number(q.get("case")));history.replaceState(null,"",location.pathname)}
+  else if(q.get("expense")&&data.permissions.can_create){openForm(null,Number(q.get("expense")));history.replaceState(null,"",location.pathname)}
+}
+function mine(c){const me=meId;return (c.status==="director_review"&&data.permissions.is_director&&Number(c.created_by)!==me)||(c.status==="head_review"&&Number(c.head_user_id)===me)||c.my_inspection_pending}
+function renderTodo(){
+  const rows=data.cases.filter(mine),eligible=data.eligible_expenses;
+  const parts=rows.map(c=>`<button data-case="${c.id}"><b>${esc(c.case_no)}</b> · ${esc(c.subject)} — ${c.my_inspection_pending?"รอท่านตรวจรับพัสดุ":c.status==="head_review"?"รอท่านเห็นชอบ":"รอท่านอนุมัติ"}</button>`);
+  if(eligible.length&&data.permissions.can_create)parts.push(`<button data-new="1">มีคำขอเบิกจ่าย <b>${eligible.length}</b> รายการรอเริ่มจัดซื้อจัดจ้าง</button>`);
+  $("todo").innerHTML=parts.length?`<div class="pc-todo"><h2>งานที่รอท่าน</h2>${parts.join("")}</div>`:"";
+}
+$("todo").onclick=e=>{const b=e.target.closest("button");if(!b)return;if(b.dataset.case)openCase(Number(b.dataset.case));else openForm()};
+const GROUPS={all:["ทั้งหมด",()=>true],review:["รอพิจารณา",c=>["draft","head_review","director_review"].includes(c.status)],approved:["รอออกใบสั่ง",c=>c.status==="approved"],ordered:["รอตรวจรับ",c=>c.status==="ordered"],accepted:["ตรวจรับแล้ว",c=>c.status==="accepted"],cancelled:["ยกเลิก",c=>c.status==="cancelled"]};
+function renderChips(){$("chips").innerHTML=Object.entries(GROUPS).map(([k,[label,fn]])=>`<button class="pc-chip ${filter===k?"active":""}" data-filter="${k}">${label}<b>${data.cases.filter(fn).length}</b></button>`).join("")}
+$("chips").onclick=e=>{const b=e.target.closest("[data-filter]");if(!b)return;filter=b.dataset.filter;renderChips();renderList()};
+function renderList(){
+  const q=$("search").value.trim().toLowerCase(),rows=data.cases.filter(GROUPS[filter][1]).filter(c=>!q||[c.case_no,c.subject,c.project_name,c.vendor_name,c.request_no,c.order_no].join(" ").toLowerCase().includes(q));
+  $("list").innerHTML=rows.length?`<table class="list"><thead><tr><th>เลขที่</th><th>เรื่อง / โครงการ</th><th class="hide-sm">ผู้ขาย/ผู้รับจ้าง</th><th class="num">วงเงิน (บาท)</th><th>สถานะ</th><th class="hide-sm">ตรวจรับ</th><th class="hide-sm">อัปเดต</th></tr></thead><tbody>${rows.map(c=>`<tr class="click" data-case="${c.id}"><td><b>${esc(c.case_no)}</b><div class="muted">${c.procurement_type==="hire"?"จัดจ้าง":"จัดซื้อ"} · คำขอ ${esc(c.request_no||"-")}</div></td><td>${esc(c.subject)}<div class="muted">${esc(c.project_name)}</div></td><td class="hide-sm">${esc(c.vendor_name||"-")}</td><td class="num">${money(c.total_amount)}</td><td><span class="pill ${c.status}">${esc(data.statuses[c.status]||c.status)}</span>${c.review_note&&["draft","ordered","cancelled"].includes(c.status)?`<div class="muted" style="color:#9A5B0C">${esc(c.review_note)}</div>`:""}</td><td class="hide-sm">${c.inspector_count?`${c.accepted_count}/${c.inspector_count}`:"-"}${c.my_inspection_pending?' <span class="pill head_review">รอท่าน</span>':""}</td><td class="muted hide-sm">${date(c.updated_at)}</td></tr>`).join("")}</tbody></table>`
+    :`<div class="empty">${data.cases.length?"ไม่พบรายการตามเงื่อนไข":"ยังไม่มีงานจัดซื้อจัดจ้างในปีงบประมาณนี้"}</div>`;
+}
+$("search").oninput=renderList;
+$("list").onclick=e=>{const r=e.target.closest("[data-case]");if(r)openCase(Number(r.dataset.case))};
+
+// ---------- แบบฟอร์ม ----------
+function itemRow(i={}){
+  return `<tr><td><input class="i-desc" value="${esc(i.description||"")}" maxlength="500"></td>
+  <td><select class="i-type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${i.item_type===k?"selected":""}>${v}</option>`).join("")}</select></td>
+  <td><input class="i-cat" value="${esc(i.category||"")}" placeholder="เช่น วัสดุสำนักงาน"></td>
+  <td><input class="i-qty" type="number" min="0.01" step="any" value="${i.quantity??1}"></td>
+  <td><input class="i-unit" value="${esc(i.unit||"ชิ้น")}"></td>
+  <td><input class="i-price" type="number" min="0" step="0.01" value="${i.unit_price??""}"></td>
+  <td class="num i-amount">0.00</td><td><button type="button" class="x" title="ลบ">×</button></td></tr>`;
+}
+function collectItems(){return [...$("itemRows").children].map(r=>({description:r.querySelector(".i-desc").value,item_type:r.querySelector(".i-type").value,category:r.querySelector(".i-cat").value,quantity:Number(r.querySelector(".i-qty").value),unit:r.querySelector(".i-unit").value,unit_price:Number(r.querySelector(".i-price").value)}))}
+function updateTotals(){
+  let total=0;for(const r of $("itemRows").children){const a=Math.round(Number(r.querySelector(".i-qty").value||0)*Number(r.querySelector(".i-price").value||0)*100)/100;total+=a;r.querySelector(".i-amount").textContent=money(a)}
+  $("totalText").textContent=money(total);
+  const limit=editingExpense?Number(editingExpense.amount):null;
+  $("limitText").textContent=limit!=null?`(ยอดคำขอเบิก ${money(limit)} บาท)`:"";
+  $("limitText").style.color=limit!=null&&total>limit+0.001?"var(--color-danger)":"";
+  updateInspectorHint(total);
+}
+function updateInspectorHint(total=Number($("totalText").textContent.replace(/,/g,""))){
+  const n=$("people").querySelectorAll("input:checked").length,need=total>data.committee_threshold?3:1;
+  $("inspectorHint").textContent=need===3?`วงเงินเกิน ${data.committee_threshold.toLocaleString("th-TH")} บาท ต้องแต่งตั้งคณะกรรมการตรวจรับอย่างน้อย 3 คน (คนแรกที่เลือกเป็นประธาน) — เลือกแล้ว ${n} คน`:`วงเงินไม่เกิน ${data.committee_threshold.toLocaleString("th-TH")} บาท แต่งตั้งผู้ตรวจรับ 1 คนได้ (เลือก 3 คนขึ้นไปจะเป็นคณะกรรมการ) — เลือกแล้ว ${n} คน`;
+  $("inspectorHint").className="hint"+(n<need?" warn":"");
+}
+$("itemRows").addEventListener("input",updateTotals);
+$("itemRows").addEventListener("click",e=>{if(e.target.closest(".x")){e.target.closest("tr").remove();updateTotals()}});
+$("addItem").onclick=()=>{$("itemRows").insertAdjacentHTML("beforeend",itemRow());updateTotals()};
+let selectedInspectors=[];
+function renderPeople(){
+  const q=$("peopleSearch").value.trim();
+  $("people").innerHTML=data.users.filter(u=>!q||u.full_name.includes(q)||selectedInspectors.includes(u.id)).map(u=>`<label><input type="checkbox" value="${u.id}" ${selectedInspectors.includes(u.id)?"checked":""}>${esc(u.full_name)}${selectedInspectors.indexOf(u.id)===0&&selectedInspectors.length>=3?' <span class="muted">(ประธาน)</span>':""}</label>`).join("")||'<div class="muted">ไม่พบรายชื่อ</div>';
+  updateInspectorHint();
+}
+$("peopleSearch").oninput=renderPeople;
+$("people").onchange=e=>{const id=Number(e.target.value);if(e.target.checked){if(!selectedInspectors.includes(id))selectedInspectors.push(id)}else selectedInspectors=selectedInspectors.filter(x=>x!==id);renderPeople()};
+
+async function loadExpense(id){
+  if(!id){editingExpense=null;$("expenseHint").textContent="";return}
+  const res=await apiRequest(`/api/procurement/expense?expense_id=${id}`);editingExpense=res.expense;
+  $("expenseHint").textContent=`${res.expense.project_name} · ผู้ขอ ${res.expense.requester_name||"-"} · ยอดคำขอ ${money(res.expense.amount)} บาท`;
+  if(!editingId){
+    $("fSubject").value=res.expense.request_purpose||"";$("fNecessity").value=res.expense.necessity||"";$("fVendor").value=res.expense.payee||"";
+    $("itemRows").innerHTML=res.items.map(i=>itemRow({description:i.description,item_type:CATEGORY_TYPE[i.category]||(i.category==="services"?"service":"material"),quantity:i.quantity,unit:i.unit,unit_price:i.unit_price})).join("")||itemRow();
+    const kinds=new Set(res.items.map(i=>i.category));$("fType").value=kinds.size===1&&kinds.has("services")?"hire":"purchase";
+  }
+  updateTotals();
+}
+$("fExpense").onchange=()=>loadExpense(Number($("fExpense").value)).catch(e=>error(e.message));
+$("fMethod").onchange=()=>{if($("fMethod").value!=="specific"&&$("fMethodReason").value===DEFAULT_REASON)$("fMethodReason").value="";if($("fMethod").value==="specific"&&!$("fMethodReason").value)$("fMethodReason").value=DEFAULT_REASON};
+async function openForm(c=null,expenseId=null){
+  error();editingId=c?.id||null;$("caseForm").reset();
+  $("fMethod").innerHTML=Object.entries(data.methods).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join("");
+  $("formTitle").textContent=c?`แก้ไข ${c.case_no}`:"เริ่มจัดซื้อจัดจ้าง";$("formSub").textContent=c?.review_note?`ข้อสังเกต: ${c.review_note}`:"";
+  $("expenseField").hidden=Boolean(c);
+  if(!c){
+    if(!data.eligible_expenses.length){error("ยังไม่มีคำขอเบิกจ่ายที่ส่งถึงฝ่ายงบประมาณและรอดำเนินการ");return}
+    $("fExpense").innerHTML=data.eligible_expenses.map(e=>`<option value="${e.id}">${esc(e.request_no||"")} · ${esc(e.project_name)} · ${money(e.amount)} บาท${e.priority==="urgent"?" · ด่วนที่สุด":e.priority==="high"?" · ด่วน":""}</option>`).join("");
+    if(expenseId&&data.eligible_expenses.some(e=>e.id===expenseId))$("fExpense").value=expenseId;
+    $("fReportDate").value=todayIso();$("fMethodReason").value=DEFAULT_REASON;$("fDays").value=7;selectedInspectors=[];
+  } else {
+    const map={fType:"procurement_type",fMethod:"method",fReportDate:"report_date",fSubject:"subject",fNecessity:"necessity",fMethodReason:"method_reason",fReference:"reference_price",fReferenceSource:"reference_source",fDays:"delivery_days",fPlace:"delivery_place",fVendor:"vendor_name",fTax:"vendor_tax_id",fAddress:"vendor_address",fPhone:"vendor_phone",fReportNo:"report_no",fCommitteeNo:"committee_order_no",fEgp:"egp_project_no"};
+    for(const[id,key]of Object.entries(map))$(id).value=c[key]??"";
+    $("itemRows").innerHTML=c.items.map(itemRow).join("");selectedInspectors=c.inspectors.map(i=>Number(i.user_id));
+    editingExpense={amount:c.expense_amount};
+  }
+  renderPeople();openModal("formModal");
+  if(!c)await loadExpense(Number($("fExpense").value));else updateTotals();
+}
+$("newBtn").onclick=()=>openForm().catch(e=>error(e.message));
+$("caseForm").onsubmit=async e=>{
+  e.preventDefault();const btn=$("saveBtn");btn.disabled=true;
+  const body={expense_id:Number($("fExpense").value),procurement_type:$("fType").value,method:$("fMethod").value,report_date:$("fReportDate").value||null,subject:$("fSubject").value,necessity:$("fNecessity").value,method_reason:$("fMethodReason").value,reference_price:$("fReference").value,reference_source:$("fReferenceSource").value,delivery_days:$("fDays").value,delivery_place:$("fPlace").value,vendor_name:$("fVendor").value,vendor_tax_id:$("fTax").value,vendor_address:$("fAddress").value,vendor_phone:$("fPhone").value,report_no:$("fReportNo").value,committee_order_no:$("fCommitteeNo").value,egp_project_no:$("fEgp").value,items:collectItems(),inspectors:selectedInspectors};
+  try{const res=editingId?await apiRequest(`/api/procurement/cases/${editingId}`,{method:"PATCH",body}):await apiRequest("/api/procurement/cases",{method:"POST",body});closeModal("formModal");await load();openCase(editingId||res.id)}
+  catch(err){alert(err.message)}finally{btn.disabled=false}
+};
+
+// ---------- รายละเอียด ----------
+async function openCase(id){
+  try{
+    const res=await apiRequest(`/api/procurement/cases/${id}`),c=res.case,p=res.permissions;currentCase=res;
+    $("dTitle").textContent=`${c.case_no} · ${c.subject}`;$("dSub").innerHTML=`${esc(c.project_name)} · คำขอ ${esc(c.request_no||"-")} · <span class="pill ${c.status}">${esc(res.statuses[c.status])}</span>`;
+    const at=STEP_ORDER.indexOf(c.status);
+    const steps=c.status==="cancelled"?"":`<div class="steps">${STEP_ORDER.map((s,i)=>`<div class="step ${i<at||c.status==="accepted"?"done":i===at?"now":""}">${STEP_LABEL[s]}</div>`).join("")}</div>`;
+    const verb=c.procurement_type==="hire"?"จ้าง":"ซื้อ";
+    const docs=[["report",`รายงานขอ${verb}`,true],["committee","คำสั่งแต่งตั้งผู้ตรวจรับ",Boolean(c.approved_at)],["order",`ใบสั่ง${verb}`,Boolean(c.order_no)],["inspection","ใบตรวจรับพัสดุ",c.status==="accepted"]];
+    const inspectors=c.inspectors.map(i=>`<div class="cell"><span>${c.inspectors.length>=3?(i.position==="chair"?"ประธานกรรมการ":"กรรมการ"):"ผู้ตรวจรับพัสดุ"}</span><strong>${esc(i.full_name)}</strong><div class="muted">${i.decision==="accept"?`✓ ตรวจรับ ${date(i.decided_at)}`:i.decision==="reject"?`✗ ไม่รับ: ${esc(i.note||"")}`:"ยังไม่ตรวจรับ"}</div></div>`).join("");
+    const links=c.inventory_links.length?`<div class="sec">เข้าทะเบียนพัสดุ</div><div class="pc-table"><table><thead><tr><th>รหัส</th><th>รายการ</th><th class="num">จำนวน</th></tr></thead><tbody>${c.inventory_links.map(l=>`<tr><td>${esc(l.item_code)}</td><td>${esc(l.name)}</td><td class="num">${Number(l.quantity).toLocaleString("th-TH")}</td></tr>`).join("")}</tbody></table></div><div class="hint"><a href="/inventory.html">เปิดระบบพัสดุและครุภัณฑ์</a> เพื่อแก้รหัสครุภัณฑ์ สถานที่ หรือผู้รับผิดชอบ</div>`:"";
+    $("dBody").innerHTML=`${steps}
+      ${!c.expense_open&&!["accepted","cancelled"].includes(c.status)?`<div class="pc-notice">คำขอเบิกจ่ายที่ผูกไว้ไม่อยู่ในขั้นดำเนินการของฝ่ายงบประมาณแล้ว (อาจถูกส่งกลับหรือไม่อนุมัติ) — ตรวจสอบก่อนดำเนินการต่อ</div>`:""}
+      ${c.review_note&&c.status!=="accepted"?`<div class="pc-notice">${esc(c.review_note)}</div>`:""}
+      <div class="info">
+        <div class="cell"><span>วงเงิน</span><strong>${money(c.total_amount)} บาท</strong><div class="muted">คำขอเบิก ${money(c.expense_amount)}</div></div>
+        <div class="cell"><span>วิธี</span><strong>${esc(res.methods[c.method]||c.method)}</strong></div>
+        <div class="cell"><span>ผู้${c.procurement_type==="hire"?"รับจ้าง":"ขาย"}</span><strong>${esc(c.vendor_name||"-")}</strong><div class="muted">${esc(c.vendor_tax_id||"")}</div></div>
+        <div class="cell"><span>ราคากลาง</span><strong>${c.reference_price!=null?money(c.reference_price):"-"}</strong><div class="muted">${esc(c.reference_source||"")}</div></div>
+        <div class="cell"><span>ผู้จัดทำ</span><strong>${esc(c.creator_name||"-")}</strong></div>
+        <div class="cell"><span>ผอ. อนุมัติ</span><strong>${c.approved_at?esc(c.director_name):"-"}</strong><div class="muted">${c.approved_at?date(c.approved_at):""}</div></div>
+        <div class="cell"><span>ใบสั่ง${verb}</span><strong>${esc(c.order_no||"-")}</strong><div class="muted">${c.order_date?date(c.order_date):""}${c.delivery_due_date?` · ส่งภายใน ${date(c.delivery_due_date)}`:""}</div></div>
+        <div class="cell"><span>ส่งมอบ</span><strong>${c.delivered_date?date(c.delivered_date):"-"}</strong><div class="muted">${esc(c.delivery_document_no||"")}</div></div>
+      </div>
+      <div class="sec">รายการ</div>
+      <div class="pc-table"><table><thead><tr><th>ที่</th><th>รายการ</th><th>ประเภท</th><th class="num">จำนวน</th><th class="num">ราคา/หน่วย</th><th class="num">รวม</th></tr></thead><tbody>${c.items.map(i=>`<tr><td>${i.line_no}</td><td>${esc(i.description)}<div class="muted">${esc(i.category||"")}</div></td><td>${TYPES[i.item_type]}</td><td class="num">${Number(i.quantity).toLocaleString("th-TH")} ${esc(i.unit||"")}</td><td class="num">${money(i.unit_price)}</td><td class="num">${money(i.amount)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="sec">${c.inspectors.length>=3?"คณะกรรมการตรวจรับพัสดุ":"ผู้ตรวจรับพัสดุ"}</div><div class="info">${inspectors||'<div class="muted">ยังไม่ได้เลือก</div>'}</div>
+      ${links}
+      <div class="sec">เอกสาร</div><div class="docs">${docs.map(([k,l,ok])=>`<a class="btn btn-ghost ${ok?"":"off"}" target="_blank" rel="noopener" href="/api/procurement/cases/${c.id}/documents/${k}">${l}</a>`).join("")}</div>
+      ${actions(c,p)}
+      <div class="sec">ประวัติ</div><div class="log">${c.events.map(v=>`<div><b>${esc(v.actor_name||"")}</b> · ${date(v.created_at)}<br>${esc(v.note||v.action)}</div>`).join("")}</div>`;
+    openModal("detailModal");
+  }catch(e){error(e.message)}
+}
+function actions(c,p){
+  const out=[];
+  if(p.can_edit)out.push(`<button class="btn btn-ghost" data-act="edit">แก้ไข</button>`);
+  if(p.can_submit)out.push(`<button class="btn btn-primary" data-act="submit">ส่งรายงานเสนอพิจารณา</button>`);
+  if(p.can_head_approve)out.push(`<button class="btn btn-primary" data-act="head_approve">เห็นชอบ เสนอผู้อำนวยการ</button>`);
+  if(p.can_director_approve)out.push(`<button class="btn btn-primary" data-act="approve">อนุมัติ และแต่งตั้งผู้ตรวจรับ</button>`);
+  if(p.can_return)out.push(`<button class="btn btn-ghost" data-act="return">ส่งกลับแก้ไข</button>`);
+  if(p.can_order)out.push(`<div class="f"><label>เลขที่ใบสั่ง (ว่าง = ออกให้อัตโนมัติ)</label><input id="aOrderNo"></div><div class="f"><label>วันที่ใบสั่ง</label><input type="date" id="aOrderDate" value="${todayIso()}"></div><div class="f"><label>กำหนดส่งมอบ</label><input type="date" id="aDue"></div><button class="btn btn-primary" data-act="order">ออกใบสั่ง${c.procurement_type==="hire"?"จ้าง":"ซื้อ"}</button>`);
+  if(p.can_record_delivery)out.push(`<div class="f"><label>วันที่ผู้ขายส่งมอบ</label><input type="date" id="aDelivered" value="${c.delivered_date||todayIso()}"></div><div class="f"><label>เลขที่ใบส่งของ/ใบแจ้งหนี้</label><input id="aDeliveryNo" value="${esc(c.delivery_document_no||"")}"></div><button class="btn ${c.delivered_date?"btn-ghost":"btn-primary"}" data-act="record_delivery">${c.delivered_date?"แก้ไขการส่งมอบ":"บันทึกการส่งมอบ"}</button>`);
+  if(p.can_inspect)out.push(`<button class="btn btn-primary" data-act="accept">ตรวจรับ ถูกต้องครบถ้วน</button><button class="btn btn-danger" data-act="reject">ไม่รับพัสดุ</button>`);
+  if(p.can_post_inventory)out.push(`<button class="btn btn-primary" data-act="post_inventory">นำเข้าทะเบียนพัสดุ</button>`);
+  if(p.can_set_numbers&&!p.can_edit)out.push(`<button class="btn btn-ghost" data-act="numbers">บันทึกเลขที่เอกสาร</button>`);
+  if(p.can_cancel)out.push(`<button class="btn btn-danger" data-act="cancel">ยกเลิก</button>`);
+  return out.length?`<div class="act">${out.join("")}</div>`:"";
+}
+$("dBody").addEventListener("click",async e=>{
+  const b=e.target.closest("[data-act]");if(!b)return;const c=currentCase.case,act=b.dataset.act;
+  if(act==="edit"){closeModal("detailModal");return openForm(c)}
+  let body={action:act};
+  if(act==="return"||act==="cancel"||act==="reject"){const note=prompt(act==="reject"?"ระบุเหตุผลที่ไม่รับพัสดุ (ผู้ขายต้องส่งมอบใหม่)":act==="cancel"?"ระบุเหตุผลที่ยกเลิก":"ระบุสิ่งที่ต้องแก้ไข");if(!note||!note.trim())return;body.note=note;if(act==="reject")body={action:"inspect",decision:"reject",note}}
+  if(act==="accept"){if(!confirm("ยืนยันว่าตรวจรับพัสดุถูกต้องครบถ้วนตามใบสั่ง?"))return;body={action:"inspect",decision:"accept"}}
+  if(act==="approve"&&!confirm("อนุมัติรายงานขอซื้อ/ขอจ้าง และลงนามคำสั่งแต่งตั้งผู้ตรวจรับพัสดุ?"))return;
+  if(act==="order")body={action:"order",order_no:$("aOrderNo").value,order_date:$("aOrderDate").value,delivery_due_date:$("aDue").value||null};
+  if(act==="record_delivery")body={action:"record_delivery",delivered_date:$("aDelivered").value,delivery_document_no:$("aDeliveryNo").value};
+  if(act==="numbers"){const r=prompt("เลขที่รายงานขอซื้อ/จ้าง",c.report_no||"");if(r===null)return;const m=prompt("เลขที่คำสั่งแต่งตั้งผู้ตรวจรับ",c.committee_order_no||"");if(m===null)return;const g=prompt("เลขที่โครงการ e-GP",c.egp_project_no||"");if(g===null)return;body={action:"set_numbers",report_no:r,committee_order_no:m,egp_project_no:g}}
+  b.disabled=true;
+  try{const res=await apiRequest(`/api/procurement/cases/${c.id}/action`,{method:"POST",body});if(res.waiting_for)alert(`บันทึกการตรวจรับแล้ว รอผู้ตรวจรับอีก ${res.waiting_for} คน`);if(res.accepted)alert("ตรวจรับครบแล้ว นำพัสดุเข้าทะเบียนเรียบร้อย ฝ่ายการเงินดำเนินการเบิกจ่ายต่อได้");await load();await openCase(c.id)}
+  catch(err){alert(err.message);b.disabled=false}
+});
+
+(async()=>{
+  const me=await apiRequest("/api/auth/me");if(!me.user){location.href="/login.html";return}meId=Number(me.user.id);
+  const year=fy();$("year").innerHTML=[year-2,year-1,year,year+1].map(y=>`<option ${y===year?"selected":""}>${y}</option>`).join("");
+  $("year").onchange=()=>load().catch(e=>error(e.message));
+  await load();
+})().catch(e=>error(e.message));
+</script>
+</body>
+</html>

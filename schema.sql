@@ -1079,3 +1079,56 @@ CREATE TABLE IF NOT EXISTS student_insurance (
   UNIQUE (student_id, academic_year)
 );
 CREATE INDEX IF NOT EXISTS idx_student_insurance_year ON student_insurance(academic_year, student_id);
+
+-- งานจัดซื้อจัดจ้าง (src/routes/procurement.js สร้างให้อัตโนมัติเมื่อเรียกใช้ครั้งแรก)
+CREATE TABLE IF NOT EXISTS procurement_cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, case_no TEXT NOT NULL UNIQUE, fiscal_year INTEGER NOT NULL,
+      expense_id INTEGER NOT NULL REFERENCES project_expenses(id), project_id INTEGER NOT NULL REFERENCES projects(id),
+      procurement_type TEXT NOT NULL CHECK (procurement_type IN ('purchase','hire')),
+      method TEXT NOT NULL DEFAULT 'specific', method_reason TEXT, subject TEXT NOT NULL, necessity TEXT,
+      reference_price REAL, reference_source TEXT, delivery_days INTEGER, delivery_place TEXT,
+      vendor_name TEXT, vendor_tax_id TEXT, vendor_address TEXT, vendor_phone TEXT, egp_project_no TEXT,
+      total_amount REAL NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','head_review','director_review','approved','ordered','accepted','cancelled')),
+      review_note TEXT, report_no TEXT, report_date TEXT, committee_order_no TEXT,
+      head_user_id INTEGER REFERENCES users(id), head_signed_at TEXT,
+      director_user_id INTEGER REFERENCES users(id), approved_at TEXT,
+      order_no TEXT, order_date TEXT, delivery_due_date TEXT, ordered_by INTEGER REFERENCES users(id),
+      delivered_date TEXT, delivery_document_no TEXT, accepted_at TEXT,
+      created_by INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS procurement_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE,
+      line_no INTEGER NOT NULL, description TEXT NOT NULL,
+      item_type TEXT NOT NULL DEFAULT 'material' CHECK (item_type IN ('material','equipment','service')),
+      category TEXT, quantity REAL NOT NULL CHECK (quantity > 0), unit TEXT,
+      unit_price REAL NOT NULL CHECK (unit_price >= 0), amount REAL NOT NULL CHECK (amount >= 0),
+      UNIQUE(case_id, line_no));
+CREATE TABLE IF NOT EXISTS procurement_inspectors (
+      case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id), sort_order INTEGER NOT NULL DEFAULT 0,
+      position TEXT NOT NULL DEFAULT 'inspector' CHECK (position IN ('inspector','chair','member')),
+      decision TEXT CHECK (decision IN ('accept','reject') OR decision IS NULL), decided_at TEXT, note TEXT,
+      PRIMARY KEY(case_id, user_id));
+CREATE TABLE IF NOT EXISTS procurement_postings (
+      case_id INTEGER PRIMARY KEY REFERENCES procurement_cases(id), posted_by INTEGER NOT NULL REFERENCES users(id),
+      posted_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS procurement_inventory_links (
+      case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE, line_no INTEGER NOT NULL,
+      inventory_item_id INTEGER NOT NULL REFERENCES inventory_items(id), quantity REAL NOT NULL,
+      PRIMARY KEY(case_id, line_no, inventory_item_id));
+CREATE TABLE IF NOT EXISTS procurement_counters (
+      kind TEXT NOT NULL, fiscal_year INTEGER NOT NULL, last_number INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(kind, fiscal_year));
+CREATE TABLE IF NOT EXISTS procurement_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE,
+      action TEXT NOT NULL, note TEXT, actor_id INTEGER REFERENCES users(id), created_at TEXT NOT NULL DEFAULT (datetime('now')));
+CREATE TABLE IF NOT EXISTS procurement_notifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id), message TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), read_at TEXT);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_procurement_active_expense ON procurement_cases(expense_id) WHERE status<>'cancelled';
+CREATE INDEX IF NOT EXISTS idx_procurement_cases_year ON procurement_cases(fiscal_year, status);
+CREATE INDEX IF NOT EXISTS idx_procurement_items_case ON procurement_items(case_id, line_no);
+CREATE INDEX IF NOT EXISTS idx_procurement_inspectors_user ON procurement_inspectors(user_id, decision);
+CREATE INDEX IF NOT EXISTS idx_procurement_events_case ON procurement_events(case_id, id);
+CREATE INDEX IF NOT EXISTS idx_procurement_notifications_user ON procurement_notifications(user_id, read_at);

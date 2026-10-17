@@ -77,7 +77,8 @@ window.ProjectWorkflow = (() => {
     function financeButtons(e){
       const button=(action,label)=>`<button class="btn btn-primary" data-request="${e.id}" data-action="${action}">${label}</button>`;
       const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ตรวจแล้ว เสนอผู้อำนวยการ'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
-      return primary+(['pending','approved'].includes(e.status)&&e.current_step!=='director_approval'?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
+      const procurement=['finance_queue','finance_processing'].includes(e.current_step)?`<a class="btn btn-ghost" href="/procurement.html?expense=${e.id}">จัดซื้อจัดจ้าง</a>`:'';
+      return primary+procurement+(['pending','approved'].includes(e.status)&&e.current_step!=='director_approval'?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
     }
     async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();root.querySelector(`[data-project="${id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});}
     function newRequest(id){editRequest(null,id);}

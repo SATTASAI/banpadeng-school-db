@@ -2,6 +2,7 @@ import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectF
 import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary, canManageProjectFinance } from "./project-workflow.js";
+import { PROCUREMENT_ROLES } from "./procurement.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
 const CATEGORIES = ["materials", "equipment", "services", "compensation", "utilities", "travel", "food", "opening_balance", "other"];
@@ -421,8 +422,9 @@ async function saveRoleAssignment(request, env) {
   const user = await currentUser(request, env);
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้น" }, 403);
   const body = await request.json().catch(() => null), roleKey = String(body?.role_key || ""), department = String(body?.department || ""), userId = Number(body?.user_id);
-  const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey);
-  if (!definition || !ROLE_KEYS.includes(roleKey)) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
+  // บทบาทงานพัสดุ (ไม่ใช่ขั้นลงนามคำขอแบบเดิม) ใช้กับทุกฝ่าย
+  const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey) || (PROCUREMENT_ROLES[roleKey] ? { key: roleKey, label: PROCUREMENT_ROLES[roleKey], scoped: false } : null);
+  if (!definition || !(ROLE_KEYS.includes(roleKey) || PROCUREMENT_ROLES[roleKey])) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
   if (definition.scoped && !["academic", "early_childhood", "budget", "personnel", "general"].includes(department)) return jsonResponse({ error: "กรุณาเลือกฝ่ายงาน" }, 400);
   if (!definition.scoped && department) return jsonResponse({ error: "หน้าที่นี้ไม่ต้องระบุฝ่าย" }, 400);
   const target = await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL AND deleted_at IS NULL").bind(userId).first();

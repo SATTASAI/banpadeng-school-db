@@ -1,6 +1,7 @@
 import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { executives, isDirector } from "../lib/leave-data.js";
+import { procurementBlocksDisbursement } from "./procurement.js";
 
 const ready = new WeakSet();
 const clean = (v, max = 1500) => String(v ?? "").trim().slice(0, max) || null;
@@ -286,6 +287,8 @@ async function action(request, env, user, id) {
       args = [user.id,id]; message = "เจ้าหน้าที่การเงินรับเรื่องแล้ว";
     } else if (kind === "complete") {
       // ตรวจเอกสารเสร็จ → เสนอผู้อำนวยการอนุมัติ (ยังไม่อนุมัติจนกว่า ผอ. ลงนาม)
+      const procurement = await procurementBlocksDisbursement(env, id);
+      if (procurement) return jsonResponse({ error: procurement, code: "procurement_pending" },409);
       const directors = await budgetDirectorIds(env);
       if (!directors.length) return jsonResponse({ error: "ยังไม่มีบัญชีผู้อำนวยการสำหรับอนุมัติ กรุณาตั้งหน้าที่ \"ผู้อำนวยการอนุมัติ\" ในระบบงบประมาณ" },409);
       sql = "UPDATE project_expenses SET current_step='director_approval',updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='finance_processing'";

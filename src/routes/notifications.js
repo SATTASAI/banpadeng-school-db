@@ -1,4 +1,5 @@
 import {ensureFinanceQueueNotifications} from './project-workflow.js';
+import {ensureProcurementSchema} from './procurement.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData} from '../lib/leave-data.js';
@@ -37,13 +38,16 @@ function feed(env,user,personnelHead,director){
  CASE d.status WHEN 'pending' THEN 'รอผู้อำนวยการพิจารณา — '||d.reason WHEN 'approved' THEN 'ผู้อำนวยการอนุมัติ ลบข้อมูลแล้ว' ELSE 'ผู้อำนวยการไม่อนุมัติการลบ' END,
  COALESCE(d.decided_at,d.requested_at),'/students.html?delete_requests=1',NULL
  FROM student_delete_requests d WHERE (?=1 AND d.status='pending') OR (d.requested_by=? AND d.status IN ('approved','rejected'))
+ UNION ALL
+ SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at
+ FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id]};
+ return {sql,values:[user.id,isAdmin(user)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id,user.id]};
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
- await ensure(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user));
+ await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user));
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();
@@ -58,6 +62,8 @@ export async function handleNotifications(request,env,pathname,method){
   await env.DB.batch([
    env.DB.prepare(`UPDATE project_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='project:'||project_notifications.id)`).bind(user.id,user.id),
+   env.DB.prepare(`UPDATE procurement_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
+    AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='procurement:'||procurement_notifications.id)`).bind(user.id,user.id),
    env.DB.prepare(`UPDATE project_balance_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM project_balance_requests b JOIN notification_reads r ON r.message_key='balance:'||b.id||':'||b.status
       WHERE b.id=project_balance_notifications.request_id AND r.user_id=?)`).bind(user.id,user.id),

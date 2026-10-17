@@ -40,6 +40,7 @@ import { handleTimetableSyncRoute } from "./routes/timetable-sync.js";
 import { handleTimetableReadRoute, handleTimetableRoute } from "./routes/timetable.js";
 import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
+import { handleProcurementRoute } from "./routes/procurement.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
@@ -4303,6 +4304,8 @@ export default {
       if (balanceResponse) return balanceResponse;
       const projectWorkflowResponse = await handleProjectWorkflowRoute(request, env, pathname, method);
       if (projectWorkflowResponse) return projectWorkflowResponse;
+      const procurementResponse = await handleProcurementRoute(request, env, pathname, method);
+      if (procurementResponse) return procurementResponse;
       const budgetResponse = await handleBudgetRoute(request, env, pathname, method);
       if (budgetResponse) return budgetResponse;
       const departmentStaffResponse = await handleDepartmentStaffRoute(request, env, pathname, method);
