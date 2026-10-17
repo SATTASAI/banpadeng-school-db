@@ -53,7 +53,8 @@ test('budget uses one sidebar navigation in the workspace and synchronizes the s
  const html=fs.readFileSync('public/budget.html','utf8');
  assert(!html.includes('<nav class="tabs">'));
  assert(html.includes('.embedded .budget-page-picker{display:none}'));
- assert.equal(n.groups.budget.find(item=>item.url==='/budget.html?view=roles').adminOnly,true);
+ assert(!n.groups.budget.some(item=>item.url==='/budget.html?view=roles'));assert.equal(n.routes.approvers,'/budget.html?view=roles');assert.equal(n.parentFor('approvers','/budget.html?view=roles'),'approvers');assert.equal(n.parentFor('budget','/budget.html?view=requests'),'budget');
+ assert(fs.readFileSync('public/dashboard.html','utf8').includes('data-page="approvers" class="admin-only"'));
  assert(n.groups.budget.some(item=>item.url==='/budget.html?view=audit'));
  const nodes=new Map();
  const ids=['requests','disbursements','plans','otherProjects','incomeView','reports','audit','roles'];
