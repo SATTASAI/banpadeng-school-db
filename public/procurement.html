@@ -34,6 +34,7 @@
 .items td{padding:6px}.items input,.items select{width:100%;padding:7px 8px;border:1px solid var(--color-border);border-radius:8px;font:13px var(--font-body)}.items .x{border:0;background:none;color:var(--color-danger);font-size:18px;cursor:pointer}
 .people{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;max-height:210px;overflow:auto;padding:8px;border:1px solid var(--color-border);border-radius:12px;background:#fff}
 .people label{display:flex;gap:8px;align-items:center;font-size:13px;padding:6px 8px;border-radius:8px;cursor:pointer}.people label:hover{background:#F2F7FC}.people input{width:auto}
+.m-opt{display:flex;gap:6px;align-items:flex-start;font-size:12px;margin-top:3px;cursor:pointer}.m-opt input{width:auto!important;margin-top:2px}.i-match{margin-top:4px}
 .hint{font-size:12px;color:var(--color-text-muted);margin-top:4px}.hint.warn{color:#9A5B0C}
 .form-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;flex-wrap:wrap}
 .steps{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:6px 0 16px}.step{padding:8px 6px;border-radius:10px;background:#EEF2F6;font-size:11px;text-align:center;color:#6B7C8E}.step.done{background:#E1F5EE;color:#176B53}.step.now{background:#1671D7;color:#fff;font-weight:700}
@@ -89,13 +90,13 @@ html.embedded .pc-back{display:none}html.embedded body{background:transparent}
       <div class="f"><label>โทรศัพท์</label><input id="fPhone"></div>
     </div>
     <div class="sec">รายการพัสดุ</div>
-    <div class="pc-table"><table class="items"><thead><tr><th style="min-width:220px">รายการ</th><th>ประเภท</th><th>หมวด (ทะเบียนพัสดุ)</th><th style="width:90px">จำนวน</th><th style="width:90px">หน่วย</th><th style="width:120px">ราคา/หน่วย</th><th class="num">รวม</th><th></th></tr></thead><tbody id="itemRows"></tbody></table></div>
+    <div class="pc-table"><table class="items"><thead><tr><th style="min-width:220px">รายการ</th><th style="min-width:120px">ประเภท</th><th>หมวด (ทะเบียนพัสดุ)</th><th style="width:90px">จำนวน</th><th style="width:90px">หน่วย</th><th style="width:120px">ราคา/หน่วย</th><th class="num">รวม</th><th></th></tr></thead><tbody id="itemRows"></tbody></table></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-ghost" id="addItem">+ เพิ่มรายการ</button><div><b>รวม <span id="totalText">0.00</span> บาท</b> <span class="muted" id="limitText"></span></div></div>
     <div class="hint">วัสดุ: รวมยอดเข้ากับทะเบียนเดิมที่ชื่อและหน่วยตรงกัน · ครุภัณฑ์: สร้างทะเบียนแยกทีละหน่วย · งานจ้าง/บริการ: ไม่เข้าทะเบียนพัสดุ</div>
     <div class="sec">ผู้ตรวจรับพัสดุ</div>
     <div class="f"><input type="search" id="peopleSearch" placeholder="ค้นหาชื่อ"></div>
     <div class="people" id="people"></div>
-    <div class="hint" id="inspectorHint"></div>
+    <div class="hint" id="inspectorHint"></div><div class="hint">ค่าเริ่มต้น: เจ้าหน้าที่พัสดุ และรองผู้อำนวยการ (เปลี่ยนได้)</div>
     <div class="sec">เลขที่เอกสาร (ไม่บังคับ)</div>
     <div class="grid">
       <div class="f"><label>เลขที่รายงานขอซื้อ/จ้าง</label><input id="fReportNo"></div>
@@ -163,8 +164,10 @@ $("search").oninput=renderList;
 $("list").onclick=e=>{const r=e.target.closest("[data-case]");if(r)openCase(Number(r.dataset.case))};
 
 // ---------- แบบฟอร์ม ----------
+let rowSeq=0;
 function itemRow(i={}){
-  return `<tr><td><input class="i-desc" value="${esc(i.description||"")}" maxlength="500"></td>
+  const id=++rowSeq;
+  return `<tr data-row="${id}" data-match="${esc(i.inventory_match||"auto")}" data-item-id="${i.inventory_item_id||""}"><td><input class="i-desc" value="${esc(i.description||"")}" maxlength="500"><div class="i-match"></div></td>
   <td><select class="i-type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${i.item_type===k?"selected":""}>${v}</option>`).join("")}</select></td>
   <td><input class="i-cat" value="${esc(i.category||"")}" placeholder="เช่น วัสดุสำนักงาน"></td>
   <td><input class="i-qty" type="number" min="0.01" step="any" value="${i.quantity??1}"></td>
@@ -172,7 +175,29 @@ function itemRow(i={}){
   <td><input class="i-price" type="number" min="0" step="0.01" value="${i.unit_price??""}"></td>
   <td class="num i-amount">0.00</td><td><button type="button" class="x" title="ลบ">×</button></td></tr>`;
 }
-function collectItems(){return [...$("itemRows").children].map(r=>({description:r.querySelector(".i-desc").value,item_type:r.querySelector(".i-type").value,category:r.querySelector(".i-cat").value,quantity:Number(r.querySelector(".i-qty").value),unit:r.querySelector(".i-unit").value,unit_price:Number(r.querySelector(".i-price").value)}))}
+function collectItems(){return [...$("itemRows").children].map(r=>({description:r.querySelector(".i-desc").value,item_type:r.querySelector(".i-type").value,category:r.querySelector(".i-cat").value,quantity:Number(r.querySelector(".i-qty").value),unit:r.querySelector(".i-unit").value,unit_price:Number(r.querySelector(".i-price").value),inventory_match:r.dataset.match||"auto",inventory_item_id:r.dataset.itemId?Number(r.dataset.itemId):null}))}
+// ตรวจชื่อวัสดุที่คล้ายกับทะเบียนเดิม ให้ผู้ใช้ตัดสินว่าเป็นรายการเดียวกันหรือไม่
+let matchTimer=null,matchVersion=0;
+function scheduleMatches(){clearTimeout(matchTimer);matchTimer=setTimeout(()=>checkMatches().catch(()=>{}),400)}
+async function checkMatches(){
+  const rows=[...$("itemRows").children],version=++matchVersion;
+  const materials=rows.filter(r=>r.querySelector(".i-type").value==="material"&&r.querySelector(".i-desc").value.trim());
+  for(const r of rows)if(!materials.includes(r)){r.querySelector(".i-match").innerHTML="";r.dataset.match="auto";r.dataset.itemId=""}
+  if(!materials.length)return;
+  const res=await apiRequest("/api/procurement/inventory-matches",{method:"POST",body:{items:materials.map(r=>({description:r.querySelector(".i-desc").value,unit:r.querySelector(".i-unit").value}))}});
+  if(version!==matchVersion)return;
+  materials.forEach((r,i)=>renderMatch(r,res.matches[i]||[]));
+}
+function renderMatch(r,list){
+  const box=r.querySelector(".i-match"),name="m"+r.dataset.row;
+  if(r.dataset.match==="item"&&!list.some(c=>String(c.id)===r.dataset.itemId)){r.dataset.match="auto";r.dataset.itemId=""}
+  if(!list.length){if(r.dataset.match==="item"){r.dataset.match="auto";r.dataset.itemId=""}box.innerHTML='<div class="hint">ไม่พบในทะเบียน — จะสร้างทะเบียนวัสดุใหม่</div>';return}
+  const exact=list.find(c=>c.exact);
+  if(r.dataset.match==="auto"&&exact){r.dataset.match="item";r.dataset.itemId=String(exact.id)}
+  const decided=r.dataset.match!=="auto";
+  box.innerHTML=`<div class="hint ${decided?"":"warn"}">${exact?"พบทะเบียนเดิมชื่อเดียวกัน":"คล้ายกับทะเบียนเดิม — เป็นรายการเดียวกันหรือไม่?"}</div>${list.map(c=>`<label class="m-opt"><input type="radio" name="${name}" value="${c.id}" ${r.dataset.match==="item"&&r.dataset.itemId===String(c.id)?"checked":""}> ใช่ — ${esc(c.item_code)} · ${esc(c.name)} (${esc(c.unit||"")}) คงเหลือ ${Number(c.current_quantity).toLocaleString("th-TH")}${c.unit!==r.querySelector(".i-unit").value?' <b style="color:#9A5B0C">หน่วยไม่ตรง</b>':""} <span class="muted">${Math.round(c.score*100)}%</span></label>`).join("")}<label class="m-opt"><input type="radio" name="${name}" value="new" ${r.dataset.match==="new"?"checked":""}> ไม่ใช่ — สร้างทะเบียนใหม่</label>`;
+  box.onchange=e=>{if(e.target.value==="new"){r.dataset.match="new";r.dataset.itemId=""}else{r.dataset.match="item";r.dataset.itemId=e.target.value}box.querySelector(".hint").classList.remove("warn")};
+}
 function updateTotals(){
   let total=0;for(const r of $("itemRows").children){const a=Math.round(Number(r.querySelector(".i-qty").value||0)*Number(r.querySelector(".i-price").value||0)*100)/100;total+=a;r.querySelector(".i-amount").textContent=money(a)}
   $("totalText").textContent=money(total);
@@ -186,8 +211,9 @@ function updateInspectorHint(total=Number($("totalText").textContent.replace(/,/
   $("inspectorHint").textContent=need===3?`วงเงินเกิน ${data.committee_threshold.toLocaleString("th-TH")} บาท ต้องแต่งตั้งคณะกรรมการตรวจรับอย่างน้อย 3 คน (คนแรกที่เลือกเป็นประธาน) — เลือกแล้ว ${n} คน`:`วงเงินไม่เกิน ${data.committee_threshold.toLocaleString("th-TH")} บาท แต่งตั้งผู้ตรวจรับ 1 คนได้ (เลือก 3 คนขึ้นไปจะเป็นคณะกรรมการ) — เลือกแล้ว ${n} คน`;
   $("inspectorHint").className="hint"+(n<need?" warn":"");
 }
-$("itemRows").addEventListener("input",updateTotals);
-$("itemRows").addEventListener("click",e=>{if(e.target.closest(".x")){e.target.closest("tr").remove();updateTotals()}});
+$("itemRows").addEventListener("input",e=>{updateTotals();if(e.target.matches(".i-desc,.i-unit")){const r=e.target.closest("tr");r.dataset.match="auto";r.dataset.itemId="";scheduleMatches()}});
+$("itemRows").addEventListener("change",e=>{if(e.target.matches(".i-type"))scheduleMatches()});
+$("itemRows").addEventListener("click",e=>{if(e.target.closest(".x")){e.target.closest("tr").remove();updateTotals();scheduleMatches()}});
 $("addItem").onclick=()=>{$("itemRows").insertAdjacentHTML("beforeend",itemRow());updateTotals()};
 let selectedInspectors=[];
 function renderPeople(){
@@ -207,7 +233,7 @@ async function loadExpense(id){
     $("itemRows").innerHTML=res.items.map(i=>itemRow({description:i.description,item_type:CATEGORY_TYPE[i.category]||(i.category==="services"?"service":"material"),quantity:i.quantity,unit:i.unit,unit_price:i.unit_price})).join("")||itemRow();
     const kinds=new Set(res.items.map(i=>i.category));$("fType").value=kinds.size===1&&kinds.has("services")?"hire":"purchase";
   }
-  updateTotals();
+  updateTotals();scheduleMatches();
 }
 $("fExpense").onchange=()=>loadExpense(Number($("fExpense").value)).catch(e=>error(e.message));
 $("fMethod").onchange=()=>{if($("fMethod").value!=="specific"&&$("fMethodReason").value===DEFAULT_REASON)$("fMethodReason").value="";if($("fMethod").value==="specific"&&!$("fMethodReason").value)$("fMethodReason").value=DEFAULT_REASON};
@@ -220,7 +246,7 @@ async function openForm(c=null,expenseId=null){
     if(!data.eligible_expenses.length){error("ยังไม่มีคำขอเบิกจ่ายที่ส่งถึงฝ่ายงบประมาณและรอดำเนินการ");return}
     $("fExpense").innerHTML=data.eligible_expenses.map(e=>`<option value="${e.id}">${esc(e.request_no||"")} · ${esc(e.project_name)} · ${money(e.amount)} บาท${e.priority==="urgent"?" · ด่วนที่สุด":e.priority==="high"?" · ด่วน":""}</option>`).join("");
     if(expenseId&&data.eligible_expenses.some(e=>e.id===expenseId))$("fExpense").value=expenseId;
-    $("fReportDate").value=todayIso();$("fMethodReason").value=DEFAULT_REASON;$("fDays").value=7;selectedInspectors=[];
+    $("fReportDate").value=todayIso();$("fMethodReason").value=DEFAULT_REASON;$("fDays").value=7;selectedInspectors=[...(data.default_inspectors||[])];
   } else {
     const map={fType:"procurement_type",fMethod:"method",fReportDate:"report_date",fSubject:"subject",fNecessity:"necessity",fMethodReason:"method_reason",fReference:"reference_price",fReferenceSource:"reference_source",fDays:"delivery_days",fPlace:"delivery_place",fVendor:"vendor_name",fTax:"vendor_tax_id",fAddress:"vendor_address",fPhone:"vendor_phone",fReportNo:"report_no",fCommitteeNo:"committee_order_no",fEgp:"egp_project_no"};
     for(const[id,key]of Object.entries(map))$(id).value=c[key]??"";
@@ -228,7 +254,7 @@ async function openForm(c=null,expenseId=null){
     editingExpense={amount:c.expense_amount};
   }
   renderPeople();openModal("formModal");
-  if(!c)await loadExpense(Number($("fExpense").value));else updateTotals();
+  if(!c)await loadExpense(Number($("fExpense").value));else{updateTotals();scheduleMatches()}
 }
 $("newBtn").onclick=()=>openForm().catch(e=>error(e.message));
 $("caseForm").onsubmit=async e=>{
@@ -263,7 +289,7 @@ async function openCase(id){
         <div class="cell"><span>ส่งมอบ</span><strong>${c.delivered_date?date(c.delivered_date):"-"}</strong><div class="muted">${esc(c.delivery_document_no||"")}</div></div>
       </div>
       <div class="sec">รายการ</div>
-      <div class="pc-table"><table><thead><tr><th>ที่</th><th>รายการ</th><th>ประเภท</th><th class="num">จำนวน</th><th class="num">ราคา/หน่วย</th><th class="num">รวม</th></tr></thead><tbody>${c.items.map(i=>`<tr><td>${i.line_no}</td><td>${esc(i.description)}<div class="muted">${esc(i.category||"")}</div></td><td>${TYPES[i.item_type]}</td><td class="num">${Number(i.quantity).toLocaleString("th-TH")} ${esc(i.unit||"")}</td><td class="num">${money(i.unit_price)}</td><td class="num">${money(i.amount)}</td></tr>`).join("")}</tbody></table></div>
+      <div class="pc-table"><table><thead><tr><th>ที่</th><th>รายการ</th><th>ประเภท</th><th class="num">จำนวน</th><th class="num">ราคา/หน่วย</th><th class="num">รวม</th></tr></thead><tbody>${c.items.map(i=>`<tr><td>${i.line_no}</td><td>${esc(i.description)}<div class="muted">${esc(i.category||"")}</div></td><td>${TYPES[i.item_type]}${i.item_type==="material"?`<div class="muted">${i.inventory_match==="item"?"รวมกับ "+esc(i.match_code||""):i.inventory_match==="new"?"สร้างทะเบียนใหม่":"อัตโนมัติ"}</div>`:""}</td><td class="num">${Number(i.quantity).toLocaleString("th-TH")} ${esc(i.unit||"")}</td><td class="num">${money(i.unit_price)}</td><td class="num">${money(i.amount)}</td></tr>`).join("")}</tbody></table></div>
       <div class="sec">${c.inspectors.length>=3?"คณะกรรมการตรวจรับพัสดุ":"ผู้ตรวจรับพัสดุ"}</div><div class="info">${inspectors||'<div class="muted">ยังไม่ได้เลือก</div>'}</div>
       ${links}
       <div class="sec">เอกสาร</div><div class="docs">${docs.map(([k,l,ok])=>`<a class="btn btn-ghost ${ok?"":"off"}" target="_blank" rel="noopener" href="/api/procurement/cases/${c.id}/documents/${k}">${l}</a>`).join("")}</div>

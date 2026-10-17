@@ -99,7 +99,55 @@ export async function ensureProcurementSchema(env) {
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_procurement_events_case ON procurement_events(case_id, id)"),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_procurement_notifications_user ON procurement_notifications(user_id, read_at)"),
   ]);
+  // เลือกว่ารายการวัสดุนี้เข้าทะเบียนเดิมใด หรือสร้างใหม่ (auto = ชื่อและหน่วยตรงกันเป๊ะจึงรวมยอด)
+  for (const [name, type] of [["inventory_match", "TEXT NOT NULL DEFAULT 'auto'"], ["inventory_item_id", "INTEGER REFERENCES inventory_items(id)"]]) {
+    try { await env.DB.prepare(`ALTER TABLE procurement_items ADD COLUMN ${name} ${type}`).run(); }
+    catch (error) { if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error; }
+  }
   ready.add(env.DB);
+}
+
+// ---------- ตรวจชื่อคล้ายกันในทะเบียนพัสดุ ----------
+export function normalizeName(text) {
+  return String(text || "").toLowerCase().normalize("NFC").replace(/[\s\-_.,/()\[\]"'`*+:;!?×x]+/g, "");
+}
+function bigrams(text) {
+  const out = new Map();
+  for (let i = 0; i < text.length - 1; i++) { const g = text.slice(i, i + 2); out.set(g, (out.get(g) || 0) + 1); }
+  return out;
+}
+export function nameSimilarity(a, b) {
+  const x = normalizeName(a), y = normalizeName(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  if (x.length < 2 || y.length < 2) return 0;
+  const gx = bigrams(x), gy = bigrams(y);
+  let overlap = 0;
+  for (const [g, n] of gx) overlap += Math.min(n, gy.get(g) || 0);
+  const dice = (2 * overlap) / (x.length - 1 + y.length - 1);
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  const contained = long.includes(short) ? 0.55 + 0.45 * (short.length / long.length) : 0;
+  return Math.round(Math.max(dice, contained) * 100) / 100;
+}
+const SIMILAR_THRESHOLD = 0.4;
+async function materialRegister(env) {
+  const { results } = await env.DB.prepare("SELECT id,item_code,name,unit,current_quantity FROM inventory_items WHERE item_type='material' AND status='active'").all().catch(() => ({ results: [] }));
+  return results;
+}
+export function similarMaterials(register, description, unit) {
+  const target = normalizeName(description);
+  return register.map((r) => ({ ...r, score: nameSimilarity(description, r.name), exact: normalizeName(r.name) === target && String(r.unit || "") === String(unit || "") }))
+    .filter((r) => r.score >= SIMILAR_THRESHOLD).sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score).slice(0, 5);
+}
+
+// รอง ผอ. (ตามตำแหน่งในทะเบียนบุคลากร หรือที่ตั้งในหน้าผู้อนุมัติ) ใช้เป็นผู้ตรวจรับเริ่มต้นร่วมกับเจ้าหน้าที่พัสดุ
+async function deputyDirectorIds(env) {
+  const byPosition = await env.DB.prepare(`SELECT DISTINCT a.user_id FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id
+    JOIN users u ON u.id=a.user_id WHERE p.status='active' AND u.status='active' AND u.deleted_at IS NULL AND REPLACE(COALESCE(p.position,''),' ','') LIKE '%รองผู้อำนวยการ%'`).all().catch(() => ({ results: [] }));
+  if (byPosition.results.length) return byPosition.results.map((r) => Number(r.user_id));
+  const { results } = await env.DB.prepare(`SELECT DISTINCT a.user_id FROM budget_role_assignments a JOIN users u ON u.id=a.user_id
+    WHERE a.role_key='deputy_director' AND u.status='active'`).all().catch(() => ({ results: [] }));
+  return results.map((r) => Number(r.user_id));
 }
 
 async function roleUser(env, roleKey) {
@@ -154,8 +202,12 @@ function normalizeItems(items) {
     if (!description) return { error: `กรุณาระบุรายละเอียดรายการที่ ${index + 1}` };
     if (!Number.isFinite(quantity) || quantity <= 0) return { error: `จำนวนรายการที่ ${index + 1} ต้องมากกว่า 0` };
     if (!Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(amount)) return { error: `ราคาต่อหน่วยรายการที่ ${index + 1} ไม่ถูกต้อง` };
-    rows.push({ line_no: index + 1, description, item_type: ITEM_TYPES.includes(raw.item_type) ? raw.item_type : "material",
-      category: clean(raw.category, 120), quantity, unit: clean(raw.unit, 60) || "ชิ้น", unit_price: money(unitPrice), amount });
+    const itemType = ITEM_TYPES.includes(raw.item_type) ? raw.item_type : "material";
+    const match = itemType === "material" && ["new", "item"].includes(raw.inventory_match) ? raw.inventory_match : "auto";
+    const matchId = match === "item" ? Number(raw.inventory_item_id) : null;
+    if (match === "item" && !(Number.isInteger(matchId) && matchId > 0)) return { error: `กรุณาเลือกทะเบียนพัสดุของรายการที่ ${index + 1}` };
+    rows.push({ line_no: index + 1, description, item_type: itemType, category: clean(raw.category, 120), quantity,
+      unit: clean(raw.unit, 60) || "ชิ้น", unit_price: money(unitPrice), amount, inventory_match: match, inventory_item_id: matchId });
   }
   const total = sumMoney(rows.map((r) => r.amount));
   if (!(total > 0)) return { error: "ยอดรวมต้องมากกว่า 0 บาท" };
@@ -199,7 +251,8 @@ async function loadCase(env, id) {
 
 async function caseDetail(env, row) {
   const [{ results: items }, { results: inspectors }, { results: events }, { results: links }] = await Promise.all([
-    env.DB.prepare("SELECT * FROM procurement_items WHERE case_id=? ORDER BY line_no").bind(row.id).all(),
+    env.DB.prepare(`SELECT p.*,i.item_code match_code,i.name match_name,i.unit match_unit FROM procurement_items p
+      LEFT JOIN inventory_items i ON i.id=p.inventory_item_id WHERE p.case_id=? ORDER BY p.line_no`).bind(row.id).all(),
     env.DB.prepare(`SELECT i.*,u.full_name FROM procurement_inspectors i JOIN users u ON u.id=i.user_id WHERE i.case_id=? ORDER BY i.sort_order,i.user_id`).bind(row.id).all(),
     env.DB.prepare(`SELECT v.*,u.full_name actor_name FROM procurement_events v LEFT JOIN users u ON u.id=v.actor_id WHERE v.case_id=? ORDER BY v.id`).bind(row.id).all(),
     env.DB.prepare(`SELECT l.*,i.item_code,i.name FROM procurement_inventory_links l JOIN inventory_items i ON i.id=l.inventory_item_id WHERE l.case_id=? ORDER BY l.line_no,i.item_code`).bind(row.id).all().catch(() => ({ results: [] })),
@@ -281,6 +334,7 @@ async function overview(request, env, user) {
     eligible_expenses: eligible.map((e) => ({ ...e, amount: money(e.amount) })),
     users: people,
     roles: { procurement_officer: officerUser, procurement_head: ctx.head },
+    default_inspectors: [...new Set([officerUser?.id, ...(await deputyDirectorIds(env))].filter(Boolean).map(Number))],
     methods: PROCUREMENT_METHODS, statuses: STATUS_LABELS, committee_threshold: COMMITTEE_THRESHOLD,
     permissions: { can_create: ctx.officer, is_officer: ctx.officer, is_director: ctx.director, is_finance: ctx.finance },
   });
@@ -322,6 +376,13 @@ function parseCaseBody(body) {
   };
 }
 
+async function matchError(env, items) {
+  const ids = [...new Set(items.filter((i) => i.inventory_match === "item").map((i) => i.inventory_item_id))];
+  if (!ids.length) return null;
+  const { results } = await env.DB.prepare(`SELECT id FROM inventory_items WHERE item_type='material' AND status='active' AND id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all();
+  return results.length === ids.length ? null : "ทะเบียนพัสดุที่เลือกจับคู่ไม่มีแล้วหรือไม่ใช่วัสดุที่ใช้งานอยู่ กรุณาเลือกใหม่";
+}
+
 async function validInspectors(env, ids) {
   if (!ids.length) return true;
   const { results } = await env.DB.prepare(`SELECT id FROM users WHERE status='active' AND role IS NOT NULL AND deleted_at IS NULL AND id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all();
@@ -337,8 +398,8 @@ function inspectorStatements(env, caseId, ids) {
 
 function itemStatements(env, caseId, items) {
   return [env.DB.prepare("DELETE FROM procurement_items WHERE case_id=?").bind(caseId),
-    ...items.map((i) => env.DB.prepare(`INSERT INTO procurement_items(case_id,line_no,description,item_type,category,quantity,unit,unit_price,amount)
-      VALUES(?,?,?,?,?,?,?,?,?)`).bind(caseId, i.line_no, i.description, i.item_type, i.category, i.quantity, i.unit, i.unit_price, i.amount))];
+    ...items.map((i) => env.DB.prepare(`INSERT INTO procurement_items(case_id,line_no,description,item_type,category,quantity,unit,unit_price,amount,inventory_match,inventory_item_id)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(caseId, i.line_no, i.description, i.item_type, i.category, i.quantity, i.unit, i.unit_price, i.amount, i.inventory_match, i.inventory_item_id))];
 }
 
 async function createCase(request, env, user) {
@@ -350,6 +411,8 @@ async function createCase(request, env, user) {
   if (!expenseOpen(expense)) return jsonResponse({ error: "เริ่มจัดซื้อจัดจ้างได้เฉพาะคำขอที่ส่งถึงฝ่ายงบประมาณแล้วและยังไม่เสนออนุมัติเบิกจ่าย" }, 409);
   if (parsed.total > money(expense.amount) + 0.000001) return jsonResponse({ error: `ยอดจัดซื้อ ${moneyText(parsed.total)} บาท เกินยอดคำขอเบิก ${moneyText(expense.amount)} บาท` }, 409);
   if (!await validInspectors(env, parsed.inspectors)) return jsonResponse({ error: "พบผู้ตรวจรับที่ไม่ใช่บัญชีที่ใช้งานอยู่" }, 400);
+  const badMatch = await matchError(env, parsed.items);
+  if (badMatch) return jsonResponse({ error: badMatch }, 400);
   const year = Number(expense.fiscal_year);
   const caseNo = `PRC-${year}-${String(await nextNumber(env, "case", year)).padStart(4, "0")}`;
   const f = parsed.fields;
@@ -381,6 +444,8 @@ async function updateCase(request, env, user, id) {
   if (parsed.error) return jsonResponse({ error: parsed.error }, 400);
   if (parsed.total > money(row.expense_amount) + 0.000001) return jsonResponse({ error: `ยอดจัดซื้อ ${moneyText(parsed.total)} บาท เกินยอดคำขอเบิก ${moneyText(row.expense_amount)} บาท` }, 409);
   if (!await validInspectors(env, parsed.inspectors)) return jsonResponse({ error: "พบผู้ตรวจรับที่ไม่ใช่บัญชีที่ใช้งานอยู่" }, 400);
+  const badMatch = await matchError(env, parsed.items);
+  if (badMatch) return jsonResponse({ error: badMatch }, 400);
   const f = parsed.fields;
   const results = await env.DB.batch([
     env.DB.prepare(`UPDATE procurement_cases SET procurement_type=?,method=?,method_reason=?,subject=?,necessity=?,reference_price=?,reference_source=?,
@@ -404,7 +469,17 @@ async function submitReadiness(env, row) {
   if (!row.vendor_name) return "กรุณาระบุผู้ขาย/ผู้รับจ้าง";
   if (!row.necessity) return "กรุณาระบุเหตุผลและความจำเป็น";
   const count = await env.DB.prepare("SELECT COUNT(*) n FROM procurement_inspectors WHERE case_id=?").bind(row.id).first();
-  return inspectorRuleError(money(row.total_amount), Number(count?.n || 0));
+  const rule = inspectorRuleError(money(row.total_amount), Number(count?.n || 0));
+  if (rule) return rule;
+  const { results: auto } = await env.DB.prepare("SELECT line_no,description,unit FROM procurement_items WHERE case_id=? AND item_type='material' AND COALESCE(inventory_match,'auto')='auto' ORDER BY line_no").bind(row.id).all();
+  if (auto.length) {
+    const register = await materialRegister(env);
+    for (const item of auto) {
+      const similar = similarMaterials(register, item.description, item.unit);
+      if (similar.length && !similar.some((r) => r.exact)) return `รายการที่ ${item.line_no} "${item.description}" คล้ายกับทะเบียนพัสดุเดิม กรุณาเลือกว่าเป็นรายการเดียวกันหรือสร้างทะเบียนใหม่`;
+    }
+  }
+  return null;
 }
 
 const ORDER_PREFIX = { purchase: "PO", hire: "WO" };
@@ -438,8 +513,10 @@ async function inventoryStatements(env, user, row, items) {
   for (const item of items) {
     if (item.item_type === "service") continue;
     if (item.item_type === "material") {
-      const existing = await env.DB.prepare(`SELECT id FROM inventory_items WHERE item_type='material' AND status='active' AND TRIM(name)=? AND COALESCE(unit,'')=? ORDER BY id LIMIT 1`)
-        .bind(item.description.trim(), item.unit || "").first();
+      const chosen = item.inventory_match === "item" && item.inventory_item_id
+        ? await env.DB.prepare("SELECT id FROM inventory_items WHERE id=? AND item_type='material' AND status='active'").bind(item.inventory_item_id).first() : null;
+      const existing = chosen || (item.inventory_match === "new" ? null : await env.DB.prepare(`SELECT id FROM inventory_items WHERE item_type='material' AND status='active' AND TRIM(name)=? AND COALESCE(unit,'')=? ORDER BY id LIMIT 1`)
+        .bind(item.description.trim(), item.unit || "").first());
       if (existing) {
         statements.push(receive("?", [existing.id], item, item.quantity));
         statements.push(env.DB.prepare("INSERT OR IGNORE INTO procurement_inventory_links(case_id,line_no,inventory_item_id,quantity) VALUES(?,?,?,?)").bind(row.id, item.line_no, existing.id, item.quantity));
@@ -464,7 +541,9 @@ async function postInventory(env, user, row, request) {
       ...stock,
       eventStatement(env, row.id, "accepted", stock.length ? "ตรวจรับครบแล้ว นำเข้าทะเบียนพัสดุเรียบร้อย" : "ตรวจรับครบแล้ว (งานจ้าง/บริการ ไม่มีพัสดุเข้าทะเบียน)", user),
       auditStatement(env, user, "accepted", row.id, { case_no: row.case_no }, request),
-      ...notifyStatements(env, row.id, recipients, `ตรวจรับพัสดุครบแล้ว (${row.case_no}) ฝ่ายการเงินดำเนินการเบิกจ่ายต่อได้`, 0),
+      ...notifyStatements(env, row.id, recipients, money(row.total_amount) < money(row.expense_amount)
+        ? `ตรวจรับพัสดุครบแล้ว (${row.case_no}) ยอดจริง ${moneyText(row.total_amount)} บาท น้อยกว่ายอดขอ ${moneyText(row.expense_amount)} บาท เจ้าของโครงการกรุณาปิดยอดในหน้าเอกสารโครงการ`
+        : `ตรวจรับพัสดุครบแล้ว (${row.case_no}) ฝ่ายการเงินดำเนินการเบิกจ่ายต่อได้`, 0),
     ]);
     return { ok: true };
   } catch (error) {
@@ -703,6 +782,14 @@ async function documentRoute(request, env, user, id, kind) {
   return new Response("ไม่พบเอกสาร", { status: 404 });
 }
 
+// ยอดที่ต้องปิดตามใบตรวจรับ (null = ไม่มีงานจัดซื้อที่ตรวจรับแล้ว หรือยอดเท่ากันแล้ว)
+export async function procurementClosing(env, expenseId) {
+  const row = await env.DB.prepare(`SELECT c.case_no,c.total_amount,e.amount FROM procurement_cases c JOIN project_expenses e ON e.id=c.expense_id
+    WHERE c.expense_id=? AND c.status='accepted'`).bind(expenseId).first().catch(() => null);
+  if (!row || money(row.total_amount) >= money(row.amount)) return null;
+  return { case_no: row.case_no, actual: money(row.total_amount), requested: money(row.amount) };
+}
+
 // ใช้ในระบบเบิกจ่าย: ห้ามเสนอผู้อำนวยการอนุมัติเบิกจ่ายจนกว่าตรวจรับพัสดุครบ
 export async function procurementBlocksDisbursement(env, expenseId) {
   const row = await env.DB.prepare("SELECT case_no,status FROM procurement_cases WHERE expense_id=? AND status<>'cancelled'").bind(expenseId).first().catch(() => null);
@@ -719,6 +806,13 @@ export async function handleProcurementRoute(request, env, pathname, method) {
   if (pathname === "/api/procurement/overview" && method === "GET") return overview(request, env, user);
   if (pathname === "/api/procurement/expense" && method === "GET") return expenseForCreate(request, env, user);
   if (pathname === "/api/procurement/cases" && method === "POST") return createCase(request, env, user);
+  if (pathname === "/api/procurement/inventory-matches" && method === "POST") {
+    if (!await isProcurementOfficer(env, user)) return jsonResponse({ error: "เฉพาะเจ้าหน้าที่พัสดุหรือผู้บริหาร" }, 403);
+    const body = await request.json().catch(() => null);
+    const items = Array.isArray(body?.items) ? body.items.slice(0, 100) : [];
+    const register = await materialRegister(env);
+    return jsonResponse({ matches: items.map((i) => similarMaterials(register, i?.description, i?.unit)) });
+  }
   if (pathname === "/api/procurement/notifications/read" && method === "POST") {
     const body = await request.json().catch(() => null);
     await env.DB.prepare("UPDATE procurement_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL AND case_id=?").bind(user.id, Number(body?.case_id)).run();

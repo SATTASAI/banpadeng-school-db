@@ -1,7 +1,7 @@
 import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { executives, isDirector } from "../lib/leave-data.js";
-import { procurementBlocksDisbursement } from "./procurement.js";
+import { procurementBlocksDisbursement, procurementClosing } from "./procurement.js";
 
 const ready = new WeakSet();
 const clean = (v, max = 1500) => String(v ?? "").trim().slice(0, max) || null;
@@ -201,11 +201,20 @@ async function overview(request, env, user) {
   for (const doc of docs) {
     if (doc.attachment_id && !doc.notification_sent) await notifyBudgetSupportingDocument(env,{ id: doc.created_by },doc.id);
   }
+  const requestIds = requests.map(e => e.id);
+  const procurement = new Map();
+  if (requestIds.length) {
+    const { results: cases } = await env.DB.prepare(`SELECT expense_id,id,case_no,status,total_amount FROM procurement_cases WHERE status<>'cancelled' AND expense_id IN (${requestIds.map(() => "?").join(",")})`).bind(...requestIds).all().catch(() => ({ results: [] }));
+    for (const c of cases) procurement.set(c.expense_id, c);
+  }
   const { results: notifications } = await env.DB.prepare(`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
     JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id
     WHERE n.user_id=? AND v.project_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`).bind(user.id,...ids).all();
   return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
     can_director_approve: director && e.status === "pending" && e.current_step === "director_approval" && Number(e.created_by) !== Number(user.id),
+    procurement: procurement.get(e.id) || null,
+    can_close_balance: ["pending","approved"].includes(e.status) && procurement.get(e.id)?.status === "accepted" && money(procurement.get(e.id).total_amount) < money(e.amount)
+      && (Number(e.created_by) === Number(user.id) || Boolean(projects.find(p => p.id === e.project_id)?.can_request)),
     items: items.filter(i => i.expense_id === e.id), documents: docs.filter(d => d.expense_id === e.id), can_edit: e.status === "draft" && Number(e.created_by) === Number(user.id),
     can_attach: finance || projects.find(p => p.id === e.project_id)?.can_request || Number(e.created_by) === Number(user.id) })) });
 }
@@ -267,6 +276,16 @@ async function action(request, env, user, id) {
     if (!item.n || round(item.total) !== round(row.amount)) return jsonResponse({ error: "รายการค่าใช้จ่ายไม่ครบ กรุณาบันทึกใหม่" },409);
     sql = "UPDATE project_expenses SET status='pending',current_step='finance_queue',submitted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='draft'";
     args = [id]; audience = "finance"; message = "มีคำขอเบิกจ่ายใหม่ รอเจ้าหน้าที่รับเรื่อง";
+  } else if (kind === "close_balance") {
+    // เจ้าของโครงการปิดยอดตามใบตรวจรับพัสดุ คืนวงเงินส่วนที่เหลือให้โครงการ (ระหว่างดำเนินการกันไว้เท่ายอดขอเบิก)
+    if (Number(row.created_by) !== Number(user.id) && !await ownsProject(env,user,row.project_id)) return jsonResponse({ error: "เฉพาะเจ้าของโครงการ" },403);
+    if (!["pending","approved"].includes(row.status)) return jsonResponse({ error: "ปิดยอดได้ก่อนยืนยันการเบิกจ่ายเท่านั้น" },409);
+    const closing = await procurementClosing(env, id);
+    if (!closing) return jsonResponse({ error: "ไม่มียอดที่ต้องปิด (ยังไม่ตรวจรับพัสดุ หรือยอดตรงกันแล้ว)" },409);
+    const returned = sumMoney([closing.requested,-closing.actual]);
+    const text = `ปิดยอดตามใบตรวจรับ ${closing.case_no}: ${closing.requested.toLocaleString("th-TH",{minimumFractionDigits:2})} → ${closing.actual.toLocaleString("th-TH",{minimumFractionDigits:2})} บาท คืนวงเงินโครงการ ${returned.toLocaleString("th-TH",{minimumFractionDigits:2})} บาท`;
+    sql = "UPDATE project_expenses SET amount=?,notes=COALESCE(notes||char(10),'')||?,updated_at=datetime('now') WHERE id=? AND status IN ('pending','approved') AND ROUND(amount,2)=?";
+    args = [closing.actual,text,id,closing.requested]; audience = "finance"; message = text;
   } else if (kind === "approve" || (["return","reject"].includes(kind) && row.current_step === "director_approval")) {
     // ขั้นผู้อำนวยการอนุมัติ: หลังเจ้าหน้าที่การเงินตรวจเอกสารเสร็จ ก่อนยืนยันการจ่าย
     if (!(await budgetDirectorIds(env)).includes(Number(user.id))) return jsonResponse({ error: "เฉพาะผู้อำนวยการเท่านั้นที่อนุมัติขั้นนี้ได้" },403);
@@ -300,6 +319,8 @@ async function action(request, env, user, id) {
       sql = "UPDATE project_expenses SET status=?,current_step=?,review_note=?,returned_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status IN ('pending','approved')";
       args = [kind === "return" ? "draft" : "rejected",kind === "return" ? "returned" : "rejected",note,id]; message = `${kind === "return" ? "ส่งกลับให้แก้ไข" : "ไม่อนุมัติ"}: ${note}`;
     } else if (kind === "pay") {
+      const closing = await procurementClosing(env, id);
+      if (closing) return jsonResponse({ error: `ยอดตรวจรับจริง ${closing.actual.toLocaleString("th-TH",{minimumFractionDigits:2})} บาท น้อยกว่ายอดขอเบิก รอเจ้าของโครงการกด "ปิดยอดตามจริง" ก่อนยืนยันการเบิกจ่าย`, code: "closing_required" },409);
       const date = body.payment_date, method = body.payment_method, recipient = clean(body.payment_recipient,250), number = clean(body.payment_no,100), reference = clean(body.payment_reference,150), tax = round(body.withholding_tax || 0);
       if (!validDate(date) || !["cash","transfer","cheque","other"].includes(method) || !recipient || !number || !Number.isFinite(tax) || tax<0 || tax>Number(row.amount)) return jsonResponse({ error: "กรุณาระบุเลขที่ใบสำคัญ วันที่ วิธีจ่าย ผู้รับเงิน และภาษีให้ถูกต้อง" },400);
       if (["transfer","cheque"].includes(method) && !reference) return jsonResponse({ error: "กรุณาระบุเลขอ้างอิงการโอนหรือเช็ค" },400);
@@ -310,7 +331,7 @@ async function action(request, env, user, id) {
   const token = crypto.randomUUID();
   const conditions={submit:"e.status='draft'",receive:"e.status='pending' AND e.current_step='finance_queue'",
     complete:"e.status='pending' AND e.current_step='finance_processing'",approve:"e.status='pending' AND e.current_step='director_approval'",return:"e.status IN ('pending','approved')",
-    reject:"e.status IN ('pending','approved')",pay:"e.status='approved' AND e.current_step='finance_ready'"};
+    reject:"e.status IN ('pending','approved')",close_balance:"e.status IN ('pending','approved')",pay:"e.status='approved' AND e.current_step='finance_ready'"};
   const events=eventStatements(env,token,id,kind,message,user,audience,conditions[kind]);
   // The event is the transaction marker. Do not depend on changes() across D1 statements.
   const results=await env.DB.batch([events[0],env.DB.prepare(sql+' AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)').bind(...args,token),...events.slice(1)]);

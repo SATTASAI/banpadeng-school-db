@@ -65,6 +65,8 @@ window.ProjectWorkflow = (() => {
           ${e.status==='paid'?`<div class="wf-notice">ใบสำคัญ ${esc(e.payment_no)} · วันที่ ${esc(e.payment_date)} · ผู้รับเงิน ${esc(e.payment_recipient)} · ยอดสุทธิ ${money(e.net_paid)} บาท</div>`:''}
           <div class="wf-files">${e.documents.filter(d=>d.attachment_id).map(d=>`<a href="/api/attachments/${d.attachment_id}" target="_blank" rel="noopener">${esc(d.title)} — ${esc(d.file_name)}</a>`).join('')||'<span class="wf-muted">ยังไม่มีไฟล์แนบ</span>'}</div>
           <div class="wf-actions">${e.can_edit?`<button class="btn btn-ghost" data-edit-request="${e.id}">แก้ไขร่าง</button><button class="btn btn-primary" data-request="${e.id}" data-action="submit">ส่งเอกสาร</button>`:''}
+          ${e.procurement?`<a class="btn btn-ghost" href="/procurement.html?case=${e.procurement.id}">จัดซื้อจัดจ้าง ${esc(e.procurement.case_no)} · ${e.procurement.status==='accepted'?'ตรวจรับแล้ว '+money(e.procurement.total_amount)+' บาท':'กำลังดำเนินการ'}</a>`:''}
+          ${e.can_close_balance?`<button class="btn btn-primary" data-request="${e.id}" data-action="close_balance">ปิดยอดตามจริง ${money(e.procurement.total_amount)} บาท</button>`:''}
           ${e.can_attach?`<button class="btn btn-ghost" data-attach="${e.id}">+ แนบเอกสารเพิ่มเติม</button>`:''}
           ${e.can_director_approve?directorButtons(e):data.permissions.can_finance&&options.finance?financeButtons(e):''}
           ${['approved','paid'].includes(e.status)?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/budget/requests/${e.id}/document">พิมพ์คำขอ</a>`:''}
@@ -114,6 +116,7 @@ window.ProjectWorkflow = (() => {
     }
     function requestAction(id,action){const row=data.requests.find(e=>e.id===id);if(!row)return;
       if(action==='pay'){payment(row);return;}
+      if(action==='close_balance'){const back=Math.round((row.amount-row.procurement.total_amount)*100)/100;modal(`<h2>ปิดยอดตามจริง</h2><p>${esc(row.request_no)} · ยอดขอเบิก ${money(row.amount)} บาท</p><p class="wf-steps">ยอดตรวจรับพัสดุจริง ${money(row.procurement.total_amount)} บาท · คืนวงเงินให้โครงการ ${money(back)} บาท<br>ยอดเบิกจ่ายจะเปลี่ยนเป็นยอดจริง และแจ้งฝ่ายการเงิน</p><form><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">ยืนยันปิดยอด</button></div></form>`);dialog.querySelector('form').onsubmit=e=>{e.preventDefault();execute(id,{action:'close_balance'});};return;}
       const label={submit:'ส่งเอกสารให้ฝ่ายงบประมาณ',receive:'รับเรื่อง',complete:'ดำเนินการเสร็จสิ้น',return:'ส่งกลับให้แก้ไข',reject:'ไม่อนุมัติ'}[action];
       modal(`<h2>${label}</h2><p>${esc(row.request_no)} · ${money(row.amount)} บาท</p><form><label class="field">หมายเหตุ / เหตุผล<textarea name="review_note" maxlength="1500" ${['return','reject'].includes(action)?'required':''}></textarea></label><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">ยืนยัน${label}</button></div></form>`);
       dialog.querySelector('form').onsubmit=e=>{e.preventDefault();execute(id,{action,review_note:dialog.querySelector('textarea').value});};

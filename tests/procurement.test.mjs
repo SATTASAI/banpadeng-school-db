@@ -229,3 +229,49 @@ test("director cannot approve a report they prepared and cancelled cases free th
   assert.equal((await call(env, 3, "/api/procurement/overview")).body.eligible_expenses.length, 1);
   assert.equal((await call(env, 5, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "complete" })).status, 200);
 });
+
+test("similar names need a decision, chosen register is merged, and the owner closes the unused reservation before payment", async () => {
+  const { env, expenseId } = await setup();
+  assert.equal((await call(env, 1, "/api/budget/roles", "PUT", { role_key: "deputy_director", department: "academic", user_id: 9 })).status, 200);
+  const overview = await call(env, 3, "/api/procurement/overview");
+  assert.deepEqual(overview.body.default_inspectors, [3, 9], "procurement officer and deputy director by default");
+
+  const matches = await call(env, 3, "/api/procurement/inventory-matches", "POST", { items: [{ description: "กระดาษถ่ายเอกสาร A4", unit: "รีม" }, { description: "กระดาษ A4", unit: "รีม" }] });
+  assert.equal(matches.body.matches[0][0].item_code, "OLD-1");
+  assert.equal(matches.body.matches[0][0].exact, false);
+  assert.equal(matches.body.matches[1][0].exact, true);
+
+  const items = [{ description: "กระดาษถ่ายเอกสาร A4", item_type: "material", quantity: 5, unit: "รีม", unit_price: 120 }];
+  const created = await call(env, 3, "/api/procurement/cases", "POST", casePayload(expenseId, { items, inspectors: [3, 9] }));
+  const id = created.body.id;
+  const blocked = await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "submit" });
+  assert.equal(blocked.status, 409);
+  assert.match(blocked.body.error, /คล้ายกับทะเบียนพัสดุเดิม/);
+  const oldId = env.raw.prepare("SELECT id FROM inventory_items WHERE item_code='OLD-1'").get().id;
+  items[0].inventory_match = "item"; items[0].inventory_item_id = oldId;
+  assert.equal((await call(env, 3, `/api/procurement/cases/${id}`, "PATCH", casePayload(expenseId, { items, inspectors: [3, 9] }))).status, 200);
+  for (const [user, action] of [[3, "submit"], [4, "head_approve"], [6, "approve"], [3, "order"]])
+    assert.equal((await call(env, user, `/api/procurement/cases/${id}/action`, "POST", { action })).status, 200, action);
+  await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "record_delivery", delivered_date: "2026-11-09" });
+  await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" });
+  assert.equal((await call(env, 9, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" })).body.accepted, true);
+  assert.equal(env.raw.prepare("SELECT current_quantity FROM inventory_items WHERE id=?").get(oldId).current_quantity, 8);
+
+  // คำขอ 2,100 บาท ซื้อจริง 600 บาท: วงเงินยังกันไว้ 2,100 จนเจ้าของโครงการปิดยอด
+  const expense = (id2) => env.raw.prepare("SELECT amount FROM project_expenses WHERE id=?").get(id2).amount;
+  assert.equal(expense(expenseId), 2100);
+  assert.equal((await call(env, 5, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "complete" })).status, 200);
+  assert.equal((await call(env, 6, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "approve" })).status, 200);
+  const pay = { action: "pay", payment_no: "PV-1", payment_date: "2026-11-12", payment_method: "cash", payment_recipient: "ร้านทดสอบ" };
+  const early = await call(env, 5, `/api/project-documents/requests/${expenseId}/action`, "POST", pay);
+  assert.equal(early.status, 409);
+  assert.equal(early.body.code, "closing_required");
+  const workflow = await call(env, 2, "/api/project-documents/overview");
+  assert.equal(workflow.body.requests[0].can_close_balance, true);
+  assert.equal((await call(env, 10, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "close_balance" })).status, 403);
+  assert.equal((await call(env, 2, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "close_balance" })).status, 200);
+  assert.equal(expense(expenseId), 600);
+  assert.equal((await call(env, 2, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "close_balance" })).status, 409);
+  assert.equal((await call(env, 5, `/api/project-documents/requests/${expenseId}/action`, "POST", pay)).status, 200);
+  assert.equal(env.raw.prepare("SELECT spent_amount FROM projects WHERE id=10").get().spent_amount, 600);
+});
