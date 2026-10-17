@@ -3367,6 +3367,8 @@ async function validateManagedFile(file, entityType = "") {
   return { mimeType, limit };
 }
 
+const MAINTENANCE_FILE_TYPES = new Set(["maintenance_request", "maintenance_update", "maintenance_before", "maintenance_after"]);
+
 // เลือก Drive เมื่อผู้ดูแลตั้งค่าครบแล้ว; รองรับ R2 เดิมเพื่อไม่ให้ไฟล์เก่าหยุดทำงาน
 function getFileStorageProvider(env) {
   const explicit = String(env.FILE_STORAGE_PROVIDER || "").trim().toLowerCase();
@@ -3558,9 +3560,10 @@ async function handleUploadAttachment(request, env, entityType, entityId) {
   if (validation.error) return jsonResponse({ error: validation.error },400);
   const safeName = String(file.name || "attachment").replace(/[^\p{L}\p{N}._ -]/gu,"_").slice(0,180);
   const officeDocument = Object.values(OFFICE_FILE_MIMES).includes(validation.mimeType);
+  // รูปแจ้งซ่อมเก็บใน R2 (เปิดเร็ว ส่งเป็นภาพใน LINE ได้ทันที) เมื่อผูก binding FILES แล้ว; ยังไม่ผูกใช้ที่เก็บหลักไปก่อน
   const provider = ["document", "work_record"].includes(entityType) || officeDocument
     ? "drive"
-    : getFileStorageProvider(env);
+    : MAINTENANCE_FILE_TYPES.has(entityType) && env.FILES ? "r2" : getFileStorageProvider(env);
   const allowDuplicate = String(form?.get("allow_duplicate") || "") === "1";
   const fileHash = await hashManagedFile(file);
   const existing = await env.DB.prepare("SELECT id,object_key,file_name,file_size,storage_provider,drive_file_id,file_hash FROM file_attachments WHERE entity_type=? AND entity_id=?").bind(entityType,entityId).first();
