@@ -35,7 +35,8 @@
   .sidebar nav a.nav-grades .nav-number { background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.35); color:#fff; }
   .nav-external { margin-left:auto; font-size:13px; opacity:.85; }
   .nav-label { font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:#5F7B97; padding:14px 12px 4px; font-weight:700; }
-  .nav-number { width:23px; height:23px; border-radius:7px; background:#E6F0FA; border:1px solid rgba(46,111,180,.18); color:#2565A8; font-weight:650; display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
+  .nav-number svg { display:block; }
+  .nav-number { width:24px; height:24px; border-radius:7px; background:#E6F0FA; border:1px solid rgba(46,111,180,.18); color:#2565A8; font-weight:650; display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
   .sidebar nav a.active .nav-number { background:rgba(0,122,255,.12); border-color:rgba(0,122,255,.13); color:#07599F; }
   .nav-group { position:relative; }
   .nav-group > a { padding-right:32px; }
@@ -228,6 +229,7 @@
       <a href="/admin-cleanup.html" data-page="admin-cleanup" class="superadmin-only" style="display:none;"><span class="nav-number">☠</span>ล้างข้อมูลทดสอบ</a>
       <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่า LINE</a>
     </nav>
+    <script src="/js/nav-icons.js"></script>
     <div class="sidebar-footer">
       <span class="role-chip" id="roleChip">—</span>
       <div id="userName">—</div>
