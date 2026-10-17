@@ -33,6 +33,10 @@
   .sidebar nav a.nav-grades { margin:6px 0 4px; background:linear-gradient(135deg,#1E7BE0,#1561C2); color:#fff; font-weight:650; box-shadow:0 6px 16px rgba(22,97,194,.28); }
   .sidebar nav a.nav-grades:hover { background:linear-gradient(135deg,#2B88EC,#1A6CD3); color:#fff; transform:translateY(-1px); box-shadow:0 8px 20px rgba(22,97,194,.34); }
   .sidebar nav a.nav-grades .nav-number { background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.35); color:#fff; }
+  .sidebar nav a.nav-cleanup { background:#0E2A1B; color:#5CFF9D; font-weight:650; box-shadow:0 0 0 1px rgba(57,255,140,.55),0 0 12px rgba(57,255,140,.45),inset 0 0 10px rgba(57,255,140,.12); text-shadow:0 0 6px rgba(57,255,140,.7); }
+  .sidebar nav a.nav-cleanup:hover { background:#123622; color:#8BFFBA; box-shadow:0 0 0 1px rgba(57,255,140,.8),0 0 18px rgba(57,255,140,.65),inset 0 0 12px rgba(57,255,140,.18); }
+  .sidebar nav a.nav-cleanup .nav-number { background:rgba(57,255,140,.12); border-color:rgba(57,255,140,.55); color:#5CFF9D; filter:drop-shadow(0 0 3px rgba(57,255,140,.8)); }
+  .sidebar nav a.nav-cleanup.active { background:#164A2C; color:#B5FFD2; }
   .nav-external { margin-left:auto; font-size:13px; opacity:.85; }
   .nav-label { font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:#5F7B97; padding:14px 12px 4px; font-weight:700; }
   .nav-number svg { display:block; }
@@ -226,7 +230,7 @@
       <a href="/security.html" data-page="security" class="admin-only" style="display:none;"><span class="nav-number">12</span>สำรองและตรวจสอบ</a>
       <a href="/system-status.html" data-page="system-status" class="admin-only" style="display:none;"><span class="nav-number">SYS</span>สถานะระบบ</a>
       <a href="https://banpadengschool.ac.th/admin" target="_blank" rel="noopener noreferrer" class="admin-only" style="display:none;" title="เปิด Graphic Design for Developer ในแท็บใหม่"><span class="nav-number">WEB</span>จัดการเว็บไซต์</a>
-      <a href="/admin-cleanup.html" data-page="admin-cleanup" class="superadmin-only" style="display:none;"><span class="nav-number">☠</span>ล้างข้อมูลทดสอบ</a>
+      <a href="/admin-cleanup.html" data-page="admin-cleanup" class="superadmin-only nav-cleanup" style="display:none;"><span class="nav-number">☠</span>ล้างข้อมูลทดสอบ</a>
       <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่า LINE</a>
     </nav>
     <script src="/js/nav-icons.js"></script>
