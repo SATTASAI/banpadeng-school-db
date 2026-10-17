@@ -23,18 +23,19 @@
   .sidebar-brand .brand-mark img { width:100%; height:100%; object-fit:contain; padding:2px; }
   .sidebar nav { display:flex; flex-direction:column; gap:2px; flex:1; }
   .sidebar nav a {
-    color:#536D87; text-decoration:none; padding:8px 10px;
+    color:#2E4D6E; text-decoration:none; padding:8px 10px; font-weight:550;
+    background:rgba(255,255,255,.42); box-shadow:inset 0 0 0 1px rgba(92,132,170,.08);
     border-radius:10px; font-size:13px; transition:.18s ease; display:flex; align-items:center; gap:9px; position:relative;
   }
-  .sidebar nav a:hover { background:rgba(255,255,255,.62); color:#135E9F; transform:translateX(1px); box-shadow:inset 0 0 0 1px rgba(92,132,170,.10); }
-  .sidebar nav a.active { background:rgba(0,122,255,.13); color:#095FAE; font-weight:650; box-shadow:inset 0 0 0 1px rgba(0,122,255,.10); }
+  .sidebar nav a:hover { background:rgba(255,255,255,.85); color:#135E9F; transform:translateX(1px); box-shadow:inset 0 0 0 1px rgba(92,132,170,.10); }
+  .sidebar nav a.active { background:rgba(0,122,255,.16); color:#095FAE; font-weight:650; box-shadow:inset 0 0 0 1px rgba(0,122,255,.16); }
   .sidebar nav a.active::before { display:none; }
   .sidebar nav a.nav-grades { margin:6px 0 4px; background:linear-gradient(135deg,#1E7BE0,#1561C2); color:#fff; font-weight:650; box-shadow:0 6px 16px rgba(22,97,194,.28); }
   .sidebar nav a.nav-grades:hover { background:linear-gradient(135deg,#2B88EC,#1A6CD3); color:#fff; transform:translateY(-1px); box-shadow:0 8px 20px rgba(22,97,194,.34); }
   .sidebar nav a.nav-grades .nav-number { background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.35); color:#fff; }
   .nav-external { margin-left:auto; font-size:13px; opacity:.85; }
-  .nav-label { font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:#8297AC; padding:14px 12px 4px; font-weight:700; }
-  .nav-number { width:23px; height:23px; border-radius:7px; background:rgba(255,255,255,.56); border:1px solid rgba(93,132,170,.12); display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
+  .nav-label { font-size:10px; text-transform:uppercase; letter-spacing:0.09em; color:#5F7B97; padding:14px 12px 4px; font-weight:700; }
+  .nav-number { width:23px; height:23px; border-radius:7px; background:#E6F0FA; border:1px solid rgba(46,111,180,.18); color:#2565A8; font-weight:650; display:inline-flex; align-items:center; justify-content:center; font-size:10px; flex-shrink:0; }
   .sidebar nav a.active .nav-number { background:rgba(0,122,255,.12); border-color:rgba(0,122,255,.13); color:#07599F; }
   .nav-group { position:relative; }
   .nav-group > a { padding-right:32px; }
