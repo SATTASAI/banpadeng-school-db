@@ -56,6 +56,11 @@
         <div class="copy-row"><input id="webhookUrl" readonly value="กำลังโหลด..." /><button class="btn btn-ghost" id="copyBtn">คัดลอก URL</button></div>
       </div>
       <div class="settings-card">
+        <h3>แจ้งเตือนทุกระบบทาง LINE รายบุคคล</h3><p>ส่งรายการเดียวกับกระดิ่งแจ้งเตือน (งานมอบหมาย การลา สอนแทน หนังสือราชการ เบิกจ่าย แก้ยอด จัดซื้อจัดจ้าง ขอลบนักเรียน) ให้ครูที่จับคู่ LINE แล้ว รวมเป็น 1 ข้อความต่อคนต่อรอบ ส่งทันทีหลังมีการบันทึก และเก็บตกทุก 2 นาที</p>
+        <div class="hint" id="feedStatus">กำลังโหลด...</div>
+        <div style="margin-top:10px"><button class="btn btn-ghost" id="feedRunBtn" style="width:auto">ส่งที่ค้างอยู่ตอนนี้</button></div>
+      </div>
+      <div class="settings-card">
         <h3>จับคู่บัญชี LINE ของครู</h3><p>ให้ครูแอดเพื่อน LINE ของโรงเรียน แล้วส่งข้อความอะไรก็ได้ 1 ครั้ง ชื่อ LINE จะขึ้นที่นี่ เลือกว่าเป็นครูคนไหนแล้วกด “จับคู่” ระบบจะส่งข้อความยืนยันไปหาครูคนนั้น 1 ข้อความ</p>
         <div class="match-summary" id="matchSummary"></div>
         <div class="match-list" id="matchList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
@@ -137,12 +142,17 @@ function renderMatch(){
     try{await apiRequest(`/api/line/match/${button.dataset.unlink}`,{method:"DELETE"});toast("ยกเลิกการจับคู่แล้ว");await loadPersonal()}catch(error){toast(error.message,true)}
   });
 }
+function renderFeed(){
+  const f=lineStatus?.feed,r=f?.last_run;if(!f){$("feedStatus").textContent="";return}
+  const when=r?.finished_at?new Date(r.finished_at.replace(" ","T")+"Z").toLocaleString("th-TH",{dateStyle:"medium",timeStyle:"short"}):"ยังไม่เคยทำงาน";
+  $("feedStatus").innerHTML=`รอบล่าสุด: ${esc(when)}${r?` · ตรวจ ${Number(r.users_checked||0)} คน · ส่ง ${Number(r.messages_sent||0)} ข้อความ`:""}${r?.quota_remaining!=null?` · โควตาคงเหลือ ${Number(r.quota_remaining)}`:""}<br>30 วันล่าสุด ส่งแล้ว ${f.items_30d} รายการ${f.failed_30d?` · ส่งไม่สำเร็จ ${f.failed_30d}`:""}${r?.note?`<br><strong>${esc(r.note)}</strong>`:""}`;
+}
 async function loadPersonal(){
   try{matchData=await apiRequest("/api/line/match");renderMatch()}catch(error){$("matchList").innerHTML=`<div class="empty">${esc(error.message)}</div>`}
 }
 async function loadStatus(showMessage=false){
   $("refreshBtn").disabled=true;
-  try{lineStatus=await apiRequest("/api/line/status");renderStatus();renderTargets();loadPersonal();if(showMessage)toast("ตรวจสอบสถานะล่าสุดแล้ว")}
+  try{lineStatus=await apiRequest("/api/line/status");renderStatus();renderFeed();renderTargets();loadPersonal();if(showMessage)toast("ตรวจสอบสถานะล่าสุดแล้ว")}
   catch(error){if(error.status===403){document.querySelector("main").innerHTML='<div class="panel"><h2>ไม่มีสิทธิ์เข้าถึง</h2><p>หน้านี้สำหรับผู้บริหารหรือผู้ดูแลระบบเท่านั้น</p><a class="btn btn-primary" href="/maintenance.html" style="width:auto">กลับระบบแจ้งซ่อม</a></div>'}else toast(error.message,true)}
   finally{$("refreshBtn")&&($("refreshBtn").disabled=false)}
 }
@@ -158,6 +168,7 @@ $("refreshBtn").onclick=()=>loadStatus(true);
 $("copyBtn").onclick=async()=>{try{await navigator.clipboard.writeText($("webhookUrl").value);toast("คัดลอก Webhook URL แล้ว")}catch{ $("webhookUrl").select();document.execCommand("copy");toast("คัดลอก Webhook URL แล้ว") }};
 $("testBtn").onclick=async()=>{const button=$("testBtn");button.disabled=true;button.textContent="กำลังส่ง...";try{await apiRequest("/api/line/test",{method:"POST"});toast("ส่งข้อความทดสอบสำเร็จ กรุณาตรวจใน LINE")}catch(error){toast(error.message,true)}finally{button.textContent="ส่งข้อความทดสอบ";button.disabled=!lineStatus?.configured}};
 (async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}if(me.user.role!=="superadmin"){location="/dashboard.html";return}await loadStatus()})().catch(error=>toast(error.message,true));
+$("feedRunBtn").onclick=async()=>{const b=$("feedRunBtn");b.disabled=true;try{const r=await apiRequest("/api/line/feed/run",{method:"POST"});toast(r.skipped==="locked"?"เพิ่งส่งไปเมื่อสักครู่ ลองใหม่ใน 15 วินาที":r.skipped?"ยังไม่ได้ตั้งค่า LINE":`ส่งแล้ว ${r.messages_sent} ข้อความ`);await loadStatus()}catch(e){toast(e.message,true)}finally{b.disabled=false}};
 </script>
 </body>
 </html>

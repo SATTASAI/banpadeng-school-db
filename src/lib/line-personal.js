@@ -2,6 +2,7 @@
 // ผู้ใช้กด "เชื่อมต่อ LINE" ในหน้าบัญชี → ได้รหัสชั่วคราว → พิมพ์รหัสนั้นในแชต LINE OA ของโรงเรียน
 // Webhook จับคู่รหัสกับ userId ของ LINE แล้วตอบกลับ (reply ไม่นับโควตา)
 import { getCurrentUser, jsonResponse } from "./auth.js";
+import { lineFeedPreference, setLineFeedPreference } from "./line-feed.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
@@ -200,6 +201,7 @@ async function linkStatus(env, user) {
     blocked: link?.status === "blocked",
     display_name: link?.display_name || null,
     linked_at: link?.linked_at || null,
+    notify_all: await lineFeedPreference(env, user.id),
     official_account: bot ? { basic_id: bot.basic_id, name: bot.display_name, add_friend_url: addFriendUrl(bot.basic_id) } : null,
   };
 }
@@ -272,6 +274,13 @@ export async function handleLinePersonalRoute(request, env, pathname, method) {
   if (isMatch) return handleAdminMatch(request, env, pathname, method, user);
 
   if (pathname === "/api/line/link" && method === "GET") return jsonResponse(await linkStatus(env, user));
+
+  if (pathname === "/api/line/link" && method === "PATCH") {
+    const body = await request.json().catch(() => null);
+    if (typeof body?.notify_all !== "boolean") return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
+    await setLineFeedPreference(env, user.id, body.notify_all);
+    return jsonResponse({ ok: true, notify_all: body.notify_all });
+  }
 
   if (pathname === "/api/line/link" && method === "DELETE") {
     await env.DB.batch([

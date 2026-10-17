@@ -1,0 +1,97 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { fixture, call } from "./notifications.test.mjs";
+import { dispatchLineNotifications, buildLineDigest } from "../src/lib/line-feed.js";
+import worker from "../src/index.js";
+
+function mockLine(quota = { type: "none" }, usage = 0) {
+  const pushes = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    if (u.endsWith("/v2/bot/message/push")) { pushes.push(JSON.parse(init.body)); return new Response("{}", { status: 200 }); }
+    if (u.endsWith("/v2/bot/message/quota")) return Response.json(quota);
+    if (u.endsWith("/v2/bot/message/quota/consumption")) return Response.json({ totalUsage: usage });
+    return new Response("{}", { status: 404 });
+  };
+  return { pushes, restore: () => { globalThis.fetch = original; } };
+}
+
+async function setup() {
+  const env = await fixture();
+  env.LINE_CHANNEL_ACCESS_TOKEN = "token";
+  env.PUBLIC_BASE_URL = "https://school.test";
+  await call(env, "/api/overview");
+  await call(env, "/api/notifications", "GET", undefined, 2);
+  env.raw.exec(`CREATE TABLE IF NOT EXISTS line_user_links(user_id INTEGER PRIMARY KEY,line_user_id TEXT NOT NULL UNIQUE,display_name TEXT,
+    status TEXT NOT NULL DEFAULT 'active',linked_at TEXT NOT NULL DEFAULT(datetime('now')),updated_at TEXT NOT NULL DEFAULT(datetime('now')));
+    INSERT INTO line_user_links(user_id,line_user_id) VALUES(2,'U-teacher'),(3,'U-other');
+    INSERT INTO tasks(id,title,created_by) VALUES(1,'งานค้างเดิม',1);INSERT INTO task_assignees(task_id,user_id) VALUES(1,2);`);
+  return env;
+}
+const unlock = (env) => { try { env.raw.exec("UPDATE line_feed_runs SET started_at=NULL"); } catch {} };
+
+test("digest text links straight to a single item or to the dashboard for several", () => {
+  const one = buildLineDigest([{ title: "สอนแทน", message: "คาบ 2", url: "/substitutes.html" }], "https://s.test");
+  assert.match(one, /https:\/\/s\.test\/substitutes\.html/);
+  const many = buildLineDigest(Array.from({ length: 7 }, (_, i) => ({ title: `เรื่อง ${i}`, message: "x", url: "/x" })), "https://s.test");
+  assert.match(many, /มีแจ้งเตือนใหม่ 7 รายการ/);
+  assert.match(many, /และอีก 2 รายการ/);
+  assert.match(many, /dashboard\.html/);
+});
+
+test("first run records the backlog, later events are pushed once per person and respect opt-out", async () => {
+  const env = await setup();
+  const line = mockLine();
+  try {
+    await dispatchLineNotifications(env);
+    assert.equal(line.pushes.length, 0, "backlog is not sent when LINE is first linked");
+    env.raw.exec(`INSERT INTO tasks(id,title,created_by) VALUES(2,'ส่งแผนการสอน',1),(3,'ประชุมกลุ่มสาระ',1);
+      INSERT INTO task_assignees(task_id,user_id) VALUES(2,2),(3,2),(3,3);`);
+    unlock(env);
+    const run = await dispatchLineNotifications(env);
+    assert.equal(run.messages_sent, 2);
+    const teacher = line.pushes.find((p) => p.to === "U-teacher");
+    assert.match(teacher.messages[0].text, /มีแจ้งเตือนใหม่ 2 รายการ/);
+    assert.doesNotMatch(teacher.messages[0].text, /งานค้างเดิม/);
+    unlock(env);
+    await dispatchLineNotifications(env);
+    assert.equal(line.pushes.length, 2, "nothing is sent twice");
+    // ปิดรับทาง LINE
+    assert.equal((await call(env, "/api/line/link", "PATCH", { notify_all: false }, 3)).status, 200);
+    env.raw.exec("INSERT INTO tasks(id,title,created_by) VALUES(4,'งานใหม่',1);INSERT INTO task_assignees(task_id,user_id) VALUES(4,2),(4,3);");
+    unlock(env);
+    await dispatchLineNotifications(env);
+    assert.deepEqual(line.pushes.slice(2).map((p) => p.to), ["U-teacher"]);
+    // ถูกล็อกเมื่อรันถี่เกินไป
+    assert.equal((await dispatchLineNotifications(env)).skipped, "locked");
+  } finally { line.restore(); }
+});
+
+test("quota reserve stops general pushes and a saved request triggers delivery right away", async () => {
+  const env = await setup();
+  const line = mockLine({ type: "limited", value: 300 }, 285);
+  try {
+    await dispatchLineNotifications(env);
+    env.raw.exec("INSERT INTO tasks(id,title,created_by) VALUES(5,'งานด่วน',1);INSERT INTO task_assignees(task_id,user_id) VALUES(5,2);");
+    unlock(env);
+    const run = await dispatchLineNotifications(env);
+    assert.equal(run.messages_sent, 0);
+    assert.match(run.note, /โควตา/);
+  } finally { line.restore(); }
+  const ok = mockLine();
+  try {
+    unlock(env);
+    const pending = [];
+    const response = await worker.fetch(new Request("https://school.test/api/notifications/read", { method: "POST" }), env, { waitUntil: (p) => pending.push(p) });
+    assert.equal(response.status, 401);
+    assert.equal(pending.length, 0, "failed or excluded requests do not trigger LINE");
+    const { signJWT } = await import("../src/lib/crypto.js");
+    const token = await signJWT({ sub: 1 }, env.JWT_SECRET);
+    await worker.fetch(new Request("https://school.test/api/line/link", { method: "PATCH", headers: { Cookie: `bpd_session=${token}`, "Content-Type": "application/json" }, body: JSON.stringify({ notify_all: true }) }), env, { waitUntil: (p) => pending.push(p) });
+    assert.equal(pending.length, 1);
+    await Promise.all(pending);
+    assert.equal(ok.pushes.length, 1);
+    assert.match(ok.pushes[0].messages[0].text, /งานด่วน/);
+  } finally { ok.restore(); }
+});

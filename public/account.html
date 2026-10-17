@@ -39,13 +39,14 @@
       </section>
       <section class="account-card line-card">
         <h2>การแจ้งเตือน LINE ส่วนตัว</h2>
-        <p class="muted">เชื่อมบัญชี LINE เพื่อรับแจ้งเตือนงานที่เกี่ยวกับคุณโดยตรง เช่น งานซ่อมที่ได้รับมอบหมาย หรือความคืบหน้างานที่คุณแจ้ง</p>
+        <p class="muted">เชื่อมบัญชี LINE เพื่อรับแจ้งเตือนงานที่เกี่ยวกับคุณโดยตรง เช่น งานซ่อม งานมอบหมาย การลา สอนแทน หนังสือราชการ เบิกจ่าย และจัดซื้อจัดจ้าง</p>
         <div class="line-status"><span class="line-dot" id="lineDot"></span><span id="lineStatusText">กำลังตรวจสอบ...</span></div>
         <div class="line-actions">
           <button class="btn btn-line" id="lineConnectButton" type="button">เชื่อมต่อ LINE</button>
           <button class="btn" id="lineCheckButton" type="button" style="display:none">ตรวจสอบอีกครั้ง</button>
           <button class="btn" id="lineUnlinkButton" type="button" style="display:none">ยกเลิกการเชื่อมต่อ</button>
         </div>
+        <label id="lineNotifyAllRow" style="display:none;align-items:center;gap:10px;margin-top:14px;font-size:14px;cursor:pointer"><input type="checkbox" id="lineNotifyAll" style="width:auto"> รับแจ้งเตือนทุกระบบทาง LINE (ปิดแล้วยังได้รับแจ้งเตือนงานซ่อม และยังเห็นที่กระดิ่งในระบบตามปกติ)</label>
         <div class="line-steps" id="lineSteps">
           <strong>ทำตาม 2 ขั้นตอนนี้ (รหัสใช้ได้ <span id="lineExpiry">15</span> นาที)</strong>
           <ol>
@@ -98,8 +99,13 @@
       else if(s.linked){text.innerHTML=`เชื่อมต่อแล้วกับ <strong>${escapeHtml(s.display_name||"บัญชี LINE")}</strong>`;document.getElementById("lineSteps").classList.remove("visible");check.style.display="none"}
       else text.textContent="ยังไม่ได้เชื่อมต่อ — แอดเพื่อน LINE โรงเรียนแล้วส่งข้อความ 1 ครั้ง ผู้ดูแลระบบจะจับคู่ให้ หรือกดเชื่อมต่อเองด้วยรหัส";
       connect.textContent=s.linked?"เปลี่ยนบัญชี LINE":"เชื่อมต่อ LINE";unlink.style.display=s.linked?"inline-flex":"none";
+      document.getElementById("lineNotifyAllRow").style.display=s.linked?"flex":"none";document.getElementById("lineNotifyAll").checked=s.notify_all!==false;
       return s;
     }
+    document.getElementById("lineNotifyAll").addEventListener("change",async e=>{
+      try{await apiRequest("/api/line/link",{method:"PATCH",body:{notify_all:e.target.checked}});lineMessage(e.target.checked?"เปิดรับแจ้งเตือนทุกระบบทาง LINE แล้ว":"ปิดรับแจ้งเตือนทุกระบบทาง LINE แล้ว (ยังได้รับแจ้งเตือนงานซ่อม)")}
+      catch(err){e.target.checked=!e.target.checked;lineMessage(err.message,true)}
+    });
     document.getElementById("lineConnectButton").addEventListener("click",async()=>{
       const button=document.getElementById("lineConnectButton");button.disabled=true;
       try{

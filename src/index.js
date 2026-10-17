@@ -41,6 +41,7 @@ import { handleTimetableReadRoute, handleTimetableRoute } from "./routes/timetab
 import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handleProcurementRoute } from "./routes/procurement.js";
+import { dispatchLineNotifications, ensureLineFeedSchema } from "./lib/line-feed.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
@@ -2779,7 +2780,11 @@ async function handleLineStatus(request, env) {
       first_seen_at,last_seen_at,last_event_type,target_id
     FROM line_targets ORDER BY is_default DESC,last_seen_at DESC,id DESC`).all();
   const selectedTarget = await getSelectedLineTarget(env);
+  await ensureLineFeedSchema(env);
+  const feedRun = await env.DB.prepare("SELECT * FROM line_feed_runs WHERE id=1").first();
+  const feedTotals = await env.DB.prepare(`SELECT COUNT(*) items,SUM(status='failed') failed FROM line_feed_sent WHERE status IN ('sent','failed') AND created_at>=datetime('now','-30 days')`).first();
   return jsonResponse({
+    feed: { last_run: feedRun || null, items_30d: Number(feedTotals?.items || 0), failed_30d: Number(feedTotals?.failed || 0) },
     webhook_url: `${new URL(request.url).origin}/api/line/webhook`,
     credentials: {
       channel_secret: !!env.LINE_CHANNEL_SECRET,
@@ -4216,7 +4221,7 @@ async function handleImportStaff(request, env) {
 }
 
 // ---------- Router ----------
-export default {
+const app = {
   async fetch(request, env, context) {
     const url = new URL(request.url);
     const { pathname } = url;
@@ -4318,6 +4323,11 @@ export default {
       const linePersonalResponse = await handleLinePersonalRoute(request, env, pathname, method);
       if (linePersonalResponse) return linePersonalResponse;
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
+      if (pathname === "/api/line/feed/run" && method === "POST") {
+        const user = await getCurrentUser(request, env);
+        if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+        return jsonResponse(await dispatchLineNotifications(env, { trigger: "manual", origin: env.PUBLIC_BASE_URL || new URL(request.url).origin }));
+      }
       if (pathname === "/api/line/test" && method === "POST") return await handleLineTest(request, env);
       const lineTargetMatch = pathname.match(/^\/api\/line\/targets\/(\d+)$/);
       if (lineTargetMatch && method === "PATCH") return await handleUpdateLineTarget(request, env, Number(lineTargetMatch[1]));
@@ -4483,5 +4493,23 @@ export default {
 
     // ทุก path อื่นๆ ให้เสิร์ฟไฟล์หน้าเว็บจากโฟลเดอร์ public/ ตามปกติ
     return env.ASSETS.fetch(request);
+  },
+};
+
+// หลังมีการบันทึกข้อมูลสำเร็จ ส่งแจ้งเตือน LINE ที่เกิดใหม่ทันทีโดยไม่ทำให้คำขอช้าลง
+// (dispatchLineNotifications เว้นระยะเองอย่างน้อย 15 วินาที และ Cron ทุก 2 นาทีเก็บตกที่เหลือ)
+const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|notifications\/read)/;
+export default {
+  async fetch(request, env, context) {
+    const response = await app.fetch(request, env, context);
+    const { pathname } = new URL(request.url);
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
+      && response.status < 400 && env.LINE_CHANNEL_ACCESS_TOKEN && context?.waitUntil) {
+      context.waitUntil(dispatchLineNotifications(env, { trigger: "event", origin: env.PUBLIC_BASE_URL || new URL(request.url).origin }).catch(() => {}));
+    }
+    return response;
+  },
+  async scheduled(event, env, context) {
+    context.waitUntil(dispatchLineNotifications(env, { trigger: "cron" }).catch((error) => console.error("line feed", error)));
   },
 };

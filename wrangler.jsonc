@@ -14,6 +14,8 @@
   },
   // รหัสเวอร์ชันของการ deploy: ใช้ตั้งค่าโครงสร้างฐานข้อมูลครั้งเดียวต่อ deploy (src/lib/schema-stamp.js)
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
+  // ส่งแจ้งเตือนทุกระบบทาง LINE รายบุคคล (src/lib/line-feed.js) — เก็บตกทุก 2 นาที
+  "triggers": { "crons": ["*/2 * * * *"] },
   "d1_databases": [
     {
       "binding": "DB",
