@@ -1,5 +1,5 @@
 import { workScopeCondition } from "./lib/work-scopes.js";
-import {handleDepartmentStaffRoute} from './routes/department-staff.js';
+import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -856,6 +856,7 @@ function escapeLikePattern(value) {
 
 async function handleGlobalSearch(request, env) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const q = cleanText(new URL(request.url).searchParams.get("q"), 100) || "";
   if (!q) return jsonResponse({ query: q, results: [] });
@@ -2868,7 +2869,24 @@ const MAINTENANCE_TRANSITIONS = {
 };
 
 function canManageMaintenance(user) {
-  return isAdmin(user) || user?.role === "staff";
+  return isAdmin(user) || user?.role === "staff" || user?.maintenance_head === true;
+}
+
+// หัวหน้าฝ่ายบริหารทั่วไป (department_staff ฝ่าย general ที่ is_head=1 และผูกบัญชีกับทะเบียนบุคลากร)
+// รับแจ้งซ่อมแทนกลุ่ม LINE โรงเรียน และมีสิทธิ์จัดการงานซ่อมเหมือนเจ้าหน้าที่
+async function generalHeadUserIds(env) {
+  try {
+    await ensureDepartmentStaff(env);
+    const { results } = await env.DB.prepare(`SELECT DISTINCT a.user_id FROM department_staff d
+      JOIN personnel_records p ON p.id=d.personnel_id AND p.status='active'
+      JOIN personnel_accounts a ON a.personnel_id=p.id JOIN users u ON u.id=a.user_id AND u.status='active'
+      WHERE d.department='general' AND d.is_head=1`).all();
+    return results.map((row) => Number(row.user_id));
+  } catch { return []; }
+}
+async function markMaintenanceHead(env, user) {
+  if (user?.role && user.maintenance_head === undefined) user.maintenance_head = (await generalHeadUserIds(env)).includes(Number(user.id));
+  return user;
 }
 
 function maintenanceVisibilitySql(user, alias = "m") {
@@ -2904,6 +2922,7 @@ async function nextMaintenanceNumber(env) {
 
 async function handleListFacilities(request, env) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const params = new URL(request.url).searchParams;
   const q = cleanText(params.get("q"), 100) || "";
@@ -2924,6 +2943,7 @@ async function handleListFacilities(request, env) {
 
 async function handleCreateFacility(request, env) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!canManageMaintenance(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่เพิ่มสถานที่ได้" }, 403);
   const body = await request.json().catch(() => null);
@@ -2948,6 +2968,7 @@ async function handleCreateFacility(request, env) {
 
 async function handleUpdateFacility(request, env, facilityId) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   if (!canManageMaintenance(user)) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขสถานที่" }, 403);
   const existing = await env.DB.prepare("SELECT id FROM facilities WHERE id=?").bind(facilityId).first();
@@ -2986,6 +3007,7 @@ async function handleUpdateFacility(request, env, facilityId) {
 
 async function handleMaintenanceSummary(request, env) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const visibility = maintenanceVisibilitySql(user);
   const row = await env.DB.prepare(`SELECT COUNT(*) AS total_count,
@@ -2997,13 +3019,15 @@ async function handleMaintenanceSummary(request, env) {
       SUM(CASE WHEN priority='urgent' AND status NOT IN ('verified','cancelled') THEN 1 ELSE 0 END) AS urgent_count,
       COALESCE(SUM(CASE WHEN strftime('%Y-%m',completed_at)=strftime('%Y-%m','now') THEN actual_cost ELSE 0 END),0) AS month_cost
     FROM maintenance_requests m WHERE ${visibility.sql}`).bind(...visibility.binds).first();
-  const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
+  const heads = await generalHeadUserIds(env);
+  const lineTarget = env.LINE_CHANNEL_ACCESS_TOKEN ? (heads.length ? { target_type:"user" } : await getSelectedLineTarget(env)) : null;
   const lineMetrics = lineTarget ? await getLineDeliveryMetrics(env,lineTarget) : { recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null };
+  if (heads.length) lineMetrics.recipient_count = heads.length;
   return jsonResponse({
     total_count:Number(row?.total_count||0), open_count:Number(row?.open_count||0), in_progress_count:Number(row?.in_progress_count||0),
     waiting_parts_count:Number(row?.waiting_parts_count||0), awaiting_verification_count:Number(row?.awaiting_verification_count||0),
     overdue_count:Number(row?.overdue_count||0), urgent_count:Number(row?.urgent_count||0), month_cost:Number(row?.month_cost||0),
-    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget),
+    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget), line_to_head:heads.length>0,
     line_recipient_count:lineMetrics.recipient_count, line_monthly_usage:lineMetrics.monthly_usage,
     line_monthly_limit:lineMetrics.monthly_limit, line_remaining:lineMetrics.remaining,
   });
@@ -3011,6 +3035,7 @@ async function handleMaintenanceSummary(request, env) {
 
 async function handleListMaintenanceRequests(request, env) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const params = new URL(request.url).searchParams;
   const q = cleanText(params.get("q"),100) || "";
@@ -3043,6 +3068,7 @@ async function handleListMaintenanceRequests(request, env) {
 
 async function handleGetMaintenanceRequest(request, env, requestId) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) return jsonResponse({ error: "ไม่พบใบแจ้งซ่อม" },404);
@@ -3089,6 +3115,7 @@ async function handleCreateMaintenanceRequest(request, env) {
 
 async function handleUpdateMaintenanceRequest(request, env, requestId) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) return jsonResponse({ error: "ไม่พบใบแจ้งซ่อม" },404);
@@ -3185,14 +3212,32 @@ function buildMaintenanceFlex(item, eventType, origin, requestId, headline) {
   };
 }
 
-// ส่งแจ้งเตือนงานซ่อม: กลุ่ม LINE ที่เลือกไว้ (options.group) + รายบุคคล (ผู้รับผิดชอบ/ผู้แจ้ง ที่เชื่อม LINE แล้ว)
+function maintenanceHeadHeadline(eventType) {
+  return { reported:"มีแจ้งซ่อมใหม่ รอมอบหมายช่าง", assigned:"มอบหมายช่างแล้ว", completed:"ซ่อมเสร็จแล้ว รอผู้แจ้งตรวจรับ",
+    verified:"ผู้แจ้งตรวจรับงานซ่อมแล้ว", cancelled:"งานซ่อมถูกยกเลิก", waiting_parts:"งานซ่อมรออะไหล่", in_progress:"เริ่มซ่อมแล้ว" }[eventType] || "อัปเดตงานแจ้งซ่อม";
+}
+
+// ส่งแจ้งเตือนงานซ่อม: หัวหน้าฝ่ายบริหารทั่วไป (เดิมคือกลุ่ม LINE ที่เลือกไว้ (options.group) + รายบุคคล (ผู้รับผิดชอบ/ผู้แจ้ง ที่เชื่อม LINE แล้ว)
 async function sendMaintenanceLineNotification(request, env, requestId, eventType, options = {}) {
   const sendGroup = options.group !== false, sendPersonal = options.personal !== false;
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) throw new Error("ไม่พบใบแจ้งซ่อม");
   const targets = [];
-  const lineTarget = sendGroup && env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
-  if (sendGroup && !lineTarget) {
+  // เดิมส่งเข้ากลุ่ม LINE โรงเรียน: ตอนนี้ส่งถึงหัวหน้าฝ่ายบริหารทั่วไปรายบุคคล
+  // (ใช้กลุ่มเฉพาะเมื่อยังไม่ได้ตั้งหัวหน้าฝ่าย เพื่อไม่ให้แจ้งซ่อมตกหล่นระหว่างเปลี่ยนระบบ)
+  const heads = sendGroup ? await generalHeadUserIds(env) : [];
+  const lineTarget = sendGroup && !heads.length && env.LINE_CHANNEL_ACCESS_TOKEN ? await getSelectedLineTarget(env) : null;
+  if (heads.length) {
+    const personalIds = sendPersonal ? maintenancePersonalRecipients(item, eventType, options.actorId).map((r)=>r.user_id) : [];
+    const headIds = heads.filter((id)=>id !== Number(options.actorId||0) && !personalIds.includes(id));
+    const linkedHeads = await getLinkedLineUsers(env, headIds);
+    for (const id of headIds) {
+      const link = linkedHeads.get(id);
+      targets.push(link && env.LINE_CHANNEL_ACCESS_TOKEN
+        ? { type:"user", user_id:id, target_id:link.line_user_id, label:link.full_name, headline:maintenanceHeadHeadline(eventType) }
+        : { type:"user", user_id:id, label:link?.full_name||"หัวหน้าฝ่ายบริหารทั่วไป", status: env.LINE_CHANNEL_ACCESS_TOKEN ? "not_linked" : "not_configured" });
+    }
+  } else if (sendGroup && !lineTarget) {
     targets.push({ type:"group", label:null, status:"not_configured" });
   } else if (lineTarget) {
     targets.push({ type:"group", target_id:lineTarget.target_id, label:lineTarget.display_name||"กลุ่ม LINE" });
@@ -3267,6 +3312,7 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
 
 async function handleNotifyMaintenanceRequest(request, env, requestId) {
   const user = await getCurrentUser(request,env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
@@ -3483,6 +3529,7 @@ const ATTACHMENT_ENTITY_TABLES = {
 
 async function handleUploadAttachment(request, env, entityType, entityId) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const config = ATTACHMENT_ENTITY_TABLES[entityType];
   if (!config) return jsonResponse({ error: "ประเภทไฟล์แนบไม่ถูกต้อง" },400);
@@ -3698,6 +3745,7 @@ async function handlePublicMaintenanceImage(request, env, attachmentId) {
 
 async function handleDownloadAttachment(request, env, attachmentId) {
   const user = await getCurrentUser(request, env);
+  await markMaintenanceHead(env, user);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" },401);
   const attachment = await env.DB.prepare("SELECT * FROM file_attachments WHERE id=?").bind(attachmentId).first();
   if (!attachment) return jsonResponse({ error: "ไม่พบไฟล์แนบ" },404);

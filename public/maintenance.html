@@ -73,7 +73,7 @@
     <div class="field span-2"><label>วิธีแก้ไข/ผลการดำเนินงาน</label><textarea id="uResolution" rows="3"></textarea></div>
     <div class="field span-3"><label>บันทึกความคืบหน้า/เหตุผล</label><textarea id="uComment" rows="2"></textarea></div>
     <div class="field span-3"><label>ภาพหลังซ่อม (แนบก่อนเลือก “ซ่อมเสร็จ”)</label><input type="file" id="uAfterFile" accept="image/jpeg,image/png,image/webp,image/gif" /><div class="file-meta" id="afterMeta">รูปภาพไม่เกิน 2 MB · ภาพใหญ่ระบบจะลดขนาดให้อัตโนมัติ</div></div>
-    <label class="notify-choice span-3"><input type="checkbox" id="uNotifyLine" /><span><strong>ส่งการอัปเดตนี้เข้ากลุ่ม LINE</strong><small id="uNotifyHint">ระบบจะประเมินตามสถานะและจำนวนผู้รับในกลุ่ม</small></span></label>
+    <label class="notify-choice span-3"><input type="checkbox" id="uNotifyLine" /><span><strong id="uNotifyTitle">ส่งการอัปเดตนี้ถึงหัวหน้าฝ่ายบริหารทั่วไป</strong><small id="uNotifyHint">ระบบจะประเมินตามสถานะ</small></span></label>
   </div>
   <div class="form-actions"><button class="btn btn-primary" id="saveUpdateBtn">บันทึกการอัปเดต</button></div>
 </div></div>
@@ -140,10 +140,11 @@ function refreshNotifyChoice(){
   const event=plannedLineEvent(),automatic=AUTO_LINE_EVENTS.has(event),recipient=summary.line_recipient_count,remaining=summary.line_remaining;
   $("uNotifyLine").disabled=!event||automatic;
   $("uNotifyLine").checked=!!event&&automatic;
-  const estimate=recipient==null?"":` คาดว่าจะนับประมาณ ${Number(recipient).toLocaleString("th-TH")} ข้อความ`;
+  const estimate=recipient==null||summary.line_to_head?"":` คาดว่าจะนับประมาณ ${Number(recipient).toLocaleString("th-TH")} ข้อความ`;
   const quotaWarning=remaining!==null&&remaining!==undefined&&Number(remaining)<=0?" · โควตาเดือนนี้หมดแล้ว ระบบจะบันทึกงานแต่ไม่ส่ง LINE":remaining!==null&&recipient!==null&&Number(remaining)<Number(recipient)*2?` · โควตาใกล้หมด เหลือ ${Number(remaining).toLocaleString("th-TH")}`:"";
   const personalNote=event?" · ผู้รับผิดชอบ/ผู้แจ้งที่เชื่อม LINE แล้วจะได้รับแจ้งส่วนตัวอัตโนมัติ":"";
-  $("uNotifyHint").textContent=(!event?"ไม่มีการเปลี่ยนสถานะหรือผู้รับผิดชอบ จึงไม่ส่ง LINE":automatic?`สถานะนี้ส่งอัตโนมัติและป้องกันการส่งซ้ำภายใน 10 นาที${estimate}${quotaWarning}`:`สถานะนี้ไม่ส่งเข้ากลุ่มอัตโนมัติ เลือกได้ว่าต้องการแจ้งกลุ่มหรือไม่${estimate}${quotaWarning}`)+personalNote;
+  $("uNotifyHint").textContent=(!event?"ไม่มีการเปลี่ยนสถานะหรือผู้รับผิดชอบ จึงไม่ส่ง LINE":automatic?`สถานะนี้ส่งอัตโนมัติและป้องกันการส่งซ้ำภายใน 10 นาที${estimate}${quotaWarning}`:(summary.line_to_head?`สถานะนี้ไม่แจ้งหัวหน้าฝ่ายบริหารทั่วไปอัตโนมัติ เลือกได้ว่าต้องการแจ้งหรือไม่${quotaWarning}`:`สถานะนี้ไม่ส่งเข้ากลุ่มอัตโนมัติ เลือกได้ว่าต้องการแจ้งกลุ่มหรือไม่${estimate}${quotaWarning}`))+personalNote;
+  $("uNotifyTitle").textContent=summary.line_to_head?"ส่งการอัปเดตนี้ถึงหัวหน้าฝ่ายบริหารทั่วไป":"ส่งการอัปเดตนี้เข้ากลุ่ม LINE (ยังไม่ได้ตั้งหัวหน้าฝ่ายบริหารทั่วไป)";
 }
 function openUpdate(){
   const r=current.request;$("updateSubtitle").textContent=`${r.request_no} · ${r.title}`;let options=TRANSITIONS[r.status]||[r.status];

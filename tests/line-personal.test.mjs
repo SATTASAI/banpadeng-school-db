@@ -183,3 +183,36 @@ test("admin matches a LINE friend to a teacher and the teacher gets a confirmati
   assert.equal((await call(env, "/api/line/match/2", "DELETE", null, 1)).status, 200);
   assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM line_user_links").get().n, 0);
 });
+
+test("repair requests go to the general-administration head instead of the school LINE group", async () => {
+  const env = fixture();
+  await call(env, "/api/overview");
+  const head = env.raw.prepare("SELECT id FROM personnel_records WHERE user_id=4").get();
+  assert.ok(head, "personnel record exists for the head");
+  assert.equal((await call(env, "/api/department-staff/general", "POST", { personnel_id: head.id, is_head: true })).status, 200);
+  env.raw.exec("INSERT INTO line_user_links(user_id,line_user_id,display_name) VALUES(4,'Uhead0000000001','หัวหน้าทั่วไป'),(3,'Utech0000000002','ช่าง')");
+  lineCalls.length = 0;
+  const created = await call(env, "/api/maintenance/requests", "POST",
+    { title: "ก๊อกน้ำรั่ว", description: "ห้องน้ำชาย", category: "plumbing", custom_location: "ห้องน้ำ" }, 2);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  let pushes = lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body);
+  assert.deepEqual(pushes.map((p) => p.to), ["Uhead0000000001"], "only the head, not the group");
+  assert.equal(pushes[0].messages[0].contents.body.contents[0].text, "มีแจ้งซ่อมใหม่ รอมอบหมายช่าง");
+
+  // หัวหน้าฝ่าย (บทบาทครู) จัดการงานซ่อมได้ และไม่ได้รับแจ้งเรื่องที่ตัวเองมอบหมาย
+  const summary = await call(env, "/api/maintenance/summary", "GET", null, 4);
+  assert.equal(summary.body.can_manage, true);
+  assert.equal(summary.body.line_to_head, true);
+  lineCalls.length = 0;
+  const assigned = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "assigned", assigned_to: 3 }, 4);
+  assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+  pushes = lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body.to);
+  assert.deepEqual(pushes, ["Utech0000000002"]);
+  // ช่างซ่อมเสร็จ → หัวหน้าฝ่ายและผู้แจ้งได้รับ (ผู้แจ้งยังไม่เชื่อม LINE)
+  await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "in_progress" }, 3);
+  lineCalls.length = 0;
+  const done = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed", resolution: "เปลี่ยนก๊อก" }, 3);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.deepEqual(lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body.to), ["Uhead0000000001"]);
+  assert.equal((await call(env, "/api/maintenance/summary", "GET", null, 2)).body.can_manage, false, "ordinary teachers still cannot manage");
+});
