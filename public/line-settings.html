@@ -17,10 +17,12 @@
     .steps{display:grid;gap:11px}.step{display:grid;grid-template-columns:31px minmax(0,1fr);gap:10px}.step-number{width:31px;height:31px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(180deg,#E9F5FF,#D9EBFB);color:#176DBB;font-weight:800;font-size:12px}.step strong{display:block;font-size:13px;margin-top:2px}.step span{display:block;color:var(--color-text-muted);font-size:12px;line-height:1.5;margin-top:2px}
     .target-list{display:grid;gap:9px}.target-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:13px 14px;border:1px solid var(--color-border);border-radius:14px;background:#fff}.target-card.selected{border-color:#55A5E8;background:#F1F9FF;box-shadow:0 0 0 3px rgba(64,151,222,.08)}.target-name{display:flex;align-items:center;gap:8px;font-weight:700}.target-badge{padding:3px 7px;border-radius:999px;background:#E8F2FA;color:#3B6689;font-size:10px;font-weight:700}.target-badge.active{background:#DDF4E9;color:#16714D}.target-meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--color-text-muted);font-size:11px;margin-top:5px}.target-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.target-actions .btn{min-height:34px;padding:6px 10px;font-size:12px}
     .empty{padding:28px 18px;text-align:center;border:1px dashed #B9CCD9;border-radius:14px;color:var(--color-text-muted);background:rgba(246,250,253,.7)}.empty strong{display:block;color:#365773;margin-bottom:4px}.hint{margin-top:12px;padding:10px 12px;border-radius:11px;background:#FFF7E7;border:1px solid #F1DBA9;color:#7C5B18;font-size:12px;line-height:1.55}
+    .match-list{display:grid;gap:9px}.match-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(180px,240px) auto;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--color-border);border-radius:14px;background:#fff}.match-row.done{background:#F3FBF6;border-color:#BFE6CD}
+    .match-name{font-weight:700;color:#183153}.match-meta{font-size:12px;color:var(--color-text-muted);margin-top:3px}.match-row select{width:100%;min-width:0}.match-row .btn{width:auto}.match-summary{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}.match-chip{padding:5px 10px;border-radius:999px;background:#EEF4F9;font-size:12px;color:#365773}.match-chip.ok{background:#E2F5EA;color:#1F7346}
     .toast{position:fixed;right:20px;bottom:20px;z-index:100;max-width:390px;padding:12px 15px;border-radius:13px;background:#183153;color:#fff;box-shadow:0 12px 35px rgba(24,49,83,.28);display:none}.toast.error{background:#A83F4C}
     html.embedded .page-back{display:none}html.embedded body{background:transparent}html.embedded .app-main{padding-top:18px}
     @media(max-width:860px){.status-hero,.layout{grid-template-columns:1fr}.layout aside{display:grid;grid-template-columns:1fr 1fr;gap:14px}.layout aside .settings-card{margin:0}}
-    @media(max-width:620px){.page-head{align-items:flex-start;flex-direction:column}.layout aside{grid-template-columns:1fr}.copy-row,.target-card{grid-template-columns:1fr}.target-actions{justify-content:flex-start}}
+    @media(max-width:620px){.match-row{grid-template-columns:1fr}.page-head{align-items:flex-start;flex-direction:column}.layout aside{grid-template-columns:1fr}.copy-row,.target-card{grid-template-columns:1fr}.target-actions{justify-content:flex-start}}
   </style>
 </head>
 <body>
@@ -54,6 +56,12 @@
         <div class="copy-row"><input id="webhookUrl" readonly value="กำลังโหลด..." /><button class="btn btn-ghost" id="copyBtn">คัดลอก URL</button></div>
       </div>
       <div class="settings-card">
+        <h3>จับคู่บัญชี LINE ของครู</h3><p>ให้ครูแอดเพื่อน LINE ของโรงเรียน แล้วส่งข้อความอะไรก็ได้ 1 ครั้ง ชื่อ LINE จะขึ้นที่นี่ เลือกว่าเป็นครูคนไหนแล้วกด “จับคู่” ระบบจะส่งข้อความยืนยันไปหาครูคนนั้น 1 ข้อความ</p>
+        <div class="match-summary" id="matchSummary"></div>
+        <div class="match-list" id="matchList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
+        <div class="hint">ครูที่แอดเพื่อนไว้ก่อนเปิด Webhook จะยังไม่ขึ้นรายชื่อ ให้ครูส่งข้อความหา LINE โรงเรียน 1 ครั้งแล้วกด “ตรวจสอบอีกครั้ง”</div>
+      </div>
+      <div class="settings-card">
         <h3>กลุ่มที่ระบบตรวจพบ</h3><p>เพิ่ม LINE Official Account เข้ากลุ่ม แล้วให้สมาชิกคนใดก็ได้ส่งข้อความหนึ่งครั้ง จากนั้นกด “ตรวจสอบอีกครั้ง”</p>
         <div class="target-list" id="targetList"><div class="empty">กำลังโหลดข้อมูล...</div></div>
         <div class="hint">หากเพิ่งเปิด Webhook ให้กด Verify และเปิด <strong>Use webhook</strong> ก่อน จากนั้นตรวจว่าเปิด <strong>Allow bot to join group chats</strong> แล้วจึงเชิญบัญชีทางการเข้ากลุ่ม</div>
@@ -68,11 +76,6 @@
           <div class="step"><div class="step-number">3</div><div><strong>เชิญ OA เข้ากลุ่ม</strong><span>สมาชิกในกลุ่มส่งข้อความหนึ่งครั้ง</span></div></div>
           <div class="step"><div class="step-number">4</div><div><strong>เลือกกลุ่มปลายทาง</strong><span>กดปุ่ม “ใช้กลุ่มนี้” แล้วส่งข้อความทดสอบ</span></div></div>
         </div>
-      </div>
-      <div class="settings-card">
-        <h3>แจ้งเตือนรายบุคคล</h3><p id="personalSummary">กำลังโหลด...</p>
-        <p style="font-size:12px">ครูแต่ละคนเชื่อมเองที่เมนู บัญชีของฉัน → เชื่อมต่อ LINE (ได้รหัสไปพิมพ์ในแชต LINE โรงเรียน) งานซ่อมจะแจ้งผู้รับผิดชอบและผู้แจ้งโดยตรง</p>
-        <div id="personalList" style="display:grid;gap:6px;max-height:260px;overflow:auto;font-size:13px"></div>
       </div>
       <div class="settings-card">
         <h3>ข้อควรทราบ</h3><p>LINE อาจใช้เวลาสองสามวินาทีในการส่งเหตุการณ์ หลังส่งข้อความในกลุ่มแล้วให้รอสักครู่ก่อนรีเฟรช</p>
@@ -112,11 +115,30 @@ function renderTargets(){
   </article>`).join("");
   $("targetList").querySelectorAll("[data-action]").forEach(button=>button.onclick=()=>updateTarget(Number(button.dataset.id),button.dataset.action));
 }
+let matchData=null;
+function renderMatch(){
+  const {accounts,users}=matchData;const linkedUsers=users.filter(u=>u.link_status==="active").length;
+  const waiting=accounts.filter(a=>!a.linked_user_id).length;
+  $("matchSummary").innerHTML=`<span class="match-chip ok">จับคู่แล้ว ${linkedUsers.toLocaleString("th-TH")} / ${users.length.toLocaleString("th-TH")} คน</span><span class="match-chip">รอจับคู่ ${waiting.toLocaleString("th-TH")} บัญชี</span>`;
+  if(!accounts.length){$("matchList").innerHTML='<div class="empty"><strong>ยังไม่มีบัญชี LINE ของครู</strong>ให้ครูแอดเพื่อน LINE โรงเรียนแล้วส่งข้อความ 1 ครั้ง</div>';return}
+  const free=users.filter(u=>!u.link_status);
+  $("matchList").innerHTML=accounts.map(a=>a.linked_user_id
+    ?`<div class="match-row done"><div><div class="match-name">${esc(a.display_name||"บัญชี LINE")}</div><div class="match-meta">พบล่าสุด ${esc(dateText(a.last_seen_at))}${a.link_status==="blocked"?" · บล็อก LINE โรงเรียนอยู่":""}</div></div><div>✓ ${esc(a.linked_user_name)}</div><button class="btn btn-ghost" data-unlink="${a.linked_user_id}">ยกเลิก</button></div>`
+    :`<div class="match-row"><div><div class="match-name">${esc(a.display_name||"บัญชี LINE (ไม่ทราบชื่อ)")}</div><div class="match-meta">แอดเมื่อ ${esc(dateText(a.first_seen_at))}</div></div><select data-account="${a.id}"><option value="">— เลือกครู —</option>${free.map(u=>`<option value="${u.id}">${esc(u.full_name)}</option>`).join("")}</select><button class="btn btn-primary" data-match="${a.id}">จับคู่</button></div>`).join("");
+  $("matchList").querySelectorAll("[data-match]").forEach(button=>button.onclick=async()=>{
+    const select=$("matchList").querySelector(`select[data-account="${button.dataset.match}"]`);if(!select.value)return toast("กรุณาเลือกชื่อครูก่อน",true);
+    const teacher=select.options[select.selectedIndex].textContent;if(!confirm(`จับคู่บัญชี LINE นี้กับ ${teacher}?`))return;
+    button.disabled=true;
+    try{const r=await apiRequest("/api/line/match",{method:"POST",body:{account_id:Number(button.dataset.match),user_id:Number(select.value)}});toast(r.notified?`จับคู่กับ ${teacher} แล้ว และส่งข้อความยืนยันแล้ว`:`จับคู่กับ ${teacher} แล้ว (ส่งข้อความยืนยันไม่สำเร็จ)`);await loadPersonal()}
+    catch(error){toast(error.message,true);button.disabled=false}
+  });
+  $("matchList").querySelectorAll("[data-unlink]").forEach(button=>button.onclick=async()=>{
+    if(!confirm("ยกเลิกการจับคู่บัญชีนี้? ครูคนนี้จะไม่ได้รับแจ้งเตือนส่วนตัว"))return;
+    try{await apiRequest(`/api/line/match/${button.dataset.unlink}`,{method:"DELETE"});toast("ยกเลิกการจับคู่แล้ว");await loadPersonal()}catch(error){toast(error.message,true)}
+  });
+}
 async function loadPersonal(){
-  try{const r=await apiRequest("/api/line/linked-users");const active=r.users.filter(u=>u.status==="active");
-    $("personalSummary").textContent=`เชื่อมแล้ว ${active.length.toLocaleString("th-TH")} จาก ${Number(r.active_user_count).toLocaleString("th-TH")} คน`;
-    $("personalList").innerHTML=r.users.map(u=>`<div style="display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--color-border)"><span>${esc(u.full_name)}<br><small style="color:var(--color-text-muted)">LINE: ${esc(u.display_name||"-")}</small></span><small style="color:${u.status==="active"?"#17A668":"#B56A0A"}">${u.status==="active"?"รับแจ้งเตือน":"บล็อก OA"}</small></div>`).join("")||'<small style="color:var(--color-text-muted)">ยังไม่มีผู้ใช้เชื่อม LINE</small>';
-  }catch(error){$("personalSummary").textContent=error.message}
+  try{matchData=await apiRequest("/api/line/match");renderMatch()}catch(error){$("matchList").innerHTML=`<div class="empty">${esc(error.message)}</div>`}
 }
 async function loadStatus(showMessage=false){
   $("refreshBtn").disabled=true;

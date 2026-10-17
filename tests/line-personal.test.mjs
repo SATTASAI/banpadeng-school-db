@@ -158,3 +158,28 @@ test("linked users list is superadmin only", async () => {
   assert.equal(admin.status, 200);
   assert.equal(admin.body.active_user_count, 4);
 });
+
+test("admin matches a LINE friend to a teacher and the teacher gets a confirmation", async () => {
+  const env = fixture();
+  await webhook(env, [{ type: "follow", webhookEventId: "follow-1", replyToken: "r", source: { type: "user", userId: "Uanne0000000001" } },
+    textEvent("Uanne0000000001", "สวัสดีค่ะ", 9)]);
+  assert.equal((await call(env, "/api/line/match", "GET", null, 2)).status, 403);
+  const list = await call(env, "/api/line/match", "GET", null, 1);
+  assert.equal(list.status, 200);
+  const account = list.body.accounts.find((a) => !a.linked_user_id);
+  assert.equal(account.display_name, "Somchai LINE");
+  lineCalls.length = 0;
+  const matched = await call(env, "/api/line/match", "POST", { account_id: account.id, user_id: 2 }, 1);
+  assert.equal(matched.status, 200, JSON.stringify(matched.body));
+  assert.equal(matched.body.notified, true);
+  const confirmPush = lineCalls.find((c) => c.path === "/v2/bot/message/push");
+  assert.equal(confirmPush.body.to, "Uanne0000000001");
+  assert.ok(confirmPush.body.messages[0].text.includes("ครูผู้แจ้ง"));
+  assert.equal(env.raw.prepare("SELECT line_user_id FROM line_user_links WHERE user_id=2").get().line_user_id, "Uanne0000000001");
+  // บัญชีเดียวจับคู่ซ้ำกับครูอีกคนไม่ได้
+  assert.equal((await call(env, "/api/line/match", "POST", { account_id: account.id, user_id: 4 }, 1)).status, 409);
+  const after = await call(env, "/api/line/match", "GET", null, 1);
+  assert.equal(after.body.accounts.find((a) => a.id === account.id).linked_user_name, "ครูผู้แจ้ง");
+  assert.equal((await call(env, "/api/line/match/2", "DELETE", null, 1)).status, 200);
+  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM line_user_links").get().n, 0);
+});

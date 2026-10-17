@@ -204,11 +204,72 @@ async function linkStatus(env, user) {
   };
 }
 
+async function pushText(env, lineUserId, text) {
+  try {
+    const response = await lineFetch(env, "/v2/bot/message/push", {
+      method: "POST",
+      body: JSON.stringify({ to: lineUserId, messages: [{ type: "text", text }] }),
+    });
+    return !!response?.ok;
+  } catch {
+    return false;
+  }
+}
+
+// แอดมินจับคู่บัญชี LINE ที่แอดเพื่อน OA แล้ว กับรายชื่อครูในระบบ
+async function handleAdminMatch(request, env, pathname, method, user) {
+  if (user.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบเท่านั้นที่จับคู่บัญชี LINE ได้" }, 403);
+  if (pathname === "/api/line/match" && method === "GET") {
+    const { results: accounts } = await env.DB.prepare(`SELECT t.id,t.display_name,t.last_seen_at,t.first_seen_at,t.last_event_type,
+        l.user_id AS linked_user_id,u.full_name AS linked_user_name,l.status AS link_status
+      FROM line_targets t
+      LEFT JOIN line_user_links l ON l.line_user_id=t.target_id
+      LEFT JOIN users u ON u.id=l.user_id
+      WHERE t.target_type='user' AND t.status<>'disabled'
+      ORDER BY CASE WHEN l.user_id IS NULL THEN 0 ELSE 1 END, t.last_seen_at DESC`).all();
+    const { results: teachers } = await env.DB.prepare(`SELECT u.id,u.full_name,u.role,l.status AS link_status,l.display_name AS line_name
+      FROM users u LEFT JOIN line_user_links l ON l.user_id=u.id
+      WHERE u.status='active' AND u.role IS NOT NULL ORDER BY u.full_name`).all();
+    return jsonResponse({ accounts: accounts || [], users: teachers || [] });
+  }
+  if (pathname === "/api/line/match" && method === "POST") {
+    const body = await request.json().catch(() => null);
+    const targetId = Number(body?.account_id || 0), userId = Number(body?.user_id || 0);
+    if (!targetId || !userId) return jsonResponse({ error: "กรุณาเลือกบัญชี LINE และชื่อครู" }, 400);
+    const account = await env.DB.prepare("SELECT target_id,display_name FROM line_targets WHERE id=? AND target_type='user'").bind(targetId).first();
+    if (!account) return jsonResponse({ error: "ไม่พบบัญชี LINE ที่เลือก" }, 404);
+    const teacher = await env.DB.prepare("SELECT id,full_name FROM users WHERE id=? AND status='active' AND role IS NOT NULL").bind(userId).first();
+    if (!teacher) return jsonResponse({ error: "ไม่พบผู้ใช้ที่เลือก" }, 404);
+    const taken = await env.DB.prepare(`SELECT u.full_name FROM line_user_links l JOIN users u ON u.id=l.user_id
+      WHERE l.line_user_id=? AND l.user_id<>? AND u.status='active'`).bind(account.target_id, userId).first();
+    if (taken) return jsonResponse({ error: `บัญชี LINE นี้จับคู่กับ ${taken.full_name} อยู่แล้ว กรุณายกเลิกก่อน` }, 409);
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM line_user_links WHERE line_user_id=? AND user_id<>?").bind(account.target_id, userId),
+      env.DB.prepare(`INSERT INTO line_user_links(user_id,line_user_id,display_name,status) VALUES (?,?,?,'active')
+        ON CONFLICT(user_id) DO UPDATE SET line_user_id=excluded.line_user_id,display_name=excluded.display_name,
+          status='active',linked_at=datetime('now'),updated_at=datetime('now')`).bind(userId, account.target_id, account.display_name || null),
+      env.DB.prepare("DELETE FROM line_link_codes WHERE user_id=?").bind(userId),
+    ]);
+    // แจ้งเจ้าของบัญชีเพื่อยืนยันว่าจับคู่ถูกคน (ใช้โควตา 1 ข้อความ)
+    const notified = body?.notify === false ? false : await pushText(env, account.target_id,
+      `บัญชี LINE นี้ถูกเชื่อมกับ "${teacher.full_name}" ในระบบโรงเรียนบ้านป่าเด็งแล้ว ✅\nหากไม่ใช่คุณ กรุณาแจ้งผู้ดูแลระบบ`);
+    return jsonResponse({ ok: true, notified });
+  }
+  const unlinkMatch = pathname.match(/^\/api\/line\/match\/(\d+)$/);
+  if (unlinkMatch && method === "DELETE") {
+    await env.DB.prepare("DELETE FROM line_user_links WHERE user_id=?").bind(Number(unlinkMatch[1])).run();
+    return jsonResponse({ ok: true });
+  }
+  return jsonResponse({ error: "Method not allowed" }, 405);
+}
+
 export async function handleLinePersonalRoute(request, env, pathname, method) {
-  if (pathname !== "/api/line/link" && pathname !== "/api/line/link/code" && pathname !== "/api/line/linked-users") return null;
+  const isMatch = pathname === "/api/line/match" || /^\/api\/line\/match\/\d+$/.test(pathname);
+  if (!isMatch && pathname !== "/api/line/link" && pathname !== "/api/line/link/code" && pathname !== "/api/line/linked-users") return null;
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureLinePersonalSchema(env);
+  if (isMatch) return handleAdminMatch(request, env, pathname, method, user);
 
   if (pathname === "/api/line/link" && method === "GET") return jsonResponse(await linkStatus(env, user));
 

@@ -96,7 +96,7 @@
       connect.disabled=false;
       if(s.linked&&s.blocked){text.textContent=`เชื่อมกับ ${s.display_name||"บัญชี LINE"} แล้ว แต่ไม่ได้รับข้อความ เพราะบล็อกหรือลบเพื่อน LINE โรงเรียน — เพิ่มเพื่อนกลับเพื่อรับแจ้งเตือน`}
       else if(s.linked){text.innerHTML=`เชื่อมต่อแล้วกับ <strong>${escapeHtml(s.display_name||"บัญชี LINE")}</strong>`;document.getElementById("lineSteps").classList.remove("visible");check.style.display="none"}
-      else text.textContent="ยังไม่ได้เชื่อมต่อ";
+      else text.textContent="ยังไม่ได้เชื่อมต่อ — แอดเพื่อน LINE โรงเรียนแล้วส่งข้อความ 1 ครั้ง ผู้ดูแลระบบจะจับคู่ให้ หรือกดเชื่อมต่อเองด้วยรหัส";
       connect.textContent=s.linked?"เปลี่ยนบัญชี LINE":"เชื่อมต่อ LINE";unlink.style.display=s.linked?"inline-flex":"none";
       return s;
     }
