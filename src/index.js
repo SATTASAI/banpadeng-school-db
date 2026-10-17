@@ -3876,14 +3876,18 @@ async function handleSystemStatus(request, env) {
   const d1Limit = numericEnv(env.D1_DATABASE_LIMIT_BYTES, DEFAULT_D1_DATABASE_LIMIT_BYTES);
   const r2Limit = numericEnv(env.R2_STORAGE_LIMIT_BYTES, DEFAULT_R2_FREE_LIMIT_BYTES);
 
-  const [d1Probe, countsResult, attachmentResult, selectedTarget, lineDeliveryResult, googleDrive] = await Promise.all([
+  await ensureLineFeedSchema(env).catch(()=>{});
+  const [d1Probe, countsResult, attachmentResult, selectedTarget, lineDeliveryResult, googleDrive, feedRun, feedTotals, linkedResult, schemaRow, r2Probe] = await Promise.all([
     env.DB.prepare("SELECT datetime('now') AS database_time").all(),
     env.DB.prepare(`SELECT
       (SELECT COUNT(*) FROM users) AS users,
       (SELECT COUNT(*) FROM students) AS students,
       (SELECT COUNT(*) FROM projects) AS projects,
       (SELECT COUNT(*) FROM documents) AS documents,
-      (SELECT COUNT(*) FROM audit_logs) AS audit_logs`).first(),
+      (SELECT COUNT(*) FROM audit_logs) AS audit_logs,
+      (SELECT COUNT(*) FROM maintenance_requests) AS maintenance_requests,
+      (SELECT COUNT(*) FROM inventory_items) AS inventory_items,
+      (SELECT COUNT(*) FROM project_expenses WHERE workflow_version=2) AS budget_requests`).first(),
     env.DB.prepare(`SELECT
       COUNT(*) AS total_files,
       COALESCE(SUM(file_size),0) AS total_bytes,
@@ -3899,26 +3903,51 @@ async function handleSystemStatus(request, env) {
       MAX(CASE WHEN delivery_status IN ('failed','quota_exhausted') THEN created_at END) AS last_failed_at
       FROM maintenance_notifications WHERE created_at >= datetime('now','-30 days')`).first(),
     inspectGoogleDrive(env),
+    env.DB.prepare("SELECT * FROM line_feed_runs WHERE id=1").first().catch(()=>null),
+    env.DB.prepare(`SELECT COALESCE(SUM(status='sent'),0) sent,COALESCE(SUM(status='failed'),0) failed FROM line_feed_sent WHERE created_at>=datetime('now','-30 days')`).first().catch(()=>null),
+    env.DB.prepare(`SELECT COUNT(*) linked,(SELECT COUNT(*) FROM users WHERE status='active' AND role IS NOT NULL AND deleted_at IS NULL) active FROM line_user_links l JOIN users u ON u.id=l.user_id WHERE l.status='active' AND u.status='active'`).first().catch(()=>null),
+    env.DB.prepare("SELECT setting_value,updated_at FROM system_settings WHERE setting_key='registry_schema_version'").first().catch(()=>null),
+    env.FILES ? env.FILES.list({ limit: 1 }).then(()=>true).catch(()=>false) : Promise.resolve(false),
   ]);
+  let procurementCount = null;
+  try { procurementCount = Number((await env.DB.prepare("SELECT COUNT(*) n FROM procurement_cases").first())?.n || 0); } catch { procurementCount = null; }
 
   const d1BytesRaw = d1Probe?.meta?.size_after == null ? null : Number(d1Probe.meta.size_after);
   const d1Bytes = Number.isFinite(d1BytesRaw) && d1BytesRaw >= 0 ? d1BytesRaw : null;
   const d1Percent = usagePercent(d1Bytes, d1Limit);
   const r2Bytes = Number(attachmentResult?.r2_bytes || 0);
   const r2Percent = usagePercent(r2Bytes, r2Limit);
-  const lineConfigured = !!(env.LINE_CHANNEL_SECRET && env.LINE_CHANNEL_ACCESS_TOKEN && selectedTarget);
+  // ตอนนี้แจ้งเตือนส่งรายบุคคลเป็นหลัก (กลุ่ม LINE ไม่จำเป็นแล้ว) จึงต้องการแค่ Channel secret + token
+  const lineConfigured = !!(env.LINE_CHANNEL_SECRET && env.LINE_CHANNEL_ACCESS_TOKEN);
   const lineMetrics = lineConfigured
-    ? await getLineDeliveryMetrics(env, selectedTarget).catch(() => ({ recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null }))
+    ? await getLineDeliveryMetrics(env, selectedTarget || { target_type:"user" }).catch(() => ({ recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null }))
     : { recipient_count:null,monthly_usage:null,monthly_limit:null,remaining:null };
+  const generalHeads = await generalHeadUserIds(env);
+  const feedAgeMinutes = feedRun?.finished_at ? (Date.now() - Date.parse(String(feedRun.finished_at).replace(" ","T")+"Z")) / 60000 : null;
   const linePercent = usagePercent(lineMetrics.monthly_usage, lineMetrics.monthly_limit);
 
   const services = {
     worker: {
       status: "healthy",
       reachable: true,
+      plan: "Workers Paid",
       request_usage_available: false,
-      request_daily_limit: numericEnv(env.WORKERS_DAILY_REQUEST_LIMIT, 100000),
+      request_monthly_included: numericEnv(env.WORKERS_MONTHLY_REQUEST_INCLUDED, 10000000),
+      version_id: env.CF_VERSION_METADATA?.id || null,
+      version_tag: env.CF_VERSION_METADATA?.tag || null,
+      schema_version: schemaRow?.setting_value || null,
+      schema_updated_at: schemaRow?.updated_at || null,
       note: "จำนวน Request และข้อผิดพลาดจริงตรวจสอบจาก Cloudflare Dashboard",
+    },
+    jobs: {
+      status: !lineConfigured ? "unknown" : feedAgeMinutes === null ? "warning" : feedAgeMinutes > 10 ? "warning" : "healthy",
+      cron: "ทุก 2 นาที",
+      last_trigger: feedRun?.trigger || null,
+      last_finished_at: feedRun?.finished_at || null,
+      minutes_since: feedAgeMinutes === null ? null : Math.round(feedAgeMinutes),
+      users_checked: feedRun?.users_checked ?? null,
+      messages_sent: feedRun?.messages_sent ?? null,
+      note: feedRun?.note || null,
     },
     d1: {
       status: usageLevel(d1Percent) === "unknown" ? "healthy" : usageLevel(d1Percent),
@@ -3942,13 +3971,14 @@ async function handleSystemStatus(request, env) {
     },
     r2: {
       configured: !!env.FILES,
-      reachable: !!env.FILES,
-      status: "unknown",
+      reachable: r2Probe,
+      bucket: env.FILES ? "banpadeng-school-files" : null,
+      status: !env.FILES ? "warning" : !r2Probe ? "critical" : usageLevel(r2Percent) === "unknown" ? "healthy" : usageLevel(r2Percent),
       registered_files: Number(attachmentResult?.r2_files || 0),
       registered_bytes: r2Bytes,
       limit_bytes: r2Limit,
       percent: r2Percent,
-      note: "ยอดใช้เป็นขนาดไฟล์ในทะเบียนเท่านั้น ตรวจปริมาณจริงและจำนวนคำขอจาก Cloudflare Dashboard",
+      note: "เก็บรูปแจ้งซ่อม · ยอดใช้คิดจากขนาดไฟล์ในทะเบียน ฟรี 10 GB ต่อเดือน",
     },
     line: {
       configured: lineConfigured,
@@ -3956,6 +3986,11 @@ async function handleSystemStatus(request, env) {
       status: !lineConfigured ? "critical" : usageLevel(linePercent) === "unknown" ? "warning" : usageLevel(linePercent),
       target_name: selectedTarget?.display_name || null,
       target_type: selectedTarget?.target_type || null,
+      linked_users: Number(linkedResult?.linked || 0),
+      active_users: Number(linkedResult?.active || 0),
+      maintenance_to_head: generalHeads.length > 0,
+      feed_sent_30d: Number(feedTotals?.sent || 0),
+      feed_failed_30d: Number(feedTotals?.failed || 0),
       recipient_count: lineMetrics.recipient_count,
       monthly_usage: lineMetrics.monthly_usage,
       monthly_limit: lineMetrics.monthly_limit,
@@ -3967,7 +4002,8 @@ async function handleSystemStatus(request, env) {
     },
   };
 
-  const states = [services.d1.status, services.drive.status, services.line.status];
+  services.d1.counts.procurement_cases = procurementCount;
+  const states = [services.d1.status, services.drive.status, services.line.status, services.r2.status, services.jobs.status];
   const overall = states.includes("critical") ? "critical"
     : states.some((state) => state === "danger" || state === "warning") ? "warning" : "healthy";
 
