@@ -88,3 +88,16 @@ test('checklist evaluates required count per section, finite scores, complete ba
  assert.throws(()=>validateScores(rubric,{'p.1':.5}));assert.throws(()=>validateScores(starterTemplates[0].rubric,{'1.1':NaN}));assert.throws(()=>validateScores(starterTemplates[0].rubric,{'1.1':'3'}));assert.throws(()=>validateScores(starterTemplates[0].rubric,{'bogus':1}));
  const env=await fixture();const r=await call(env,'templates','POST',{...starterTemplates[1],verified:true,confirm_reference:true});assert.equal(r.status,400);
 });
+
+test('linked aliases cannot act as two committee members; expiry invalidates an already redeemed guest session',async()=>{
+ const env=await fixture(),{id,invitation}=await createCase(env,true);
+ const person=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=3').get().personnel_id;
+ env.raw.exec("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(7,'alias@test','x','x','บัญชีอื่นของหัวหน้า','teacher')");env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)').run(7,person);
+ await call(env,`cases/${id}/remove`,'POST',{assignment_id:invitation.id});
+ assert.equal((await call(env,`cases/${id}/assignments`,'POST',{user_id:7})).status,409);
+ const invited=await(await call(env,`cases/${id}/assignments`,'POST',{guest_name:'ผู้ทรงคุณวุฒิใหม่',guest_org:'ภายนอก'})).json();
+ const token=new URLSearchParams(new URL(invited.invitation_url).hash.slice(1)).get('invite');const redeemed=await call(env,'guest/session','POST',{token},null);const cookie=redeemed.headers.get('set-cookie').split(';')[0];
+ assert.equal((await guest(env,'cases',cookie)).status,200);
+ env.raw.prepare('UPDATE evaluation_assignments SET expires_at=? WHERE id=?').run(Math.floor(Date.now()/1000)-1,invited.id);
+ assert.equal((await guest(env,'cases',cookie)).status,401);
+});
