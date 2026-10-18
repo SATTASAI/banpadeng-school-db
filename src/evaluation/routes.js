@@ -136,7 +136,7 @@ export async function handleEvaluationRoute(request,env,pathname,method){
   requireValue(a.permissions.manage||mine,'ไม่ได้รับมอบหมายให้ประเมินรายนี้',403);
   if(!action&&method==='GET'){
    const summary=rows.length===JSON.parse(c.rubric_json).committee_size&&rows.every(b=>b.submitted_at)?summarize(JSON.parse(c.rubric_json),rows):null;
-   return response({case:safeCase(c),assignments:a.guest?rows.filter(r=>r.id===a.guest.id).map(r=>safeAssignment(r,true)):rows.map(r=>safeAssignment(r,a.permissions.manage||r.id===mine?.id)),mine:mine?safeAssignment(mine,true):null,summary:a.permissions.manage?summary:null,can_finalize:a.permissions.finalize&&!await owns(env,a.user,c.personnel_id)});
+   return response({case:{...safeCase(c),...(a.guest?{result:null}:{})},assignments:a.guest?rows.filter(r=>r.id===a.guest.id).map(r=>safeAssignment(r,true)):rows.map(r=>safeAssignment(r,a.permissions.manage||r.id===mine?.id)),mine:mine?safeAssignment(mine,true):null,summary:a.permissions.manage?summary:null,can_finalize:a.permissions.finalize&&!await owns(env,a.user,c.personnel_id)});
   }
   if(action==='events'&&method==='GET'){
    requireManage(a);const events=await env.DB.prepare(`SELECT e.id,e.action,e.detail_json,e.created_at,COALESCE(u.full_name,x.guest_name) AS actor FROM evaluation_events e LEFT JOIN users u ON u.id=e.actor_user_id LEFT JOIN evaluation_assignments x ON x.id=e.actor_assignment_id WHERE e.case_id=? ORDER BY e.id`).bind(id).all();return response({events:events.results});

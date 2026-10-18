@@ -101,3 +101,12 @@ test('linked aliases cannot act as two committee members; expiry invalidates an 
  env.raw.prepare('UPDATE evaluation_assignments SET expires_at=? WHERE id=?').run(Math.floor(Date.now()/1000)-1,invited.id);
  assert.equal((await guest(env,'cases',cookie)).status,401);
 });
+
+test('a guest cannot see other committee scores even after the executive publishes the result',async()=>{
+ const env=await fixture(),{id,invitation}=await createCase(env,true);
+ const token=new URLSearchParams(new URL(invitation.invitation_url).hash.slice(1)).get('invite');const redeemed=await call(env,'guest/session','POST',{token},null);const cookie=redeemed.headers.get('set-cookie').split(';')[0];
+ await call(env,`cases/${id}/open`,'POST',{});await submit(env,id,3);await submit(env,id,5);
+ const d=await(await guest(env,'cases/'+id,cookie)).json();const scores=Object.fromEntries(d.case.rubric.items.map(i=>[i.id,i.max]));await guest(env,`cases/${id}/ballot`,cookie,'PUT',{scores,revision:0,submit:true});
+ assert.equal((await call(env,`cases/${id}/publish`,'POST',{},4)).status,200);
+ const after=await(await guest(env,'cases/'+id,cookie)).json();assert.equal(after.case.result,null);assert.equal(after.summary,null);assert.equal(after.assignments.length,1);assert.equal(after.mine.name,'ผู้ทรงคุณวุฒิ');
+});
