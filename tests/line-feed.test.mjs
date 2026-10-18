@@ -119,3 +119,37 @@ test("LINE goes only to the person who must act: finance queue to the finance of
     assert(!("line_ok" in bell.notifications[0]));
   } finally { line.restore(); }
 });
+
+test("a new leave pushes LINE to personnel head and designated deputy without early action permission",async()=>{
+ const env=await setup();
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
+ (5,'deputy-leave@test','x','x','รอง ผอ. บุคลากร','executive'),(6,'other-deputy@test','x','x','รอง ผอ. ฝ่ายอื่น','executive');
+ INSERT INTO staff_profiles(user_id,position) VALUES
+ (5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),(6,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO line_user_links(user_id,line_user_id) VALUES(5,'U-deputy'),(6,'U-other-deputy');`);
+ const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
+ assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
+ const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
+ env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
+ const line=mockLine();
+ try {
+  await dispatchLineNotifications(env);
+  const form={leave_type:'sick',reason:'ไม่สบาย',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้านพัก',contact_phone:'0000000000'};
+  const response=await call(env,'/api/leave-requests','POST',form,2);
+  assert.equal(response.status,201);
+  const {id}=await response.json();
+  unlock(env);
+  await dispatchLineNotifications(env);
+  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-other']);
+  assert(line.pushes.every(p=>p.messages[0].text.includes('การลา: ครู ก')));
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ยังไม่ถึงคิว'},5)).status,403);
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'forward',deputy_personnel_id:deputy},5)).status,403);
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,200);
+  unlock(env);
+  await dispatchLineNotifications(env);
+  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-deputy','U-other']);
+  const inbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
+  assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,true);
+ } finally {line.restore();}
+});
