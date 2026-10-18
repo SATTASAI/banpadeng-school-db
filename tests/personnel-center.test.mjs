@@ -32,7 +32,7 @@ function fixture() {
       VALUES(2,'ครูสมบูรณ์','ครูสมบูรณ์','teacher@example.test','teacher','ครู','0800000000','academic','2020-05-01','ปริญญาตรี','ภาษาไทย','มหาวิทยาลัยตัวอย่าง','2030-01-01','active'),
             (NULL,'ครูข้อมูลไม่ครบ','ครูข้อมูลไม่ครบ','second@example.test',NULL,'ครู',NULL,NULL,NULL,NULL,NULL,NULL,NULL,'active');
     INSERT INTO personnel_imports(import_key,source_file,record_count) VALUES('${LICENSE_IMPORT_KEY}','seed',0);
-    INSERT INTO leave_requests VALUES(1,2,'sick',date('now'),date('now'),'approved',datetime('now')),(2,2,'personal',date('now','+7 day'),date('now','+7 day'),'pending',datetime('now'));
+    INSERT INTO leave_requests VALUES(1,2,'sick',date('now','+7 hours'),date('now','+7 hours'),'approved',datetime('now')),(2,2,'personal',date('now','+7 day'),date('now','+7 day'),'pending',datetime('now'));
     INSERT INTO tasks VALUES(1,'open',date('now','-1 day')),(2,'open',date('now','+3 day'));
     INSERT INTO work_records VALUES(1,'personnel','5','completed',date('now','-1 day')),(2,'personnel','5','open',date('now','-1 day'));
     INSERT INTO projects VALUES(1,'personnel',NULL,'พัฒนาครู','ongoing'),(2,'personnel',NULL,'ศึกษาดูงาน','completed');
