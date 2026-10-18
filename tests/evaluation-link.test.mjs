@@ -55,11 +55,17 @@ test('changing school session_version or deactivating the account revokes the in
 });
 test('school APIs retain only published results and permissions; evaluation mutations moved to evaluatesystem',async()=>{
  const env=await fixture();assert.equal((await school(env,'/api/evaluation/cases')).status,410);assert.equal((await school(env,'/evaluate')).headers.get('location'),EVALUATION_ORIGIN+'/evaluate');
- env.raw.exec(`CREATE TABLE evaluation_templates(id INTEGER PRIMARY KEY,kind TEXT,name TEXT);
+ env.raw.exec(`CREATE TABLE evaluation_templates(id INTEGER PRIMARY KEY,kind TEXT,name TEXT,reference TEXT DEFAULT '');
  CREATE TABLE evaluation_cases(id INTEGER PRIMARY KEY,personnel_id INTEGER,template_id INTEGER,title TEXT,fiscal_year INTEGER,cycle INTEGER,rank TEXT,published_at TEXT,state TEXT,result_json TEXT);`);
  const person=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=2').get().personnel_id;
- env.raw.prepare("INSERT INTO evaluation_templates VALUES(1,'pa','PA ทดสอบ')").run();
+ env.raw.prepare("INSERT INTO evaluation_templates(id,kind,name) VALUES(1,'pa','PA ทดสอบ')").run();
  env.raw.prepare("INSERT INTO evaluation_cases VALUES(1,?,1,'รอบทดสอบ',2570,1,'ครู','2026-10-18','published',?)").run(person,JSON.stringify({passed:true,average:80,members:[]}));
  const mine=await(await school(env,'/api/evaluation/results',2)).json();assert.equal(mine.results.length,1);assert.equal(mine.source,'evaluatesystem');assert.equal(mine.results[0].result.average,80);
  assert.equal((await(await school(env,'/api/evaluation/results',3)).json()).results.length,0);assert.equal((await school(env,'/api/evaluation/results',null)).status,401);
+ env.raw.exec("INSERT INTO evaluation_templates(id,kind,name) VALUES(2,'assistant','ครูผู้ช่วยทดสอบ')");
+ env.raw.prepare("INSERT INTO evaluation_cases VALUES(2,?,2,'รอบครูผู้ช่วย',2570,1,'ครูผู้ช่วย','2026-10-18','published',?)").run(person,JSON.stringify({passed:true,average:90,members:[]}));
+ env.raw.prepare("INSERT INTO evaluation_cases VALUES(3,?,2,'รอบยังไม่เผยแพร่',2570,2,'ครูผู้ช่วย',NULL,'open',?)").run(person,JSON.stringify({passed:false,average:10,members:[]}));
+ const all=await(await school(env,'/api/evaluation/results',2)).json();assert.equal(all.results.length,2);assert.deepEqual(new Set(all.results.map(r=>r.kind)),new Set(['pa','assistant']));assert.ok(all.results.every(r=>r.id!==3));
+ assert.equal((await(await school(env,'/api/evaluation/results',3)).json()).results.length,0);
+
 });
