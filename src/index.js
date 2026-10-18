@@ -4600,7 +4600,7 @@ const app = {
 
 // หลังมีการบันทึกข้อมูลสำเร็จ ส่งแจ้งเตือน LINE ที่เกิดใหม่ทันทีโดยไม่ทำให้คำขอช้าลง
 // (dispatchLineNotifications เว้นระยะเองอย่างน้อย 15 วินาที และ Cron ทุก 2 นาทีเก็บตกที่เหลือ)
-const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|evaluation-link\/|notifications\/read)/;
+const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|evaluation-link\/|notifications\/read|leave-view)/;
 export default {
   async fetch(request, env, context) {
     const response = await app.fetch(request, env, context);

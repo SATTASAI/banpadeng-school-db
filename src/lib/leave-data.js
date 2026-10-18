@@ -28,8 +28,13 @@ export function ensureLeaveData(env) {
     actor_id INTEGER NOT NULL REFERENCES users(id),action TEXT NOT NULL,note TEXT,
     created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_leave_reviewers_user ON leave_reviewers(user_id,leave_id)'),
-   env.DB.prepare("CREATE TABLE IF NOT EXISTS leave_settings (id INTEGER PRIMARY KEY CHECK(id=1),deputy_personnel_id INTEGER)")
+   env.DB.prepare("CREATE TABLE IF NOT EXISTS leave_settings (id INTEGER PRIMARY KEY CHECK(id=1),deputy_personnel_id INTEGER,line_template TEXT)")
   ]);
+  const {results:settingColumns}=await env.DB.prepare('PRAGMA table_info(leave_settings)').all();
+  if(!settingColumns.some(c=>c.name==='line_template')){
+   try{await env.DB.prepare('ALTER TABLE leave_settings ADD COLUMN line_template TEXT').run();}
+   catch(e){if(!/duplicate column/i.test(String(e.message)))throw e;}
+  }
  })().catch(e=>{ready.delete(env.DB);throw e;});
  ready.set(env.DB,promise);return promise;
 }
