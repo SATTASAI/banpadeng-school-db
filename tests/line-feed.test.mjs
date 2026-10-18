@@ -126,6 +126,11 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
  (5,'deputy-leave@test','x','x','รอง ผอ. บุคลากร','executive'),(6,'other-deputy@test','x','x','รอง ผอ. ฝ่ายอื่น','executive');
  INSERT INTO staff_profiles(user_id,position) VALUES
  (5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),(6,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES
+ (5,'รอง ผอ. บุคลากร','รองผอบุคลากร','รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),
+ (6,'รอง ผอ. ฝ่ายอื่น','รองผอฝ่ายอื่น','รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT user_id,id FROM personnel_records WHERE user_id IN (5,6);
  INSERT INTO line_user_links(user_id,line_user_id) VALUES(5,'U-deputy'),(6,'U-other-deputy');`);
  const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
