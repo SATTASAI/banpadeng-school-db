@@ -26,6 +26,17 @@ test('school login authorizes a one-time code and creates a separate evaluatesys
  assert.equal((await finish(env,callback,s.cookie)).status,401);assert.equal((await authorize(env,s.state)).status,409);
  const saved=JSON.stringify(env.raw.prepare('SELECT * FROM evaluation_login_sessions').all());assert(!saved.includes(cookie.split('=')[1]));assert(!saved.includes('password'));
 });
+test('automatic school sign-in preserves POST Origin and allows only the evaluation redirect',async()=>{
+ const env=await fixture(),s=await start(env);
+ const page=await school(env,s.location.pathname+s.location.search);
+ assert.equal(page.headers.get('referrer-policy'),'same-origin');
+ const csp=page.headers.get('content-security-policy');
+ assert.ok(csp.includes("form-action 'self' "+EVALUATION_ORIGIN+";"));
+ assert.ok(csp.includes("frame-ancestors 'none'"));
+ assert.equal((await authorize(env,s.state,1,'null')).status,403);
+ assert.equal((await authorize(env,s.state,1,'https://other.example')).status,403);
+ assert.equal((await authorize(env,s.state)).status,302);
+});
 test('login codes are bound to the browser state, expire, and reject cross-origin authorization and ordinary teachers',async()=>{
  const env=await fixture(),s=await start(env);
  assert.equal((await authorize(env,s.state,1,'https://other.example')).status,403);assert.equal((await authorize(env,s.state,2)).status,403);
