@@ -2,6 +2,7 @@ import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
 import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.js';
+import {ensureLineFeedSchema} from '../lib/line-feed.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -11,6 +12,42 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
 export async function handleLeaveRoute(request,env,pathname,method) {
+ const deliveryMatch=pathname.match(/^\/api\/leave-requests\/(\d+)\/delivery$/);
+ if(deliveryMatch&&method==='GET'){
+  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
+  await ensureLeaveData(env);
+  const id=Number(deliveryMatch[1]);
+  const row=await env.DB.prepare('SELECT id,user_id,status,workflow_stage,deputy_personnel_id FROM leave_requests WHERE id=?').bind(id).first();
+  if(!row)return fail('ไม่พบคำขอลา',404);
+  const head=await isPersonnelHead(env,user),admin=user.role==='superadmin';
+  const assigned=['executive','superadmin'].includes(user.role)&&await env.DB.prepare('SELECT 1 FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
+  const deputy=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id
+   WHERE p.id=? AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%' AND a.user_id=? LIMIT 1`).bind(row.deputy_personnel_id,user.id).first();
+  if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!deputy)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
+  await ensureLinePersonalSchema(env);await ensureLineFeedSchema(env);
+  const {results:recipients}=await env.DB.prepare(`SELECT DISTINCT u.id user_id,u.full_name,'head' kind FROM users u
+   JOIN personnel_accounts a ON a.user_id=u.id JOIN department_staff d ON d.personnel_id=a.personnel_id
+   JOIN personnel_records p ON p.id=d.personnel_id WHERE d.department='personnel' AND d.is_head=1 AND p.status='active'
+   AND u.status='active' AND u.deleted_at IS NULL
+   UNION SELECT DISTINCT u.id,u.full_name,'deputy' FROM users u
+   JOIN personnel_accounts a ON a.user_id=u.id JOIN personnel_records p ON p.id=a.personnel_id
+   WHERE p.id=? AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%'
+   AND u.role IN ('executive','superadmin') AND u.status='active' AND u.deleted_at IS NULL`).bind(row.deputy_personnel_id).all();
+  const links=await linkedLineAccounts(env);
+  const {results:states}=await env.DB.prepare("SELECT user_id,status,error,updated_at FROM line_feed_sent WHERE message_key=?").bind(`leave:${id}:pending`).all();
+  const {results:preferences}=await env.DB.prepare('SELECT user_id,enabled FROM line_feed_users').all();
+  const {results:blocked}=await env.DB.prepare("SELECT user_id FROM line_user_links WHERE status='blocked'").all();
+  const run=await env.DB.prepare('SELECT started_at,finished_at,failures,note FROM line_feed_runs WHERE id=1').first();
+  const stateById=new Map(states.map(s=>[Number(s.user_id),s])),pref=new Map(preferences.map(p=>[Number(p.user_id),Number(p.enabled)]));
+  const blockedIds=new Set(blocked.map(b=>Number(b.user_id)));
+  return json({request_id:id,workflow_stage:row.workflow_stage,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
+   deputy_assigned:row.deputy_personnel_id!=null,recipients:recipients.map(r=>{
+    const link=links.find(l=>Number(l.user_id)===Number(r.user_id));const state=stateById.get(Number(r.user_id));
+    return {kind:r.kind,name:r.full_name,link_status:link?'active':blockedIds.has(Number(r.user_id))?'blocked':'not_linked',
+     enabled:pref.get(Number(r.user_id))!==0&&(!link||pref.get(Number(link.link_owner_user_id))!==0),
+     delivery_status:state?.status||'not_queued',error:state?.error||null,updated_at:state?.updated_at||null};
+   }),last_run:run||null});
+ }
  if(pathname==='/api/leave-settings'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
   await ensureLeaveData(env);
