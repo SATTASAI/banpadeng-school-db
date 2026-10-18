@@ -86,7 +86,8 @@ const COMBINED_TOPICS={
   personnel:{"1,3":"คำสั่ง ภาระงาน และเวรประจำวัน","5":"การประเมิน PA","6,7":"การอบรม ผลงาน และแฟ้มประวัติ"},
   general:{"1,2,3":"สารบรรณและหนังสือราชการ","5":"ยานพาหนะ","6,7":"ประชาสัมพันธ์ ข่าวสาร และกิจกรรม"}
 };
-const params=new URLSearchParams(location.search);const requestedArea=params.get("area")||"",requestedTopics=String(params.get("topic")??"");
+const params=new URLSearchParams(location.search);
+if(params.get("area")==="personnel"&&params.get("topic")==="5"&&!params.has("legacy"))location.replace("/evaluation-results.html");const requestedArea=params.get("area")||"",requestedTopics=String(params.get("topic")??"");
 const scope=params.get("scope")||SchoolNavigation.workScopeFor(requestedArea,requestedTopics),scopeConfig=SchoolNavigation.workScopes[scope];
 const area=scopeConfig?.area||requestedArea,topicQuery=scopeConfig?.topic||requestedTopics;
 const topicKeys=topicQuery.split(",").filter(Boolean);const topicKey=topicKeys[0]||"";const topicIndex=Number(topicKey);const topicLabel=scopeConfig?.label||COMBINED_TOPICS[area]?.[topicQuery]||TOPICS[area]?.[topicIndex]||"หัวข้องาน";const requestedRecord=Number(params.get("record")||0);
