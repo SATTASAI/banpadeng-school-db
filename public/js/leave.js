@@ -2,7 +2,7 @@
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
- let user,records=[],detailId=null,busy=false,first=true;
+ let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false;
  function error(e){$('errorBox').textContent=e.message||String(e);$('errorBox').classList.add('visible');}
  function submitError(message,field){
   error(Error(message));$('successBox').hidden=true;
@@ -41,7 +41,11 @@
   const draftNotes=new Map([...document.querySelectorAll('.leave-note')].map(n=>[n.id,n.value]));
   const selected=$('deputyChoice').value||data.default_deputy_id||'';
   $('headSettings').hidden=!data.is_personnel_head;
-  $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+data.deputy_choices.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');$('deputyChoice').value=String(selected);
+  if(data.is_personnel_head){
+   const settings=await apiRequest('/api/leave-settings');deputies=settings.deputies;lineConfigured=settings.line_configured;
+   $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+deputies.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');
+   $('deputyChoice').value=String(selected||settings.deputy_personnel_id||'');showDeputyStatus();
+  }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
   const pending=records.filter(r=>r.can_acknowledge||r.can_record||r.can_review||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
@@ -49,6 +53,17 @@
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
   if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id))await details(id);}
  }
+ function showDeputyStatus(){
+  const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
+  $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับแจ้ง':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
+ }
+ $('deputyChoice').onchange=showDeputyStatus;
+ $('saveDeputy').onclick=async()=>{
+  if(busy)return;const id=Number($('deputyChoice').value);if(!id){error(Error('กรุณาเลือกรอง ผอ.'));return;}
+  busy=true;$('saveDeputy').disabled=true;
+  try{await apiRequest('/api/leave-settings',{method:'PATCH',body:{deputy_personnel_id:id}});success('บันทึกรอง ผอ. ผู้รับแจ้งล่วงหน้าแล้ว');await load();}
+  catch(e){error(e);}finally{busy=false;$('saveDeputy').disabled=false;}
+ };
  async function details(id){
   const {leave_request:r,events}=await apiRequest('/api/leave-requests/'+id);detailId=id;
   $('detailSection').hidden=false;

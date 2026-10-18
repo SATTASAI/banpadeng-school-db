@@ -20,12 +20,18 @@ export async function ensureLineFeedSchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS line_feed_sent (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_key TEXT NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('baseline','pending','sent','failed','skipped')),
-      error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(user_id, message_key))`),
+      error TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(user_id, message_key))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS line_feed_runs (
       id INTEGER PRIMARY KEY CHECK (id = 1), started_at TEXT, finished_at TEXT, trigger TEXT,
       users_checked INTEGER, messages_sent INTEGER, items_sent INTEGER, failures INTEGER, quota_remaining INTEGER, note TEXT)`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_line_feed_sent_created ON line_feed_sent(created_at)"),
   ]);
+  const {results:columns}=await env.DB.prepare('PRAGMA table_info(line_feed_sent)').all();
+  if(!columns.some(c=>c.name==='updated_at')){
+    try{await env.DB.prepare('ALTER TABLE line_feed_sent ADD COLUMN updated_at TEXT').run();}
+    catch(error){if(!/duplicate column/i.test(String(error?.message)))throw error;}
+  }
   ready.add(env.DB);
 }
 
@@ -79,7 +85,7 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
   await ensureLinePersonalSchema(env);
   await ensureLineFeedSchema(env);
   if (!await acquire(env, trigger)) return { skipped: "locked" };
-  const { results: people } = await env.DB.prepare(`SELECT l.user_id,l.line_user_id,u.id,u.role,u.full_name,COALESCE(f.enabled,1) enabled,f.user_id known
+  const { results: people } = await env.DB.prepare(`SELECT l.user_id,l.line_user_id,l.linked_at,u.id,u.role,u.full_name,COALESCE(f.enabled,1) enabled,f.user_id known
     FROM line_user_links l JOIN users u ON u.id=l.user_id LEFT JOIN line_feed_users f ON f.user_id=l.user_id
     WHERE l.status='active' AND u.status='active' AND u.role IS NOT NULL AND u.deleted_at IS NULL ORDER BY l.user_id`).all();
   const reserve = Number.isFinite(Number(env.LINE_FEED_RESERVE)) ? Number(env.LINE_FEED_RESERVE) : 20;
@@ -87,22 +93,29 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
   for (const person of people) {
     if (!Number(person.enabled)) continue;
     let rows;
-    try { rows = await unreadNotificationsFor(env, { id: Number(person.user_id), role: person.role }, 50); }
+    try { rows = await unreadNotificationsFor(env, { id: Number(person.user_id), role: person.role }, 50, {forLine:true}); }
     catch { failures++; continue; }
-    // ส่ง LINE เฉพาะผู้ที่ต้องลงมือ: ไม่ส่งเรื่องที่ตัวเองเป็นคนทำ และไม่ส่งรายการที่เห็นเพื่อกำกับดูแลเท่านั้น
+    // A deputy's early leave notice is read-only, but still needs a LINE message.
     // (เช่น คิวการเงินที่ผู้บริหารเห็นในระบบ หรือใบลาทั้งหมดที่ผู้ดูแลระบบเห็น) — ยังเห็นที่กระดิ่งในระบบตามเดิม
     rows = rows.filter((r) => Number(r.line_ok ?? 1) === 1 && Number(r.actor_id || 0) !== Number(person.user_id));
-    // คนที่เพิ่งเชื่อม LINE: จดรายการที่ค้างอยู่ไว้เฉยๆ ไม่ส่งย้อนหลัง
+    // First run: baseline the old queue. Leaves created after the LINE link must
+    // still be delivered, even when the first cron run occurs after submission.
     const fresh = await env.DB.prepare("INSERT OR IGNORE INTO line_feed_users(user_id) VALUES(?)").bind(person.user_id).run();
     if (fresh.meta.changes) {
-      if (rows.length) await env.DB.batch(rows.map((row) => env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'baseline')").bind(person.user_id, row.message_key)));
-      continue;
+      const old=rows.filter(r=>!r.message_key.startsWith('leave:')||String(r.created_at)<String(person.linked_at));
+      if(old.length) await env.DB.batch(old.map(row=>env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'baseline')").bind(person.user_id,row.message_key)));
     }
     if (!rows.length) continue;
     const keys = rows.map((r) => r.message_key);
-    const { results: seen } = await env.DB.prepare(`SELECT message_key FROM line_feed_sent WHERE user_id=? AND message_key IN (${keys.map(() => "?").join(",")})`).bind(person.user_id, ...keys).all();
-    const known = new Set(seen.map((r) => r.message_key));
-    const candidates = rows.filter((r) => !known.has(r.message_key));
+    const { results: seen } = await env.DB.prepare(`SELECT message_key,status,updated_at,created_at FROM line_feed_sent WHERE user_id=? AND message_key IN (${keys.map(() => "?").join(",")})`).bind(person.user_id, ...keys).all();
+    const known = new Map(seen.map(r=>[r.message_key,r]));
+    const candidates = rows.filter(r=>{
+      const state=known.get(r.message_key);
+      if(!state)return true;
+      if(!['failed','pending'].includes(state.status))return false;
+      const elapsed=age(state.updated_at||state.created_at);
+      return elapsed >= (state.status==='pending'?5/60:1/60);
+    });
     if (!candidates.length) continue;
     const old = candidates.filter((r) => age(r.created_at) > MAX_AGE_HOURS), current = candidates.filter((r) => age(r.created_at) <= MAX_AGE_HOURS);
     if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'skipped')").bind(person.user_id, r.message_key)));
@@ -110,10 +123,14 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
     if (remaining === undefined) remaining = await quotaRemaining(env);
     if (remaining !== null && remaining <= reserve) { quotaBlocked++; continue; }
     // จองรายการก่อนส่ง เพื่อไม่ให้สองรอบที่ทำงานซ้อนกันส่งซ้ำ
-    const claims = await env.DB.batch(current.map((r) => env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'pending')").bind(person.user_id, r.message_key)));
+    const claims = await env.DB.batch(current.map(r=>known.has(r.message_key)
+      ? env.DB.prepare(`UPDATE line_feed_sent SET status='pending',updated_at=datetime('now'),error=NULL
+        WHERE user_id=? AND message_key=? AND status=? AND COALESCE(updated_at,created_at)<datetime('now',?)`)
+        .bind(person.user_id,r.message_key,known.get(r.message_key).status,known.get(r.message_key).status==='pending'?'-5 minutes':'-1 minute')
+      : env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'pending')").bind(person.user_id,r.message_key)));
     const mine = current.filter((_, index) => claims[index].meta.changes);
     if (!mine.length) continue;
-    const update = (status, error = null) => env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE line_feed_sent SET status=?,error=? WHERE user_id=? AND message_key=? AND status='pending'").bind(status, error, person.user_id, r.message_key)));
+    const update = (status, error = null) => env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE line_feed_sent SET status=?,error=?,updated_at=datetime('now') WHERE user_id=? AND message_key=? AND status='pending'").bind(status, error, person.user_id, r.message_key)));
     try {
       await push(env, person.line_user_id, buildLineDigest(mine, origin));
       await update("sent"); sent++; items += mine.length;

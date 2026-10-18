@@ -13,7 +13,7 @@ export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
 }
-function feed(env,user,personnelHead,director,tables=new Set()){
+function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  const extra=[],extraValues=[];
  // Early notice for designated deputy is read-only; workflow roles are enforced by leave.js
  const earlyDeputy=`(?=1 AND r.status='pending' AND r.workflow_stage IN ('submitted','acknowledged')
@@ -74,7 +74,7 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
- ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
+ ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,executive,user.id,
@@ -82,9 +82,9 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
-export async function unreadNotificationsFor(env,user,limit=50){
+export async function unreadNotificationsFor(env,user,limit=50,{forLine=false}={}){
  await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);
- const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env));
+ const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),forLine);
  const {results}=await env.DB.prepare(`SELECT * FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT ?`).bind(...q.values,limit).all();
  return results.map(({read_at,...r})=>r);
 }
