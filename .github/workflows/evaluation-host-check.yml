@@ -1,0 +1,44 @@
+name: Check evaluation public hostname
+on:
+  push:
+    branches: [codex/check-evaluation-domain]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check public DNS and evaluation routing
+        run: |
+          python3 - <<'PY'
+          import socket,urllib.request,urllib.error,json,time
+          host='evaluate.banpadengschool.ac.th'
+          success=False
+          for attempt in range(1,5):
+              print('Attempt',attempt,flush=True)
+              try:
+                  ips=sorted({r[4][0] for r in socket.getaddrinfo(host,443)})
+                  print('DNS addresses:',ips,flush=True)
+                  for path in ['/','/api/evaluation/permissions','/api/users']:
+                      req=urllib.request.Request('https://'+host+path,headers={'User-Agent':'School-Evaluation-Healthcheck/1.0'})
+                      try:
+                          with urllib.request.urlopen(req,timeout=12) as response:
+                              body=response.read(20000).decode('utf-8','replace')
+                              print(path,'HTTP',response.status,'final URL',response.url,flush=True)
+                              if path=='/': assert 'ระบบประเมิน' in body or 'ประเมินผลการปฏิบัติงาน' in body,'Unexpected homepage'
+                              if path.endswith('permissions'):
+                                  data=json.loads(body)
+                                  assert data.get('access') is False and data.get('user') is None,'Unexpected permissions response'
+                              if path=='/api/users': raise RuntimeError('School API boundary failed')
+                      except urllib.error.HTTPError as error:
+                          print(path,'HTTP',error.code,flush=True)
+                          if not(path=='/api/users' and error.code==404): raise
+                  success=True
+                  break
+              except Exception as error:
+                  print(type(error).__name__+': '+str(error),flush=True)
+                  if attempt<4: time.sleep(10)
+          if not success: raise SystemExit('Evaluation hostname is not ready on the public network')
+          print('PASS: HTTPS homepage, anonymous permissions, and school API boundary verified.',flush=True)
+          PY
