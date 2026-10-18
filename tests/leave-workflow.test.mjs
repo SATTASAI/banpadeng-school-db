@@ -19,15 +19,23 @@ async function setup(){
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
 test('leave goes through personnel acknowledgement, saved records, explicit executive forwarding, deputy opinion and director decision',async()=>{
  const {env,deputy}=await setup();
+ env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
  const created=await call(env,'/api/leave-requests','POST',form,2);assert.equal(created.status,201);const {id}=await created.json();const path='/api/leave-requests/'+id;
- assert(await notice(env,3,`leave:${id}:pending`));assert(!await notice(env,4,`leave:${id}:pending`));assert(!await notice(env,6,`leave:${id}:pending`));
+ assert(await notice(env,3,`leave:${id}:pending`));assert(await notice(env,5,`leave:${id}:pending`));
+ assert(!await notice(env,4,`leave:${id}:pending`));assert(!await notice(env,6,`leave:${id}:pending`));
+ const earlyInbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
+ assert(earlyInbox.leave_requests.some(r=>r.id===id&&!r.can_acknowledge&&!r.can_record&&!r.can_forward&&!r.can_review&&!r.can_decide));
+ assert.equal((await call(env,path,'GET',undefined,5)).status,200);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},5)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},5)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'review',note:'ก่อนถึงคิว'},5)).status,403);
  assert.equal((await call(env,path,'GET',undefined,6)).status,403);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},2)).status,403);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},1)).status,403);
  assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,409);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge',note:'ตรวจสอบใบลาแล้ว'},3)).status,200);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,409);
- assert(!await notice(env,3,`leave:${id}:pending`));
+ assert(!await notice(env,3,`leave:${id}:pending`));assert(await notice(env,5,`leave:${id}:pending`));
  assert.equal((await call(env,path,'DELETE',undefined,2)).status,409);
  assert.equal((await call(env,path,'PATCH',{action:'record',note:'บันทึกในทะเบียนแล้ว'},3)).status,200);
  assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:9999},3)).status,400);
@@ -50,6 +58,17 @@ test('leave goes through personnel acknowledgement, saved records, explicit exec
  const history=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert(history.leave_requests.some(r=>r.id===id));
  // Permissions follow current accounts, not the token or a stale page.
  env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");assert.equal((await call(env,path,'GET',undefined,5)).status,403);
+});
+test('one active deputy gets an early read-only notice, but multiple unassigned deputies do not',async()=>{
+ const {env,deputy}=await setup();
+ const first=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(first.id).deputy_personnel_id,null);
+ assert(!await notice(env,5,`leave:${first.id}:pending`));assert(!await notice(env,6,`leave:${first.id}:pending`));
+ env.raw.exec("UPDATE users SET role='teacher' WHERE id=6");
+ const second=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(second.id).deputy_personnel_id,deputy);
+ assert(await notice(env,5,`leave:${second.id}:pending`));
+ assert.equal((await call(env,'/api/leave-requests/'+second.id,'PATCH',{action:'review',note:'ยังไม่ส่งต่อ'},5)).status,403);
 });
 test('concurrent forwarding creates one recorded transition and only the intended recipients',async()=>{
  const {env,deputy}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;

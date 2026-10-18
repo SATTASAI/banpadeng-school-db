@@ -21,10 +21,14 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  const deputyChoices=people.filter(isDeputy).map(({user_ids,...p})=>p);
  if(!id&&method==='GET') {
   const {results}=await env.DB.prepare(`${select} WHERE ?=1 OR ?=1 OR r.user_id=? OR
-   (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?))
-   ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC,r.id DESC`).bind(admin?1:0,head?1:0,user.id,execAccount?1:0,user.id).all();
+   (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?)) OR
+   (?=1 AND r.status='pending' AND r.workflow_stage IN ('submitted','acknowledged') AND EXISTS(
+   SELECT 1 FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id
+   WHERE a.user_id=? AND p.id=r.deputy_personnel_id AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%'))
+   ORDER BY CASE WHEN r.status='pending' THEN 0 ELSE 1 END,r.created_at DESC,r.id DESC`).bind(admin?1:0,head?1:0,user.id,execAccount?1:0,user.id,execAccount?1:0,user.id).all();
   const {results:assigned}=await env.DB.prepare('SELECT leave_id,kind FROM leave_reviewers WHERE user_id=?').bind(user.id).all();
   const assignments=new Map(assigned.map(r=>[r.leave_id,r.kind]));
+  const earlyDeputy=execAccount&&results.some(r=>r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage)&&people.some(p=>isDeputy(p)&&p.id===r.deputy_personnel_id&&p.user_ids.includes(user.id)));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
   return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&r.workflow_stage==='submitted',
@@ -32,13 +36,14 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    can_review:execAccount&&assignments.get(r.id)==='deputy'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_decide:execAccount&&assignments.get(r.id)==='director'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
-   is_personnel_head:head,can_view_pending:head||admin||assigned.length>0,deputy_choices:head?deputyChoices:[],
+   is_personnel_head:head,can_view_pending:head||admin||assigned.length>0||earlyDeputy,deputy_choices:head?deputyChoices:[],
    default_deputy_id:setting?.deputy_personnel_id||null,profile:profile||{}});
  }
  if(id&&method==='GET') {
   const row=await env.DB.prepare(`${select} WHERE r.id=?`).bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
   const assigned=execAccount&&await env.DB.prepare('SELECT 1 FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
-  if(row.user_id!==user.id&&!head&&!admin&&!assigned)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
+  const earlyDeputy=execAccount&&row.status==='pending'&&['submitted','acknowledged'].includes(row.workflow_stage)&&people.some(p=>isDeputy(p)&&p.id===row.deputy_personnel_id&&p.user_ids.includes(user.id));
+  if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!earlyDeputy)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
   const {results:events}=await env.DB.prepare(`SELECT e.action,e.note,e.created_at,u.full_name FROM leave_events e JOIN users u ON u.id=e.actor_id WHERE e.leave_id=? ORDER BY e.id`).bind(id).all();
   return json({leave_request:await leaveForm(env,row),events});
  }
@@ -53,9 +58,13 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const position=text(body.position,200),address=text(body.contact_address,1000),phone=text(body.contact_phone,100);
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
+  // Use configured personnel deputy (or sole active deputy) to prevent an unrelated executive receiving the early alert
+  const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
+  const deputies=people.filter(isDeputy);
+  const deputyForNotice=deputies.find(p=>p.id===setting?.deputy_personnel_id)||(deputies.length===1?deputies[0]:null);
   const results=await env.DB.batch([
-   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null),
+   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) VALUES(last_insert_rowid(),?,'submitted')").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid()").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);

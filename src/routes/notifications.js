@@ -15,6 +15,10 @@ export async function optionalFeedTables(env){
 }
 function feed(env,user,personnelHead,director,tables=new Set()){
  const extra=[],extraValues=[];
+ // Early notice for designated deputy is read-only; workflow roles are enforced by leave.js
+ const earlyDeputy=`(?=1 AND r.status='pending' AND r.workflow_stage IN ('submitted','acknowledged')
+ AND EXISTS(SELECT 1 FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id
+ WHERE p.id=r.deputy_personnel_id AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%' AND a.user_id=?))`;
  if(['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records'].every(t=>tables.has(t))){
   extra.push(`SELECT 'substitute:'||a.id,'สอนแทน',
   'วันที่ '||a.absence_date||' คาบ '||a.period||' · '||COALESCE(e.classroom,'')||' '||COALESCE(e.subject,'')||COALESCE(' (แทน '||ap.full_name||')',''),
@@ -46,11 +50,11 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  SELECT 'leave:'||r.id||':'||CASE WHEN r.status<>'pending' THEN r.status WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'reviewed' ELSE 'forwarded' END ELSE 'pending' END,'การลา: '||u.full_name,
  CASE r.status WHEN 'pending' THEN CASE WHEN r.workflow_stage='forwarded' THEN CASE WHEN r.reviewer_at IS NOT NULL THEN 'รองผู้บริหารบันทึกความเห็นแล้ว รอคำสั่งผู้อำนวยการ' ELSE 'หัวหน้าฝ่ายบุคลากรส่งใบลาให้พิจารณา' END ELSE 'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ' END WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
  COALESCE(r.approved_at,r.reviewer_at,r.forwarded_at,r.created_at),'/leave.html?request='||r.id,NULL,NULL,
- CASE WHEN (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR (r.user_id=? AND r.status IN ('approved','rejected')) OR
+ CASE WHEN (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR (r.user_id=? AND r.status IN ('approved','rejected')) OR ${earlyDeputy} OR
  (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
  SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND ((v.kind='deputy' AND r.reviewer_at IS NULL) OR (v.kind='director' AND r.reviewer_at IS NOT NULL)))) THEN 1 ELSE 0 END
  FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE
- (?=1 AND r.status='pending') OR (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR
+ (?=1 AND r.status='pending') OR (?=1 AND r.status='pending' AND r.workflow_stage='submitted') OR ${earlyDeputy} OR
  (r.user_id=? AND r.status IN ('approved','rejected')) OR
  (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
  SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=? AND (v.kind='director' OR r.reviewer_at IS NULL)))
@@ -71,7 +75,11 @@ function feed(env,user,personnelHead,director,tables=new Set()){
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
  ) SELECT m.* FROM messages m WHERE m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key)`;
- return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.role==='superadmin'?1:0,personnelHead?1:0,user.id,['executive','superadmin'].includes(user.role)?1:0,user.id,user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
+ const executive=['executive','superadmin'].includes(user.role)?1:0;
+ return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
+ personnelHead?1:0,user.id,executive,user.id,executive,user.id,
+ user.role==='superadmin'?1:0,personnelHead?1:0,executive,user.id,user.id,executive,user.id,
+ user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50){
