@@ -4320,7 +4320,7 @@ const app = {
       // Evaluation is a separate app surface with host-only cookies and a strict route boundary.
       if (url.hostname === EVALUATION_HOST) {
         if (!evaluationHostPathAllowed(pathname)) return jsonResponse({error:"ไม่พบหน้าในระบบประเมิน"},404);
-        if (["/","/evaluate"].includes(pathname)) return Response.redirect(new URL("/evaluate.html",url.origin),302);
+        if (pathname === "/") return Response.redirect(new URL("/evaluate",url.origin),302);
       }
       if (pathname.startsWith("/api/evaluation/")) {
         return await handleEvaluationRoute(request,env,pathname,method);

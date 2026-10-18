@@ -70,7 +70,8 @@ test('guest invitation is one-time, expires in 7 days, is scoped to one case, an
 test('strict evaluate host does not expose school routes, mutations reject cross-origin, and schema migration is isolated',async()=>{
  const env=await fixture();for(const path of ['/api/users','/dashboard.html','/api/line/webhook','/api/security/backup'])assert.equal((await worker.fetch(new Request(origin+path),env,{})).status,404);
  const r=await worker.fetch(new Request(origin+'/api/evaluation/templates',{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json'},body:'{}'}),env,{});assert.equal(r.status,403);
- assert.equal((await worker.fetch(new Request(origin+'/'),env,{})).headers.get('location'),origin+'/evaluate.html');
+ assert.equal((await worker.fetch(new Request(origin+'/'),env,{})).headers.get('location'),origin+'/evaluate');
+ assert.equal((await worker.fetch(new Request(origin+'/evaluate'),env,{})).status,200);
 });
 test('criteria versions cannot retroactively change a case; invalid dates, self evaluation and stale saves are rejected',async()=>{
  const env=await fixture(),{id,person,templateId}=await createCase(env);

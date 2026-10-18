@@ -1,9 +1,5 @@
 name: Connect evaluation domain
 on:
-  workflow_run:
-    workflows: [Deploy Cloudflare Worker]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -12,7 +8,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   connect:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     env:
