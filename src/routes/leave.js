@@ -3,6 +3,7 @@ import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
 import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.js';
 import {ensureLineFeedSchema} from '../lib/line-feed.js';
+import {unreadNotificationsFor} from './notifications.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -25,11 +26,11 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    WHERE p.id=? AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%' AND a.user_id=? LIMIT 1`).bind(row.deputy_personnel_id,user.id).first();
   if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!deputy)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
   await ensureLinePersonalSchema(env);await ensureLineFeedSchema(env);
-  const {results:recipients}=await env.DB.prepare(`SELECT DISTINCT u.id user_id,u.full_name,'head' kind FROM users u
+  const {results:recipients}=await env.DB.prepare(`SELECT DISTINCT u.id user_id,u.full_name,'head' kind,u.role FROM users u
    JOIN personnel_accounts a ON a.user_id=u.id JOIN department_staff d ON d.personnel_id=a.personnel_id
    JOIN personnel_records p ON p.id=d.personnel_id WHERE d.department='personnel' AND d.is_head=1 AND p.status='active'
    AND u.status='active' AND u.deleted_at IS NULL
-   UNION SELECT DISTINCT u.id,u.full_name,'deputy' FROM users u
+   UNION SELECT DISTINCT u.id,u.full_name,'deputy',u.role FROM users u
    JOIN personnel_accounts a ON a.user_id=u.id JOIN personnel_records p ON p.id=a.personnel_id
    WHERE p.id=? AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%'
    AND u.role IN ('executive','superadmin') AND u.status='active' AND u.deleted_at IS NULL`).bind(row.deputy_personnel_id).all();
@@ -40,12 +41,18 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const run=await env.DB.prepare('SELECT started_at,finished_at,failures,note FROM line_feed_runs WHERE id=1').first();
   const stateById=new Map(states.map(s=>[Number(s.user_id),s])),pref=new Map(preferences.map(p=>[Number(p.user_id),Number(p.enabled)]));
   const blockedIds=new Set(blocked.map(b=>Number(b.user_id)));
+  const feedChecks=await Promise.all(recipients.map(async r=>{
+   try {const rows=await unreadNotificationsFor(env,{id:Number(r.user_id),role:r.role},50,{forLine:true});
+    return {user_id:r.user_id,has_notice:rows.some(x=>x.message_key===`leave:${id}:pending`),error:null};}
+   catch(e){return {user_id:r.user_id,has_notice:false,error:String(e?.message||e).slice(0,300)};}
+  }));
   return json({request_id:id,workflow_stage:row.workflow_stage,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
    deputy_assigned:row.deputy_personnel_id!=null,recipients:recipients.map(r=>{
-    const link=links.find(l=>Number(l.user_id)===Number(r.user_id));const state=stateById.get(Number(r.user_id));
+    const link=links.find(l=>Number(l.user_id)===Number(r.user_id));const state=stateById.get(Number(r.user_id));const feed=feedChecks.find(x=>Number(x.user_id)===Number(r.user_id));
     return {kind:r.kind,name:r.full_name,link_status:link?'active':blockedIds.has(Number(r.user_id))?'blocked':'not_linked',
      enabled:pref.get(Number(r.user_id))!==0&&(!link||pref.get(Number(link.link_owner_user_id))!==0),
-     delivery_status:state?.status||'not_queued',error:state?.error||null,updated_at:state?.updated_at||null};
+     delivery_status:state?.status||'not_queued',error:state?.error||null,updated_at:state?.updated_at||null,
+     feed_has_notice:feed?.has_notice||false,feed_error:feed?.error||null};
    }),last_run:run||null});
  }
  if(pathname==='/api/leave-settings'){
