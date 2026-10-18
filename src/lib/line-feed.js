@@ -4,12 +4,22 @@
 // งานแจ้งซ่อมส่ง LINE ของตัวเองอยู่แล้ว และไม่อยู่ในรายการนี้ จึงไม่ซ้ำกัน
 import { ensureLinePersonalSchema, linkedLineAccounts } from "./line-personal.js";
 import { unreadNotificationsFor } from "../routes/notifications.js";
+import { ensureLeaveData } from "./leave-data.js";
+import { createLeaveAccessUrl } from "./leave-access.js";
 
 const ready = new WeakSet();
 const LOCK_SECONDS = 15;
 const MAX_AGE_HOURS = 72; // ไม่ส่งรายการที่เก่ากว่านี้ (เช่น ตอนเพิ่งเชื่อม LINE)
 const MAX_LINES = 5;
 const DEFAULT_ORIGIN = "https://system.banpadengschool.ac.th";
+export const DEFAULT_LEAVE_LINE_TEMPLATE = "• {title}\n  {message}";
+const LEAVE_FIELDS = new Set(["title", "message", "id", "link"]);
+
+export function validLeaveLineTemplate(value) {
+  if (typeof value !== "string" || value.length > 400) return false;
+  const fields = [...value.matchAll(/\{([^{}]*)\}/g)];
+  return !/[{}]/.test(value.replace(/\{[^{}]*\}/g, "")) && fields.every(([, field]) => LEAVE_FIELDS.has(field));
+}
 
 export async function ensureLineFeedSchema(env) {
   if (ready.has(env.DB)) return;
@@ -42,9 +52,14 @@ const age = (value) => {
 };
 const trim = (text, max) => { const value = String(text || "").replace(/\s+/g, " ").trim(); return value.length > max ? value.slice(0, max - 1) + "…" : value; };
 
-export function buildLineDigest(items, origin = DEFAULT_ORIGIN) {
+export function buildLineDigest(items, origin = DEFAULT_ORIGIN, leaveTemplate = DEFAULT_LEAVE_LINE_TEMPLATE) {
   const base = String(origin || DEFAULT_ORIGIN).replace(/\/$/, "");
-  const lines = items.slice(0, MAX_LINES).map((item) => `• ${trim(item.title, 80)}\n  ${trim(item.message, 160)}`);
+  const lines = items.slice(0, MAX_LINES).map((item) => {
+    if (!String(item.message_key || "").startsWith("leave:")) return `• ${trim(item.title, 80)}\n  ${trim(item.message, 160)}`;
+    const fields={title:trim(item.title,80),message:trim(item.message,160),id:String(item.message_key).split(":")[1],link:base+(item.url||"/leave.html")};
+    const body=(leaveTemplate || DEFAULT_LEAVE_LINE_TEMPLATE).replace(/\{(title|message|id|link)\}/g,(_,key)=>fields[key]);
+    return items.length>1&&!String(leaveTemplate).includes('{link}')?`${body}\n  เปิดใบลา: ${fields.link}`:body;
+  });
   const more = items.length > MAX_LINES ? `\n…และอีก ${items.length - MAX_LINES} รายการ` : "";
   const link = items.length === 1 ? base + (items[0].url || "/dashboard.html") : base + "/dashboard.html";
   const head = items.length === 1 ? "🔔 แจ้งเตือนจากระบบโรงเรียนบ้านป่าเด็ง" : `🔔 มีแจ้งเตือนใหม่ ${items.length} รายการ`;
@@ -85,6 +100,9 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
   await ensureLinePersonalSchema(env);
   await ensureLineFeedSchema(env);
   if (!await acquire(env, trigger)) return { skipped: "locked" };
+  await ensureLeaveData(env);
+  const leaveSetting=await env.DB.prepare('SELECT line_template FROM leave_settings WHERE id=1').first();
+  const leaveTemplate=leaveSetting?.line_template||DEFAULT_LEAVE_LINE_TEMPLATE;
   const people=await linkedLineAccounts(env);
   const {results:preferences}=await env.DB.prepare('SELECT user_id,enabled FROM line_feed_users').all();
   const enabled=new Map(preferences.map(r=>[Number(r.user_id),Number(r.enabled)]));
@@ -140,7 +158,10 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
     if (!mine.length) continue;
     const update = (status, error = null) => env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE line_feed_sent SET status=?,error=?,updated_at=datetime('now') WHERE user_id=? AND message_key=? AND status='pending'").bind(status, error, person.user_id, r.message_key)));
     try {
-      await push(env, person.line_user_id, buildLineDigest(mine, origin));
+      const linked=await Promise.all(mine.map(async r=>({
+        ...r,url:await createLeaveAccessUrl(env,r.message_key,Number(person.user_id))||r.url
+      })));
+      await push(env, person.line_user_id, buildLineDigest(linked, origin, leaveTemplate));
       await update("sent"); sent++; items += mine.length;
       for(const row of mine)delivered.add(`${person.line_user_id}:${row.message_key}`);
       if (remaining !== null) remaining--;

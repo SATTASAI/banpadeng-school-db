@@ -40,11 +40,13 @@
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
   const draftNotes=new Map([...document.querySelectorAll('.leave-note')].map(n=>[n.id,n.value]));
   const selected=$('deputyChoice').value||data.default_deputy_id||'';
-  $('headSettings').hidden=!data.is_personnel_head;
-  if(data.is_personnel_head){
+  const canConfigure=data.is_personnel_head||user.role==='superadmin';
+  $('headSettings').hidden=!canConfigure;
+  if(canConfigure){
    const settings=await apiRequest('/api/leave-settings');deputies=settings.deputies;lineConfigured=settings.line_configured;
    $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+deputies.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');
    $('deputyChoice').value=String(selected||settings.deputy_personnel_id||'');showDeputyStatus();
+   if($('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
   const pending=records.filter(r=>r.can_acknowledge||r.can_record||r.can_review||r.can_decide);
@@ -57,6 +59,18 @@
   const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
   $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับแจ้ง':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
  }
+ function showLinePreview(){
+  const template=$('leaveLineTemplate').value||'• {title}\n  {message}';
+  const values={title:'การลา: ครูตัวอย่าง',message:'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ',id:'123',link:location.origin+'/leave.html?request=123'};
+  $('leaveLinePreview').textContent='🔔 แจ้งเตือนจากระบบโรงเรียนบ้านป่าเด็ง\n\n'+template.replace(/\{(title|message|id|link)\}/g,(_,key)=>values[key])+'\n\nเปิดดู: '+values.link;
+ }
+ $('leaveLineTemplate').oninput=()=>{$('leaveLineTemplate').dataset.dirty='true';showLinePreview();};
+ $('saveLeaveLineTemplate').onclick=async()=>{
+  if(busy)return;busy=true;$('saveLeaveLineTemplate').disabled=true;
+  try{const saved=await apiRequest('/api/leave-settings',{method:'PATCH',body:{line_template:$('leaveLineTemplate').value}});
+   $('leaveLineTemplate').value=saved.line_template;$('leaveLineTemplate').dataset.dirty='false';showLinePreview();success('บันทึกข้อความ LINE สำหรับการแจ้งเตือนครั้งต่อไปแล้ว');
+  }catch(e){error(e);}finally{busy=false;$('saveLeaveLineTemplate').disabled=false;}
+ };
  $('deputyChoice').onchange=showDeputyStatus;
  $('saveDeputy').onclick=async()=>{
   if(busy)return;const id=Number($('deputyChoice').value);if(!id){error(Error('กรุณาเลือกรอง ผอ.'));return;}
@@ -124,5 +138,5 @@
  $('backHomeLink').onclick=e=>{if(window.parent!==window&&window.parent.showOverview){e.preventDefault();window.parent.showOverview();}};
  (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(!user)throw Error('กรุณาเข้าสู่ระบบ');$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
   setInterval(()=>{if(!document.hidden&&!busy&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||''))load().catch(error);},15000);
- }catch(e){error(e);$('submitBtn').disabled=true;}})();
+ }catch(e){error(e);$('submitBtn').disabled=true;$('leaveLoginPrompt').hidden=false;}})();
 })();

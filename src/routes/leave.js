@@ -2,8 +2,9 @@ import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
 import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.js';
-import {ensureLineFeedSchema} from '../lib/line-feed.js';
+import {ensureLineFeedSchema,DEFAULT_LEAVE_LINE_TEMPLATE,validLeaveLineTemplate} from '../lib/line-feed.js';
 import {unreadNotificationsFor} from './notifications.js';
+import {readLeaveAccess} from '../lib/leave-access.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -13,6 +14,13 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
 export async function handleLeaveRoute(request,env,pathname,method) {
+ if(pathname==='/api/leave-view'&&method==='POST'){
+  const body=await request.json().catch(()=>null);
+  await ensureLeaveData(env);
+  const row=await readLeaveAccess(env,body?.token);
+  if(!row)return fail('ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว',404);
+  return json({leave:{...row,leave_type:row.leave_subtype||row.leave_type,leave_subtype:undefined}});
+ }
  const deliveryMatch=pathname.match(/^\/api\/leave-requests\/(\d+)\/delivery$/);
  if(deliveryMatch&&method==='GET'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
@@ -74,9 +82,11 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(method==='GET'){
    await ensureLinePersonalSchema(env);
    const selected=await designatedDeputy(env,people);
+   const saved=await env.DB.prepare('SELECT line_template FROM leave_settings WHERE id=1').first();
    const links=await linkedLineAccounts(env);
    const {results:blocked}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l WHERE l.status='blocked'`).all();
-   return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,deputies:people.filter(isDeputy).map(p=>({
+   return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
+    line_template:saved?.line_template||DEFAULT_LEAVE_LINE_TEMPLATE,deputies:people.filter(isDeputy).map(p=>({
     id:p.id,full_name:p.full_name,position:p.position,
     line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id))?'active':
      p.user_ids.some(id=>blocked.some(l=>l.user_id===id))?'blocked':'not_linked'
@@ -84,6 +94,12 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   }
   if(method==='PATCH'){
    const body=await request.json().catch(()=>null);
+   if(body&&Object.hasOwn(body,'line_template')){
+    if(Object.keys(body).some(k=>k!=='line_template')||!validLeaveLineTemplate(body.line_template))return fail('ข้อความต้องยาวไม่เกิน 400 ตัวอักษร ใช้ได้เฉพาะ {title} {message} {id} {link}');
+    const template=body.line_template.trim()||null;
+    await env.DB.prepare('INSERT INTO leave_settings(id,line_template) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET line_template=excluded.line_template').bind(template).run();
+    return json({ok:true,line_template:template||DEFAULT_LEAVE_LINE_TEMPLATE});
+   }
    const deputy=people.find(p=>p.id===Number(body?.deputy_personnel_id)&&isDeputy(p));
    if(!deputy)return fail('กรุณาเลือกรองผู้อำนวยการที่มีบัญชีผู้บริหารใช้งานอยู่');
    await env.DB.batch([

@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
 test('head inbox shows acknowledgement and forwarding separately, sends the selected deputy, escapes text and retains draft notes on refresh',async()=>{
- const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
- const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{
+ const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
+ const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{
   if(path==='/api/auth/me')return{user:{id:3,full_name:'หัวหน้าฝ่าย'}};
   if(path==='/api/leave-settings')return{deputy_personnel_id:5,deputies:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ',line_status:'active'}]};
   if(options){payload=options.body;stage='acknowledged';return{ok:true};}

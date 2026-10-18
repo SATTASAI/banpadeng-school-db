@@ -15,6 +15,7 @@
   <h2>การลา</h2>
   <p class="muted">ยื่นใบลา → หัวหน้าฝ่ายบุคลากรรับทราบและบันทึก → ส่งต่อรองผู้บริหารให้ความเห็น → ผู้อำนวยการออกคำสั่ง</p>
   <div class="error-box" id="errorBox" role="alert"></div>
+  <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
   <section class="panel leave-panel">
    <h3>ยื่นใบลาใหม่</h3>
@@ -40,6 +41,12 @@
    <h3>รอง ผอ. ผู้รับแจ้งการลา</h3><p class="muted">เลือกรอง ผอ. ที่รับผิดชอบฝ่ายบุคลากรและกดบันทึกก่อนครูยื่นใบลา รอง ผอ. จะได้รับ LINE พร้อมหัวหน้าฝ่ายและดูใบลาได้ แต่ให้ความเห็นได้หลังหัวหน้าฝ่ายส่งต่อ</p>
    <label for="deputyChoice">รองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร</label><select id="deputyChoice"><option value="">เลือกรองผู้บริหาร</option></select>
    <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกผู้รับแจ้งล่วงหน้า</button><p id="deputyLineStatus" class="muted" role="status"></p>
+   <h4>ข้อความแจ้งการลาทาง LINE</h4>
+   <p class="muted">ปรับข้อความสำหรับใบลาใหม่และการเปลี่ยนสถานะครั้งต่อไป ใช้ {title} ชื่อผู้ยื่น, {message} สถานะ, {id} เลขที่ใบลา, {link} ลิงก์ใบลา ข้อความส่วนหัวและลิงก์เปิดดูยังแสดงเสมอ</p>
+   <label for="leaveLineTemplate">ข้อความในรายการแจ้งเตือน</label>
+   <textarea id="leaveLineTemplate" rows="4" maxlength="400" placeholder="• {title}&#10;  {message}"></textarea>
+   <p class="muted">ตัวอย่างข้อความที่จะส่ง</p><pre id="leaveLinePreview" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+   <button class="btn btn-primary" id="saveLeaveLineTemplate" type="button">บันทึกข้อความ LINE</button>
   </section>
   <section id="pendingSection" hidden><h3>รายการรอดำเนินการ</h3><div class="panel" id="pendingPanel"></div></section>
   <section id="detailSection" class="panel leave-panel" hidden aria-live="polite"><div class="leave-detail-heading"><h3>รายละเอียดใบลา</h3><button class="btn btn-ghost" id="closeDetail" type="button">ปิดรายละเอียด</button></div><div id="detailPanel"></div></section>

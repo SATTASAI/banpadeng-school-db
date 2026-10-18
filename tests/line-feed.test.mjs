@@ -138,6 +138,7 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
  env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลาเลขที่ {id}: {title}\n{message}\n{link}'},3)).status,200);
  const line=mockLine();
  try {
   await dispatchLineNotifications(env);
@@ -149,6 +150,18 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   await dispatchLineNotifications(env);
   assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-other']);
   assert(line.pushes.every(p=>p.messages[0].text.includes('การลา: ครู ก')));
+  assert(line.pushes.every(p=>p.messages[0].text.includes(`ใบลาเลขที่ ${id}: การลา: ครู ก`)));
+  const deputyText=line.pushes.find(p=>p.to==='U-deputy').messages[0].text;
+  const token=deputyText.match(/leave-view\.html\?token=([a-f0-9]{64})/)?.[1];
+  assert(token,'the deputy receives an unguessable view link');
+  const anonymous=()=>worker.fetch(new Request('https://school.test/api/leave-view',{
+   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})}),env,{});
+  assert.equal((await worker.fetch(new Request(`https://school.test/api/leave-requests/${id}`),env,{})).status,401);
+  const view=await anonymous();assert.equal(view.status,200);
+  const {leave}=await view.json();assert.equal(leave.id,id);assert.equal(leave.full_name,'ครู ก');
+  assert.equal(leave.contact_phone,undefined);
+  assert.equal((await worker.fetch(new Request('https://school.test/api/leave-view',{
+   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:(token[0]==='0'?'1':'0')+token.slice(1)})}),env,{})).status,404);
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ยังไม่ถึงคิว'},5)).status,403);
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'forward',deputy_personnel_id:deputy},5)).status,403);
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
@@ -158,6 +171,11 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-deputy','U-other']);
   const inbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
   assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,true);
+  env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");
+  assert.equal((await anonymous()).status,404,'the link stops working if the deputy loses access');
+  env.raw.exec("UPDATE users SET role='executive' WHERE id=5");
+  env.raw.exec("UPDATE leave_line_access SET expires_at=datetime('now','-1 minute')");
+  assert.equal((await anonymous()).status,404,'expired links cannot read the leave');
  } finally {line.restore();}
 });
 test('first feed after a linked deputy receives a new leave, including one already read in the bell',async()=>{
@@ -228,7 +246,7 @@ test('deputy receives the leave through an existing LINE match on another login 
   await dispatchLineNotifications(env);
   const {id}=await (await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ทดสอบบัญชีร่วม',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้าน',contact_phone:'0000000000'},2)).json();
   unlock(env);await dispatchLineNotifications(env);
-  assert.equal(line.pushes.filter(p=>p.to==='U-shared-deputy'&&p.messages[0].text.includes(`request=${id}`)).length,1);
+  assert.equal(line.pushes.filter(p=>p.to==='U-shared-deputy'&&/leave-view\.html\?token=[a-f0-9]{64}/.test(p.messages[0].text)).length,1);
   assert.equal(line.pushes.filter(p=>p.to==='U-other'&&p.messages[0].text.includes('การลา: ครู ก')).length,1,'the head gets only one copy across both accounts');
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
  }finally{line.restore();}
