@@ -3,6 +3,7 @@
 // Webhook จับคู่รหัสกับ userId ของ LINE แล้วตอบกลับ (reply ไม่นับโควตา)
 import { getCurrentUser, jsonResponse } from "./auth.js";
 import { lineFeedPreference, setLineFeedPreference } from "./line-feed.js";
+import { ensurePersonnelData } from "./personnel-data.js";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const CODE_LENGTH = 6;
@@ -166,6 +167,33 @@ export async function getLinkedLineUsers(env, userIds) {
       AND l.user_id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all();
   for (const row of results || []) map.set(Number(row.user_id), row);
   return map;
+}
+
+// A staff member can have more than one school login. The LINE match belongs to
+// that person, so an executive login may use the link on their other login. Do
+// not infer identity from display names or a group chat's last sender.
+export async function linkedLineAccounts(env) {
+  await ensureLinePersonalSchema(env);
+  await ensurePersonnelData(env);
+  const { results } = await env.DB.prepare(`WITH shared AS (
+    SELECT a.user_id,MIN(l.line_user_id) line_user_id,MIN(l.linked_at) linked_at,MIN(l.user_id) owner_user_id
+    FROM personnel_accounts a
+    JOIN personnel_accounts other ON other.personnel_id=a.personnel_id
+    JOIN line_user_links l ON l.user_id=other.user_id AND l.status='active'
+    JOIN users owner ON owner.id=l.user_id AND owner.status='active' AND owner.deleted_at IS NULL
+    JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
+    GROUP BY a.user_id HAVING COUNT(DISTINCT l.line_user_id)=1
+  )
+  SELECT u.id user_id,u.role,u.full_name,
+    CASE WHEN direct.user_id IS NOT NULL THEN direct.line_user_id ELSE shared.line_user_id END line_user_id,
+    CASE WHEN direct.user_id IS NOT NULL THEN direct.linked_at ELSE shared.linked_at END linked_at,
+    CASE WHEN direct.user_id IS NOT NULL THEN direct.user_id ELSE shared.owner_user_id END link_owner_user_id
+  FROM users u LEFT JOIN line_user_links direct ON direct.user_id=u.id
+  LEFT JOIN shared ON shared.user_id=u.id
+  WHERE u.status='active' AND u.role IS NOT NULL AND u.deleted_at IS NULL
+    AND (direct.status='active' OR (direct.user_id IS NULL AND shared.line_user_id IS NOT NULL))
+  ORDER BY u.id`).all();
+  return results;
 }
 
 // ผู้รับรายบุคคลของงานซ่อมแต่ละเหตุการณ์ (ไม่ส่งหาคนที่เป็นผู้กดเอง)

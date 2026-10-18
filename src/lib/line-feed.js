@@ -2,7 +2,7 @@
 // ใช้รายการเดียวกับกระดิ่งแจ้งเตือนในระบบ (src/routes/notifications.js) แล้วรวมเป็นข้อความเดียวต่อคนต่อรอบ
 // ทำงานทุก 2 นาที (Cron) และหลังมีการบันทึกข้อมูลในระบบ (เว้นระยะอย่างน้อย LOCK_SECONDS)
 // งานแจ้งซ่อมส่ง LINE ของตัวเองอยู่แล้ว และไม่อยู่ในรายการนี้ จึงไม่ซ้ำกัน
-import { ensureLinePersonalSchema } from "./line-personal.js";
+import { ensureLinePersonalSchema, linkedLineAccounts } from "./line-personal.js";
 import { unreadNotificationsFor } from "../routes/notifications.js";
 
 const ready = new WeakSet();
@@ -85,13 +85,14 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
   await ensureLinePersonalSchema(env);
   await ensureLineFeedSchema(env);
   if (!await acquire(env, trigger)) return { skipped: "locked" };
-  const { results: people } = await env.DB.prepare(`SELECT l.user_id,l.line_user_id,l.linked_at,u.id,u.role,u.full_name,COALESCE(f.enabled,1) enabled,f.user_id known
-    FROM line_user_links l JOIN users u ON u.id=l.user_id LEFT JOIN line_feed_users f ON f.user_id=l.user_id
-    WHERE l.status='active' AND u.status='active' AND u.role IS NOT NULL AND u.deleted_at IS NULL ORDER BY l.user_id`).all();
+  const people=await linkedLineAccounts(env);
+  const {results:preferences}=await env.DB.prepare('SELECT user_id,enabled FROM line_feed_users').all();
+  const enabled=new Map(preferences.map(r=>[Number(r.user_id),Number(r.enabled)]));
+  const delivered=new Set();
   const reserve = Number.isFinite(Number(env.LINE_FEED_RESERVE)) ? Number(env.LINE_FEED_RESERVE) : 20;
   let remaining, sent = 0, items = 0, failures = 0, quotaBlocked = 0;
   for (const person of people) {
-    if (!Number(person.enabled)) continue;
+    if (enabled.get(Number(person.user_id))===0 || enabled.get(Number(person.link_owner_user_id))===0) continue;
     let rows;
     try { rows = await unreadNotificationsFor(env, { id: Number(person.user_id), role: person.role }, 50, {forLine:true}); }
     catch { failures++; continue; }
@@ -120,20 +121,28 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
     const old = candidates.filter((r) => age(r.created_at) > MAX_AGE_HOURS), current = candidates.filter((r) => age(r.created_at) <= MAX_AGE_HOURS);
     if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'skipped')").bind(person.user_id, r.message_key)));
     if (!current.length) continue;
+    // Two school logins for one person may both see the same item. Record it
+    // against each login, but send only one copy to their shared LINE account.
+    const duplicates=current.filter(r=>delivered.has(`${person.line_user_id}:${r.message_key}`));
+    if(duplicates.length)await env.DB.batch(duplicates.map(r=>env.DB.prepare(`INSERT INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'sent')
+      ON CONFLICT(user_id,message_key) DO UPDATE SET status='sent',error=NULL,updated_at=datetime('now')`).bind(person.user_id,r.message_key)));
+    const outstanding=current.filter(r=>!delivered.has(`${person.line_user_id}:${r.message_key}`));
+    if(!outstanding.length)continue;
     if (remaining === undefined) remaining = await quotaRemaining(env);
     if (remaining !== null && remaining <= reserve) { quotaBlocked++; continue; }
     // จองรายการก่อนส่ง เพื่อไม่ให้สองรอบที่ทำงานซ้อนกันส่งซ้ำ
-    const claims = await env.DB.batch(current.map(r=>known.has(r.message_key)
+    const claims = await env.DB.batch(outstanding.map(r=>known.has(r.message_key)
       ? env.DB.prepare(`UPDATE line_feed_sent SET status='pending',updated_at=datetime('now'),error=NULL
         WHERE user_id=? AND message_key=? AND status=? AND COALESCE(updated_at,created_at)<datetime('now',?)`)
         .bind(person.user_id,r.message_key,known.get(r.message_key).status,known.get(r.message_key).status==='pending'?'-5 minutes':'-1 minute')
       : env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'pending')").bind(person.user_id,r.message_key)));
-    const mine = current.filter((_, index) => claims[index].meta.changes);
+    const mine = outstanding.filter((_, index) => claims[index].meta.changes);
     if (!mine.length) continue;
     const update = (status, error = null) => env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE line_feed_sent SET status=?,error=?,updated_at=datetime('now') WHERE user_id=? AND message_key=? AND status='pending'").bind(status, error, person.user_id, r.message_key)));
     try {
       await push(env, person.line_user_id, buildLineDigest(mine, origin));
       await update("sent"); sent++; items += mine.length;
+      for(const row of mine)delivered.add(`${person.line_user_id}:${row.message_key}`);
       if (remaining !== null) remaining--;
     } catch (error) {
       failures++; await update("failed", String(error?.message || error).slice(0, 300));

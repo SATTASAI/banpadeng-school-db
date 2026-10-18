@@ -1,7 +1,7 @@
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
-import {ensureLinePersonalSchema} from '../lib/line-personal.js';
+import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -20,11 +20,12 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(method==='GET'){
    await ensureLinePersonalSchema(env);
    const selected=await designatedDeputy(env,people);
-   const {results:links}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l`).all();
+   const links=await linkedLineAccounts(env);
+   const {results:blocked}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l WHERE l.status='blocked'`).all();
    return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,deputies:people.filter(isDeputy).map(p=>({
     id:p.id,full_name:p.full_name,position:p.position,
-    line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id&&l.status==='active'))?'active':
-     p.user_ids.some(id=>links.some(l=>l.user_id===id&&l.status==='blocked'))?'blocked':'not_linked'
+    line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id))?'active':
+     p.user_ids.some(id=>blocked.some(l=>l.user_id===id))?'blocked':'not_linked'
    }))});
   }
   if(method==='PATCH'){
