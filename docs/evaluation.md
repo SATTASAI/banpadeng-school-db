@@ -13,7 +13,7 @@
 ตารางถูกสร้างอัตโนมัติเมื่อเรียก evaluation API ครั้งแรก ไม่เรียก migration ของงบประมาณ/ตารางเรียน/ระบบอื่น
 `schema.js` เป็นแหล่งอ้างอิงตารางประเมิน; การสำรอง D1 เดิมครอบคลุมตารางนี้ด้วย
 ตั้ง `assets.run_worker_first=true` เพื่อให้ทุกเส้นทางผ่านตัวตรวจ hostname ก่อนเสิร์ฟไฟล์
-Workflow `Connect evaluation domain` ทำงานหลัง `Deploy Cloudflare Worker` สำเร็จ โดยใช้ Cloudflare token เดิม (ต้องมี Workers Scripts Write)
+Workflow `Connect evaluation domain` เป็นคำสั่งติดตั้งโดเมนที่เรียกเองหลัง Worker deploy สำเร็จ โดยใช้ Cloudflare token (ต้องมี Workers Scripts Write) การทดสอบติดตั้งครั้งแรกได้ HTTP 403 จึงต้องเพิ่มสิทธิ์ที่ Cloudflare หรือผูก Custom domain ผ่านหน้า Worker Settings ด้วยบัญชีเจ้าของก่อน ไม่ลองซ้ำอัตโนมัติทุก deploy
 ผูกเฉพาะ hostname ที่ขอ ไม่แก้ hostname โรงเรียนอื่น และหยุดหากชื่อที่ขอผูก Worker อื่นอยู่แล้ว
 
 ## สิทธิ์
