@@ -1,0 +1,38 @@
+name: Inspect evaluatesystem build settings
+on:
+  push:
+    branches: [codex/inspect-evaluatesystem]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN }}
+    steps:
+      - name: Read configuration without secrets
+        run: |
+          python3 - <<'PY'
+          import os,json,urllib.request,urllib.error
+          root='https://api.cloudflare.com/client/v4/accounts/'+os.environ['CF_ACCOUNT_ID']
+          def get(path):
+              req=urllib.request.Request(root+path,headers={'Authorization':'Bearer '+os.environ['CF_API_TOKEN']})
+              try:
+                  with urllib.request.urlopen(req,timeout=25) as r: data=json.load(r)
+              except urllib.error.HTTPError as e:
+                  print('CONFIG_HTTP',path,e.code,flush=True);return None
+              return data.get('result')
+          scripts=get('/workers/scripts') or []
+          for name in ['banpadeng-school-db','evaluatesystem']:
+              script=next((s for s in scripts if s.get('id')==name),None)
+              print('WORKER',name,'exists',bool(script),flush=True)
+              if not script:continue
+              triggers=get('/builds/workers/'+script['tag']+'/triggers') or []
+              for t in triggers:
+                  print('BUILD_CONFIG',json.dumps({'worker':name,'trigger_uuid':t.get('trigger_uuid') or t.get('uuid'),'root_directory':t.get('root_directory'),'build_command':t.get('build_command'),'deploy_command':t.get('deploy_command'),'branch_includes':t.get('branch_includes'),'repo_name':(t.get('repo_connection') or {}).get('repo_name')},ensure_ascii=False),flush=True)
+              settings=get('/workers/scripts/'+name+'/settings')
+              if settings:
+                  print('BINDING_NAMES',name,json.dumps([{'name':b.get('name'),'type':b.get('type')} for b in settings.get('bindings',[])]),flush=True)
+          PY
