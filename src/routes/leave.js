@@ -96,7 +96,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    const body=await request.json().catch(()=>null);
    if(body&&Object.hasOwn(body,'line_template')){
     if(user.role!=='superadmin')return fail('เฉพาะผู้ดูแลระบบเท่านั้น',403);
-    if(Object.keys(body).some(k=>k!=='line_template')||!validLeaveLineTemplate(body.line_template))return fail('ข้อความต้องยาวไม่เกิน 400 ตัวอักษร ใช้ได้เฉพาะ {title} {message} {id} {link}');
+    if(Object.keys(body).some(k=>k!=='line_template')||!validLeaveLineTemplate(body.line_template))return fail('ข้อความต้องยาวไม่เกิน 400 ตัวอักษร ใช้ได้เฉพาะ {title} {message} {id} {link} {reason} {leave_dates}');
     const template=body.line_template.trim()||null;
     await env.DB.prepare('INSERT INTO leave_settings(id,line_template) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET line_template=excluded.line_template').bind(template).run();
     return json({ok:true,line_template:template||DEFAULT_LEAVE_LINE_TEMPLATE});

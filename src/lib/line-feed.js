@@ -12,8 +12,8 @@ const LOCK_SECONDS = 15;
 const MAX_AGE_HOURS = 72; // ไม่ส่งรายการที่เก่ากว่านี้ (เช่น ตอนเพิ่งเชื่อม LINE)
 const MAX_LINES = 5;
 const DEFAULT_ORIGIN = "https://system.banpadengschool.ac.th";
-export const DEFAULT_LEAVE_LINE_TEMPLATE = "• {title}\n  {message}";
-const LEAVE_FIELDS = new Set(["title", "message", "id", "link"]);
+export const DEFAULT_LEAVE_LINE_TEMPLATE = "• {title}\n  {message}\n  วันที่ลา: {leave_dates}\n  เหตุผลการลา: {reason}";
+const LEAVE_FIELDS = new Set(["title", "message", "id", "link", "reason", "leave_dates"]);
 
 export function validLeaveLineTemplate(value) {
   if (typeof value !== "string" || value.length > 400) return false;
@@ -52,13 +52,20 @@ const age = (value) => {
 };
 const trim = (text, max) => { const value = String(text || "").replace(/\s+/g, " ").trim(); return value.length > max ? value.slice(0, max - 1) + "…" : value; };
 
+function leaveDate(value) {
+  const match=String(value||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return match?`${Number(match[3])}/${Number(match[2])}/${Number(match[1])+543}`:'—';
+}
+
 export function buildLineDigest(items, origin = DEFAULT_ORIGIN, leaveTemplate = DEFAULT_LEAVE_LINE_TEMPLATE) {
   const base = String(origin || DEFAULT_ORIGIN).replace(/\/$/, "");
   const lines = items.slice(0, MAX_LINES).map((item) => {
     if (!String(item.message_key || "").startsWith("leave:")) return `• ${trim(item.title, 80)}\n  ${trim(item.message, 160)}`;
-    const fields={title:trim(item.title,80),message:trim(item.message,160),id:String(item.message_key).split(":")[1],link:base+(item.url||"/leave.html")};
-    const body=(leaveTemplate || DEFAULT_LEAVE_LINE_TEMPLATE).replace(/\{(title|message|id|link)\}/g,(_,key)=>fields[key]);
-    return items.length>1&&!String(leaveTemplate).includes('{link}')?`${body}\n  เปิดใบลา: ${fields.link}`:body;
+    const fields={title:trim(item.title,80),message:trim(item.message,160),id:String(item.message_key).split(":")[1],link:base+(item.url||"/leave.html"),reason:trim(item.reason,300)||"—",
+      leave_dates:item.start_date===item.end_date?leaveDate(item.start_date):`${leaveDate(item.start_date)} ถึง ${leaveDate(item.end_date)}`};
+    const rendered=(leaveTemplate || DEFAULT_LEAVE_LINE_TEMPLATE).replace(/\{(title|message|id|link|reason|leave_dates)\}/g,(_,key)=>fields[key]);
+    const body=rendered.length>750?rendered.slice(0,749)+"…":rendered;
+    return items.length>1&&!body.includes(fields.link)?`${body}\n  เปิดใบลา: ${fields.link}`:body;
   });
   const more = items.length > MAX_LINES ? `\n…และอีก ${items.length - MAX_LINES} รายการ` : "";
   const link = items.length === 1 ? base + (items[0].url || "/dashboard.html") : base + "/dashboard.html";
@@ -158,9 +165,11 @@ export async function dispatchLineNotifications(env, { trigger = "cron", origin 
     if (!mine.length) continue;
     const update = (status, error = null) => env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE line_feed_sent SET status=?,error=?,updated_at=datetime('now') WHERE user_id=? AND message_key=? AND status='pending'").bind(status, error, person.user_id, r.message_key)));
     try {
-      const linked=await Promise.all(mine.map(async r=>({
-        ...r,url:await createLeaveAccessUrl(env,r.message_key,Number(person.user_id))||r.url
-      })));
+      const linked=await Promise.all(mine.map(async r=>{
+        const leaveId=String(r.message_key).match(/^leave:(\d+):/)?.[1];
+        const details=leaveId?await env.DB.prepare('SELECT reason,start_date,end_date FROM leave_requests WHERE id=?').bind(Number(leaveId)).first():null;
+        return {...r,...details,url:await createLeaveAccessUrl(env,r.message_key,Number(person.user_id))||r.url};
+      }));
       await push(env, person.line_user_id, buildLineDigest(linked, origin, leaveTemplate));
       await update("sent"); sent++; items += mine.length;
       for(const row of mine)delivered.add(`${person.line_user_id}:${row.message_key}`);

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, call } from "./notifications.test.mjs";
-import { dispatchLineNotifications, buildLineDigest } from "../src/lib/line-feed.js";
+import { dispatchLineNotifications, buildLineDigest, validLeaveLineTemplate } from "../src/lib/line-feed.js";
 import { linkedLineAccounts } from "../src/lib/line-personal.js";
 import worker from "../src/index.js";
 
@@ -138,11 +138,11 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
  env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลาเลขที่ {id}: {title}\n{message}\n{link}'},1)).status,200);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลาเลขที่ {id}: {title}\n{message}\nวันที่ลา: {leave_dates}\nเหตุผล: {reason}\n{link}'},1)).status,200);
  const line=mockLine();
  try {
   await dispatchLineNotifications(env);
-  const form={leave_type:'sick',reason:'ไม่สบาย',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้านพัก',contact_phone:'0000000000'};
+  const form={leave_type:'sick',reason:'ไม่สบาย',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-20',contact_address:'บ้านพัก',contact_phone:'0000000000'};
   const response=await call(env,'/api/leave-requests','POST',form,2);
   assert.equal(response.status,201);
   const {id}=await response.json();
@@ -151,6 +151,8 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-other']);
   assert(line.pushes.every(p=>p.messages[0].text.includes('การลา: ครู ก')));
   assert(line.pushes.every(p=>p.messages[0].text.includes(`ใบลาเลขที่ ${id}: การลา: ครู ก`)));
+  assert(line.pushes.every(p=>p.messages[0].text.includes('วันที่ลา: 19/10/2569 ถึง 20/10/2569')));
+  assert(line.pushes.every(p=>p.messages[0].text.includes('เหตุผล: ไม่สบาย')));
   const deputyText=line.pushes.find(p=>p.to==='U-deputy').messages[0].text;
   const token=deputyText.match(/leave-view\.html\?token=([a-f0-9]{64})/)?.[1];
   assert(token,'the deputy receives an unguessable view link');
@@ -169,6 +171,8 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   unlock(env);
   await dispatchLineNotifications(env);
   assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-deputy','U-other']);
+  assert.match(line.pushes.at(-1).messages[0].text,/วันที่ลา: 19\/10\/2569 ถึง 20\/10\/2569/);
+  assert.match(line.pushes.at(-1).messages[0].text,/เหตุผล: ไม่สบาย/);
   const inbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
   assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,true);
   env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");
@@ -268,4 +272,18 @@ test('shared personnel lookup refuses ambiguous LINE matches and a blocked direc
  assert(!((await linkedLineAccounts(env)).some(p=>p.user_id===5)));
  env.raw.exec("INSERT INTO line_user_links(user_id,line_user_id,status) VALUES(5,'U-blocked','blocked')");
  assert(!((await linkedLineAccounts(env)).some(p=>p.user_id===5)));
+});
+
+test('leave template renders single-day dates, legacy missing data and literal reasons within LINE limits',()=>{
+ const item={message_key:'leave:1:pending',title:'ครูทดสอบ',message:'รอรับทราบ',reason:'พักรักษาตัว {link}',start_date:'2026-10-19',end_date:'2026-10-19',url:'/leave-view.html?token=example'};
+ assert(validLeaveLineTemplate('{reason} {leave_dates} {title} {link}'));
+ assert(!validLeaveLineTemplate('{unknown}'));
+ const text=buildLineDigest([item],'https://s.test');
+ assert.match(text,/วันที่ลา: 19\/10\/2569\n/);
+ assert.match(text,/เหตุผลการลา: พักรักษาตัว \{link\}/);
+ const legacy=buildLineDigest([{message_key:'leave:2:pending'}],'https://s.test','{reason} / {leave_dates}');
+ assert.match(legacy,/— \/ —/);
+ const long=buildLineDigest(Array.from({length:5},(_,i)=>({...item,reason:'ยาว'.repeat(1000),url:'/leave-view.html?token='+i})),'https://s.test','{reason}'.repeat(50));
+ assert(long.length<=5000);
+ for(let i=0;i<5;i++)assert(long.includes('https://s.test/leave-view.html?token='+i));
 });

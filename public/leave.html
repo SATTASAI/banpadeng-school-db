@@ -42,9 +42,10 @@
    <label for="deputyChoice">รองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร</label><select id="deputyChoice"><option value="">เลือกรองผู้บริหาร</option></select>
    <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกผู้รับแจ้งล่วงหน้า</button><p id="deputyLineStatus" class="muted" role="status"></p>
    <div id="lineTemplateSettings" hidden><h4>ข้อความแจ้งการลาทาง LINE</h4>
-   <p class="muted">ปรับข้อความสำหรับใบลาใหม่และการเปลี่ยนสถานะครั้งต่อไป ใช้ {title} ชื่อผู้ยื่น, {message} สถานะ, {id} เลขที่ใบลา, {link} ลิงก์ใบลา ข้อความส่วนหัวและลิงก์เปิดดูยังแสดงเสมอ</p>
+   <p class="muted">ปรับข้อความสำหรับใบลาใหม่และการเปลี่ยนสถานะครั้งต่อไป ใช้ {title} ชื่อผู้ยื่น, {message} สถานะ, {id} เลขที่ใบลา, {link} ลิงก์ใบลา, {reason} เหตุผลการลา, {leave_dates} วันที่ลา (ตั้งแต่–ถึง) ข้อความส่วนหัวและลิงก์เปิดดูยังแสดงเสมอ</p>
    <label for="leaveLineTemplate">ข้อความในรายการแจ้งเตือน</label>
-   <textarea id="leaveLineTemplate" rows="4" maxlength="400" placeholder="• {title}&#10;  {message}"></textarea>
+   <textarea id="leaveLineTemplate" rows="4" maxlength="400" placeholder="• {title}&#10;  {message}&#10;  วันที่ลา: {leave_dates}&#10;  เหตุผลการลา: {reason}"></textarea>
+   <div class="leave-actions"><button class="btn btn-ghost" id="insertLeaveReason" type="button">แทรกเหตุผลการลา</button><button class="btn btn-ghost" id="insertLeaveDates" type="button">แทรกวันที่ลา</button></div>
    <p class="muted">ตัวอย่างข้อความที่จะส่ง</p><pre id="leaveLinePreview" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
    <button class="btn btn-primary" id="saveLeaveLineTemplate" type="button">บันทึกข้อความ LINE</button></div>
   </section>
