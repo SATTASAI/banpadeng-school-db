@@ -61,9 +61,9 @@
   $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับแจ้ง':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
  }
  function showLinePreview(){
-  const template=$('leaveLineTemplate').value||'• {title}\n  {message}\n  วันที่ลา: {leave_dates}\n  เหตุผลการลา: {reason}';
-  const values={title:'การลา: ครูตัวอย่าง',message:'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ',id:'123',reason:'ไม่สบาย ขอพักรักษาตัว',leave_dates:'19/10/2569 ถึง 20/10/2569',link:location.origin+'/leave.html?request=123'};
-  $('leaveLinePreview').textContent='🔔 แจ้งเตือนจากระบบโรงเรียนบ้านป่าเด็ง\n\n'+template.replace(/\{(title|message|id|link|reason|leave_dates)\}/g,(_,key)=>values[key])+'\n\nเปิดดู: '+values.link;
+  const template=$('leaveLineTemplate').value||'• {title}\n  {message}\n  วันที่ลา: {leave_dates}\n  เหตุผลการลา: {reason}\n  เบอร์โทรศัพท์ครู: {phone}';
+  const values={title:'การลา: ครูตัวอย่าง',message:'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ',id:'123',reason:'ไม่สบาย ขอพักรักษาตัว',phone:'0800000000',leave_dates:'19/10/2569 ถึง 20/10/2569',link:location.origin+'/leave.html?request=123'};
+  $('leaveLinePreview').textContent='🔔 แจ้งเตือนจากระบบโรงเรียนบ้านป่าเด็ง\n\n'+template.replace(/\{(title|message|id|link|reason|leave_dates|phone)\}/g,(_,key)=>values[key])+'\n\nเปิดดู: '+values.link;
  }
  function insertLineField(field){
   const input=$('leaveLineTemplate'),start=input.selectionStart??input.value.length,end=input.selectionEnd??start;
@@ -73,6 +73,7 @@
  }
  $('insertLeaveReason').onclick=()=>insertLineField('{reason}');
  $('insertLeaveDates').onclick=()=>insertLineField('{leave_dates}');
+ $('insertLeavePhone').onclick=()=>insertLineField('{phone}');
  $('leaveLineTemplate').oninput=()=>{$('leaveLineTemplate').dataset.dirty='true';showLinePreview();};
  $('saveLeaveLineTemplate').onclick=async()=>{
   if(busy)return;busy=true;$('saveLeaveLineTemplate').disabled=true;
