@@ -1,0 +1,81 @@
+name: Connect evaluation domain
+on:
+  workflow_run:
+    workflows: [Deploy Cloudflare Worker]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cloudflare-evaluation-domain
+  cancel-in-progress: false
+jobs:
+  connect:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      CF_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CF_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_TOKEN }}
+    steps:
+      - name: Attach only the requested evaluation hostname
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          account=os.environ['CF_ACCOUNT_ID']
+          token=os.environ['CF_API_TOKEN']
+          if len(account)!=32 or not token:
+              raise SystemExit('::error::Cloudflare account or deployment token is missing')
+          root=f'https://api.cloudflare.com/client/v4/accounts/{account}/workers/domains'
+          headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}
+          def call(method,body=None):
+              req=urllib.request.Request(root,data=json.dumps(body).encode() if body else None,headers=headers,method=method)
+              try:
+                  with urllib.request.urlopen(req,timeout=35) as res: result=json.load(res)
+              except urllib.error.HTTPError as error:
+                  raise SystemExit(f'::error::Cloudflare domain request returned HTTP {error.code}. Deployment token needs Workers Scripts Write for this account.')
+              if not result.get('success'):
+                  codes=[e.get('code') for e in result.get('errors',[])]
+                  raise SystemExit(f'::error::Cloudflare rejected the domain request (codes: {codes})')
+              return result['result']
+          hostname='evaluate.banpadengschool.ac.th'
+          domains=call('GET')
+          existing=next((d for d in domains if d['hostname']==hostname),None)
+          if existing and existing.get('service')!='banpadeng-school-db':
+              raise SystemExit('::error::Evaluation hostname already points to another Worker; no changes made')
+          if not existing or not existing.get('enabled',True):
+              call('PUT',{'hostname':hostname,'service':'banpadeng-school-db','zone_name':'banpadengschool.ac.th','enabled':True})
+          verified=next((d for d in call('GET') if d['hostname']==hostname),None)
+          if not verified or verified.get('service')!='banpadeng-school-db':
+              raise SystemExit('::error::Cannot verify evaluation domain attachment')
+          print('Verified evaluation hostname attachment; school hostnames were not changed.')
+          PY
+      - name: Verify evaluation app and school API boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,time,urllib.request,urllib.error
+          base='https://evaluate.banpadengschool.ac.th'
+          ready=False
+          for attempt in range(8):
+              try:
+                  with urllib.request.urlopen(base+'/api/evaluation/permissions',timeout=12) as r:
+                      data=json.load(r)
+                      ready=data.get('access') is False and data.get('user') is None
+                  if ready: break
+              except (urllib.error.URLError,TimeoutError): pass
+              time.sleep(5)
+          if not ready: raise SystemExit('::error::Domain attached, but evaluation HTTPS/API is not ready yet')
+          try:
+              urllib.request.urlopen(base+'/api/users',timeout=12)
+          except urllib.error.HTTPError as e:
+              if e.code!=404: raise SystemExit('::error::Unexpected school API response on evaluation hostname')
+          else: raise SystemExit('::error::School API boundary failed')
+          with open(__import__('os').environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('Evaluation app verified: https://evaluate.banpadengschool.ac.th/\n\nUnauthenticated access is denied and school APIs return 404 on this hostname.\n')
+          print('Evaluation HTTPS/API and hostname boundary verified.')
+          PY

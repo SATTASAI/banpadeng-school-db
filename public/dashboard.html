@@ -423,6 +423,7 @@
         link.dataset.parentPage = key;
         link.dataset.url = item.url;
         link.textContent = item.label;
+        if (item.evaluationOnly) { link.dataset.evaluationOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
         if (item.url === '/budget.html?view=otherProjects') {
           const badge=document.createElement('small');
@@ -442,6 +443,7 @@
     });
   }
   buildSidebarSubmenus();
+  apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
 
   function showOverview() {
     setMobileMenu(false);

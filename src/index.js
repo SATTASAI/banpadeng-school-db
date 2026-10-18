@@ -1,3 +1,4 @@
+import {handleEvaluationRoute,EVALUATION_HOST,evaluationHostPathAllowed} from './evaluation/routes.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
@@ -4316,6 +4317,14 @@ const app = {
     const method = request.method;
 
     try {
+      // Evaluation is a separate app surface with host-only cookies and a strict route boundary.
+      if (url.hostname === EVALUATION_HOST) {
+        if (!evaluationHostPathAllowed(pathname)) return jsonResponse({error:"ไม่พบหน้าในระบบประเมิน"},404);
+        if (["/","/evaluate"].includes(pathname)) return Response.redirect(new URL("/evaluate.html",url.origin),302);
+      }
+      if (pathname.startsWith("/api/evaluation/")) {
+        return await handleEvaluationRoute(request,env,pathname,method);
+      }
       // LINE ต้องได้รับ HTTP 200 อย่างรวดเร็ว: ตรวจลายเซ็นและตอบก่อน migration/auth ของ API ภายใน
       if (pathname === "/api/line/webhook" && method === "POST") return await handleLineWebhook(request, env, context);
       if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
@@ -4586,7 +4595,7 @@ const app = {
 
 // หลังมีการบันทึกข้อมูลสำเร็จ ส่งแจ้งเตือน LINE ที่เกิดใหม่ทันทีโดยไม่ทำให้คำขอช้าลง
 // (dispatchLineNotifications เว้นระยะเองอย่างน้อย 15 วินาที และ Cron ทุก 2 นาทีเก็บตกที่เหลือ)
-const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|notifications\/read)/;
+const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|notifications\/read)/;
 export default {
   async fetch(request, env, context) {
     const response = await app.fetch(request, env, context);
