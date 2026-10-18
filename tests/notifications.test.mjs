@@ -8,6 +8,7 @@ import {ensureBudgetSchema} from '../src/routes/budget.js';
 
 export async function fixture(){
  const raw=new DatabaseSync(':memory:');raw.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
+ raw.limits.compoundSelect=5; // Match Cloudflare D1's lower UNION limit.
  raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
  (1,'admin@test','x','x','ผู้ดูแล','superadmin'),(2,'owner@test','x','x','ครู ก','teacher'),(3,'co@test','x','x','ครู ข','teacher');
  INSERT INTO projects(id,department,name,budget_amount,fiscal_year,created_by,funding_type) VALUES

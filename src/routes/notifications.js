@@ -33,7 +33,9 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
   c.subject||CASE WHEN c.due_date IS NOT NULL THEN ' · กำหนด '||c.due_date ELSE '' END,c.updated_at,'/correspondence.html?record='||c.id,NULL,NULL,1
   FROM correspondence_records c WHERE c.assigned_to=? AND c.created_by<>? AND c.status NOT IN ('completed','archived')`);extraValues.push(user.id,user.id);
  }
- const sql=`WITH messages AS (
+ // D1 permits at most five terms in one compound SELECT. Keep each group below
+ // that limit, including the two optional message sources.
+ const sql=`WITH primary_messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
  CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
  v.actor_id actor_id,
@@ -61,7 +63,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  UNION ALL
  SELECT 'task:'||t.id,'งานที่ได้รับมอบหมาย',t.title,t.created_at,'/tasks.html',NULL,t.created_by,1
  FROM tasks t JOIN task_assignees a ON a.task_id=t.id WHERE a.user_id=? AND a.status<>'done' AND t.status='open'
- UNION ALL
+ ), secondary_messages AS (
  SELECT 'approval:'||a.id,'เอกสารเบิกจ่ายรอลงนาม',p.name||' · '||a.step_label,a.updated_at,'/budget.html?view=requests',NULL,NULL,1
  FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
  WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
@@ -74,6 +76,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
+ ), messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages
  ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
