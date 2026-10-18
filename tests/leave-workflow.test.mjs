@@ -70,6 +70,32 @@ test('one active deputy gets an early read-only notice, but multiple unassigned 
  assert(await notice(env,5,`leave:${second.id}:pending`));
  assert.equal((await call(env,'/api/leave-requests/'+second.id,'PATCH',{action:'review',note:'ยังไม่ส่งต่อ'},5)).status,403);
 });
+test('head configures the early deputy before forwarding; unassigned pending leaves gain read-only access and LINE status is visible',async()=>{
+ const {env,deputy}=await setup();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ assert.equal((await call(env,'/api/leave-settings','GET',undefined,2)).status,403);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},5)).status,403);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:9999},3)).status,400);
+ const settings=await (await call(env,'/api/leave-settings','GET',undefined,3)).json();
+ assert.equal(settings.deputies.find(p=>p.id===deputy).line_status,'not_linked');
+ env.raw.exec("INSERT INTO line_user_links(user_id,line_user_id,status) VALUES(5,'U-deputy','blocked')");
+ assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,3)).json()).deputies.find(p=>p.id===deputy).line_status,'blocked');
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3)).status,200);
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(id).deputy_personnel_id,deputy);
+ assert(await notice(env,5,`leave:${id}:pending`));
+ assert.equal((await call(env,`/api/leave-requests/${id}`,'GET',undefined,5)).status,200);
+ assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
+ const next=(await (await call(env,'/api/leave-requests','POST',form,2)).json()).id;
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(next).deputy_personnel_id,deputy);
+});
+test('personnel-scoped deputy assignment resolves the first leave when there are several deputies',async()=>{
+ const {env,deputy}=await setup();
+ env.raw.prepare("INSERT INTO budget_role_assignments(role_key,department,user_id) VALUES('deputy_director','personnel',5)").run();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(id).deputy_personnel_id,deputy);
+ assert(await notice(env,5,`leave:${id}:pending`));
+ assert(!await notice(env,6,`leave:${id}:pending`));
+});
 test('concurrent forwarding creates one recorded transition and only the intended recipients',async()=>{
  const {env,deputy}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
  await call(env,path,'PATCH',{action:'acknowledge'},3);

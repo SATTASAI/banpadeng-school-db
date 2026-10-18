@@ -43,6 +43,17 @@ export async function executives(env) {
  const people=new Map();for (const p of results) {if(!people.has(p.id))people.set(p.id,{id:p.id,full_name:p.full_name,position:p.position,user_ids:[]});people.get(p.id).user_ids.push(p.user_id);}
  return [...people.values()];
 }
+// The explicit leave assignment wins. A personnel-scoped executive assignment is a
+// useful fallback before the first leave has ever been forwarded.
+export async function designatedDeputy(env, people) {
+ const deputies=people.filter(isDeputy);
+ const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
+ const selected=deputies.find(p=>p.id===Number(setting?.deputy_personnel_id));
+ if(selected)return selected;
+ const assignment=await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='deputy_director' AND department='personnel'").first().catch(()=>null);
+ const scoped=deputies.filter(p=>p.user_ids.some(id=>id===Number(assignment?.user_id)));
+ return scoped.length===1?scoped[0]:deputies.length===1?deputies[0]:null;
+}
 export function validDate(s) {return typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s+'T00:00:00Z'))&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s;}
 export function calendarDays(start,end) {return Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;}
 export function today() {return new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});}

@@ -37,8 +37,9 @@
    </form>
   </section>
   <section class="panel leave-panel" id="headSettings" hidden>
-   <h3>ผู้รับเรื่องหลังส่งต่อ</h3><p class="muted">ผู้อำนวยการรับจากทะเบียนบุคลากร เลือกรองผู้บริหารที่รับผิดชอบฝ่ายบุคลากรให้ตรงกับผู้ได้รับมอบหมาย ระบบจะจำตัวเลือกหลังส่งต่อสำเร็จ</p>
+   <h3>รอง ผอ. ผู้รับแจ้งการลา</h3><p class="muted">เลือกรอง ผอ. ที่รับผิดชอบฝ่ายบุคลากรและกดบันทึกก่อนครูยื่นใบลา รอง ผอ. จะได้รับ LINE พร้อมหัวหน้าฝ่ายและดูใบลาได้ แต่ให้ความเห็นได้หลังหัวหน้าฝ่ายส่งต่อ</p>
    <label for="deputyChoice">รองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร</label><select id="deputyChoice"><option value="">เลือกรองผู้บริหาร</option></select>
+   <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกผู้รับแจ้งล่วงหน้า</button><p id="deputyLineStatus" class="muted" role="status"></p>
   </section>
   <section id="pendingSection" hidden><h3>รายการรอดำเนินการ</h3><div class="panel" id="pendingPanel"></div></section>
   <section id="detailSection" class="panel leave-panel" hidden aria-live="polite"><div class="leave-detail-heading"><h3>รายละเอียดใบลา</h3><button class="btn btn-ghost" id="closeDetail" type="button">ปิดรายละเอียด</button></div><div id="detailPanel"></div></section>

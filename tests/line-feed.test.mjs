@@ -159,3 +159,44 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,true);
  } finally {line.restore();}
 });
+test('first feed after a linked deputy receives a new leave, including one already read in the bell',async()=>{
+ const env=await setup();
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(5,'deputy-first@test','x','x','รอง ผอ.','executive');
+ INSERT INTO staff_profiles(user_id,position) VALUES(5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(5,'รอง ผอ.','รองผอ','รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_accounts(user_id,personnel_id) SELECT user_id,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO line_user_links(user_id,line_user_id,linked_at) VALUES(5,'U-first',datetime('now','-1 hour'))`);
+ const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get().id;
+ await call(env,'/api/department-staff/personnel','POST',{personnel_id:head,is_head:true});
+ const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
+ await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3);
+ const {id}=await (await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ทดสอบแจ้งเตือน',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้าน',contact_phone:'0000000000'},2)).json();
+ await call(env,'/api/notifications/read','POST',{message_key:`leave:${id}:pending`},5);
+ const line=mockLine();
+ try{
+  await dispatchLineNotifications(env);
+  assert(line.pushes.some(p=>p.to==='U-first'&&p.messages[0].text.includes('การลา: ครู ก')));
+  assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=5 AND message_key=?").get(`leave:${id}:pending`).status,'sent');
+ }finally{line.restore();}
+});
+
+test('a failed LINE push is retried by cron and marked sent, without a duplicate after success',async()=>{
+ const env=await setup();
+ const original=globalThis.fetch;let attempts=0;
+ globalThis.fetch=async(url,init={})=>{
+  if(String(url).endsWith('/v2/bot/message/push'))return new Response(attempts++===0?'temporary':'{}',{status:attempts===1?503:200});
+  if(String(url).endsWith('/v2/bot/message/quota'))return Response.json({type:'none'});
+  return Response.json({totalUsage:0});
+ };
+ try{
+  await dispatchLineNotifications(env);
+  env.raw.exec("INSERT INTO tasks(id,title,created_by) VALUES(9,'งานใหม่',1); INSERT INTO task_assignees(task_id,user_id) VALUES(9,2);");
+  unlock(env);assert.equal((await dispatchLineNotifications(env)).failures,1);
+  assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=2 AND message_key='task:9'").get().status,'failed');
+  env.raw.exec("UPDATE line_feed_sent SET updated_at=datetime('now','-2 minutes') WHERE user_id=2 AND message_key='task:9'");
+  unlock(env);assert.equal((await dispatchLineNotifications(env)).messages_sent,1);
+  unlock(env);await dispatchLineNotifications(env);
+  assert.equal(attempts,2);
+  assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=2 AND message_key='task:9'").get().status,'sent');
+ }finally{globalThis.fetch=original;}
+});

@@ -1,6 +1,7 @@
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
-import {ensureLeaveData,executives,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
+import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
+import {ensureLinePersonalSchema} from '../lib/line-personal.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -10,6 +11,35 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
 export async function handleLeaveRoute(request,env,pathname,method) {
+ if(pathname==='/api/leave-settings'){
+  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
+  await ensureLeaveData(env);
+  const head=await isPersonnelHead(env,user);
+  if(!head&&user.role!=='superadmin')return fail('เฉพาะหัวหน้าฝ่ายบุคลากรหรือผู้ดูแลระบบ',403);
+  const people=await executives(env);
+  if(method==='GET'){
+   await ensureLinePersonalSchema(env);
+   const selected=await designatedDeputy(env,people);
+   const {results:links}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l`).all();
+   return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,deputies:people.filter(isDeputy).map(p=>({
+    id:p.id,full_name:p.full_name,position:p.position,
+    line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id&&l.status==='active'))?'active':
+     p.user_ids.some(id=>links.some(l=>l.user_id===id&&l.status==='blocked'))?'blocked':'not_linked'
+   }))});
+  }
+  if(method==='PATCH'){
+   const body=await request.json().catch(()=>null);
+   const deputy=people.find(p=>p.id===Number(body?.deputy_personnel_id)&&isDeputy(p));
+   if(!deputy)return fail('กรุณาเลือกรองผู้อำนวยการที่มีบัญชีผู้บริหารใช้งานอยู่');
+   await env.DB.batch([
+    env.DB.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET deputy_personnel_id=excluded.deputy_personnel_id').bind(deputy.id),
+    // Requests submitted before configuration must become visible to the chosen deputy.
+    env.DB.prepare("UPDATE leave_requests SET deputy_personnel_id=? WHERE status='pending' AND workflow_stage IN ('submitted','acknowledged') AND deputy_personnel_id IS NULL").bind(deputy.id)
+   ]);
+   return json({ok:true,deputy_personnel_id:deputy.id});
+  }
+  return fail('Method not allowed',405);
+ }
  const match=pathname.match(/^\/api\/leave-requests(?:\/(\d+))?$/);
  if(!match)return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
@@ -30,14 +60,14 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const assignments=new Map(assigned.map(r=>[r.leave_id,r.kind]));
   const earlyDeputy=execAccount&&results.some(r=>r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage)&&people.some(p=>isDeputy(p)&&p.id===r.deputy_personnel_id&&p.user_ids.includes(user.id)));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
-  const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
+  const setting=await designatedDeputy(env,people);
   return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&r.workflow_stage==='submitted',
    can_record:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',can_forward:head&&r.status==='pending'&&r.workflow_stage==='acknowledged',
    can_review:execAccount&&assignments.get(r.id)==='deputy'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_decide:execAccount&&assignments.get(r.id)==='director'&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
    is_personnel_head:head,can_view_pending:head||admin||assigned.length>0||earlyDeputy,deputy_choices:head?deputyChoices:[],
-   default_deputy_id:setting?.deputy_personnel_id||null,profile:profile||{}});
+   default_deputy_id:setting?.id||null,profile:profile||{}});
  }
  if(id&&method==='GET') {
   const row=await env.DB.prepare(`${select} WHERE r.id=?`).bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
@@ -59,9 +89,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
   // Use configured personnel deputy (or sole active deputy) to prevent an unrelated executive receiving the early alert
-  const setting=await env.DB.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').first();
-  const deputies=people.filter(isDeputy);
-  const deputyForNotice=deputies.find(p=>p.id===setting?.deputy_personnel_id)||(deputies.length===1?deputies[0]:null);
+  const deputyForNotice=await designatedDeputy(env,people);
   const results=await env.DB.batch([
    env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null),
