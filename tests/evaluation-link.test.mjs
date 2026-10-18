@@ -18,7 +18,7 @@ const finish=(env,location,cookie)=>handleEvaluationLogin(new Request(location,{
 
 test('school login authorizes a one-time code and creates a separate evaluatesystem session without sharing passwords or JWT',async()=>{
  const env=await fixture(),s=await start(env);assert.equal(s.location.origin,SCHOOL_ORIGIN);assert.match(s.cookie,new RegExp('^'+LOGIN_COOKIE+'='));
- const page=await school(env,s.location.pathname+s.location.search);assert.equal(page.status,200);assert.match(await page.text(),/ยืนยันและเข้าสู่ระบบประเมิน/);
+ const page=await school(env,s.location.pathname+s.location.search);assert.equal(page.status,200);const html=await page.text();assert.match(html,/document.getElementById\('evaluation-connect'\).submit\(\)/);assert.doesNotMatch(html,/ยืนยันและเข้าสู่ระบบประเมิน/);const nonce=html.match(/<script nonce="([0-9a-f]+)"/)[1];assert.ok(page.headers.get('content-security-policy').includes("script-src 'nonce-"+nonce+"'"));
  const approved=await authorize(env,s.state);assert.equal(approved.status,302);const callback=new URL(approved.headers.get('location'));assert.equal(callback.origin,EVALUATION_ORIGIN);assert(callback.searchParams.get('code'));
  const completed=await finish(env,callback,s.cookie);assert.equal(completed.status,302);assert.equal(completed.headers.get('location'),'/evaluate');
  const cookie=completed.headers.getSetCookie().find(c=>c.startsWith(SESSION_COOKIE+'=')).split(';')[0];assert(!cookie.includes('bpd_session='));
