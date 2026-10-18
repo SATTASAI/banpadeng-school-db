@@ -1,4 +1,6 @@
-import {handleEvaluationRoute,EVALUATION_HOST,evaluationHostPathAllowed} from './evaluation/routes.js';
+import {handleEvaluationRead} from './evaluation/read.js';
+import {handleEvaluationLink} from './evaluation/link.js';
+import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
@@ -4317,13 +4319,16 @@ const app = {
     const method = request.method;
 
     try {
-      // Evaluation is a separate app surface with host-only cookies and a strict route boundary.
-      if (url.hostname === EVALUATION_HOST) {
-        if (!evaluationHostPathAllowed(pathname)) return jsonResponse({error:"ไม่พบหน้าในระบบประเมิน"},404);
-        if (pathname === "/") return Response.redirect(new URL("/evaluate",url.origin),302);
+      // The independent evaluatesystem Worker owns evaluation screens and mutations.
+      if (["/evaluate","/evaluate.html"].includes(pathname)) return Response.redirect(EVALUATION_ORIGIN+"/evaluate",302);
+      if (["/evaluation-connect","/evaluation-connect.html","/api/evaluation-link/authorize"].includes(pathname)) {
+        await ensureAuthSecuritySchema(env);
+        return await handleEvaluationLink(request,env);
       }
       if (pathname.startsWith("/api/evaluation/")) {
-        return await handleEvaluationRoute(request,env,pathname,method);
+        await ensureAuthSecuritySchema(env);
+        const evaluationRead=await handleEvaluationRead(request,env,pathname,method);
+        return evaluationRead || jsonResponse({error:"การประเมินย้ายไป evaluatesystem แล้ว",url:EVALUATION_ORIGIN},410);
       }
       // LINE ต้องได้รับ HTTP 200 อย่างรวดเร็ว: ตรวจลายเซ็นและตอบก่อน migration/auth ของ API ภายใน
       if (pathname === "/api/line/webhook" && method === "POST") return await handleLineWebhook(request, env, context);
@@ -4595,7 +4600,7 @@ const app = {
 
 // หลังมีการบันทึกข้อมูลสำเร็จ ส่งแจ้งเตือน LINE ที่เกิดใหม่ทันทีโดยไม่ทำให้คำขอช้าลง
 // (dispatchLineNotifications เว้นระยะเองอย่างน้อย 15 วินาที และ Cron ทุก 2 นาทีเก็บตกที่เหลือ)
-const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|notifications\/read)/;
+const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|evaluation-link\/|notifications\/read)/;
 export default {
   async fetch(request, env, context) {
     const response = await app.fetch(request, env, context);

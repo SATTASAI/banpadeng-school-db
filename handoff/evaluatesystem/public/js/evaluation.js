@@ -60,8 +60,7 @@
  function showInvitation(url){$('inviteUrl').value=url;$('inviteDialog').showModal();}
  $('copyInvite').onclick=()=>busy($('copyInvite'),async()=>{try{await navigator.clipboard.writeText($('inviteUrl').value);notify('คัดลอกลิงก์แล้ว');}catch{$('inviteUrl').select();notify('กรุณาคัดลอกลิงก์จากช่องที่เลือก');}});
  $('inviteDialog').addEventListener('close',()=>{$('inviteUrl').value='';});
- $('loginForm').onsubmit=async e=>{e.preventDefault();await busy(e.submitter,async()=>{const form=new FormData(e.target);const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({email:form.get('email'),password:form.get('password')})});const data=await r.json();if(!r.ok)throw new Error(data.error||'เข้าสู่ระบบไม่สำเร็จ');e.target.reset();await init();});};
- $('logout').onclick=()=>busy($('logout'),async()=>{if(permissions.guest)await api('guest/logout','POST',{});else await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'});location.replace('/evaluate.html');});
+ $('logout').onclick=()=>busy($('logout'),async()=>{if(permissions.guest)await api('guest/logout','POST',{});else await fetch('/auth/logout',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}});location.replace('/evaluate.html');});
  $('refresh').onclick=()=>busy($('refresh'),refresh);
  async function init(){permissions=await api('permissions');$('loginPanel').hidden=!!permissions.access;$('app').hidden=!permissions.access;$('logout').hidden=!permissions.user&&!permissions.guest;$('identity').textContent=permissions.guest?permissions.guest.name:permissions.user?.full_name||'';
   if(!permissions.access){if(permissions.user)notify('บัญชีนี้ไม่มีสิทธิ์เข้าระบบประเมิน ครูดูผลของตนเองได้ในฝ่ายบุคลากร',true);return;}

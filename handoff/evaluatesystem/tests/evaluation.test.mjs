@@ -1,25 +1,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
+
 import worker from '../src/index.js';
-import {signJWT} from '../src/lib/crypto.js';
+import {ensureEvaluationSessions,tokenHash,randomToken,SESSION_COOKIE} from '../src/evaluation/session-link.js';
 import {validateRubric,validateScores,summarize} from '../src/evaluation/scoring.js';
 import {starterTemplates} from '../src/evaluation/templates.js';
 const origin='https://evaluate.banpadengschool.ac.th';
 async function fixture(){
- const raw=new DatabaseSync(':memory:');raw.exec(readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
+ const raw=new DatabaseSync(':memory:');raw.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,password_hash TEXT,password_salt TEXT,full_name TEXT,role TEXT,status TEXT DEFAULT 'active',session_version INTEGER DEFAULT 1);
+ CREATE TABLE personnel_records(id INTEGER PRIMARY KEY,user_id INTEGER UNIQUE,full_name TEXT,position TEXT DEFAULT 'ครู',academic_rank TEXT,status TEXT DEFAULT 'active');
+ CREATE TABLE personnel_accounts(user_id INTEGER PRIMARY KEY,personnel_id INTEGER REFERENCES personnel_records(id));
+ CREATE TABLE department_staff(department TEXT,personnel_id INTEGER,is_head INTEGER,PRIMARY KEY(department,personnel_id));`);
  raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
  (1,'admin@test','x','x','แอดมิน','superadmin'),(2,'teacher@test','x','x','ครูเป้าหมาย','teacher'),
  (3,'head@test','x','x','หัวหน้าฝ่ายบุคคล','teacher'),(4,'executive@test','x','x','ผู้อำนวยการ','executive'),
  (5,'academic@test','x','x','หัวหน้าฝ่ายวิชาการ','teacher'),(6,'outsider@test','x','x','ครูอื่น','teacher');`);
  function prepare(sql){let args=[];return {bind(...a){args=a;return this;},async first(){return raw.prepare(sql).get(...args)||null;},async all(){return {results:raw.prepare(sql).all(...args)};},async run(){const r=raw.prepare(sql).run(...args);return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};}};}
  const env={raw,JWT_SECRET:'evaluation-test-only',DB:{prepare,async batch(stmts){raw.exec('BEGIN');try{const results=[];for(const s of stmts)results.push(await s.run());raw.exec('COMMIT');return results;}catch(e){raw.exec('ROLLBACK');throw e;}}},ASSETS:{fetch:()=>new Response('asset')}};
+ raw.exec(`INSERT INTO personnel_records(id,user_id,full_name) SELECT id,id,full_name FROM users; INSERT INTO personnel_accounts(user_id,personnel_id) SELECT id,id FROM users;`);
  await call(env,'permissions');
  for(const [user,dept] of [[3,'personnel'],[5,'academic']]){const p=raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').get(user);raw.prepare('INSERT INTO department_staff(department,personnel_id,is_head) VALUES(?,?,1)').run(dept,p.personnel_id);}
  return env;
 }
-async function call(env,path,method='GET',body,user=1,host=origin){const token=user?await signJWT({sub:user},env.JWT_SECRET):null;return worker.fetch(new Request(host+'/api/evaluation/'+path,{method,headers:{'Content-Type':'application/json',...(token?{Cookie:'bpd_session='+token}:{})},body:body===undefined?undefined:JSON.stringify(body)}),env,{});}
+async function seedSession(env,user){await ensureEvaluationSessions(env);const token=randomToken();await env.DB.prepare('INSERT INTO evaluation_login_sessions(session_hash,user_id,session_version,expires_at) VALUES(?,?,1,?)').bind(await tokenHash(token),user,Math.floor(Date.now()/1000)+604800).run();return token;}
+async function call(env,path,method='GET',body,user=1,host=origin){const token=user?await seedSession(env,user):null;return worker.fetch(new Request(host+'/api/evaluation/'+path,{method,headers:{'Content-Type':'application/json',...(token?{Cookie:SESSION_COOKIE+'='+token}:{})},body:body===undefined?undefined:JSON.stringify(body)}),env,{});}
 async function guest(env,path,cookie,method='GET',body){return worker.fetch(new Request(origin+'/api/evaluation/'+path,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)}),env,{});}
 async function createCase(env,external=false){
  const template=await call(env,'templates','POST',{...starterTemplates[0],verified:true,confirm_reference:true});assert.equal(template.status,201,await template.clone().text());const templateId=(await template.json()).id;
@@ -110,4 +115,10 @@ test('a guest cannot see other committee scores even after the executive publish
  const d=await(await guest(env,'cases/'+id,cookie)).json();const scores=Object.fromEntries(d.case.rubric.items.map(i=>[i.id,i.max]));await guest(env,`cases/${id}/ballot`,cookie,'PUT',{scores,revision:0,submit:true});
  assert.equal((await call(env,`cases/${id}/publish`,'POST',{},4)).status,200);
  const after=await(await guest(env,'cases/'+id,cookie)).json();assert.equal(after.case.result,null);assert.equal(after.summary,null);assert.equal(after.assignments.length,1);assert.equal(after.mine.name,'ผู้ทรงคุณวุฒิ');
+});
+
+test('the independent Worker never accepts the school session cookie and does not serve school authentication endpoints',async()=>{
+ const env=await fixture();const response=await worker.fetch(new Request(origin+'/api/evaluation/cases',{headers:{Cookie:'bpd_session=school-token'}}),env,{});assert.equal(response.status,401);
+ assert.equal((await worker.fetch(new Request(origin+'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),env,{})).status,404);
+ const health=await(await worker.fetch(new Request(origin+'/api/health'),env,{})).json();assert.equal(health.app,'evaluatesystem');assert.equal(health.protocol,'evaluation-link-v1');
 });

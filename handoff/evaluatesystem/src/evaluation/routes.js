@@ -1,5 +1,5 @@
+import {evaluationPermissions} from './permissions.js';
 import {getCurrentUser,jsonResponse,parseCookies} from '../lib/auth.js';
-import {ensureDepartmentStaff} from '../routes/department-staff.js';
 import {ensureEvaluationSchema} from './schema.js';
 import {starterTemplates} from './templates.js';
 import {EvaluationError,requireValue,validateRubric,validateScores,summarize} from './scoring.js';
@@ -20,15 +20,6 @@ async function input(request){
  if(reader)while(true){const {done,value}=await reader.read();if(done)break;count+=value.length;if(count>120000){await reader.cancel();throw new EvaluationError('ข้อมูลมีขนาดใหญ่เกินไป',413);}chunks.push(value);}
  const bytes=new Uint8Array(count);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}
  try{return JSON.parse(new TextDecoder().decode(bytes));}catch{throw new EvaluationError('ข้อมูล JSON ไม่ถูกต้อง');}
-}
-export async function evaluationPermissions(env,user){
- if(!user?.role)return {access:false,manage:false,criteria:false,finalize:false};
- await ensureDepartmentStaff(env);
- const {results:heads}=await env.DB.prepare(`SELECT d.department FROM department_staff d
- JOIN personnel_records p ON p.id=d.personnel_id AND p.status='active'
- JOIN personnel_accounts a ON a.personnel_id=p.id WHERE d.is_head=1 AND a.user_id=?`).bind(user.id).all();
- const executive=user.role==='executive',admin=user.role==='superadmin',personnel=heads.some(h=>h.department==='personnel');
- return {access:executive||admin||heads.length>0,manage:executive||admin||personnel,criteria:admin||personnel,finalize:executive};
 }
 async function actor(request,env){
  const token=parseCookies(request)[cookieName];
