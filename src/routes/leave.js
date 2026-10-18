@@ -82,11 +82,11 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(method==='GET'){
    await ensureLinePersonalSchema(env);
    const selected=await designatedDeputy(env,people);
-   const saved=await env.DB.prepare('SELECT line_template FROM leave_settings WHERE id=1').first();
+   const saved=user.role==='superadmin'?await env.DB.prepare('SELECT line_template FROM leave_settings WHERE id=1').first():null;
    const links=await linkedLineAccounts(env);
    const {results:blocked}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l WHERE l.status='blocked'`).all();
    return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
-    line_template:saved?.line_template||DEFAULT_LEAVE_LINE_TEMPLATE,deputies:people.filter(isDeputy).map(p=>({
+    ...(user.role==='superadmin'?{line_template:saved?.line_template||DEFAULT_LEAVE_LINE_TEMPLATE}:{}),deputies:people.filter(isDeputy).map(p=>({
     id:p.id,full_name:p.full_name,position:p.position,
     line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id))?'active':
      p.user_ids.some(id=>blocked.some(l=>l.user_id===id))?'blocked':'not_linked'
@@ -95,6 +95,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(method==='PATCH'){
    const body=await request.json().catch(()=>null);
    if(body&&Object.hasOwn(body,'line_template')){
+    if(user.role!=='superadmin')return fail('เฉพาะผู้ดูแลระบบเท่านั้น',403);
     if(Object.keys(body).some(k=>k!=='line_template')||!validLeaveLineTemplate(body.line_template))return fail('ข้อความต้องยาวไม่เกิน 400 ตัวอักษร ใช้ได้เฉพาะ {title} {message} {id} {link}');
     const template=body.line_template.trim()||null;
     await env.DB.prepare('INSERT INTO leave_settings(id,line_template) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET line_template=excluded.line_template').bind(template).run();

@@ -42,11 +42,12 @@
   const selected=$('deputyChoice').value||data.default_deputy_id||'';
   const canConfigure=data.is_personnel_head||user.role==='superadmin';
   $('headSettings').hidden=!canConfigure;
+  $('lineTemplateSettings').hidden=user.role!=='superadmin';
   if(canConfigure){
    const settings=await apiRequest('/api/leave-settings');deputies=settings.deputies;lineConfigured=settings.line_configured;
    $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+deputies.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');
    $('deputyChoice').value=String(selected||settings.deputy_personnel_id||'');showDeputyStatus();
-   if($('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
+   if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
   const pending=records.filter(r=>r.can_acknowledge||r.can_record||r.can_review||r.can_decide);

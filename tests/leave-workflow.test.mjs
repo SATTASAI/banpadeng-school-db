@@ -76,10 +76,12 @@ test('head configures the early deputy before forwarding; unassigned pending lea
  assert.equal((await call(env,'/api/leave-settings','GET',undefined,2)).status,403);
  assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},5)).status,403);
  assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title}'},2)).status,403);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {unknown}'},3)).status,400);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title} เลขที่ {id}'},3)).status,200);
- assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,3)).json()).line_template,'ใบลา {title} เลขที่ {id}');
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:''},3)).status,200);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title}'},3)).status,403);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {unknown}'},1)).status,400);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title} เลขที่ {id}'},1)).status,200);
+ assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,1)).json()).line_template,'ใบลา {title} เลขที่ {id}');
+ assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,3)).json()).line_template,undefined);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:''},1)).status,200);
  assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:9999},3)).status,400);
  const settings=await (await call(env,'/api/leave-settings','GET',undefined,3)).json();
  assert.equal(settings.deputies.find(p=>p.id===deputy).line_status,'not_linked');

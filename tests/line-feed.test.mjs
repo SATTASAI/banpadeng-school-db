@@ -138,7 +138,7 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
  env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลาเลขที่ {id}: {title}\n{message}\n{link}'},3)).status,200);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลาเลขที่ {id}: {title}\n{message}\n{link}'},1)).status,200);
  const line=mockLine();
  try {
   await dispatchLineNotifications(env);
