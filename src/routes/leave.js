@@ -46,13 +46,23 @@ export async function handleLeaveRoute(request,env,pathname,method) {
     return {user_id:r.user_id,has_notice:rows.some(x=>x.message_key===`leave:${id}:pending`),error:null};}
    catch(e){return {user_id:r.user_id,has_notice:false,error:String(e?.message||e).slice(0,300)};}
   }));
+  const profileChecks=await Promise.all(recipients.map(async r=>{
+   const link=links.find(l=>Number(l.user_id)===Number(r.user_id));
+   if(!link||!env.LINE_CHANNEL_ACCESS_TOKEN)return {user_id:r.user_id,status:'not_checked'};
+   try{
+    const response=await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(link.line_user_id)}`,
+     {headers:{Authorization:`Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`}});
+    return {user_id:r.user_id,status:response.ok?'available':response.status===404?'unavailable':'unknown'};
+   }catch{return {user_id:r.user_id,status:'unknown'};}
+  }));
   return json({request_id:id,workflow_stage:row.workflow_stage,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
    deputy_assigned:row.deputy_personnel_id!=null,recipients:recipients.map(r=>{
     const link=links.find(l=>Number(l.user_id)===Number(r.user_id));const state=stateById.get(Number(r.user_id));const feed=feedChecks.find(x=>Number(x.user_id)===Number(r.user_id));
     return {kind:r.kind,name:r.full_name,link_status:link?'active':blockedIds.has(Number(r.user_id))?'blocked':'not_linked',
      enabled:pref.get(Number(r.user_id))!==0&&(!link||pref.get(Number(link.link_owner_user_id))!==0),
      delivery_status:state?.status||'not_queued',error:state?.error||null,updated_at:state?.updated_at||null,
-     feed_has_notice:feed?.has_notice||false,feed_error:feed?.error||null};
+     feed_has_notice:feed?.has_notice||false,feed_error:feed?.error||null,
+     oa_profile_status:profileChecks.find(x=>Number(x.user_id)===Number(r.user_id))?.status||'not_checked'};
    }),last_run:run||null});
  }
  if(pathname==='/api/leave-settings'){
