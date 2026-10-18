@@ -44,3 +44,22 @@ test('saved request stays successful if refreshing the registry fails, so users 
  const h=submissionHarness({reloadFails:true});await new Promise(r=>setImmediate(r));h.fill();await h.submit();
  assert.equal(h.calls.length,1);assert.equal(h.calls[0].leave_days,0.5);assert.equal(h.node('fReason').value,'');assert.equal(h.node('successBox').hidden,false);assert.match(h.node('errorBox').textContent,/บันทึกใบลาสำเร็จแล้ว/);assert.equal(h.node('submitError').hidden,true);assert.equal(h.node('submitBtn').disabled,false);
 });
+
+test('superadmin inserts leave dates and reason at the cursor and previews their values',async()=>{
+ const nodes=new Map();let saved;
+ const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},hidden:false,classList:{add(){},remove(){}},focus(){},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b;}});return nodes.get(id);};
+ const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
+  if(path==='/api/auth/me')return{user:{id:1,role:'superadmin'}};
+  if(path==='/api/leave-settings'){if(options){saved=options.body.line_template;return{line_template:saved};}return{deputies:[],line_template:'วันที่ลา: '};}
+  return{profile:{},leave_requests:[]};
+ }});
+ vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+ assert.equal(node('lineTemplateSettings').hidden,false);
+ node('insertLeaveDates').onclick();
+ const input=node('leaveLineTemplate');input.value+='\nเหตุผล: ';input.selectionStart=input.selectionEnd=input.value.length;
+ node('insertLeaveReason').onclick();
+ assert.equal(input.value,'วันที่ลา: {leave_dates}\nเหตุผล: {reason}');
+ assert.match(node('leaveLinePreview').textContent,/วันที่ลา: 19\/10\/2569 ถึง 20\/10\/2569/);
+ assert.match(node('leaveLinePreview').textContent,/เหตุผล: ไม่สบาย ขอพักรักษาตัว/);
+ await node('saveLeaveLineTemplate').onclick();assert.equal(saved,input.value);
+});
