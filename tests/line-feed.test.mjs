@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, call } from "./notifications.test.mjs";
 import { dispatchLineNotifications, buildLineDigest } from "../src/lib/line-feed.js";
+import { linkedLineAccounts } from "../src/lib/line-personal.js";
 import worker from "../src/index.js";
 
 function mockLine(quota = { type: "none" }, usage = 0) {
@@ -199,4 +200,54 @@ test('a failed LINE push is retried by cron and marked sent, without a duplicate
   assert.equal(attempts,2);
   assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=2 AND message_key='task:9'").get().status,'sent');
  }finally{globalThis.fetch=original;}
+});
+
+test('deputy receives the leave through an existing LINE match on another login of the same personnel',async()=>{
+ const env=await setup();
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
+ (5,'deputy-main@test','x','x','รอง ผอ.','executive'),
+ (7,'deputy-old@test','x','x','บัญชีครูเดิมของรอง ผอ.','teacher'),
+ (8,'head-old@test','x','x','บัญชีครูเดิมหัวหน้า','teacher');
+ INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES
+ (5,'รอง ผอ.','รองผอร่วมบัญชี','รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT user_id,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT 7,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT 8,id FROM personnel_records WHERE user_id=3;
+ INSERT INTO line_user_links(user_id,line_user_id,linked_at) VALUES(7,'U-shared-deputy',datetime('now','-1 hour'));`);
+ const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
+ const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get().id;
+ await call(env,'/api/department-staff/personnel','POST',{personnel_id:head,is_head:true});
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3)).status,200);
+ const settings=await (await call(env,'/api/leave-settings','GET',undefined,3)).json();
+ assert.equal(settings.deputies.find(p=>p.id===deputy).line_status,'active');
+ const line=mockLine();
+ try{
+  await dispatchLineNotifications(env);
+  const {id}=await (await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ทดสอบบัญชีร่วม',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้าน',contact_phone:'0000000000'},2)).json();
+  unlock(env);await dispatchLineNotifications(env);
+  assert.equal(line.pushes.filter(p=>p.to==='U-shared-deputy'&&p.messages[0].text.includes(`request=${id}`)).length,1);
+  assert.equal(line.pushes.filter(p=>p.to==='U-other'&&p.messages[0].text.includes('การลา: ครู ก')).length,1,'the head gets only one copy across both accounts');
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
+ }finally{line.restore();}
+});
+test('shared personnel lookup refuses ambiguous LINE matches and a blocked direct match',async()=>{
+ const env=await setup();
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
+ (5,'executive-ambiguous@test','x','x','รอง ผอ.','executive'),
+ (6,'old-one@test','x','x','บัญชีเก่า ก','teacher'),
+ (7,'old-two@test','x','x','บัญชีเก่า ข','teacher');
+ INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(5,'รอง ผอ.','รองผอทดสอบ','รองผู้อำนวยการ');
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT 5,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT 6,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO personnel_accounts(user_id,personnel_id)
+ SELECT 7,id FROM personnel_records WHERE user_id=5;
+ INSERT INTO line_user_links(user_id,line_user_id) VALUES(6,'U-one'),(7,'U-two');`);
+ assert(!((await linkedLineAccounts(env)).some(p=>p.user_id===5)));
+ env.raw.exec("INSERT INTO line_user_links(user_id,line_user_id,status) VALUES(5,'U-blocked','blocked')");
+ assert(!((await linkedLineAccounts(env)).some(p=>p.user_id===5)));
 });
