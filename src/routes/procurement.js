@@ -3,6 +3,7 @@
 // คำขอเบิกจ่าย → รายงานขอซื้อ/ขอจ้าง → หัวหน้าเจ้าหน้าที่ (ถ้ากำหนด) → ผู้อำนวยการอนุมัติ
 // → ใบสั่งซื้อ/สั่งจ้าง → ส่งมอบ → ผู้ตรวจรับครบทุกคน → เข้าทะเบียนพัสดุอัตโนมัติ → การเงินเบิกจ่ายต่อ
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
+import { FINANCE_ROLE_SQL } from "../lib/finance-roles.js";
 import { money, sumMoney, multiplyMoney } from "../lib/project-finance.js";
 import { bahtText } from "../lib/thai-baht.js";
 import { budgetDirectorIds, canManageProjectFinance, PROJECT_FUNDING_TYPES } from "./project-workflow.js";
@@ -184,7 +185,7 @@ function auditStatement(env, user, action, caseId, details, request) {
 }
 
 async function financeUserIds(env) {
-  const { results } = await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='finance_review' AND department=''").all();
+  const { results } = await env.DB.prepare(`SELECT DISTINCT user_id FROM budget_role_assignments WHERE role_key IN ${FINANCE_ROLE_SQL} AND department=''`).all();
   return results.map((r) => Number(r.user_id));
 }
 

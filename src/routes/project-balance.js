@@ -1,4 +1,5 @@
 import { money, sumMoney } from '../lib/project-finance.js';
+import {isFinanceMember} from '../lib/finance-roles.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 const ready=new WeakSet();
 const round=money;
@@ -40,7 +41,7 @@ async function inbox(request,env,user){
 async function propose(request,env,user,id){
  // ขอแก้ยอดได้เฉพาะผู้รับผิดชอบโครงการหรือเจ้าหน้าที่การเงิน
  const owner=await env.DB.prepare('SELECT 1 FROM project_owners WHERE project_id=? AND user_id=?').bind(id,user.id).first();
- const finance=isAdmin(user)||await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE role_key='finance_review' AND department='' AND user_id=?").bind(user.id).first();
+ const finance=isAdmin(user)||await isFinanceMember(env,user.id);
  if(!owner&&!finance)return jsonResponse({error:'ขอแก้ยอดได้เฉพาะผู้รับผิดชอบโครงการหรือเจ้าหน้าที่การเงิน'},403);
  const body=await request.json().catch(()=>null),target=amount(body?.total_spent),reason=String(body?.reason||'').trim().slice(0,1500),p=await project(env,id);
  if(!p)return jsonResponse({error:'ไม่พบโครงการ'},404);

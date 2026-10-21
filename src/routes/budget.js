@@ -3,6 +3,7 @@ import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary, canManageProjectFinance } from "./project-workflow.js";
 import { PROCUREMENT_ROLES } from "./procurement.js";
+import { FINANCE_ROLES, FINANCE_ROLE_SQL, isFinanceMember } from "../lib/finance-roles.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
 const CATEGORIES = ["materials", "equipment", "services", "compensation", "utilities", "travel", "food", "opening_balance", "other"];
@@ -150,9 +151,16 @@ async function workflowAssignments(env, department, requesterId) {
     const row = await env.DB.prepare(`SELECT a.user_id,u.full_name,u.status,u.deleted_at
       FROM budget_role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_key=? AND a.department=?`)
       .bind(step.key, scope).first();
-    if (!row || row.status !== "active" || row.deleted_at) { missing.push(step.label); continue; }
-    if (Number(row.user_id) === Number(requesterId)) { missing.push(`${step.label} (ต้องเป็นคนละคนกับผู้ขอ)`); continue; }
-    assignments.push({ ...step, order: index + 1, user_id: row.user_id, user_name: row.full_name });
+    let pick = row && row.status === "active" && !row.deleted_at && Number(row.user_id) !== Number(requesterId) ? row : null;
+    if (!pick && step.key === "finance_review") {
+      // ผู้รับผิดชอบฝ่ายการเงินยังไม่ได้ตั้งหรือเป็นผู้ขอเอง → ใช้เจ้าหน้าที่การเงินคนอื่นแทน
+      pick = await env.DB.prepare(`SELECT a.user_id,u.full_name FROM budget_role_assignments a JOIN users u ON u.id=a.user_id
+        WHERE a.role_key IN ${FINANCE_ROLE_SQL} AND a.department='' AND u.status='active' AND u.deleted_at IS NULL AND a.user_id<>?
+        ORDER BY CASE a.role_key WHEN 'finance_review' THEN 0 WHEN 'finance_staff_1' THEN 1 ELSE 2 END LIMIT 1`).bind(requesterId).first();
+    }
+    if (!pick) { missing.push(row && Number(row.user_id) === Number(requesterId) ? `${step.label} (ต้องเป็นคนละคนกับผู้ขอ)` : step.label); continue; }
+    const row2 = pick;
+    assignments.push({ ...step, order: index + 1, user_id: row2.user_id, user_name: row2.full_name });
   }
   return { assignments, missing };
 }
@@ -243,7 +251,10 @@ async function overview(request, env) {
   const approvalsByRequest = new Map(), itemsByRequest = new Map();
   for (const row of approvalRows.results) { if (!approvalsByRequest.has(row.expense_id)) approvalsByRequest.set(row.expense_id, []); approvalsByRequest.get(row.expense_id).push(row); }
   for (const row of itemRows.results) { if (!itemsByRequest.has(row.expense_id)) itemsByRequest.set(row.expense_id, []); itemsByRequest.get(row.expense_id).push(row); }
-  const financeAssignment = await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='finance_review' AND department='' ").first();
+  const financeMember = await isFinanceMember(env, user.id);
+  // ขั้นฝ่ายการเงินตรวจสอบ: เจ้าหน้าที่การเงินคนใดก็ลงนามแทนกันได้ (ยกเว้นคำขอของตนเอง)
+  const mayAct = (step, row) => Boolean(step && (Number(step.assigned_user_id) === Number(user.id)
+    || (step.step_key === "finance_review" && financeMember && Number(row.created_by) !== Number(user.id))));
   const totals = Object.fromEntries(STATUSES.map((status) => [status, { item_count: 0, total_amount: 0 }]));
   for (const row of statusRows.results) totals[row.status] = { item_count: Number(row.item_count), total_amount: Number(row.total_amount) };
   const financials=await projectFinancialRows(env,year),financialMap=new Map(financials.map(p=>[p.id,p])),canonical=financialTotals(financials);
@@ -253,9 +264,9 @@ async function overview(request, env) {
     const approvals = approvalsByRequest.get(row.id) || [], activeApproval = approvals.find((step) => step.status === "pending");
     return { ...row, amount: number(row.amount), approvals, items: itemsByRequest.get(row.id) || [],
       can_edit: Number(row.created_by) === Number(user.id) && row.status === "draft",
-      can_sign: Boolean(activeApproval && Number(activeApproval.assigned_user_id) === Number(user.id)),
-      can_return: Boolean(activeApproval && Number(activeApproval.assigned_user_id) === Number(user.id)),
-      can_pay: row.status === "approved" && row.current_step === "finance_completion" && Number(financeAssignment?.user_id) === Number(user.id),
+      can_sign: mayAct(activeApproval, row),
+      can_return: mayAct(activeApproval, row),
+      can_pay: row.status === "approved" && row.current_step === "finance_completion" && financeMember,
       document_ready: Boolean(row.workflow_completed_at && ["approved", "paid"].includes(row.status)) };
   });
   return jsonResponse({ fiscal_year: year, funding_summary: await projectFundingSummary(env,year,financials),
@@ -365,7 +376,8 @@ async function workflowAction(request, env, id) {
   if (["sign", "return", "reject"].includes(body.action)) {
     const approval = await env.DB.prepare("SELECT * FROM budget_request_approvals WHERE expense_id=? AND status='pending' ORDER BY step_order LIMIT 1").bind(id).first();
     if (!approval) return jsonResponse({ error: "รายการนี้ไม่มีขั้นอนุมัติที่รอดำเนินการ" }, 409);
-    if (Number(approval.assigned_user_id) !== Number(user.id)) return jsonResponse({ error: "รายการนี้ไม่ได้อยู่ในคิวอนุมัติของคุณ" }, 403);
+    const financeStand = approval.step_key === "finance_review" && Number(row.created_by) !== Number(user.id) && await isFinanceMember(env, user.id);
+    if (Number(approval.assigned_user_id) !== Number(user.id) && !financeStand) return jsonResponse({ error: "รายการนี้ไม่ได้อยู่ในคิวอนุมัติของคุณ" }, 403);
     if (body.action === "sign") {
       const limitError = await budgetLimitError(env, row.project_id, row.amount, id);
       if (limitError) return jsonResponse({ error: limitError, code: "project_budget_exceeded" }, 409);
@@ -399,8 +411,7 @@ async function workflowAction(request, env, id) {
     return jsonResponse({ ok: true });
   }
   if (body.action === "pay") {
-    const finance = await env.DB.prepare("SELECT user_id FROM budget_role_assignments WHERE role_key='finance_review' AND department='' ").first();
-    if (!finance || Number(finance.user_id) !== Number(user.id)) return jsonResponse({ error: "เฉพาะผู้รับผิดชอบฝ่ายการเงินเท่านั้น" }, 403);
+    if (!await isFinanceMember(env, user.id)) return jsonResponse({ error: "เฉพาะเจ้าหน้าที่การเงินเท่านั้น" }, 403);
     if (row.status !== "approved" || row.current_step !== "finance_completion") return jsonResponse({ error: "คำขอยังผ่านการลงนามไม่ครบ" }, 409);
     const paymentNo = clean(body.payment_no, 100), paymentDate = String(body.payment_date || ""), method = PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null;
     const recipient = clean(body.payment_recipient, 250) || clean(row.payee, 250), reference = clean(body.payment_reference, 150);
@@ -423,8 +434,15 @@ async function saveRoleAssignment(request, env) {
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้น" }, 403);
   const body = await request.json().catch(() => null), roleKey = String(body?.role_key || ""), department = String(body?.department || ""), userId = Number(body?.user_id);
   // บทบาทงานพัสดุ (ไม่ใช่ขั้นลงนามคำขอแบบเดิม) ใช้กับทุกฝ่าย
-  const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey) || (PROCUREMENT_ROLES[roleKey] ? { key: roleKey, label: PROCUREMENT_ROLES[roleKey], scoped: false } : null);
-  if (!definition || !(ROLE_KEYS.includes(roleKey) || PROCUREMENT_ROLES[roleKey])) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
+  const extra = PROCUREMENT_ROLES[roleKey] || FINANCE_ROLES[roleKey];
+  const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey) || (extra ? { key: roleKey, label: extra, scoped: false } : null);
+  if (!definition || !(ROLE_KEYS.includes(roleKey) || extra)) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
+  // เจ้าหน้าที่การเงินเพิ่มเติมเป็นตำแหน่งไม่บังคับ — เลือก "ยังไม่กำหนด" เพื่อถอดออกได้
+  if (FINANCE_ROLES[roleKey] && !body?.user_id) {
+    await env.DB.prepare("DELETE FROM budget_role_assignments WHERE role_key=? AND department=''").bind(roleKey).run();
+    await audit(env, user, "unassign_role", null, { role_key: roleKey }, request);
+    return jsonResponse({ ok: true });
+  }
   if (definition.scoped && !["academic", "early_childhood", "budget", "personnel", "general"].includes(department)) return jsonResponse({ error: "กรุณาเลือกฝ่ายงาน" }, 400);
   if (!definition.scoped && department) return jsonResponse({ error: "หน้าที่นี้ไม่ต้องระบุฝ่าย" }, 400);
   const target = await env.DB.prepare("SELECT id FROM users WHERE id=? AND status='active' AND role IS NOT NULL AND deleted_at IS NULL").bind(userId).first();

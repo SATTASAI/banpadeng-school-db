@@ -1,4 +1,5 @@
 import {ensureFinanceQueueNotifications} from './project-workflow.js';
+import {FINANCE_ROLE_SQL} from '../lib/finance-roles.js';
 import {ensureProcurementSchema} from './procurement.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
@@ -52,8 +53,8 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
  v.actor_id actor_id,
  CASE WHEN n.audience<>'finance' THEN 1
-  WHEN EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key='finance_review' AND f.department='' AND f.user_id=n.user_id) THEN 1
-  WHEN NOT EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key='finance_review' AND f.department='') AND ?=1 THEN 1 ELSE 0 END line_ok
+  WHEN EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='' AND f.user_id=n.user_id) THEN 1
+  WHEN NOT EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='') AND ?=1 THEN 1 ELSE 0 END line_ok
  FROM project_notifications n JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id WHERE n.user_id=?
  UNION ALL
  SELECT 'balance:'||r.id||':'||r.status,'คำขอแก้ยอด: '||p.name,
@@ -77,8 +78,9 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  FROM tasks t JOIN task_assignees a ON a.task_id=t.id WHERE a.user_id=? AND a.status<>'done' AND t.status='open'
  ), secondary_messages AS (
  SELECT 'approval:'||a.id,'เอกสารเบิกจ่ายรอลงนาม',p.name||' · '||a.step_label,a.updated_at,'/budget.html?view=requests',NULL,NULL,1
- FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id
- WHERE a.assigned_user_id=? AND a.status='pending' AND e.status='pending'
+ FROM budget_request_approvals a JOIN project_expenses e ON e.id=a.expense_id JOIN projects p ON p.id=e.project_id JOIN (SELECT ? uid) me
+ WHERE a.status='pending' AND e.status='pending' AND (a.assigned_user_id=me.uid OR (a.step_key='finance_review' AND e.created_by<>me.uid
+  AND EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='' AND f.user_id=me.uid)))
  UNION ALL
  SELECT 'student-delete:'||d.id||':'||d.status,'ขอลบข้อมูลนักเรียนถาวร: '||d.student_name,
  CASE d.status WHEN 'pending' THEN 'รอผู้อำนวยการพิจารณา — '||d.reason WHEN 'approved' THEN 'ผู้อำนวยการอนุมัติ ลบข้อมูลแล้ว' ELSE 'ผู้อำนวยการไม่อนุมัติการลบ' END,

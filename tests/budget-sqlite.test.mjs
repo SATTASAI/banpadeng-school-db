@@ -212,3 +212,42 @@ test("kindergarten projects use their own approval assignments", async () => {
   const overview = await call(env, 2, "overview?fiscal_year=2570");
   assert.equal(overview.body.projects.find((project) => project.id === 11).department, "early_childhood");
 });
+
+test("two extra finance officers have the same rights as the finance lead and can stand in for each other", async () => {
+  const env = fixture();
+  env.raw.exec(`INSERT INTO users VALUES (8,'fin2@x','เจ้าหน้าที่การเงิน 1','teacher','active','2026-01-01',NULL),(9,'fin3@x','เจ้าหน้าที่การเงิน 2','teacher','active','2026-01-01',NULL)`);
+  await assign(env, "department_head", "academic", 4);
+  await assign(env, "deputy_director", "academic", 5);
+  await assign(env, "finance_review", "", 6);
+  await assign(env, "director_approval", "", 7);
+  await assign(env, "finance_staff_1", "", 8);
+  await assign(env, "finance_staff_2", "", 9);
+  assert.equal((await call(env, 4, "roles", "PUT", { role_key: "finance_staff_1", department: "", user_id: 3 })).status, 403, "only admins assign");
+  assert.equal((await call(env, 1, "roles", "PUT", { role_key: "finance_staff_1", department: "academic", user_id: 3 })).status, 400, "not department scoped");
+
+  const id = (await call(env, 2, "requests", "POST", requestPayload())).body.id;
+  await call(env, 4, `requests/${id}/action`, "POST", { action: "sign" });
+  await call(env, 5, `requests/${id}/action`, "POST", { action: "sign" });
+  const list = await call(env, 8, "overview?year=2570");
+  assert.equal(list.status, 200);
+  assert.equal(list.body.requests.find((r) => r.id === id).can_sign, true, "extra finance officer sees the finance step as signable");
+  assert.equal((await call(env, 3, `requests/${id}/action`, "POST", { action: "sign" })).status, 403, "ordinary teacher cannot sign");
+  assert.equal((await call(env, 8, `requests/${id}/action`, "POST", { action: "sign", review_note: "ตรวจแทน" })).status, 200, "finance officer 1 signs in place of the lead");
+  assert.equal(env.raw.prepare("SELECT acted_by FROM budget_request_approvals WHERE expense_id=? AND step_key='finance_review'").get(id).acted_by, 8);
+  await call(env, 7, `requests/${id}/action`, "POST", { action: "sign" });
+  const paid = await call(env, 9, `requests/${id}/action`, "POST", {
+    action: "pay", payment_no: "PAY-9", payment_date: "2026-10-03", payment_method: "cash", payment_recipient: "ร้านตัวอย่าง",
+  });
+  assert.equal(paid.status, 200, "finance officer 2 records the payment");
+
+  // ผู้รับผิดชอบฝ่ายการเงินเป็นผู้ขอเอง → ขั้นการเงินส่งให้เจ้าหน้าที่การเงินคนอื่นแทน
+  env.raw.exec("INSERT INTO project_owners VALUES(10,6)");
+  const own = await call(env, 6, "requests", "POST", requestPayload(50));
+  assert.equal(own.status, 201);
+  const step = env.raw.prepare("SELECT assigned_user_id FROM budget_request_approvals WHERE expense_id=? AND step_key='finance_review'").get(own.body.id);
+  assert.equal(step.assigned_user_id, 8);
+
+  // ถอดตำแหน่งเพิ่มเติมออกได้
+  assert.equal((await call(env, 1, "roles", "PUT", { role_key: "finance_staff_2", department: "", user_id: null })).status, 200);
+  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM budget_role_assignments WHERE role_key='finance_staff_2'").get().n, 0);
+});
