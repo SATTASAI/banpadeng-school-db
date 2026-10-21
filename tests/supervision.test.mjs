@@ -23,7 +23,7 @@ const ok=async(...args)=>{const r=await json(...args);assert.ok(r.status<300,`${
 async function school(){
  const env=await fixture();await call(env,'/api/overview');
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
-  (5,'director@test','x','x','ผอ. ทดสอบ','executive'),(6,'deputy@test','x','x','รอง ผอ. ทดสอบ','superadmin'),(7,'hr@test','x','x','หัวหน้าฝ่ายบุคคล','teacher');
+  (5,'director@test','x','x','ผอ. ทดสอบ','executive'),(6,'deputy@test','x','x','รอง ผอ. ทดสอบ','superadmin'),(7,'hr@test','x','x','หัวหน้าฝ่ายวิชาการ','teacher');
   INSERT INTO academic_years(id,year_be,label,start_date,end_date,status) VALUES(90,2573,'ปีการศึกษา 2573','2030-01-01','2030-12-31','draft');
   INSERT INTO academic_terms(id,academic_year_id,term_number,name,start_date,end_date,status) VALUES(90,90,1,'ภาคเรียนที่ 1','2030-01-01','2030-03-31','planned');`);
  await call(env,'/api/overview');await call(env,'/api/supervision/permissions',undefined,undefined,5);
@@ -38,7 +38,7 @@ async function school(){
  env.raw.prepare("UPDATE personnel_records SET position='ผู้อำนวยการโรงเรียน' WHERE id=?").run(pid(5));
  env.raw.prepare("UPDATE personnel_records SET position='รองผู้อำนวยการสถานศึกษา' WHERE id=?").run(pid(6));
  env.raw.prepare("UPDATE personnel_records SET position='ครู' WHERE id IN (?,?)").run(pid(2),pid(3));
- env.raw.prepare("INSERT INTO department_staff(department,personnel_id,is_head) VALUES('personnel',?,1)").run(pid(7));
+ env.raw.prepare("INSERT INTO department_staff(department,personnel_id,is_head) VALUES('academic',?,1)").run(pid(7));
  return {env,pid};
 }
 const manual={visit_date:'2030-01-07',period:2,supervision_type:'teaching',topic:'การใช้คำถาม',subject:'ภาษาไทย',grade_level:'ป.4',classroom:'1'};
@@ -71,7 +71,7 @@ test('full flow: register → executives notified → accept → score → teach
  assert(!(await ok(env,'/api/notifications','GET',undefined,3)).notifications.some(n=>n.message_key.startsWith('supervision:')));
  assert.equal((await json(env,'/api/supervision/requests?scope=all','GET',undefined,3)).status,403);
 
- assert.equal((await json(env,`/api/supervision/requests/${id}/accept`,'POST',{},7)).status,403,'personnel head views but does not evaluate');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/accept`,'POST',{},7)).status,403,'academic head views but does not evaluate');
  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
  assert.equal((await json(env,`/api/supervision/requests/${id}/accept`,'POST',{},6)).status,409,'second executive cannot take it');
  const seen=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).requests.find(r=>r.id===id);
@@ -96,15 +96,15 @@ test('full flow: register → executives notified → accept → score → teach
  const mine3=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,3)).requests;
  assert.deepEqual(mine3.map(r=>r.id),[other],'teacher sees only own requests');
  assert((await ok(env,'/api/notifications','GET',undefined,2)).notifications.some(n=>/ผลการนิเทศของคุณพร้อมแล้ว/.test(n.message)));
- for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,23,'executives, personnel and admin see results: '+u);}
+ for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,23,'executives, academic and admin see results: '+u);}
 });
 
-test('personnel head appoints evaluators; appointed evaluators see only the results they scored',async()=>{
+test('academic head appoints evaluators; appointed evaluators see only the results they scored',async()=>{
  const {env}=await school();
  const first=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
  await ok(env,`/api/supervision/requests/${first}/accept`,'POST',{},5);await ok(env,`/api/supervision/requests/${first}/evaluate`,'POST',{scores:[3,3,3,3,3]},5);
  assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},2)).status,403,'teachers cannot appoint');
- assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},5)).status,403,'executives cannot appoint unless personnel head/admin');
+ assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},5)).status,403,'executives cannot appoint unless academic head/admin');
  await ok(env,'/api/supervision/evaluators','POST',{user_id:3},7);
  const list=await ok(env,'/api/supervision/evaluators','GET',undefined,1);
  assert.deepEqual(list.assigned.map(a=>a.user_id),[3]);assert(list.automatic.some(a=>a.user_id===5)&&list.automatic.some(a=>a.user_id===6));
@@ -147,13 +147,16 @@ test('published timetable limits registration to the teacher’s own lessons; ca
  assert.equal((await json(env,'/api/supervision/requests','POST',{visit_date:'2020-01-07',period:1,supervision_type:'teaching'},2)).status,400,'past dates rejected');
 });
 
-test('menus: teacher registration under support, executive pages under administration and personnel',()=>{
+test('menus: teacher registration under support, executive pages under administration and academic',()=>{
  const nav=vm.createContext({URL});vm.runInContext(fs.readFileSync('public/js/navigation-catalog.js','utf8'),nav);
  const n=nav.SchoolNavigation,html=fs.readFileSync('public/dashboard.html','utf8');
  const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];assert(support.includes('data-page="supervision"'));
  assert(n.groups.administration.some(i=>i.url==='/supervision-admin.html'&&i.supervisionOnly==='evaluate'));
- assert(n.groups.personnel.some(i=>i.url==='/supervision-admin.html?view=results'&&i.supervisionOnly==='view_all'));
- assert(n.groups.personnel.some(i=>i.url==='/supervision-admin.html?view=evaluators'&&i.supervisionOnly==='manage_evaluators'));
+ assert(n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=results'&&i.supervisionOnly==='view_all'));
+ assert(n.groups.administration.some(i=>i.url==='/supervision-admin.html?view=summary'&&i.label==='ประเมินผลการนิเทศ'&&i.supervisionOnly==='view_all'));
+ assert(!n.groups.personnel.some(i=>String(i.url).includes('supervision')),'no supervision menus left under personnel');
+ assert.equal(n.parentFor('','/supervision-admin.html?view=results'),'academic');assert.equal(n.parentFor('','/supervision-admin.html?view=summary'),'administration');
+ assert(n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=evaluators'&&i.supervisionOnly==='manage_evaluators'));
  assert.equal(n.parentFor('supervision','/supervision.html'),'supervision');assert.equal(n.parentFor('','/supervision-admin.html?request=1'),'administration');
  assert.match(html,/data-supervision-only/);
 });

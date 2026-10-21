@@ -11,8 +11,8 @@
 (()=>{
 const U=SupervisionUI,{esc}=U,$=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
-const state={perm:null,view:params.get('view'),filter:'all',teacher:'all',list:[],draft:null,focus:Number(params.get('request'))||null};
-const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate','บันทึกคะแนน',p=>p.evaluate],['results','ผลการนิเทศ',p=>p.view_all||p.evaluate],['evaluators','ผู้มีสิทธิ์ประเมิน',p=>p.manage_evaluators]];
+const state={perm:null,view:params.get('view'),filter:'all',teacher:'all',sumType:'all',list:[],draft:null,focus:Number(params.get('request'))||null};
+const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate','บันทึกคะแนน',p=>p.evaluate],['results','ผลการนิเทศ',p=>p.view_all||p.evaluate],['summary','ประเมินผลการนิเทศ',p=>p.view_all],['evaluators','ผู้มีสิทธิ์ประเมิน',p=>p.manage_evaluators]];
 const allowed=()=>TABS.filter(t=>t[2](state.perm));
 const sortAsc=(a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1;
 const me=()=>state.perm.user.id;
@@ -25,7 +25,7 @@ async function load(){if(state.perm.evaluate||state.perm.view_all)state.list=(aw
 async function render(reload=true){
  try{
   if(reload)await load();renderTabs();
-  await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,evaluators:viewEvaluators})[state.view]();
+  await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,summary:viewSummary,evaluators:viewEvaluators})[state.view]();
  }catch(e){$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;}
 }
 /* ---------- คำขอนิเทศ ---------- */
@@ -108,6 +108,58 @@ function viewResults(){
   <div class="sv-list" style="margin-top:12px">${done.length?done.map(r=>U.result(r,state.focus===r.id)).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงเมื่อผู้นิเทศบันทึกคะแนนครบและกดบันทึกผล</div></section>'}</div>`;
  if(state.focus)document.getElementById('r-'+state.focus)?.scrollIntoView({block:'center'});
 }
+/* ---------- ประเมินผลการนิเทศ (สรุปสำหรับผู้บริหาร) ---------- */
+const LEVELS=[['ดีเยี่ยม','#187E6B'],['ดีมาก','#2B86E5'],['ดี','#5B6FD8'],['พอใช้','#d98a1f'],['ควรพัฒนา','#c8483d']];
+const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
+function summaryData(){
+ const done=state.list.filter(r=>r.evaluation&&(state.sumType==='all'||r.supervision_type===state.sumType));
+ const levels=Object.fromEntries(LEVELS.map(([l])=>[l,0]));done.forEach(r=>{if(levels[r.evaluation.level]!=null)levels[r.evaluation.level]++;});
+ // ค่าเฉลี่ยรายข้อ แยกตามประเภทการนิเทศ (ข้อประเมินแต่ละประเภทไม่เหมือนกัน)
+ const groups=new Map();
+ done.forEach(r=>{let g=groups.get(r.supervision_type);if(!g){g={label:r.type_label,count:0,items:new Map()};groups.set(r.supervision_type,g);}g.count++;
+  r.evaluation.items.forEach(it=>{const k=it.label;if(!g.items.has(k))g.items.set(k,[]);g.items.get(k).push(Number(it.score));});});
+ const teachers=new Map();
+ [...done].sort((a,b)=>String(a.evaluation.evaluated_at).localeCompare(String(b.evaluation.evaluated_at))).forEach(r=>{
+  let t=teachers.get(r.teacher_user_id);if(!t){t={name:r.teacher_name,position:r.teacher_position,list:[]};teachers.set(r.teacher_user_id,t);}t.list.push(r);});
+ const rows=[...teachers.values()].map(t=>{const p=t.list.map(r=>Number(r.evaluation.percent)),last=t.list[t.list.length-1];
+  return {name:t.name,position:t.position,count:t.list.length,avg:avg(p),last:p[p.length-1],lastLevel:last.evaluation.level,lastDate:last.visit_date,trend:p.length>1?p[p.length-1]-p[0]:null};})
+  .sort((a,b)=>a.avg-b.avg||a.name.localeCompare(b.name,'th'));
+ const requested=new Set(state.list.filter(r=>state.sumType==='all'||r.supervision_type===state.sumType).map(r=>r.teacher_user_id));
+ return {done,levels,groups,rows,requested,mean:avg(done.map(r=>Number(r.evaluation.percent)))};
+}
+function viewSummary(){
+ const d=summaryData(),types=[...new Map(state.list.map(r=>[r.supervision_type,r.type_label])).entries()];
+ const chip=(k,l)=>`<button type="button" class="sv-chip" data-sumtype="${k}" aria-pressed="${state.sumType===k}">${esc(l)}</button>`;
+ const card=(l,v,c)=>`<div class="sv-stat"><span><i style="background:${c}"></i>${l}</span><b>${v}</b></div>`;
+ const top=`<div class="sv-toolbar"><div class="sv-chips" role="group" aria-label="ประเภทการนิเทศ">${chip('all','ทุกประเภท')}${types.map(([k,l])=>chip(k,l)).join('')}</div>
+  <button type="button" class="sv-btn sm" data-export style="margin-left:auto"${d.done.length?'':' disabled'}>ส่งออก Excel (CSV)</button></div>`;
+ if(!d.done.length){$('view').innerHTML=top+'<section class="sv-card" style="margin-top:16px"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศให้ประเมิน</b>เมื่อผู้นิเทศบันทึกคะแนนแล้ว ภาพรวม ระดับคุณภาพ และจุดที่ควรพัฒนาจะสรุปที่นี่</div></section>';return;}
+ const stats=`<div class="sv-stats" style="margin-top:16px">${card('ครูที่ได้รับการนิเทศ',`${d.rows.length}<small style="font-size:14px;font-weight:500;color:#607991"> / ${d.requested.size} ที่ลงทะเบียน</small>`,'#2B86E5')}${card('ครั้งที่ประเมินแล้ว',d.done.length,'#187E6B')}${card('คะแนนเฉลี่ย',U.pct(d.mean)+'%','#5B6FD8')}${card('ระดับคุณภาพเฉลี่ย',U.level(d.mean),'#d98a1f')}</div>`;
+ const maxL=Math.max(1,...Object.values(d.levels));
+ const bar=(label,value,max,color,text)=>`<div style="display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:10px;align-items:center;font-size:14px"><span>${label}</span><span style="background:#eef3f8;border-radius:99px;height:10px;overflow:hidden"><i style="display:block;height:100%;width:${Math.round(value/max*100)}%;background:${color};border-radius:99px"></i></span><b style="min-width:48px;text-align:right">${text}</b></div>`;
+ const levelCard=`<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">การกระจายระดับคุณภาพ</h2>${LEVELS.map(([l,c])=>bar(esc(l),d.levels[l],maxL,c,`${d.levels[l]} ครั้ง`)).join('')}</section>`;
+ const itemCards=[...d.groups.values()].map(g=>{const items=[...g.items.entries()].map(([label,sc])=>({label,mean:avg(sc)}));
+  const lo=Math.min(...items.map(i=>i.mean)),hi=Math.max(...items.map(i=>i.mean));
+  return `<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">ค่าเฉลี่ยรายข้อ — ${esc(g.label)} <small style="font-weight:500;color:#607991">(${g.count} ครั้ง, เต็ม 5)</small></h2>
+   ${items.map(i=>bar(esc(i.label)+(i.mean===lo&&lo<hi?' <span class="sv-tag" style="background:#fdecea;color:#b23b30">ควรพัฒนา</span>':i.mean===hi&&lo<hi?' <span class="sv-tag" style="background:#e3f4ef;color:#187E6B">จุดเด่น</span>':''),i.mean,5,i.mean===lo&&lo<hi?'#c8483d':'#2B86E5',i.mean.toFixed(2))).join('')}</section>`;}).join('');
+ const trend=t=>t==null?'<span style="color:#8aa0b4">—</span>':t>0?`<span style="color:#187E6B">▲ ${U.pct(t)}</span>`:t<0?`<span style="color:#c8483d">▼ ${U.pct(-t)}</span>`:'<span style="color:#607991">คงที่</span>';
+ const table=`<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">ผลรายครู <small style="font-weight:500;color:#607991">เรียงจากคะแนนเฉลี่ยน้อยไปมาก เพื่อวางแผนนิเทศติดตาม</small></h2>
+  <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px;min-width:560px"><thead><tr style="text-align:left;color:#607991;border-bottom:1px solid #e3eaf1">
+  <th style="padding:8px 6px">ครู</th><th style="padding:8px 6px;text-align:center">ครั้ง</th><th style="padding:8px 6px;text-align:right">เฉลี่ย</th><th style="padding:8px 6px;text-align:right">ครั้งล่าสุด</th><th style="padding:8px 6px">ระดับล่าสุด</th><th style="padding:8px 6px;text-align:right">พัฒนาการ</th></tr></thead>
+  <tbody>${d.rows.map(r=>`<tr style="border-bottom:1px solid #f0f4f8"><td style="padding:8px 6px"><b>${esc(r.name)}</b>${r.position?`<div style="color:#8aa0b4;font-size:12px">${esc(r.position)}</div>`:''}</td><td style="padding:8px 6px;text-align:center">${r.count}</td>
+   <td style="padding:8px 6px;text-align:right">${U.pct(r.avg)}%</td><td style="padding:8px 6px;text-align:right">${U.pct(r.last)}%<div style="color:#8aa0b4;font-size:12px">${U.shortDate(r.lastDate)}</div></td>
+   <td style="padding:8px 6px"><span class="lv lv-${esc(r.lastLevel)}">${esc(r.lastLevel)}</span></td><td style="padding:8px 6px;text-align:right">${trend(r.trend)}</td></tr>`).join('')}</tbody></table></div>
+  <p class="sv-hint" style="margin:0">พัฒนาการ = ร้อยละครั้งล่าสุด − ครั้งแรก (แสดงเมื่อได้รับการนิเทศมากกว่า 1 ครั้ง)</p></section>`;
+ $('view').innerHTML=top+stats+`<div style="display:grid;gap:16px;margin-top:16px">${levelCard}${itemCards}${table}</div>`;
+}
+function exportSummary(){
+ const d=summaryData(),q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+ const lines=[['ครู','ตำแหน่ง','วันที่นิเทศ','คาบ','ประเภท','วิชา','ชั้น/ห้อง','ผู้นิเทศ','คะแนนรวม (25)','ร้อยละ','ระดับ','ข้อเสนอแนะ'].map(q).join(',')];
+ [...d.done].sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th')||a.visit_date.localeCompare(b.visit_date)).forEach(r=>{const e=r.evaluation;
+  lines.push([r.teacher_name,r.teacher_position,r.visit_date,r.period,r.type_label,r.subject,U.classLabel(r),e.evaluator_name,e.total,Number(e.percent).toFixed(2),e.level,e.suggestion].map(q).join(','));});
+ const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
+ a.href=URL.createObjectURL(blob);a.download=`ประเมินผลการนิเทศ-${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
 /* ---------- ผู้มีสิทธิ์ประเมิน ---------- */
 async function viewEvaluators(){
  const data=await apiRequest('/api/supervision/evaluators');
@@ -130,7 +182,9 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.open_assignments?`ถอนสิทธิ์แล้ว (มีนัดที่รับไว้ยังไม่ประเมิน ${r.open_assignments} รายการ)`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const el=e.target.closest('[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke]');if(!el)return;
+ const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke]');if(!el)return;
+ if(el.dataset.sumtype){state.sumType=el.dataset.sumtype;viewSummary();return;}
+ if(el.dataset.export!==undefined){exportSummary();return;}
  if(el.dataset.tab){state.view=el.dataset.tab;state.focus=null;render(false);}
  else if(el.dataset.filter){state.filter=el.dataset.filter;render(false);}
  else if(el.dataset.accept){el.disabled=true;act(el.dataset.accept,'accept','รับนิเทศเรียบร้อย ระบบแจ้งครูแล้ว');}
@@ -149,7 +203,7 @@ document.addEventListener('input',e=>{if(e.target.id==='sugg'&&state.draft)state
 (async()=>{
  const auth=await apiRequest('/api/auth/me');if(!auth.user){location.href='/login.html';return;}
  state.perm=await apiRequest('/api/supervision/permissions');
- if(!state.perm.staff){$('tabs').hidden=true;$('view').innerHTML='<div class="sv-notice error">หน้านี้สำหรับผู้อำนวยการ รองผู้อำนวยการ ผู้มีสิทธิ์ประเมิน และฝ่ายบุคคลเท่านั้น ครูลงทะเบียนและดูผลของตนเองได้ที่เมนู ระบบสนับสนุน → ลงทะเบียนนิเทศ</div>';return;}
+ if(!state.perm.staff){$('tabs').hidden=true;$('view').innerHTML='<div class="sv-notice error">หน้านี้สำหรับผู้อำนวยการ รองผู้อำนวยการ ผู้มีสิทธิ์ประเมิน และฝ่ายวิชาการเท่านั้น ครูลงทะเบียนและดูผลของตนเองได้ที่เมนู ระบบสนับสนุน → ลงทะเบียนนิเทศ</div>';return;}
  if(!allowed().some(t=>t[0]===state.view))state.view=allowed()[0][0];
  await load();
  if(state.focus&&!params.get('view')){const r=state.list.find(x=>x.id===state.focus);if(r)state.view=r.status==='evaluated'&&allowed().some(t=>t[0]==='results')?'results':'requests';}
