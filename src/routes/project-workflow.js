@@ -2,6 +2,7 @@ import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows }
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { executives, isDirector } from "../lib/leave-data.js";
 import { procurementBlocksDisbursement, procurementClosing } from "./procurement.js";
+import { FINANCE_ROLE_SQL, isFinanceMember } from "../lib/finance-roles.js";
 
 const ready = new WeakSet();
 const clean = (v, max = 1500) => String(v ?? "").trim().slice(0, max) || null;
@@ -86,7 +87,7 @@ export async function ensureProjectWorkflowSchema(env) {
 export async function canManageProjectFinance(env, user) {
   if (isAdmin(user)) return true;
   if (!user) return false;
-  return Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE role_key='finance_review' AND department='' AND user_id=?").bind(user.id).first());
+  return isFinanceMember(env, user.id);
 }
 
 // ผู้อำนวยการผู้อนุมัติการเบิกจ่าย: ผู้ที่ตั้งไว้ในหน้าที่ "ผู้อำนวยการอนุมัติ" ของระบบงบประมาณ
@@ -132,7 +133,7 @@ function eventStatements(env, token, expenseId, eventType, message, user, audien
     SELECT ?,e.id,e.project_id,?,?,? FROM project_expenses e WHERE e.id=? AND (${condition})`)
     .bind(token, eventType, message, user.id, expenseId,...conditionValues)];
   const recipients = audience === "finance"
-    ? `SELECT u.id FROM users u WHERE u.status='active' AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key='finance_review' AND a.department=''))`
+    ? `SELECT u.id FROM users u WHERE u.status='active' AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key IN ${FINANCE_ROLE_SQL} AND a.department=''))`
     : Array.isArray(audience)
       ? `SELECT u.id FROM users u WHERE u.status='active' AND u.id IN (${audience.map((id) => Number(id) || 0).join(",") || "0"})`
       : `SELECT u.id FROM users u WHERE u.status='active' AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
