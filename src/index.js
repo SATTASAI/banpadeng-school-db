@@ -2692,6 +2692,15 @@ async function handleCreateInventoryInspection(request, env, itemId) {
 }
 
 // ---------- LINE Messaging API / Webhook ----------
+const LINE_API_TIMEOUT_MS = 10000;
+// ลิงก์ในข้อความ LINE ใช้โดเมนหลักของโรงเรียนเสมอ (ไม่ใช้ workers.dev หรือโดเมนที่ผู้ใช้บังเอิญเปิด)
+const SCHOOL_ORIGIN = "https://system.banpadengschool.ac.th";
+export function publicOrigin(env, request) {
+  if (env?.PUBLIC_BASE_URL) return String(env.PUBLIC_BASE_URL).replace(/\/$/, "");
+  try { const origin = new URL(request.url).origin; if (/^https:\/\/([a-z0-9-]+\.)*banpadengschool\.ac\.th$/i.test(origin)) return origin; } catch {}
+  return SCHOOL_ORIGIN;
+}
+
 function decodeBase64(value) {
   try {
     return Uint8Array.from(atob(String(value || "")), (character) => character.charCodeAt(0));
@@ -2729,6 +2738,7 @@ async function fetchLineTargetDisplayName(env, targetType, targetId) {
   try {
     const response = await fetch(`https://api.line.me${path}`, {
       headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
+      signal: AbortSignal.timeout(LINE_API_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -2738,44 +2748,51 @@ async function fetchLineTargetDisplayName(env, targetType, targetId) {
   }
 }
 
+// เหตุการณ์ที่ต้องบันทึกปลายทางเสมอ (เข้ากลุ่ม/แอดเพื่อน ฯลฯ) — ข้อความทั่วไปในกลุ่มบันทึกไม่เกินชั่วโมงละครั้ง
+const LINE_TARGET_EVENTS = new Set(["join", "leave", "follow", "unfollow", "memberJoined", "memberLeft"]);
 async function processLineWebhookEvents(env, events) {
   if (!Array.isArray(events) || events.length === 0) return;
   await ensureLineSchema(env);
   for (const event of events.slice(0, 100)) {
-    try {
-      await handleLinePersonalEvent(env, event);
-    } catch (error) {
-      console.error("LINE personal link failed", String(error?.message || error).slice(0, 300));
-    }
     const source = getLineSourceTarget(event?.source);
     const eventType = cleanText(event?.type, 50) || "unknown";
     const webhookEventId = cleanText(event?.webhookEventId, 160);
-    if (source) {
-      await env.DB.prepare(`INSERT INTO line_targets
-        (target_type,target_id,source_user_id,last_event_type)
-        VALUES (?,?,?,?)
-        ON CONFLICT(target_id) DO UPDATE SET
-          target_type=excluded.target_type,
-          source_user_id=COALESCE(excluded.source_user_id,line_targets.source_user_id),
-          last_event_type=excluded.last_event_type,
-          last_seen_at=datetime('now'),
-          updated_at=datetime('now')`)
-        .bind(source.targetType, source.targetId, cleanText(event?.source?.userId, 160), eventType).run();
-
-      const target = await env.DB.prepare("SELECT id,display_name FROM line_targets WHERE target_id=?")
-        .bind(source.targetId).first();
-      if (target && !target.display_name) {
-        const displayName = await fetchLineTargetDisplayName(env, source.targetType, source.targetId);
-        if (displayName) {
-          await env.DB.prepare("UPDATE line_targets SET display_name=?,updated_at=datetime('now') WHERE id=?")
-            .bind(displayName, target.id).run();
-        }
-      }
-    }
-    if (webhookEventId) {
-      await env.DB.prepare(`INSERT OR IGNORE INTO line_webhook_events
+    // LINE อาจส่งเหตุการณ์เดิมซ้ำ (redelivery): ประมวลผลเหตุการณ์จากแชต 1:1 ครั้งเดียว
+    // ข้อความในกลุ่มไม่ต้องบันทึก event (ไม่มีผลกับการเชื่อมบัญชี) เพื่อลดการเขียนฐานข้อมูล
+    const personal = source?.targetType === "user";
+    if (webhookEventId && (personal || LINE_TARGET_EVENTS.has(eventType))) {
+      const inserted = await env.DB.prepare(`INSERT OR IGNORE INTO line_webhook_events
         (webhook_event_id,target_id,source_type,event_type) VALUES (?,?,?,?)`)
         .bind(webhookEventId, source?.targetId || null, source?.targetType || null, eventType).run();
+      if (!inserted.meta.changes) continue;
+    } else if (event?.deliveryContext?.isRedelivery) continue;
+    if (personal) {
+      try {
+        await handleLinePersonalEvent(env, event);
+      } catch (error) {
+        console.error("LINE personal link failed", String(error?.message || error).slice(0, 300));
+      }
+    }
+    if (!source) continue;
+    const existing = await env.DB.prepare(`SELECT id,display_name,last_seen_at<datetime('now','-1 hour') AS stale FROM line_targets WHERE target_id=?`)
+      .bind(source.targetId).first();
+    if (existing && !Number(existing.stale) && !LINE_TARGET_EVENTS.has(eventType)) continue;
+    await env.DB.prepare(`INSERT INTO line_targets
+      (target_type,target_id,source_user_id,last_event_type)
+      VALUES (?,?,?,?)
+      ON CONFLICT(target_id) DO UPDATE SET
+        target_type=excluded.target_type,
+        source_user_id=COALESCE(excluded.source_user_id,line_targets.source_user_id),
+        last_event_type=excluded.last_event_type,
+        last_seen_at=datetime('now'),
+        updated_at=datetime('now')`)
+      .bind(source.targetType, source.targetId, cleanText(event?.source?.userId, 160), eventType).run();
+    if (!existing?.display_name) {
+      const displayName = await fetchLineTargetDisplayName(env, source.targetType, source.targetId);
+      if (displayName) {
+        await env.DB.prepare("UPDATE line_targets SET display_name=?,updated_at=datetime('now') WHERE target_id=?")
+          .bind(displayName, source.targetId).run();
+      }
     }
   }
 }
@@ -2826,8 +2843,9 @@ async function fetchLineApiJson(env, path) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) return null;
   const response = await fetch(`https://api.line.me${path}`, {
     headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}` },
-  });
-  if (!response.ok) return null;
+    signal: AbortSignal.timeout(LINE_API_TIMEOUT_MS),
+  }).catch(() => null);
+  if (!response?.ok) return null;
   return response.json().catch(() => null);
 }
 
@@ -2863,7 +2881,8 @@ async function pushLineMessages(env, targetId, messages) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ to: String(targetId), messages }),
-  });
+    signal: AbortSignal.timeout(LINE_API_TIMEOUT_MS),
+  }).catch((error) => { throw new Error(error?.name === "TimeoutError" ? "LINE ไม่ตอบภายใน 10 วินาที" : String(error?.message || error)); });
   if (!response.ok) throw new Error(`LINE API ${response.status}: ${(await response.text()).slice(0, 300)}`);
 }
 
@@ -3366,7 +3385,7 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
     try { metrics = await getLineDeliveryMetrics(env, lineTarget || { target_type:"user" }); } catch { metrics = null; }
     let remaining = metrics?.remaining ?? null;
     const groupCost = lineTarget ? (metrics?.recipient_count ?? 1) : 0;
-    const origin = new URL(request.url).origin;
+    const origin = publicOrigin(env, request);
     const previewId = eventType === "completed" || eventType === "verified" ? item.after_attachment_id : item.before_attachment_id;
     let hero = null;
     if (previewId && env.JWT_SECRET) {
@@ -3374,24 +3393,28 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
       const sig = await maintenanceImageSignature(env,previewId,expires);
       hero = {type:"image",url:`${origin}/api/public/maintenance-image/${previewId}?expires=${expires}&sig=${sig}`,size:"full",aspectRatio:"20:13",aspectMode:"cover"};
     }
-    // ส่งรายบุคคลก่อน (ใช้โควตาน้อยและตรงตัวผู้รับ) แล้วจึงส่งกลุ่ม
+    // ส่งรายบุคคลก่อน (ใช้โควตาน้อยและตรงตัวผู้รับ) แล้วจึงส่งกลุ่ม — จองโควตาตามลำดับ แล้วส่งพร้อมกันเพื่อให้ผู้ใช้รอไม่นาน
     sendable.sort((a,b)=>(a.type==="user"?0:1)-(b.type==="user"?0:1));
+    const planned = [];
     for (const target of sendable) {
       const cost = target.type === "group" ? groupCost : 1;
       if (remaining !== null && remaining < cost) {
         results.push({ ...target, status:"quota_exhausted", error: remaining <= 0 ? "โควตา LINE ประจำเดือนหมดแล้ว" : `โควตา LINE คงเหลือ ${remaining} ข้อความ ไม่พอสำหรับผู้รับประมาณ ${cost} คน` });
         continue;
       }
+      if (remaining !== null) remaining -= cost;
+      planned.push(target);
+    }
+    results.push(...await Promise.all(planned.map(async (target) => {
       try {
         const flex = buildMaintenanceFlex(item, eventType, origin, requestId, target.headline);
         if (hero) flex.contents.hero = hero;
         await pushLineMessages(env, target.target_id, [{ type:"flex", altText:flex.altText, contents:flex.contents }]);
-        if (remaining !== null) remaining -= cost;
-        results.push({ ...target, status:"sent" });
+        return { ...target, status:"sent" };
       } catch (error) {
-        results.push({ ...target, status:"failed", error:cleanText(error?.message||error,500) });
+        return { ...target, status:"failed", error:cleanText(error?.message||error,500) };
       }
-    }
+    })));
   }
 
   // บันทึกประวัติไม่สำเร็จต้องไม่ทำให้ผลการส่งที่ส่งไปแล้วกลายเป็น "ส่งไม่สำเร็จ"
@@ -4712,7 +4735,7 @@ export default {
     const { pathname } = new URL(request.url);
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
       && response.status < 400 && env.LINE_CHANNEL_ACCESS_TOKEN && context?.waitUntil) {
-      context.waitUntil(dispatchLineNotifications(env, { trigger: "event", origin: env.PUBLIC_BASE_URL || new URL(request.url).origin }).catch(() => {}));
+      context.waitUntil(dispatchLineNotifications(env, { trigger: "event", origin: publicOrigin(env, request) }).catch(() => {}));
     }
     return response;
   },

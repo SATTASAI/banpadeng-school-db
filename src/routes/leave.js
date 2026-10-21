@@ -59,7 +59,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    if(!link||!env.LINE_CHANNEL_ACCESS_TOKEN)return {user_id:r.user_id,status:'not_checked'};
    try{
     const response=await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(link.line_user_id)}`,
-     {headers:{Authorization:`Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`}});
+     {headers:{Authorization:`Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`},signal:AbortSignal.timeout(10000)});
     return {user_id:r.user_id,status:response.ok?'available':response.status===404?'unavailable':'unknown'};
    }catch{return {user_id:r.user_id,status:'unknown'};}
   }));

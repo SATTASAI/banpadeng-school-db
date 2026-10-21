@@ -57,6 +57,7 @@ function normalizeCode(text) {
 async function lineFetch(env, path, init = {}) {
   if (!env.LINE_CHANNEL_ACCESS_TOKEN) return null;
   return fetch(`https://api.line.me${path}`, {
+    signal: AbortSignal.timeout(10000),
     ...init,
     headers: { Authorization: `Bearer ${env.LINE_CHANNEL_ACCESS_TOKEN}`, "Content-Type": "application/json", ...(init.headers || {}) },
   });
@@ -129,7 +130,7 @@ export async function handleLinePersonalEvent(env, event) {
 
   const codeHash = await sha256Hex(code);
   const pending = await env.DB.prepare(`SELECT c.user_id,u.full_name FROM line_link_codes c JOIN users u ON u.id=c.user_id
-    WHERE c.code_hash=? AND datetime(c.expires_at)>datetime('now') AND u.status='active'`).bind(codeHash).first();
+    WHERE c.code_hash=? AND datetime(c.expires_at)>datetime('now') AND u.status='active' AND u.deleted_at IS NULL`).bind(codeHash).first();
   if (!pending) {
     await env.DB.prepare("INSERT INTO line_link_failures(line_user_id) VALUES (?)").bind(lineUserId).run();
     await replyText(env, event.replyToken, "ไม่พบรหัสนี้หรือรหัสหมดอายุแล้ว กรุณาขอรหัสใหม่จากเมนู บัญชีและความปลอดภัย → เชื่อมต่อ LINE");
@@ -137,7 +138,7 @@ export async function handleLinePersonalEvent(env, event) {
   }
 
   const existing = await env.DB.prepare(`SELECT l.user_id FROM line_user_links l JOIN users u ON u.id=l.user_id
-    WHERE l.line_user_id=? AND l.user_id<>? AND u.status='active'`).bind(lineUserId, pending.user_id).first();
+    WHERE l.line_user_id=? AND l.user_id<>? AND u.status='active' AND u.deleted_at IS NULL`).bind(lineUserId, pending.user_id).first();
   if (existing) {
     await replyText(env, event.replyToken, "บัญชี LINE นี้เชื่อมกับผู้ใช้อื่นในระบบอยู่แล้ว กรุณายกเลิกการเชื่อมต่อจากบัญชีเดิมก่อน");
     return true;
