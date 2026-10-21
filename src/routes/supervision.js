@@ -1,6 +1,6 @@
 // ระบบลงทะเบียนนิเทศ (นิเทศการสอน / นิเทศห้องเรียน)
-// ครูลงทะเบียนคาบของตนเอง → ผู้มีสิทธิ์ประเมิน (ผอ. รอง ผอ. และผู้ที่ฝ่ายบุคคลแต่งตั้ง) รับนิเทศ → ผู้รับนิเทศบันทึกคะแนน
-// ผลประเมิน: ครูเห็นเฉพาะของตนเอง ฝ่ายบริหารและฝ่ายบุคคลเห็นทั้งหมด
+// ครูลงทะเบียนคาบของตนเอง → ผู้มีสิทธิ์ประเมิน (ผอ. รอง ผอ. และผู้ที่ฝ่ายวิชาการแต่งตั้ง) รับนิเทศ → ผู้รับนิเทศบันทึกคะแนน
+// ผลประเมิน: ครูเห็นเฉพาะของตนเอง ฝ่ายบริหารและฝ่ายวิชาการเห็นทั้งหมด
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {ensurePersonnelData} from '../lib/personnel-data.js';
 import {ensureDepartmentStaff,belongsToDepartment} from './department-staff.js';
@@ -72,17 +72,18 @@ export async function supervisionPermissions(env,user){
  if(!user?.role||user.role==='viewer')return {...NONE};
  await ensureSupervisionSchema(env);await ensurePersonnelData(env);await ensureDepartmentStaff(env);
  const {results:people}=await env.DB.prepare(`SELECT p.id,p.position,p.departments,
-  EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='personnel') in_personnel,
-  EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='personnel' AND d.is_head=1) personnel_head,
+  EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='academic') in_academic,
+  EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='academic' AND d.is_head=1) academic_head,
   CASE WHEN ${EXEC_POSITION} THEN 1 ELSE 0 END exec_position
   FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).all();
  const assigned=!!await env.DB.prepare('SELECT 1 FROM supervision_evaluators WHERE user_id=?').bind(user.id).first();
  const executive=user.role==='executive'||people.some(p=>Number(p.exec_position)===1);
- const personnelHead=people.some(p=>Number(p.personnel_head)===1);
- const personnelStaff=personnelHead||people.some(p=>Number(p.in_personnel)===1||belongsToDepartment(p.departments,'personnel'));
+ // งานนิเทศการศึกษาอยู่ในฝ่ายวิชาการ
+ const academicHead=people.some(p=>Number(p.academic_head)===1);
+ const academicStaff=academicHead||people.some(p=>Number(p.in_academic)===1||belongsToDepartment(p.departments,'academic'));
  const evaluate=executive||assigned;
- const viewAll=executive||personnelStaff||user.role==='superadmin';
- const manage=user.role==='superadmin'||personnelHead;
+ const viewAll=executive||academicStaff||user.role==='superadmin';
+ const manage=user.role==='superadmin'||academicHead;
  return {register:true,evaluate,view_all:viewAll,manage_evaluators:manage,staff:evaluate||viewAll||manage,executive,assigned_evaluator:assigned};
 }
 
@@ -135,7 +136,7 @@ const SELECT=`SELECT r.*,tu.full_name teacher_name,su.full_name supervisor_name,
  LEFT JOIN supervision_evaluations e ON e.request_id=r.id LEFT JOIN users eu ON eu.id=e.evaluator_user_id`;
 function shape(row,{withResult}){
  const out={id:row.id,teacher_user_id:row.teacher_user_id,teacher_name:row.teacher_name,teacher_position:row.teacher_position||null,
-  visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
+  academic_term_id:row.academic_term_id,visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
   supervision_type:row.supervision_type,type_label:SUPERVISION_TYPES[row.supervision_type]?.label,topic:row.topic,status:row.status,
   supervisor_user_id:row.supervisor_user_id,supervisor_name:row.supervisor_name,supervisor_position:row.supervisor_position||null,
   accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at};
@@ -217,9 +218,9 @@ async function listRequests(env,user,url,perms){
   const {results}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' ORDER BY r.visit_date DESC,r.period`).bind(user.id).all();
   return reply({scope,requests:results.map(r=>shape(r,{withResult:true}))});
  }
- if(!perms.evaluate&&!perms.view_all)return fail('เฉพาะฝ่ายบริหาร ฝ่ายบุคคล หรือผู้มีสิทธิ์ประเมิน',403);
+ if(!perms.evaluate&&!perms.view_all)return fail('เฉพาะฝ่ายบริหาร ฝ่ายวิชาการ หรือผู้มีสิทธิ์ประเมิน',403);
  const {results}=await env.DB.prepare(`${SELECT} WHERE r.status<>'cancelled' ORDER BY r.visit_date,r.period,r.id`).all();
- // ผู้ประเมินที่ได้รับแต่งตั้ง (ไม่ใช่ฝ่ายบริหาร/ฝ่ายบุคคล) เห็นคะแนนเฉพาะรายการที่ตนประเมิน
+ // ผู้ประเมินที่ได้รับแต่งตั้ง (ไม่ใช่ฝ่ายบริหาร/ฝ่ายวิชาการ) เห็นคะแนนเฉพาะรายการที่ตนประเมิน
  return reply({scope,requests:results.map(r=>shape(r,{withResult:perms.view_all||r.evaluator_user_id===user.id||r.teacher_user_id===user.id}))});
 }
 
@@ -333,7 +334,7 @@ export async function handleSupervisionRoute(request,env,pathname,method){
  if(m&&method==='POST')return act(request,env,user,Number(m[1]),m[2],perms);
  const ev=pathname.match(/^\/api\/supervision\/evaluators(?:\/(\d+))?$/);
  if(ev){
-  if(!perms.manage_evaluators)return fail('เฉพาะหัวหน้าฝ่ายบุคคลหรือผู้ดูแลระบบ',403);
+  if(!perms.manage_evaluators)return fail('เฉพาะหัวหน้าฝ่ายวิชาการหรือผู้ดูแลระบบ',403);
   if(ev[1]&&method!=='DELETE')return fail('Method not allowed',405);
   return evaluators(request,env,user,method,Number(ev[1]));
  }
