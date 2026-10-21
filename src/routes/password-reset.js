@@ -1,5 +1,6 @@
 import { generateSalt, hashPassword, buildClearCookie } from '../lib/crypto.js';
 import { jsonResponse } from '../lib/auth.js';
+import { verifyTurnstile, TURNSTILE_ERROR, revokeAllSessions, securityAlert } from '../lib/auth-sessions.js';
 
 const ready = new WeakSet();
 export async function ensurePasswordResetSchema(env) {
@@ -52,6 +53,7 @@ export async function handlePasswordResetRoute(request, env, pathname, method) {
     return jsonResponse({ error: 'ส่งคำขอหลายครั้ง กรุณารอ 15 นาทีแล้วลองใหม่' }, 429, { 'Retry-After': '900' });
   }
   if (pathname === '/api/auth/forgot-password') {
+    if (!(await verifyTurnstile(env, body.turnstile_token, request)).ok) return jsonResponse({ error: TURNSTILE_ERROR }, 400);
     const email = String(body.email || '').trim().toLowerCase();
     if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return jsonResponse({ error: 'กรุณากรอกอีเมลให้ถูกต้อง' }, 400);
     if (!mail.key || !mail.from) return jsonResponse({ error: 'ระบบส่งอีเมลยังไม่พร้อม กรุณาติดต่อผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน' }, 503);
@@ -107,6 +109,8 @@ export async function handlePasswordResetRoute(request, env, pathname, method) {
       SELECT ?,'reset_password','users',?,'{}',? WHERE changes()=1`).bind(row.user_id,row.user_id,ip),
   ]);
   if (!Number(results[0]?.meta?.changes)) return invalid();
+  await revokeAllSessions(env, row.user_id, 'password_reset');
+  await securityAlert(env, [row.user_id], 'password_reset', 'ตั้งรหัสผ่านใหม่ผ่านลิงก์ทางอีเมลแล้ว ทุกอุปกรณ์ถูกออกจากระบบ — ถ้าไม่ใช่คุณ ให้ติดต่อผู้ดูแลระบบทันที');
   return jsonResponse({ message: 'ตั้งรหัสผ่านใหม่เรียบร้อย กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่' }, 200,
     { 'Set-Cookie': buildClearCookie(), 'Cache-Control': 'no-store' });
 }

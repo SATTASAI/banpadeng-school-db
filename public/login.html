@@ -26,6 +26,7 @@
         <label for="password">รหัสผ่าน</label>
         <input type="password" id="password" required autocomplete="current-password" />
       </div>
+      <div data-turnstile class="turnstile-box"></div>
       <button type="submit" class="btn btn-primary" id="submitBtn">เข้าสู่ระบบ</button>
     </form>
 
@@ -42,6 +43,7 @@
   </div>
 </div>
 
+<script src="/js/turnstile.js"></script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onSchoolTurnstile" async defer></script>
 <script src="/js/api.js"></script>
 <script>
   const form = document.getElementById("loginForm");
@@ -60,6 +62,7 @@
         body: {
           email: document.getElementById("email").value,
           password: document.getElementById("password").value,
+          turnstile_token: SchoolTurnstile.token(),
         },
       });
       const requested=new URLSearchParams(location.search).get('next');
@@ -69,6 +72,7 @@
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
+      SchoolTurnstile.reset();
       submitBtn.disabled = false;
       submitBtn.textContent = "เข้าสู่ระบบ";
     }
