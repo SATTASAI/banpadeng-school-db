@@ -69,7 +69,7 @@ export function ensureSupervisionSchema(env){
 const EXEC_POSITION=`REPLACE(COALESCE(p.position,''),' ','') LIKE '%ผู้อำนวยการ%' AND REPLACE(COALESCE(p.position,''),' ','') NOT LIKE '%ผู้ช่วยผู้อำนวยการ%'`;
 const NONE={register:false,evaluate:false,view_all:false,manage_evaluators:false,staff:false,executive:false};
 export async function supervisionPermissions(env,user){
- if(!user?.role)return {...NONE};
+ if(!user?.role||user.role==='viewer')return {...NONE};
  await ensureSupervisionSchema(env);await ensurePersonnelData(env);await ensureDepartmentStaff(env);
  const {results:people}=await env.DB.prepare(`SELECT p.id,p.position,p.departments,
   EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='personnel') in_personnel,

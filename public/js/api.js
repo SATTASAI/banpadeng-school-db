@@ -81,6 +81,7 @@ const ROLE_LABELS = {
   executive: "ผู้บริหาร",
   staff: "เจ้าหน้าที่ธุรการ",
   superadmin: "ผู้ดูแลระบบ",
+  viewer: "ผู้ชมภายนอก (ดูอย่างเดียว)",
 };
 
 // Shared notification bar uses the same authenticated API as the current page.

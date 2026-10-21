@@ -24,7 +24,7 @@ import {
   buildSessionCookie,
   buildClearCookie,
 } from "./lib/crypto.js";
-import { getCurrentUser, jsonResponse, isAdmin } from "./lib/auth.js";
+import { getCurrentUser, jsonResponse, isAdmin, viewerMayAccess, viewerExpired, VIEWER_BLOCKED, VIEWER_COLUMNS, applyViewer, ensureViewerTable } from "./lib/auth.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { importStaffRows } from "./lib/staff-import.js";
@@ -83,6 +83,9 @@ async function ensureAuthSecuritySchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id), action TEXT NOT NULL, resource TEXT NOT NULL,
       resource_id INTEGER, details TEXT, ip_address TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS viewer_accounts (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id), expires_at TEXT, created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
   authSecuritySchemaReady.add(env.DB);
 }
@@ -544,6 +547,7 @@ async function handleLogin(request, env) {
   if (!email || !password) {
     return jsonResponse({ error: "กรุณากรอกอีเมลและรหัสผ่าน" }, 400);
   }
+  await ensureViewerTable(env);
   if (!(await verifyTurnstile(env, body.turnstile_token, request)).ok) {
     return jsonResponse({ error: TURNSTILE_ERROR }, 400);
   }
@@ -558,7 +562,7 @@ async function handleLogin(request, env) {
   }
 
   const user = await env.DB.prepare(
-    "SELECT id, email, full_name, role, status, password_hash, password_salt FROM users WHERE email = ?"
+    "SELECT id, email, full_name, role, status, password_hash, password_salt, " + VIEWER_COLUMNS + " FROM users WHERE email = ?"
   )
     .bind(email)
     .first();
@@ -578,6 +582,12 @@ async function handleLogin(request, env) {
 
   if (user.status !== "active") {
     return jsonResponse({ error: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, 403);
+  }
+  applyViewer(user);
+  if (user.role === "viewer") {
+    if (viewerExpired(user)) {
+      return jsonResponse({ error: "บัญชีผู้ชมภายนอกหมดอายุแล้ว กรุณาติดต่อโรงเรียน" }, 403);
+    }
   }
 
   await env.DB.batch([
@@ -721,11 +731,13 @@ async function handleAdminListUsers(request, env) {
     return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
   }
 
+  await ensureViewerTable(env);
   await ensurePersonnelData(env);
   const { results } = await env.DB.prepare(
-    `SELECT u.id, u.email, u.full_name, u.role, u.status, u.created_at, u.approved_at,
+    `SELECT u.id, u.email, CASE WHEN va.user_id IS NOT NULL THEN 'viewer' ELSE u.role END AS role, u.full_name, u.status, u.created_at, u.approved_at, va.expires_at AS access_expires_at,
             p.position, p.phone, p.departments
      FROM users u
+     LEFT JOIN viewer_accounts va ON va.user_id=u.id
      LEFT JOIN personnel_accounts pa ON pa.user_id=u.id
      LEFT JOIN personnel_records p ON p.id=pa.personnel_id AND p.status='active'
      WHERE u.deleted_at IS NULL
@@ -744,7 +756,7 @@ async function isLastActiveSuperadmin(env, userId) {
 }
 
 // ---------- /api/admin/users/:id (PATCH) ----------
-const VALID_ROLES = ["teacher", "executive", "staff", "superadmin"];
+const VALID_ROLES = ["teacher", "executive", "staff", "superadmin", "viewer"];
 const VALID_STATUSES = ["active", "disabled"];
 
 export async function handleAdminUpdateUser(request, env, targetId) {
@@ -752,6 +764,7 @@ export async function handleAdminUpdateUser(request, env, targetId) {
   if (!isAdmin(admin)) {
     return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
   }
+  await ensureViewerTable(env);
 
   if (!targetId) {
     return jsonResponse({ error: "รหัสผู้ใช้ไม่ถูกต้อง" }, 400);
@@ -783,8 +796,12 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     if (body.role !== null && !VALID_ROLES.includes(body.role)) {
       return jsonResponse({ error: "บทบาทไม่ถูกต้อง" }, 400);
     }
+    if (body.role === "viewer" && targetId === admin.id) {
+      return jsonResponse({ error: "ไม่สามารถเปลี่ยนบัญชีของตัวเองเป็นผู้ชมภายนอกได้" }, 400);
+    }
+    // viewer เก็บในตาราง viewer_accounts และตั้ง users.role = NULL (CHECK เดิมของตาราง users)
     updates.push("role = ?");
-    values.push(body.role);
+    values.push(body.role === "viewer" ? null : body.role);
     if (body.role !== null) {
       updates.push("approved_at = ?", "approved_by = ?");
       values.push(new Date().toISOString(), admin.id);
@@ -802,6 +819,20 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     values.push(body.status);
   }
 
+  // วันหมดอายุของบัญชีผู้ชมภายนอก (YYYY-MM-DD หรือ null = ไม่หมดอายุ) — เฉพาะผู้ดูแลระบบ
+  const before = applyViewer(await env.DB.prepare("SELECT role, status, " + VIEWER_COLUMNS + " FROM users WHERE id = ?").bind(targetId).first());
+  let viewerExpiry;
+  if (body.access_expires_at !== undefined) {
+    if (admin.role !== "superadmin") return jsonResponse({ error: "กำหนดวันหมดอายุได้เฉพาะผู้ดูแลระบบ" }, 403);
+    const value = body.access_expires_at;
+    if (value !== null && !(typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)))) {
+      return jsonResponse({ error: "วันหมดอายุไม่ถูกต้อง" }, 400);
+    }
+    const willBeViewer = body.role !== undefined ? body.role === "viewer" : before?.role === "viewer";
+    if (!willBeViewer) return jsonResponse({ error: "กำหนดวันหมดอายุได้เฉพาะบัญชีผู้ชมภายนอก" }, 400);
+    viewerExpiry = value;
+  }
+
   // ผู้ดูแลแก้ชื่อ–นามสกุลที่แสดงของผู้ใช้ได้ (เช่น แก้คำผิด หรือเปลี่ยนนามสกุล)
   let newName = null;
   if (body.full_name !== undefined) {
@@ -813,17 +844,23 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     values.push(newName);
   }
 
-  if (updates.length === 0) {
+  if (updates.length === 0 && viewerExpiry === undefined) {
     return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
   }
 
-  const before = await env.DB.prepare("SELECT role, status FROM users WHERE id = ?").bind(targetId).first();
-  values.push(targetId);
-  await env.DB.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ? AND deleted_at IS NULL`)
-    .bind(...values)
-    .run();
+  if (updates.length) {
+    values.push(targetId);
+    await env.DB.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ? AND deleted_at IS NULL`)
+      .bind(...values)
+      .run();
+  }
+  if (body.role !== undefined) {
+    if (body.role === "viewer") await env.DB.prepare("INSERT OR IGNORE INTO viewer_accounts(user_id, created_by) VALUES (?, ?)").bind(targetId, admin.id).run();
+    else await env.DB.prepare("DELETE FROM viewer_accounts WHERE user_id = ?").bind(targetId).run();
+  }
+  if (viewerExpiry !== undefined) await env.DB.prepare("UPDATE viewer_accounts SET expires_at = ? WHERE user_id = ?").bind(viewerExpiry, targetId).run();
   // แจ้งเตือนความปลอดภัยเมื่อสิทธิ์หรือสถานะบัญชีเปลี่ยน: เจ้าของบัญชี + ผู้ดูแลระบบคนอื่น
-  const ROLE_TH = { superadmin: "ผู้ดูแลระบบ", executive: "ผู้บริหาร", teacher: "ครู", staff: "เจ้าหน้าที่" };
+  const ROLE_TH = { superadmin: "ผู้ดูแลระบบ", executive: "ผู้บริหาร", teacher: "ครู", staff: "เจ้าหน้าที่", viewer: "ผู้ชมภายนอก" };
   const roleText = (r) => (r ? ROLE_TH[r] || r : "ไม่มีบทบาท");
   const changes = [];
   if (body.role !== undefined && (before?.role ?? null) !== (body.role ?? null)) changes.push(`บทบาท ${roleText(before?.role)} → ${roleText(body.role)}`);
@@ -848,11 +885,11 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     }
   }
 
-  const updated = await env.DB.prepare(
-    "SELECT id, email, full_name, role, status, created_at, approved_at FROM users WHERE id = ?"
+  const updated = applyViewer(await env.DB.prepare(
+    "SELECT id, email, full_name, role, status, created_at, approved_at, " + VIEWER_COLUMNS + " FROM users WHERE id = ?"
   )
     .bind(targetId)
-    .first();
+    .first());
 
   await writeAuditLog(env, admin, "update", "user", targetId, {
     fields: Object.keys(body), role: updated.role, status: updated.status,
@@ -4326,7 +4363,7 @@ async function handleOverview(request, env) {
     total_project_spent: totalProjectSpent,
     total_project_remaining: sumMoney([totalProjectBudget,-totalProjectSpent]),
     department_summary: departmentSummary,
-    licenses_expiring: licensesExpiring,
+    licenses_expiring: user.role === "viewer" ? [] : licensesExpiring,
     current_academic_period: currentAcademicPeriod,
     funding_summary: await projectFundingSummary(env,budgetFiscalYear,financials),
     ...activity,
@@ -4389,6 +4426,11 @@ const app = {
       if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
 
       if (pathname.startsWith("/api/auth/")) await ensureAuthSecuritySchema(env);
+      // บัญชีผู้ชมภายนอกใช้ร่วมกันหลายคน: ห้ามเปลี่ยนรหัสผ่านหรือออกจากระบบอุปกรณ์อื่นแทนกัน
+      if (/^\/api\/auth\/(change-password|logout-all|sessions)(\/|$)/.test(pathname)) {
+        const viewer = await getCurrentUser(request, env).catch(() => null);
+        if (viewer?.role === "viewer") return jsonResponse(VIEWER_BLOCKED, 403);
+      }
       const passwordResetResponse = await handlePasswordResetRoute(request, env, pathname, method);
       if (passwordResetResponse) return passwordResetResponse;
       if (pathname === "/api/auth/register" && method === "POST") return await handleRegister(request, env);
@@ -4427,6 +4469,12 @@ const app = {
         await ensureAcademicData(env);
         await ensureExtendedSchema(env);
         return await handleSystemStatus(request, env);
+      }
+
+      // ผู้ชมภายนอก (viewer): อ่านได้เฉพาะรายการที่อนุญาต และแก้ไขอะไรไม่ได้
+      if (pathname.startsWith("/api/")) {
+        const viewer = await getCurrentUser(request, env).catch(() => null);
+        if (viewer?.role === "viewer" && !viewerMayAccess(method, pathname)) return jsonResponse(VIEWER_BLOCKED, 403);
       }
 
       // This module owns its schema. Reads avoid unrelated fiscal/HR migrations.

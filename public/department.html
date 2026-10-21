@@ -17,6 +17,7 @@
   .project-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .project-actions { display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
   .project-actions .btn { width:auto; padding:6px 10px; font-size:12px; }
+  .viewer-mode .project-actions, .viewer-mode #newTopicBtn, .viewer-mode .topic-actions { display:none !important; }
   .project-name { font-weight:600; font-size:16px; }
   .project-budget { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--color-text-muted); font-weight:600; font-size:13px; margin-top:7px; }
   .project-budget strong { color:var(--color-forest-900); }
@@ -425,6 +426,10 @@
     window.addEventListener("project-balances-updated",()=>loadProjects());
 
     document.getElementById("newProjectBtn").style.display = "inline-flex";
+    if (user.role === "viewer") {
+      document.getElementById("newProjectBtn").style.display = "none";
+      document.body.classList.add("viewer-mode");
+    }
     if (user.is_admin) {
       document.getElementById("newTopicBtn").style.display = "inline-flex";
       document.getElementById("newProjectBtn").style.display = "inline-flex";

@@ -185,6 +185,7 @@
     .updated-at { text-align:left; }
   }
 </style>
+<style>.viewer-banner{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fff6e6;border:1px solid #f1dcb4;color:#7a5414;font-size:14px}.viewer-mode #balanceRequestInbox,.viewer-mode .license-section{display:none}</style>
 <link rel="stylesheet" href="/css/project-workflow.css">
 <link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"><link rel="stylesheet" href="/css/mobile.css"></head>
 <body>
@@ -340,7 +341,7 @@
         </div>
       </section>
 
-      <div class="dashboard-section">
+      <div class="dashboard-section license-section">
         <h3 style="margin-bottom:2px;">สถานะวันหมดอายุใบประกอบวิชาชีพ</h3>
         <p style="color:var(--color-text-muted); margin:0; font-size:13px;">ติดตามระยะเวลาคงเหลือของครูและบุคลากรทุกคน</p>
         <div class="license-legend">
@@ -898,7 +899,8 @@
       return;
     }
     dashboardUser = user;
-    ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox"));
+    if (user.role === "viewer") enterViewerMode(user);
+    else ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox"));
 
     document.getElementById("roleChip").textContent = ROLE_LABELS[user.role] || user.role;
     document.getElementById("userName").textContent = user.full_name;
@@ -927,6 +929,29 @@
       showPage(initialKey, false);
     }
   })();
+
+  // ผู้ชมภายนอก: เห็นเฉพาะภาพรวม ทำเนียบ/โครงการของฝ่ายงาน และตารางสอน (ดูอย่างเดียว ไม่มีข้อมูลส่วนบุคคล)
+  function enterViewerMode(user) {
+    document.body.classList.add("viewer-mode");
+    const keep = new Set(["administration","academic","early_childhood","budget","personnel","general"]);
+    document.querySelectorAll(".sidebar nav > a[data-page], .sidebar nav > .nav-group").forEach((el) => {
+      const key = el.dataset.page || el.dataset.navGroup;
+      if (!keep.has(key)) { el.style.display = "none"; el.hidden = true; }
+    });
+    document.querySelectorAll(".sidebar nav .nav-child").forEach((link) => {
+      const ok = /^\/department\.html\?dept=|^\/timetable\.html$/.test(link.dataset.url || "");
+      if (!ok) { link.style.display = "none"; link.hidden = true; }
+    });
+    document.querySelectorAll(".sidebar nav > .nav-label").forEach((label) => { if (!/ฝ่ายงาน/.test(label.textContent)) label.style.display = "none"; });
+    document.querySelectorAll(".sidebar nav > a.nav-grades").forEach((a) => { a.style.display = "none"; });
+    document.getElementById("globalSearch").style.display = "none";
+    document.querySelectorAll('.sidebar-footer a[href="/account.html"]').forEach((a) => { a.style.display = "none"; });
+    const banner = document.createElement("div");
+    banner.className = "viewer-banner";
+    banner.textContent = "บัญชีผู้ชมภายนอก — ดูข้อมูลภาพรวมได้อย่างเดียว ข้อมูลส่วนบุคคลของนักเรียนและบุคลากรถูกซ่อนไว้";
+    document.getElementById("overviewWrap").prepend(banner);
+    document.querySelectorAll('#overviewWrap a[data-dashboard-page]').forEach((a) => { a.style.display = "none"; });
+  }
 
   document.getElementById("logoutLink").addEventListener("click", async (e) => {
     e.preventDefault();

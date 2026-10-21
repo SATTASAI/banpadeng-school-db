@@ -1132,3 +1132,11 @@ CREATE INDEX IF NOT EXISTS idx_procurement_items_case ON procurement_items(case_
 CREATE INDEX IF NOT EXISTS idx_procurement_inspectors_user ON procurement_inspectors(user_id, decision);
 CREATE INDEX IF NOT EXISTS idx_procurement_events_case ON procurement_events(case_id, id);
 CREATE INDEX IF NOT EXISTS idx_procurement_notifications_user ON procurement_notifications(user_id, read_at);
+
+-- บัญชีผู้ชมภายนอก (ดูอย่างเดียว): users.role เป็น NULL และถือเป็นบทบาท viewer เมื่อมีแถวในตารางนี้
+CREATE TABLE IF NOT EXISTS viewer_accounts (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id),
+  expires_at TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
