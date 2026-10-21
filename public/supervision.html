@@ -1,0 +1,143 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ลงทะเบียนนิเทศ — โรงเรียนบ้านป่าเด็ง</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/supervision.css"><link rel="stylesheet" href="/css/mobile.css"></head>
+<body><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div></div>
+<main class="sv-page">
+ <div class="sv-head"><div><h1>ลงทะเบียนนิเทศ</h1><p class="sv-lead">เลือกคาบที่คุณสอนเพื่อขอรับการนิเทศการสอนหรือนิเทศห้องเรียน คำขอจะส่งถึง ผอ. และรอง ผอ. ทันที</p></div></div>
+ <div class="sv-tabs" role="tablist" id="tabs">
+  <button type="button" role="tab" data-view="register">ลงทะเบียนรับการนิเทศ</button>
+  <button type="button" role="tab" data-view="mine">นัดหมายของฉัน</button>
+  <button type="button" role="tab" data-view="results">ผลการนิเทศของฉัน</button>
+ </div>
+ <div id="view"><div class="sv-notice">กำลังโหลด...</div></div>
+</main>
+<script src="/js/api.js"></script><script src="/js/supervision-ui.js"></script>
+<script>
+(()=>{
+const U=SupervisionUI,{esc}=U,$=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const state={view:['register','mine','results'].includes(params.get('view'))?params.get('view'):'register',start:null,week:null,mine:null,perm:null,focus:Number(params.get('request'))||null};
+const GRADES=['อ.1','อ.2','อ.3','ป.1','ป.2','ป.3','ป.4','ป.5','ป.6'];
+const addDays=(s,n)=>{const d=U.parse(s);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const mins=t=>{const [h,m]=t.split(':').map(Number);return h*60+m;};
+const past=(date,start)=>date<state.week.now.date||(date===state.week.now.date&&state.week.now.minutes>=mins(start));
+
+function setTabs(){document.querySelectorAll('#tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.view===state.view)));}
+async function render(){
+ setTabs();
+ try{
+  if(state.view==='register')await renderRegister();
+  else await renderMine(state.view);
+ }catch(e){$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;}
+}
+async function loadWeek(){state.week=await apiRequest('/api/supervision/week'+(state.start?`?start=${state.start}`:''));state.start=state.week.start;}
+async function renderRegister(){
+ await loadWeek();const w=state.week;
+ const dates=w.days.map(d=>d.date),termOf=d=>w.terms.find(t=>t.id===d.term_id);
+ const times=(w.terms[0]?.times)||w.default_times;
+ const today=w.now.date;let teach=0,booked=0;
+ const head=w.days.map(d=>`<th${d.date===today?' class="today"':''}><b>${U.DAYS[d.weekday]}</b>${U.shortDate(d.date)}${d.date===today?' · วันนี้':''}</th>`).join('');
+ let rows='';
+ for(let p=1;p<=6;p++){
+  if(p===4){const lunch=w.terms[0]?.lunch;rows+=`<tr class="lunch"><th class="pcol">${lunch?`${lunch.start}–${lunch.end}`:''}</th><td colspan="5">พักกลางวัน</td></tr>`;}
+  rows+=`<tr><th class="pcol" scope="row"><b>คาบ ${p}</b><br><span style="color:#607991">${times[p-1].start}–${times[p-1].end}</span></th>`;
+  for(const d of w.days){
+   const term=termOf(d);
+   if(!term){rows+='<td><div class="sv-slot off">นอกภาคเรียน</div></td>';continue;}
+   const t=term.times[p-1],req=w.requests.find(r=>r.visit_date===d.date&&r.period===p);
+   const lesson=term.mode==='timetable'?term.lessons.find(l=>l.weekday===d.weekday&&l.period===p):null;
+   if(term.mode==='timetable'&&!lesson&&!req){rows+='<td><div class="sv-slot none" aria-hidden="true">·</div></td>';continue;}
+   if(lesson)teach++;
+   const label=lesson?`<b>${esc(lesson.subject)}</b><small>${esc(U.classLabel(lesson))}</small>`:'';
+   if(req){booked++;rows+=`<td><button type="button" class="sv-slot booked ${req.status}" data-detail="${req.id}"><b>${esc(req.subject)}</b><small>${esc(U.classLabel(req))}</small><span class="state">${esc(req.type_label)} · ${U.STATUS[req.status]}</span></button></td>`;}
+   else if(past(d.date,t.start))rows+=`<td><div class="sv-slot past">${label}<small style="margin-top:auto">ผ่านมาแล้ว</small></div></td>`;
+   else rows+=`<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
+  }
+  rows+='</tr>';
+ }
+ const manual=w.terms.some(t=>t.mode==='manual'),timetable=w.terms.some(t=>t.mode==='timetable');
+ const notices=[];
+ if(manual)notices.push('<div class="sv-notice warn">ภาคเรียนนี้ยังไม่มีตารางสอนที่เผยแพร่ เลือกคาบที่คุณสอนจริง แล้วกรอกวิชาและชั้นเรียนในหน้าต่างยืนยัน เมื่อฝ่ายวิชาการเผยแพร่ตารางสอนแล้ว ระบบจะแสดงเฉพาะคาบสอนของคุณให้อัตโนมัติ</div>');
+ if(timetable&&!w.linked)notices.push('<div class="sv-notice error">บัญชีของคุณยังไม่ผูกกับทะเบียนบุคลากร ระบบจึงหาคาบสอนของคุณไม่ได้ กรุณาติดต่อผู้ดูแลระบบ</div>');
+ if(!w.terms.length)notices.push('<div class="sv-notice">สัปดาห์นี้ไม่อยู่ในภาคเรียน เลื่อนไปสัปดาห์ถัดไปเพื่อลงทะเบียน</div>');
+ const lbl=`${U.shortDate(dates[0])} – ${U.parse(dates[4]).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}`;
+ $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">
+  <div class="sv-weekbar"><button type="button" class="sv-btn sm" data-week="-7" aria-label="สัปดาห์ก่อน">‹</button><b>${lbl}</b><button type="button" class="sv-btn sm" data-week="7" aria-label="สัปดาห์ถัดไป">›</button>
+  <button type="button" class="sv-btn sm" data-week="0">สัปดาห์ปัจจุบัน</button><span class="meta">${timetable?`คาบสอน ${teach} คาบ · `:''}ลงทะเบียนแล้ว ${booked} คาบ</span></div>
+  ${notices.join('')}
+  <div class="sv-legend"><span><i style="border-color:#2B86E5"></i>เลือกได้</span><span><i style="background:#fff1dc"></i>รอผู้บริหารรับ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินแล้ว</span><span><i style="background:#f6f9fc"></i>ผ่านมาแล้ว / ไม่มีสอน</span></div>
+  <div class="sv-scroll"><table class="sv-grid"><thead><tr><th class="pcol">คาบ</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+function openBook(date,period){
+ const w=state.week,d=w.days.find(x=>x.date===date),term=w.terms.find(t=>t.id===d.term_id),t=term.times[period-1];
+ const lesson=term.mode==='timetable'?term.lessons.find(l=>l.weekday===d.weekday&&l.period===period):null;
+ const fixed=lesson?`<dl class="sv-dl"><dt>วันที่</dt><dd>${U.date(date,true)}</dd><dt>คาบ</dt><dd>คาบ ${period} (${t.start}–${t.end} น.)</dd><dt>วิชา</dt><dd>${esc(lesson.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(U.classLabel(lesson))}</dd></dl>`
+  :`<dl class="sv-dl"><dt>วันที่</dt><dd>${U.date(date,true)}</dd><dt>คาบ</dt><dd>คาบ ${period} (${t.start}–${t.end} น.)</dd></dl>
+   <label class="sv-field">วิชาที่สอนในคาบนี้<input id="bSubject" maxlength="120" required placeholder="เช่น ภาษาไทย ท14101"></label>
+   <div class="sv-grid2"><label class="sv-field">ชั้น<select id="bGrade"><option value="">เลือกชั้น</option>${GRADES.map(g=>`<option>${g}</option>`).join('')}</select></label>
+   <label class="sv-field">ห้อง (ถ้ามี)<input id="bClass" maxlength="30" placeholder="เช่น 1"></label></div>`;
+ const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${fixed}
+  <div><div class="sv-field" style="margin-bottom:6px">ประเภทการนิเทศ</div><div class="sv-types">
+   <div><input type="radio" name="bType" id="bt1" value="teaching" checked><label for="bt1"><b>นิเทศการสอน</b><small>สังเกตการจัดการเรียนรู้ในคาบ</small></label></div>
+   <div><input type="radio" name="bType" id="bt2" value="classroom"><label for="bt2"><b>นิเทศห้องเรียน</b><small>สภาพแวดล้อมและการจัดห้องเรียน</small></label></div></div></div>
+  <label class="sv-field">หัวข้อที่ต้องการรับข้อเสนอแนะ (ไม่บังคับ)<textarea id="bTopic" maxlength="500" placeholder="เช่น การใช้คำถามกระตุ้นการคิด การจัดกลุ่มผู้เรียน"></textarea></label>
+  <div class="sv-notice error" id="bError" hidden></div></div>
+  <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>ยืนยันลงทะเบียน</button></footer>`);
+ m.querySelector('#bOk').onclick=async()=>{
+  const btn=m.querySelector('#bOk'),err=m.querySelector('#bError');err.hidden=true;
+  const body={visit_date:date,period,supervision_type:m.querySelector('input[name=bType]:checked').value,topic:m.querySelector('#bTopic').value};
+  if(!lesson){body.subject=m.querySelector('#bSubject').value;body.grade_level=m.querySelector('#bGrade').value;body.classroom=m.querySelector('#bClass').value;
+   if(!body.subject.trim()||!body.grade_level){err.textContent='กรอกวิชาและเลือกชั้นก่อน';err.hidden=false;return;}}
+  btn.disabled=true;
+  try{await apiRequest('/api/supervision/requests',{method:'POST',body});U.close();U.toast('ลงทะเบียนเรียบร้อย ส่งคำขอถึง ผอ. และรอง ผอ. แล้ว');render();}
+  catch(e){err.textContent=e.message;err.hidden=false;btn.disabled=false;}
+ };
+}
+async function loadMine(){state.mine=(await apiRequest('/api/supervision/requests?scope=mine')).requests;}
+function row(r){
+ const owner=r.supervisor_name?`<span class="owner">ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b></span>`:'<span class="owner">รอ ผอ. หรือรอง ผอ. รับนิเทศ</span>';
+ return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small></div>
+  <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${owner}</div></div>
+  <div class="acts"><button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`}</div></div>`;
+}
+async function renderMine(view){
+ await loadMine();const list=state.mine;
+ if(view==='mine'){
+  const sorted=[...list].sort((a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1);
+  $('view').innerHTML=U.stats(list)+`<section class="sv-card" style="margin-top:16px"><div class="sv-list">${sorted.length?sorted.map(row).join(''):'<div class="sv-empty"><b>ยังไม่มีนัดหมาย</b>ไปที่แท็บ “ลงทะเบียนรับการนิเทศ” แล้วเลือกคาบที่คุณสอน</div>'}</div></section>`;
+ }else{
+  const done=list.filter(r=>r.evaluation).sort((a,b)=>String(b.evaluation.evaluated_at).localeCompare(String(a.evaluation.evaluated_at)));
+  $('view').innerHTML=U.stats(list)+`<div class="sv-list" style="margin-top:16px">${done.length?done.map(r=>U.result(r,state.focus===r.id)).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงที่นี่เมื่อผู้นิเทศบันทึกคะแนนแล้ว</div></section>'}</div>`;
+ }
+ if(state.focus)document.getElementById((view==='mine'?'q-':'r-')+state.focus)?.scrollIntoView({block:'center'});
+}
+function findRequest(id){return (state.mine||[]).find(r=>r.id===id)||(state.week?.requests||[]).find(r=>r.id===id);}
+async function openDetail(id){
+ if(!findRequest(id))await loadMine();const r=findRequest(id);if(!r)return U.toast('ไม่พบรายการ',true);
+ const m=U.modal(`<header><h2>รายละเอียดนัดหมาย</h2></header><div class="body">${U.details(r)}</div><footer>
+  ${r.status!=='evaluated'?`<button type="button" class="sv-btn danger" data-cancel="${r.id}">ยกเลิกนัดหมาย</button>`:`<button type="button" class="sv-btn primary" data-result="${r.id}">ดูผลการนิเทศ</button>`}
+  <button type="button" class="sv-btn" data-close data-autofocus>ปิด</button></footer>`);
+}
+function askCancel(id){
+ const r=findRequest(id);if(!r)return;
+ const m=U.modal(`<header><h2>ยกเลิกนัดหมายนี้?</h2></header><div class="body">${U.details(r)}${r.supervisor_name?`<p class="sv-hint">ระบบจะแจ้ง ${esc(r.supervisor_name)} ซึ่งรับนิเทศไว้แล้วให้ทราบ</p>`:''}</div>
+  <footer><button type="button" class="sv-btn" data-close data-autofocus>ไม่ยกเลิก</button><button type="button" class="sv-btn danger solid" id="cOk">ยืนยันยกเลิก</button></footer>`);
+ m.querySelector('#cOk').onclick=async()=>{m.querySelector('#cOk').disabled=true;try{await apiRequest(`/api/supervision/requests/${id}/cancel`,{method:'POST',body:{}});U.close();U.toast('ยกเลิกนัดหมายแล้ว');render();}catch(e){U.close();U.toast(e.message,true);}};
+}
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-view],[data-week],[data-book],[data-detail],[data-cancel],[data-result]');if(!el)return;
+ if(el.dataset.view){state.view=el.dataset.view;state.focus=null;render();}
+ else if(el.dataset.week!=null){const d=Number(el.dataset.week);state.start=d===0?null:addDays(state.start,d);render();}
+ else if(el.dataset.book){const [d,p]=el.dataset.book.split('|');openBook(d,Number(p));}
+ else if(el.dataset.detail)openDetail(Number(el.dataset.detail));
+ else if(el.dataset.cancel)askCancel(Number(el.dataset.cancel));
+ else if(el.dataset.result){U.close();state.view='results';state.focus=Number(el.dataset.result);render();}
+});
+(async()=>{
+ const auth=await apiRequest('/api/auth/me');if(!auth.user){location.href='/login.html';return;}
+ if(state.focus&&!params.get('view'))state.view='mine';
+ if(state.focus){await loadMine();const r=findRequest(state.focus);if(r?.status==='evaluated')state.view='results';}
+ render();
+})().catch(e=>{$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;});
+})();
+</script></body></html>

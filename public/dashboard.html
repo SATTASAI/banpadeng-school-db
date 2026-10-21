@@ -221,6 +221,7 @@
       <div class="nav-label">ระบบสนับสนุน</div>
       <a href="/support.html" data-page="student-support"><span class="nav-number">08</span>ดูแลนักเรียน</a>
       <a href="/leave.html" data-page="leave"><span class="nav-number">ลา</span>การลา</a>
+      <a href="/supervision.html" data-page="supervision"><span class="nav-number">นิเทศ</span>ลงทะเบียนนิเทศ</a>
       <a href="/substitutes.html" data-page="substitutes" title="จัดสอนแทนจากข้อมูลการลา" class="personnel-only" style="display:none"><span class="nav-number">แทน</span>จัดสอนแทน</a>
       <a href="/documents.html" data-page="documents"><span class="nav-number">09</span>เอกสาร</a>
       <a href="/reports.html" data-page="reports"><span class="nav-number">10</span>รายงาน</a>
@@ -424,6 +425,7 @@
         link.dataset.url = item.url;
         link.textContent = item.label;
         if (item.evaluationOnly) { link.dataset.evaluationOnly='true'; link.hidden=true; link.style.display='none'; }
+        if (item.supervisionOnly) { link.dataset.supervisionOnly=item.supervisionOnly; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
         if (item.url === '/budget.html?view=otherProjects') {
           const badge=document.createElement('small');
@@ -443,6 +445,7 @@
     });
   }
   buildSidebarSubmenus();
+  apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=!!p[link.dataset.supervisionOnly];link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
   apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
 
   function showOverview() {
@@ -540,6 +543,8 @@
     {title:"ระบบรายงานผลการเรียน",subtitle:"กรอกคะแนน ปพ.5 ปพ.6 ครูประจำชั้น",page_key:"grades",url:"https://grades.banpadengschool.ac.th/",keywords:"เกรด คะแนน ผลการเรียน ปพ5 ปพ6 ปพ.5 ปพ.6 ครูประจำชั้น เวลาเรียน",external:true},
     {title:"งานมอบหมาย",subtitle:"งานที่ได้รับมอบหมาย",page_key:"tasks",url:"/tasks.html",keywords:"งาน มอบหมาย กำหนดส่ง"},
     {title:"การลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
+    {title:"ลงทะเบียนนิเทศ",subtitle:"ขอรับการนิเทศการสอนและนิเทศห้องเรียน",page_key:"supervision",url:"/supervision.html",keywords:"นิเทศ นิเทศการสอน นิเทศห้องเรียน ลงทะเบียน ผลนิเทศ"},
+    {title:"นิเทศการสอน (ฝ่ายบริหาร)",subtitle:"รับนิเทศ บันทึกคะแนน และผลการนิเทศ",page_key:"administration",url:"/supervision-admin.html",keywords:"นิเทศ รับนิเทศ บันทึกคะแนน ผลนิเทศ ผู้บริหาร"},
     {title:"ผู้ใช้งานและสิทธิ์",subtitle:"กำหนดบทบาทผู้ใช้",page_key:"users",url:"/admin-users.html",keywords:"user role ผู้ใช้ สิทธิ์",admin_only:true},
     {title:"สำรองข้อมูลและความปลอดภัย",subtitle:"Audit log และการสำรองข้อมูล",page_key:"security",url:"/security.html",keywords:"backup log ความปลอดภัย",admin_only:true},
     {title:"สถานะระบบ",subtitle:"Cloudflare D1, Drive, R2 และ LINE",page_key:"system-status",url:"/system-status.html",keywords:"quota usage โควตา cloudflare drive r2 line",admin_only:true},

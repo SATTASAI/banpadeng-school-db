@@ -8,7 +8,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -33,6 +33,14 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
   c.subject||CASE WHEN c.due_date IS NOT NULL THEN ' · กำหนด '||c.due_date ELSE '' END,c.updated_at,'/correspondence.html?record='||c.id,NULL,NULL,1
   FROM correspondence_records c WHERE c.assigned_to=? AND c.created_by<>? AND c.status NOT IN ('completed','archived')`);extraValues.push(user.id,user.id);
  }
+ // ระบบนิเทศ: กลุ่มข้อความแยก เพราะกลุ่ม secondary อาจเต็ม 5 terms แล้ว
+ const supervision=tables.has('supervision_notifications')&&tables.has('supervision_requests');
+ const tertiary=supervision?`, tertiary_messages AS (
+ SELECT 'supervision:'||n.id,'นิเทศการสอน',n.message,n.created_at,
+ CASE WHEN r.teacher_user_id=n.user_id THEN '/supervision.html?request='||r.id ELSE '/supervision-admin.html?request='||r.id END,n.read_at,n.actor_id,1
+ FROM supervision_notifications n JOIN supervision_requests r ON r.id=n.request_id WHERE n.user_id=?
+ )`:'';
+ const tertiaryValues=supervision?[user.id]:[];
  // D1 permits at most five terms in one compound SELECT. Keep each group below
  // that limit, including the two optional message sources.
  const sql=`WITH primary_messages AS (
@@ -76,13 +84,13 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
- ), messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages
+ )${tertiary}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}
  ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,executive,user.id,
  user.role==='superadmin'?1:0,personnelHead?1:0,executive,user.id,user.id,executive,user.id,
- user.id,user.id,director?1:0,user.id,user.id,...extraValues,user.id]};
+ user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50,{forLine=false}={}){
@@ -109,6 +117,8 @@ export async function handleNotifications(request,env,pathname,method){
   await env.DB.batch([
    env.DB.prepare(`UPDATE project_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='project:'||project_notifications.id)`).bind(user.id,user.id),
+   ...((await optionalFeedTables(env)).has('supervision_notifications')?[env.DB.prepare(`UPDATE supervision_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
+    AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='supervision:'||supervision_notifications.id)`).bind(user.id,user.id)]:[]),
    env.DB.prepare(`UPDATE procurement_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='procurement:'||procurement_notifications.id)`).bind(user.id,user.id),
    env.DB.prepare(`UPDATE project_balance_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
