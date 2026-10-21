@@ -1,0 +1,159 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>นิเทศการสอน — โรงเรียนบ้านป่าเด็ง</title><link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/supervision.css"><link rel="stylesheet" href="/css/mobile.css"></head>
+<body><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div></div>
+<main class="sv-page">
+ <div class="sv-head"><div><h1>นิเทศการสอน</h1><p class="sv-lead" id="lead">คำขอรับการนิเทศจากครู การรับนิเทศ การบันทึกคะแนน และผลการนิเทศ</p></div></div>
+ <div class="sv-tabs" role="tablist" id="tabs"></div>
+ <div id="view"><div class="sv-notice">กำลังโหลด...</div></div>
+</main>
+<script src="/js/api.js"></script><script src="/js/supervision-ui.js"></script>
+<script>
+(()=>{
+const U=SupervisionUI,{esc}=U,$=id=>document.getElementById(id);
+const params=new URLSearchParams(location.search);
+const state={perm:null,view:params.get('view'),filter:'all',teacher:'all',list:[],draft:null,focus:Number(params.get('request'))||null};
+const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate','บันทึกคะแนน',p=>p.evaluate],['results','ผลการนิเทศ',p=>p.view_all||p.evaluate],['evaluators','ผู้มีสิทธิ์ประเมิน',p=>p.manage_evaluators]];
+const allowed=()=>TABS.filter(t=>t[2](state.perm));
+const sortAsc=(a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1;
+const me=()=>state.perm.user.id;
+
+function renderTabs(){
+ const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=state.list.filter(r=>r.status==='pending').length;
+ $('tabs').innerHTML=allowed().map(([k,l])=>`<button type="button" role="tab" data-tab="${k}" aria-selected="${state.view===k}">${l}${k==='requests'&&pend?`<span class="count">${pend}</span>`:''}${k==='evaluate'&&mineOpen?`<span class="count">${mineOpen}</span>`:''}</button>`).join('');
+}
+async function load(){if(state.perm.evaluate||state.perm.view_all)state.list=(await apiRequest('/api/supervision/requests?scope=all')).requests;}
+async function render(reload=true){
+ try{
+  if(reload)await load();renderTabs();
+  await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,evaluators:viewEvaluators})[state.view]();
+ }catch(e){$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;}
+}
+/* ---------- คำขอนิเทศ ---------- */
+function clashFor(r){return state.list.find(x=>x.id!==r.id&&x.supervisor_user_id===me()&&['confirmed','evaluated'].includes(x.status)&&x.visit_date===r.visit_date&&x.period===r.period);}
+function reqRow(r){
+ let acts='',owner='';
+ if(r.status==='pending'){
+  const clash=clashFor(r);
+  if(r.teacher_user_id===me()){owner='<span class="owner">คำขอของคุณเอง — ให้ผู้บริหารท่านอื่นรับนิเทศ</span>';}
+  else if(clash){acts=`<button type="button" class="sv-btn sm primary" disabled>รับนิเทศ</button>`;owner=`<span class="sv-conflict">คุณรับนิเทศ ${esc(clash.teacher_name)} ในวันและคาบเดียวกันไว้แล้ว</span>`;}
+  else{acts=`<button type="button" class="sv-btn sm primary" data-accept="${r.id}">รับนิเทศ</button>`;owner='<span class="owner">ยังไม่มีผู้รับผิดชอบ</span>';}
+ }else if(r.status==='confirmed'){
+  if(r.supervisor_user_id===me()){acts=`<button type="button" class="sv-btn sm" data-release="${r.id}">ถอนการรับ</button><button type="button" class="sv-btn sm primary" data-eval="${r.id}">บันทึกคะแนน</button>`;owner=`<span class="owner">ผู้รับผิดชอบ: <b>คุณ</b></span>`;}
+  else owner=`<span class="owner">ผู้รับผิดชอบ: <b>${esc(r.supervisor_name)}</b></span>`;
+ }else{
+  owner=`<span class="owner">นิเทศโดย <b>${esc(r.supervisor_name)}</b>${r.evaluation?` · ${U.pct(r.evaluation.percent)}% ${esc(r.evaluation.level)}`:''}</span>`;
+  if(r.evaluation)acts=`<button type="button" class="sv-btn sm" data-result="${r.id}">ดูผล</button>`;
+ }
+ return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small><div style="margin-top:4px;font-weight:600">${esc(r.teacher_name)}</div></div>
+  <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${owner}</div></div><div class="acts">${acts}</div></div>`;
+}
+function viewRequests(){
+ const all=[...state.list].sort(sortAsc),f=state.filter;
+ const list=f==='all'?all:f==='mine'?all.filter(r=>r.supervisor_user_id===me()):all.filter(r=>r.status===f);
+ const chip=(k,l)=>`<button type="button" class="sv-chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`;
+ $('view').innerHTML=U.stats(all)+`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+  <div class="sv-chips" role="group" aria-label="กรองสถานะ">${chip('all','ทั้งหมด')}${chip('pending','รอผู้บริหารรับนิเทศ')}${chip('confirmed','ยืนยันนัดหมายแล้ว')}${chip('evaluated','ประเมินแล้ว')}${chip('mine','ที่ฉันรับผิดชอบ')}</div>
+  <div class="sv-list">${list.length?list.map(reqRow).join(''):`<div class="sv-empty"><b>${all.length?'ไม่มีรายการในสถานะนี้':'ยังไม่มีคำขอนิเทศ'}</b>${all.length?'ลองเลือกตัวกรองอื่น':'เมื่อครูลงทะเบียนรับการนิเทศ รายการจะแสดงที่นี่และมีแจ้งเตือน'}</div>`}</div></section>`;
+ if(state.focus)document.getElementById('q-'+state.focus)?.scrollIntoView({block:'center'});
+}
+async function act(id,action,okMessage){
+ try{await apiRequest(`/api/supervision/requests/${id}/${action}`,{method:'POST',body:{}});U.toast(okMessage);}catch(e){U.toast(e.message,true);}
+ await render();
+}
+/* ---------- บันทึกคะแนน ---------- */
+function viewEvaluate(){
+ const mine=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).sort(sortAsc);
+ if(state.draft&&!mine.some(r=>r.id===state.draft.id))state.draft=null;
+ if(!state.draft&&mine.length===1)state.draft={id:mine[0].id,scores:[null,null,null,null,null],suggestion:''};
+ if(!mine.length){$('view').innerHTML=`<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีนัดหมายที่รอบันทึกคะแนน</b>ไปที่แท็บ “คำขอนิเทศ” แล้วกดรับนิเทศก่อน<div style="margin-top:12px"><button type="button" class="sv-btn primary" data-tab="requests">ไปที่คำขอนิเทศ</button></div></div></section>`;return;}
+ const d=state.draft;
+ const sel=`<label class="sv-field">นัดหมายที่คุณรับนิเทศไว้ (${mine.length} รายการ)<select id="evalSel"><option value="">— เลือกครูและนัดหมาย —</option>${mine.map(r=>`<option value="${r.id}"${d?.id===r.id?' selected':''}>${esc(r.teacher_name)} · ${U.date(r.visit_date)} คาบ ${r.period} · ${esc(r.type_label)}</option>`).join('')}</select></label>`;
+ if(!d){$('view').innerHTML=`<section class="sv-card">${sel}</section>`;return;}
+ const r=state.list.find(x=>x.id===d.id),items=state.perm.types[r.supervision_type].items;
+ $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">${sel}
+  <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
+  ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div></section>
+  <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(r.type_label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
+  <div>${items.map((q,i)=>`<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`).join('')}</div>
+  <label class="sv-field" style="margin-top:8px">ข้อเสนอแนะเพื่อพัฒนา<textarea id="sugg" maxlength="3000" placeholder="จุดเด่นที่พบ และสิ่งที่ควรพัฒนาต่อ">${esc(d.suggestion)}</textarea></label></section>
+  <aside class="sv-card sv-summary" id="summary" aria-live="polite"></aside></div>`;
+ summary();
+}
+function summary(){
+ const box=$('summary');if(!box||!state.draft)return;const s=state.draft.scores;
+ const done=s.filter(v=>v!=null).length,total=s.reduce((a,v)=>a+(v||0),0),p=total/25*100,complete=done===5;
+ box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;color:#163e67">สรุปผล</h3>${complete?'<span class="sv-pill st-evaluated">ครบทุกข้อ</span>':'<span class="sv-prov">ผลชั่วคราว</span>'}</div>
+  <div class="sv-big"><b>${U.pct(p)}</b><span style="color:#607991">ร้อยละ</span></div><div class="sv-bar"><i style="width:${p}%"></i></div>
+  <div><div class="sv-kv"><span>ประเมินแล้ว</span><b>${done} / 5 ข้อ</b></div><div class="sv-kv"><span>คะแนนรวม</span><b>${total} / 25</b></div><div class="sv-kv"><span>ระดับคุณภาพ</span><span class="lv lv-${U.level(p)}">${done?U.level(p):'—'}</span></div></div>
+  ${complete?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ 5 ข้อจึงบันทึกได้</p>'}
+  <button type="button" class="sv-btn primary" id="saveEval"${complete?'':' disabled'}>บันทึกผลการนิเทศ</button>
+  <p class="sv-hint">เกณฑ์: ร้อยละ 90 ขึ้นไป ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ควรพัฒนา</p>`;
+ $('saveEval').onclick=saveEval;
+}
+async function saveEval(){
+ const d=state.draft,btn=$('saveEval');btn.disabled=true;
+ try{await apiRequest(`/api/supervision/requests/${d.id}/evaluate`,{method:'POST',body:{scores:d.scores,suggestion:d.suggestion}});
+  U.toast('บันทึกผลการนิเทศแล้ว ครูจะเห็นผลและข้อเสนอแนะทันที');state.focus=d.id;state.draft=null;state.view='results';await render();
+ }catch(e){U.toast(e.message,true);btn.disabled=false;}
+}
+/* ---------- ผลการนิเทศ ---------- */
+function viewResults(){
+ const all=state.list,teachers=[...new Map(all.map(r=>[r.teacher_user_id,r.teacher_name])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'th'));
+ let done=all.filter(r=>r.evaluation);if(state.teacher!=='all')done=done.filter(r=>String(r.teacher_user_id)===state.teacher);
+ done.sort((a,b)=>String(b.evaluation.evaluated_at).localeCompare(String(a.evaluation.evaluated_at)));
+ const scope=state.perm.view_all?'ผลการนิเทศของครูทุกคน':'ผลการนิเทศที่คุณเป็นผู้ประเมิน';
+ $('view').innerHTML=U.stats(state.teacher==='all'?all:all.filter(r=>String(r.teacher_user_id)===state.teacher))+
+  `<div class="sv-toolbar" style="margin-top:16px"><span style="color:#607991">${scope}</span><label class="sv-field" style="flex-direction:row;align-items:center;display:flex;gap:8px;margin-left:auto">ครู<select id="teacherSel"><option value="all">ครูทุกคน</option>${teachers.map(([id,n])=>`<option value="${id}"${state.teacher===String(id)?' selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
+  <div class="sv-list" style="margin-top:12px">${done.length?done.map(r=>U.result(r,state.focus===r.id)).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงเมื่อผู้นิเทศบันทึกคะแนนครบและกดบันทึกผล</div></section>'}</div>`;
+ if(state.focus)document.getElementById('r-'+state.focus)?.scrollIntoView({block:'center'});
+}
+/* ---------- ผู้มีสิทธิ์ประเมิน ---------- */
+async function viewEvaluators(){
+ const data=await apiRequest('/api/supervision/evaluators');
+ const assignedIds=new Set(data.assigned.map(a=>a.user_id)),autoIds=new Set(data.automatic.map(a=>a.user_id));
+ const options=data.candidates.filter(c=>!assignedIds.has(c.user_id)&&!autoIds.has(c.user_id));
+ const person=p=>`<b>${esc(p.full_name)}</b>${p.position?` <span style="color:#607991">· ${esc(p.position)}</span>`:''}`;
+ $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">
+  <div><h2 style="margin:0 0 4px;color:#163e67;font-size:19px">ผู้มีสิทธิ์ประเมินโดยตำแหน่ง</h2><p class="sv-hint">ผู้อำนวยการและรองผู้อำนวยการ (ตามบทบาทผู้บริหารหรือตำแหน่งในทะเบียนบุคลากร) มีสิทธิ์รับนิเทศและบันทึกคะแนนโดยอัตโนมัติ</p></div>
+  <div class="sv-list">${data.automatic.length?data.automatic.map(p=>`<div class="sv-row" style="grid-template-columns:1fr auto"><div>${person(p)}</div><span class="sv-tag">โดยตำแหน่ง</span></div>`).join(''):'<div class="sv-notice warn">ยังไม่พบผู้อำนวยการหรือรองผู้อำนวยการในระบบ ตรวจบทบาทผู้ใช้หรือตำแหน่งในทะเบียนบุคลากร</div>'}</div></section>
+  <section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
+  <div><h2 style="margin:0 0 4px;color:#163e67;font-size:19px">ผู้ที่ได้รับแต่งตั้งให้ประเมิน</h2><p class="sv-hint">เพิ่มผู้ช่วยนิเทศ เช่น หัวหน้ากลุ่มสาระหรือครูพี่เลี้ยง ผู้ได้รับแต่งตั้งรับนิเทศและบันทึกคะแนนได้ และเห็นผลเฉพาะรายการที่ตนประเมิน</p></div>
+  <div class="sv-toolbar"><select id="addSel" aria-label="เลือกผู้ใช้"><option value="">— เลือกครูหรือบุคลากร —</option>${options.map(c=>`<option value="${c.user_id}">${esc(c.full_name)}${c.position?` · ${esc(c.position)}`:''}</option>`).join('')}</select><button type="button" class="sv-btn primary" id="addBtn">เพิ่มผู้มีสิทธิ์ประเมิน</button></div>
+  <div class="sv-list">${data.assigned.length?data.assigned.map(p=>`<div class="sv-row" style="grid-template-columns:1fr auto"><div>${person(p)}<div class="sv-hint">แต่งตั้งโดย ${esc(p.granted_by_name||'—')} · ${U.stamp(p.granted_at)}</div></div><div class="acts"><button type="button" class="sv-btn sm danger" data-revoke="${p.user_id}" data-name="${esc(p.full_name)}">ถอนสิทธิ์</button></div></div>`).join(''):'<div class="sv-empty"><b>ยังไม่มีผู้ได้รับแต่งตั้ง</b>เลือกชื่อด้านบนแล้วกดเพิ่ม</div>'}</div></section>`;
+ $('addBtn').onclick=async()=>{const id=Number($('addSel').value);if(!id)return U.toast('เลือกผู้ใช้ก่อน',true);
+  try{await apiRequest('/api/supervision/evaluators',{method:'POST',body:{user_id:id}});U.toast('เพิ่มผู้มีสิทธิ์ประเมินแล้ว');viewEvaluators();}catch(e){U.toast(e.message,true);}};
+}
+function revoke(id,name){
+ const m=U.modal(`<header><h2>ถอนสิทธิ์ประเมินของ ${esc(name)}?</h2></header><div class="body"><p style="margin:0">รายการที่ประเมินไปแล้วยังคงอยู่ รายการที่รับนิเทศไว้แต่ยังไม่ประเมิน ผู้นั้นจะบันทึกคะแนนไม่ได้จนกว่าจะได้สิทธิ์คืน หรือให้ถอนการรับเพื่อให้ผู้อื่นรับแทน</p></div>
+  <footer><button type="button" class="sv-btn" data-close data-autofocus>ไม่ถอน</button><button type="button" class="sv-btn danger solid" id="rOk">ถอนสิทธิ์</button></footer>`);
+ m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.open_assignments?`ถอนสิทธิ์แล้ว (มีนัดที่รับไว้ยังไม่ประเมิน ${r.open_assignments} รายการ)`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
+}
+document.addEventListener('click',e=>{
+ const el=e.target.closest('[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke]');if(!el)return;
+ if(el.dataset.tab){state.view=el.dataset.tab;state.focus=null;render(false);}
+ else if(el.dataset.filter){state.filter=el.dataset.filter;render(false);}
+ else if(el.dataset.accept){el.disabled=true;act(el.dataset.accept,'accept','รับนิเทศเรียบร้อย ระบบแจ้งครูแล้ว');}
+ else if(el.dataset.release){el.disabled=true;act(el.dataset.release,'release','ถอนการรับแล้ว คำขอกลับไปรอผู้บริหารรับนิเทศ');}
+ else if(el.dataset.eval){state.draft={id:Number(el.dataset.eval),scores:[null,null,null,null,null],suggestion:''};state.view='evaluate';render(false);}
+ else if(el.dataset.result){state.view='results';state.focus=Number(el.dataset.result);render(false);}
+ else if(el.dataset.revoke)revoke(Number(el.dataset.revoke),el.dataset.name);
+});
+document.addEventListener('change',e=>{
+ const t=e.target;
+ if(t.id==='evalSel'){state.draft=t.value?{id:Number(t.value),scores:[null,null,null,null,null],suggestion:''}:null;render(false);}
+ else if(t.id==='teacherSel'){state.teacher=t.value;state.focus=null;render(false);}
+ else{const m=/^s(\d)$/.exec(t.name||'');if(m&&state.draft){state.draft.scores[Number(m[1])]=Number(t.value);summary();}}
+});
+document.addEventListener('input',e=>{if(e.target.id==='sugg'&&state.draft)state.draft.suggestion=e.target.value;});
+(async()=>{
+ const auth=await apiRequest('/api/auth/me');if(!auth.user){location.href='/login.html';return;}
+ state.perm=await apiRequest('/api/supervision/permissions');
+ if(!state.perm.staff){$('tabs').hidden=true;$('view').innerHTML='<div class="sv-notice error">หน้านี้สำหรับผู้อำนวยการ รองผู้อำนวยการ ผู้มีสิทธิ์ประเมิน และฝ่ายบุคคลเท่านั้น ครูลงทะเบียนและดูผลของตนเองได้ที่เมนู ระบบสนับสนุน → ลงทะเบียนนิเทศ</div>';return;}
+ if(!allowed().some(t=>t[0]===state.view))state.view=allowed()[0][0];
+ await load();
+ if(state.focus&&!params.get('view')){const r=state.list.find(x=>x.id===state.focus);if(r)state.view=r.status==='evaluated'&&allowed().some(t=>t[0]==='results')?'results':'requests';}
+ render(false);
+})().catch(e=>{$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;});
+})();
+</script></body></html>

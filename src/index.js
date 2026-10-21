@@ -4,6 +4,7 @@ import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
+import {handleSupervisionRoute} from './routes/supervision.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
@@ -4527,6 +4528,8 @@ const app = {
 
       const leaveResponse=await handleLeaveRoute(request,env,pathname,method);
       if(leaveResponse)return leaveResponse;
+      const supervisionResponse=await handleSupervisionRoute(request,env,pathname,method);
+      if(supervisionResponse)return supervisionResponse;
 
       if (pathname === "/api/student-support" && method === "GET") return await handleListSupportCases(request, env);
       if (pathname === "/api/student-support" && method === "POST") return await handleCreateSupportCase(request, env);
