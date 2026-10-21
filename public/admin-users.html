@@ -61,6 +61,7 @@
     { value: "executive", label: "ผู้บริหาร" },
     { value: "staff", label: "เจ้าหน้าที่ธุรการ" },
     { value: "superadmin", label: "ผู้ดูแลระบบ" },
+    { value: "viewer", label: "ผู้ชมภายนอก (ดูอย่างเดียว)" },
   ];
   const DEPARTMENT_LABELS = { academic: "วิชาการ", early_childhood: "ปฐมวัย (งานอนุบาล)", budget: "งบประมาณ", personnel: "บุคคล", general: "บริหารทั่วไป" };
   let currentAdminId = null;
@@ -96,6 +97,28 @@
       }
     });
     return select;
+  }
+
+  // บัญชีผู้ชมภายนอก: ดูได้อย่างเดียว ซ่อนข้อมูลส่วนบุคคล และหมดอายุตามวันที่กำหนด (ใช้ได้ถึงสิ้นวัน)
+  function buildViewerExpiry(user) {
+    const wrap = document.createElement("label");
+    wrap.style.cssText = "display:grid;gap:4px;margin-top:8px;font-size:12px;color:var(--color-text-muted)";
+    const today = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+    const expired = user.access_expires_at && user.access_expires_at < today;
+    wrap.textContent = expired ? "หมดอายุแล้ว — ตั้งวันใหม่เพื่อเปิดใช้" : "ใช้ได้ถึงวันที่ (เว้นว่าง = ไม่หมดอายุ)";
+    if (expired) wrap.style.color = "var(--color-danger)";
+    const input = document.createElement("input");
+    input.type = "date"; input.value = user.access_expires_at || ""; input.style.width = "auto";
+    if (currentRole !== "superadmin") { input.disabled = true; input.title = ONLY_SUPER; }
+    input.addEventListener("change", async () => {
+      input.disabled = true;
+      try {
+        await apiRequest(`/api/admin/users/${user.id}`, { method: "PATCH", body: { access_expires_at: input.value || null } });
+        await loadUsers();
+      } catch (err) { alert(err.message); input.disabled = false; }
+    });
+    wrap.appendChild(input);
+    return wrap;
   }
 
   function buildStatusToggle(user) {
@@ -219,6 +242,7 @@
 
       const roleTd = document.createElement("td");
       roleTd.appendChild(buildRoleSelect(user));
+      if (user.role === "viewer") roleTd.appendChild(buildViewerExpiry(user));
       tr.appendChild(roleTd);
 
       const statusTd = document.createElement("td");
