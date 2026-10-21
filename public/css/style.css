@@ -606,3 +606,6 @@ html.embedded .page-back { display:none; }
     transition-duration:.01ms !important;
   }
 }
+
+/* Cloudflare Turnstile (กันบอท) */
+.turnstile-box{min-height:65px;margin:4px 0 14px}

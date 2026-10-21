@@ -1,4 +1,5 @@
 import { AUTH_COOKIE_NAME, verifyJWT } from "./crypto.js";
+import { sessionIsActive } from "./auth-sessions.js";
 
 export function parseCookies(request) {
   const header = request.headers.get("Cookie") || "";
@@ -38,6 +39,9 @@ export async function getCurrentUser(request, env) {
 
   if (!user || user.status !== "active") return null;
   if (user.session_version != null && Number(payload.sv || 1) !== Number(user.session_version)) return null;
+  // ออกจากระบบรายอุปกรณ์: session ที่ถูกยกเลิกใช้ต่อไม่ได้
+  if (!await sessionIsActive(env, payload)) return null;
+  Object.defineProperty(user, "session_id", { value: payload.sid || null, enumerable: false });
   return user;
 }
 

@@ -5,6 +5,7 @@ import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleSupervisionRoute} from './routes/supervision.js';
+import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
@@ -419,6 +420,7 @@ export async function handleRegister(request, env) {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
 
+  if (!(await verifyTurnstile(env, body.turnstile_token, request)).ok) return jsonResponse({ error: TURNSTILE_ERROR }, 400);
   const email = (body.email || "").trim().toLowerCase();
   const password = body.password || "";
   const fullName = (body.full_name || "").trim();
@@ -508,7 +510,8 @@ export async function handleRegister(request, env) {
         : "ไม่สามารถบันทึกข้อมูลบุคลากรได้ กรุณาลองใหม่อีกครั้ง",
     }, conflict ? 409 : 500);
   }
-  const token = await signJWT({ sub: userId }, env.JWT_SECRET);
+  const registered = await createSession(env, userId, request, "system");
+  const token = await signJWT({ sub: userId, sid: registered.sid }, env.JWT_SECRET);
 
   return jsonResponse(
     {
@@ -541,6 +544,9 @@ async function handleLogin(request, env) {
   if (!email || !password) {
     return jsonResponse({ error: "กรุณากรอกอีเมลและรหัสผ่าน" }, 400);
   }
+  if (!(await verifyTurnstile(env, body.turnstile_token, request)).ok) {
+    return jsonResponse({ error: TURNSTILE_ERROR }, 400);
+  }
 
   const ipAddress = request.headers.get("CF-Connecting-IP") || "unknown";
   const throttleKey = `${email}|${ipAddress}`.slice(0, 500);
@@ -559,12 +565,14 @@ async function handleLogin(request, env) {
 
   if (!user) {
     await recordFailedLogin(env, throttleKey);
+    if (await lockedNow(env, throttleKey)) await alertLockout(env, email, request, "system");
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
   const ok = await verifyPassword(password, user.password_salt, user.password_hash);
   if (!ok) {
     await recordFailedLogin(env, throttleKey);
+    if (await lockedNow(env, throttleKey)) await alertLockout(env, email, request, "system");
     return jsonResponse({ error: "อีเมลหรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
@@ -577,7 +585,8 @@ async function handleLogin(request, env) {
     env.DB.prepare("UPDATE users SET last_login_at = datetime('now') WHERE id = ?").bind(user.id),
   ]);
   const current = await env.DB.prepare("SELECT session_version FROM users WHERE id = ?").bind(user.id).first();
-  const token = await signJWT({ sub: user.id, sv: Number(current?.session_version || 1) }, env.JWT_SECRET);
+  const session = await createSession(env, user.id, request, "system");
+  const token = await signJWT({ sub: user.id, sv: Number(current?.session_version || 1), sid: session.sid }, env.JWT_SECRET);
 
   return jsonResponse(
     {
@@ -646,7 +655,10 @@ export async function handleChangePassword(request, env) {
       .bind(user.id, user.id, request.headers.get("CF-Connecting-IP") || null),
   ]);
   const updated = await env.DB.prepare("SELECT session_version FROM users WHERE id = ?").bind(user.id).first();
-  const token = await signJWT({ sub: user.id, sv: Number(updated.session_version) }, env.JWT_SECRET);
+  await revokeAllSessions(env, user.id, "password_changed");
+  const session = await createSession(env, user.id, request, "system");
+  await securityAlert(env, [user.id], "password_changed", "เปลี่ยนรหัสผ่านเรียบร้อย อุปกรณ์อื่นทุกเครื่องถูกออกจากระบบแล้ว — ถ้าไม่ใช่คุณ ให้ติดต่อผู้ดูแลระบบทันที");
+  const token = await signJWT({ sub: user.id, sv: Number(updated.session_version), sid: session.sid }, env.JWT_SECRET);
   return jsonResponse({ ok: true }, 200, { "Set-Cookie": buildSessionCookie(token) });
 }
 
@@ -659,12 +671,40 @@ async function handleLogoutAll(request, env) {
     env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,ip_address)
       VALUES (?,'logout_all','account',?,?)`).bind(user.id, user.id, request.headers.get("CF-Connecting-IP") || null),
   ]);
+  await revokeAllSessions(env, user.id, "logout_all");
   return jsonResponse({ ok: true }, 200, { "Set-Cookie": buildClearCookie() });
 }
 
 // ---------- /api/auth/logout ----------
-async function handleLogout() {
+async function handleLogout(request, env) {
+  const user = await getCurrentUser(request, env).catch(() => null);
+  if (user?.session_id) await revokeSession(env, user.session_id, user.id, "logout").catch(() => {});
   return jsonResponse({ ok: true }, 200, { "Set-Cookie": buildClearCookie() });
+}
+
+// ---------- /api/auth/sessions — อุปกรณ์ที่เข้าสู่ระบบ (ทั้งระบบบริหารและระบบรายงานผลการเรียน) ----------
+async function handleSessions(request, env, pathname, method) {
+  const user = await getCurrentUser(request, env);
+  if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  const headers = { "Cache-Control": "no-store" };
+  if (pathname === "/api/auth/sessions" && method === "GET") {
+    return jsonResponse({ sessions: await listSessions(env, user.id, user.session_id), current_tracked: !!user.session_id }, 200, headers);
+  }
+  const ip = request.headers.get("CF-Connecting-IP") || null;
+  if (pathname === "/api/auth/sessions/revoke-others" && method === "POST") {
+    await revokeAllSessions(env, user.id, "revoked_by_user", user.session_id);
+    await env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,ip_address) VALUES (?,'revoke_other_sessions','account',?,?)`).bind(user.id, user.id, ip).run();
+    return jsonResponse({ ok: true }, 200, headers);
+  }
+  const match = pathname.match(/^\/api\/auth\/sessions\/([a-f0-9]{48})\/revoke$/);
+  if (match && method === "POST") {
+    const changed = await revokeSession(env, match[1], user.id, "revoked_by_user");
+    if (!changed) return jsonResponse({ error: "ไม่พบอุปกรณ์นี้ หรือออกจากระบบไปแล้ว" }, 404);
+    await env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,ip_address) VALUES (?,'revoke_session','account',?,?)`).bind(user.id, user.id, ip).run();
+    const self = match[1] === user.session_id;
+    return jsonResponse({ ok: true, signed_out: self }, 200, self ? { ...headers, "Set-Cookie": buildClearCookie() } : headers);
+  }
+  return jsonResponse({ error: "ไม่พบ endpoint นี้" }, 404);
 }
 
 // ---------- /api/auth/me ----------
@@ -777,10 +817,23 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     return jsonResponse({ error: "ไม่มีข้อมูลที่จะอัปเดต" }, 400);
   }
 
+  const before = await env.DB.prepare("SELECT role, status FROM users WHERE id = ?").bind(targetId).first();
   values.push(targetId);
   await env.DB.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ? AND deleted_at IS NULL`)
     .bind(...values)
     .run();
+  // แจ้งเตือนความปลอดภัยเมื่อสิทธิ์หรือสถานะบัญชีเปลี่ยน: เจ้าของบัญชี + ผู้ดูแลระบบคนอื่น
+  const ROLE_TH = { superadmin: "ผู้ดูแลระบบ", executive: "ผู้บริหาร", teacher: "ครู", staff: "เจ้าหน้าที่" };
+  const roleText = (r) => (r ? ROLE_TH[r] || r : "ไม่มีบทบาท");
+  const changes = [];
+  if (body.role !== undefined && (before?.role ?? null) !== (body.role ?? null)) changes.push(`บทบาท ${roleText(before?.role)} → ${roleText(body.role)}`);
+  if (body.status !== undefined && before?.status !== body.status) changes.push(body.status === "disabled" ? "ระงับบัญชี" : "เปิดใช้บัญชี");
+  if (changes.length) {
+    await securityAlert(env, [targetId], "account_changed", `${admin.full_name} เปลี่ยนสิทธิ์บัญชีของคุณ: ${changes.join(" · ")}`).catch(() => {});
+    await securityAlert(env, await superadminIds(env, admin.id).then((ids) => ids.filter((id) => id !== targetId)), "account_changed",
+      `${admin.full_name} เปลี่ยนสิทธิ์บัญชี ${target.full_name}: ${changes.join(" · ")}`).catch(() => {});
+    if (body.status === "disabled") await revokeAllSessions(env, targetId, "account_disabled").catch(() => {});
+  }
 
   // ทะเบียนบุคลากรที่ผูกกับบัญชีนี้และใช้ชื่อเดิมเดียวกัน ให้เปลี่ยนตาม (ตารางสอน/มอบหมายงานแสดงชื่อเดียวกัน)
   // ถ้าทะเบียนบุคลากรตั้งชื่อต่างไว้เอง (เช่น มีคำนำหน้า) จะไม่แตะต้อง
@@ -4340,7 +4393,8 @@ const app = {
       if (passwordResetResponse) return passwordResetResponse;
       if (pathname === "/api/auth/register" && method === "POST") return await handleRegister(request, env);
       if (pathname === "/api/auth/login" && method === "POST") return await handleLogin(request, env);
-      if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout();
+      if (pathname === "/api/auth/logout" && method === "POST") return await handleLogout(request, env);
+      if (pathname === "/api/auth/sessions" || pathname.startsWith("/api/auth/sessions/")) return await handleSessions(request, env, pathname, method);
       if (pathname === "/api/auth/logout-all" && method === "POST") return await handleLogoutAll(request, env);
       if (pathname === "/api/auth/change-password" && method === "POST") return await handleChangePassword(request, env);
       if (pathname === "/api/auth/me" && method === "GET") return await handleMe(request, env);
@@ -4606,7 +4660,7 @@ const app = {
 const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|evaluation-link\/|notifications\/read|leave-view)/;
 export default {
   async fetch(request, env, context) {
-    const response = await app.fetch(request, env, context);
+    const response = applySecurityHeaders(await app.fetch(request, env, context));
     const { pathname } = new URL(request.url);
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
       && response.status < 400 && env.LINE_CHANNEL_ACCESS_TOKEN && context?.waitUntil) {

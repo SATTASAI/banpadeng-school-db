@@ -8,7 +8,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -34,13 +34,17 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
   FROM correspondence_records c WHERE c.assigned_to=? AND c.created_by<>? AND c.status NOT IN ('completed','archived')`);extraValues.push(user.id,user.id);
  }
  // ระบบนิเทศ: กลุ่มข้อความแยก เพราะกลุ่ม secondary อาจเต็ม 5 terms แล้ว
- const supervision=tables.has('supervision_notifications')&&tables.has('supervision_requests');
- const tertiary=supervision?`, tertiary_messages AS (
- SELECT 'supervision:'||n.id,'นิเทศการสอน',n.message,n.created_at,
+ // แจ้งเตือนระบบนิเทศ และแจ้งเตือนความปลอดภัยบัญชี (อุปกรณ์ใหม่ รหัสผิด เปลี่ยนรหัส/สิทธิ์)
+ const tertiaryTerms=[],tertiaryValues=[];
+ if(tables.has('supervision_notifications')&&tables.has('supervision_requests')){tertiaryTerms.push(`SELECT 'supervision:'||n.id,'นิเทศการสอน',n.message,n.created_at,
  CASE WHEN r.teacher_user_id=n.user_id THEN '/supervision.html?request='||r.id ELSE '/supervision-admin.html?request='||r.id END,n.read_at,n.actor_id,1
- FROM supervision_notifications n JOIN supervision_requests r ON r.id=n.request_id WHERE n.user_id=?
+ FROM supervision_notifications n JOIN supervision_requests r ON r.id=n.request_id WHERE n.user_id=?`);tertiaryValues.push(user.id);}
+ if(tables.has('security_notifications')){tertiaryTerms.push(`SELECT 'security:'||n.id,'ความปลอดภัยบัญชี',n.message,n.created_at,'/account.html#devices',n.read_at,NULL,1
+ FROM security_notifications n WHERE n.user_id=?`);tertiaryValues.push(user.id);}
+ const supervision=tertiaryTerms.length>0;
+ const tertiary=supervision?`, tertiary_messages AS (
+ ${tertiaryTerms.join('\n UNION ALL\n ')}
  )`:'';
- const tertiaryValues=supervision?[user.id]:[];
  // D1 permits at most five terms in one compound SELECT. Keep each group below
  // that limit, including the two optional message sources.
  const sql=`WITH primary_messages AS (
@@ -117,6 +121,8 @@ export async function handleNotifications(request,env,pathname,method){
   await env.DB.batch([
    env.DB.prepare(`UPDATE project_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='project:'||project_notifications.id)`).bind(user.id,user.id),
+   ...((await optionalFeedTables(env)).has('security_notifications')?[env.DB.prepare(`UPDATE security_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
+    AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='security:'||security_notifications.id)`).bind(user.id,user.id)]:[]),
    ...((await optionalFeedTables(env)).has('supervision_notifications')?[env.DB.prepare(`UPDATE supervision_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
     AND EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key='supervision:'||supervision_notifications.id)`).bind(user.id,user.id)]:[]),
    env.DB.prepare(`UPDATE procurement_notifications SET read_at=datetime('now') WHERE user_id=? AND read_at IS NULL
