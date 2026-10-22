@@ -333,7 +333,7 @@ $("dBody").addEventListener("click",async e=>{
 
 (async()=>{
   const me=await apiRequest("/api/auth/me");if(!me.user){location.href="/login.html";return}meId=Number(me.user.id);
-  const year=fy();$("year").innerHTML=[year-2,year-1,year,year+1].map(y=>`<option ${y===year?"selected":""}>${y}</option>`).join("");
+  const year=await workingFiscalYear();$("year").innerHTML=[...new Set([year-2,year-1,year,year+1,fy()])].sort().map(y=>`<option ${y===year?"selected":""}>${y}</option>`).join("");
   $("year").onchange=()=>load().catch(e=>error(e.message));
   await load();
 })().catch(e=>error(e.message));

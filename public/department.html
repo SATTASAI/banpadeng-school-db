@@ -177,6 +177,7 @@
   const dept = new URLSearchParams(window.location.search).get("dept");
   const requestedProjectId = Number(new URLSearchParams(window.location.search).get("project"));
   let currentUser = null;
+  let workingYear = null; // ปีงบประมาณของโครงการในปีการศึกษาปัจจุบัน
   let allUsers = [];
   let editingTopicId = null;
   let editingProjectId = null;
@@ -342,7 +343,7 @@
     document.getElementById("pName").value = project ? project.name : "";
     document.getElementById("pBudget").value = project ? project.budget_amount || 0 : 0;
     document.getElementById("pBudget").readOnly = !currentUser.is_admin;
-    const now = new Date(); const fy = now.getFullYear() + (now.getMonth() >= 9 ? 544 : 543);
+    const fy = workingYear || calendarFiscalYear();
     const chosenYear = Number(project?.fiscal_year || fy);
     document.getElementById("pFiscalYear").innerHTML = [...new Set([fy-2,fy-1,fy,fy+1,chosenYear])].sort().map(y => `<option value="${y}" ${y===chosenYear?"selected":""}>${y}</option>`).join("");
     document.getElementById("pFiscalYear").disabled = Boolean(project);
@@ -422,6 +423,7 @@
     if (!user) { window.location.href = "/login.html"; return; }
     if (!user.role) { window.location.href = "/pending.html"; return; }
     currentUser = user;
+    workingFiscalYear().then((y) => { workingYear = y; });
     const balanceInbox=document.createElement("div");document.getElementById("projectList").before(balanceInbox);ProjectBalance.mountInbox(balanceInbox,{department:dept});
     window.addEventListener("project-balances-updated",()=>loadProjects());
 

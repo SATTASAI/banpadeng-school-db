@@ -18,7 +18,7 @@
   early_childhood:[item('โครงการ','/department.html?dept=early_childhood'),item('หลักสูตรและแผน','/work-center.html?area=early_childhood&topic=0,1'),item('พัฒนาการเด็ก','/work-center.html?area=early_childhood&topic=2'),item('กิจกรรมอนุบาล','/work-center.html?area=early_childhood&topic=3'),item('สื่อและสุขภาวะ','/work-center.html?area=early_childhood&topic=4,5'),item('ผู้ปกครองและคุณภาพ','/work-center.html?area=early_childhood&topic=6,7')],
   // คำขอเบิกจ่าย/จัดซื้อจัดจ้างฝั่งผู้ขออยู่ที่ ระบบสนับสนุน; ฝ่ายงบประมาณรับเรื่องที่ "บันทึกเบิกจ่ายฯ" (ขั้นอนุมัติเดิมทั้งหมด)
   budget:[item('บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง','/finance-register.html'),item('โครงการในฝ่าย','/budget.html?view=plans'),item('โครงการฝ่ายอื่น','/budget.html?view=otherProjects'),item('แหล่งเงินและรายรับ','/budget.html?view=income'),item('รายงานการเงิน','/budget.html?view=reports'),item('ประวัติตรวจสอบ','/budget.html?view=audit'),item('พัสดุและครุภัณฑ์','/inventory.html')],
-  personnel:[item('ภาพรวมงานบุคคล','/personnel.html'),item('สถิติวันลา','/leave-stats.html'),item('สถิติการสอนแทน','/substitute-stats.html'),item('โครงการ','/department.html?dept=personnel'),item('คำสั่งและเวร',scopeUrl('personnel-duties')),item('งานมอบหมาย','/tasks.html'),item('ประเมิน PA','/evaluation-results.html'),item('พัฒนาและผลงาน',scopeUrl('personnel-development'))],
+  personnel:[item('ภาพรวมงานบุคคล','/personnel.html'),item('สถิติวันลา','/leave-stats.html'),{label:'จัดสอนแทน',url:'/substitutes.html',substituteOnly:true},item('สถิติการสอนแทน','/substitute-stats.html'),item('โครงการ','/department.html?dept=personnel'),item('คำสั่งและเวร',scopeUrl('personnel-duties')),item('งานมอบหมาย','/tasks.html'),item('ประเมิน PA','/evaluation-results.html'),item('พัฒนาและผลงาน',scopeUrl('personnel-development'))],
   general:[item('โครงการ','/department.html?dept=general'),item('สารบรรณ','/correspondence.html'),item('ยานพาหนะ','/work-center.html?area=general&topic=5'),item('ประชาสัมพันธ์','/work-center.html?area=general&topic=6,7')],
   // ระบบสนับสนุน: ผู้ขอยื่นเอกสารเบิกจ่าย ติดตามจัดซื้อจัดจ้าง และคำขอแบบลงนามเดิม
   'finance-requests':[item('ยื่นขอเบิกจ่าย','/project-documents.html'),item('ติดตามจัดซื้อจัดจ้าง','/procurement.html?mine=1'),item('คำขอใช้งบ (แบบลงนาม)','/budget.html?view=requests')],
@@ -31,7 +31,7 @@
    item('ประกันอุบัติเหตุ — กรอกรายคน','/import-center.html?template=insurance_person'),
    {label:'นักเรียน (ระบบผลการเรียน)',url:'https://grades.banpadengschool.ac.th/admin.html#import',external:true}]
  };
- const parents={tasks:'personnel'};
+ const parents={tasks:'personnel',substitutes:'personnel'};
  function canonicalUrl(url){const u=new URL(url,'https://school.invalid');if(u.pathname==='/modules.html'||u.pathname==='/modules'){const route=routes[u.searchParams.get('module')];if(route)return route;}if(u.pathname==='/work-center.html'){const scope=workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic'));if(scope){const target=new URL(scopeUrl(scope),'https://school.invalid');for(const [key,value] of u.searchParams)if(!target.searchParams.has(key))target.searchParams.set(key,value);return target.pathname+'?'+target.searchParams.toString()+u.hash;}}return url;}
  function parentFor(key,url){
   const u=new URL(url||routes[key]||'/','https://school.invalid'),path=u.pathname.replace(/\.html$/,'');
@@ -41,7 +41,7 @@
   if(path==='/supervision-admin'&&['results','evaluators'].includes(u.searchParams.get('view')))return 'academic';
   if(path==='/department'||path==='/department-staff'){const dept=u.searchParams.get('dept');if(routes[dept])return dept;}
   if(path==='/work-center'){if(workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic')))return 'personnel';const area=u.searchParams.get('area');if(routes[area])return area;}
-  const owners={'/evaluation-results':'personnel','/maintenance':'maintenance','/leave-stats':'personnel','/substitute-stats':'personnel','/finance-register':'budget','/finance-requests':'finance-requests','/tasks':'personnel','/leave':'leave','/project-documents':'finance-requests','/import-center':'imports','/inventory':'budget','/procurement':'budget','/school-bank':'budget','/budget':'budget','/correspondence':'general','/timetable':'academic','/substitutes':'substitutes','/learner-analysis':'students','/personnel':'personnel','/supervision':'supervision','/supervision-admin':'administration'};
+  const owners={'/evaluation-results':'personnel','/maintenance':'maintenance','/leave-stats':'personnel','/substitute-stats':'personnel','/finance-register':'budget','/finance-requests':'finance-requests','/tasks':'personnel','/leave':'leave','/project-documents':'finance-requests','/import-center':'imports','/inventory':'budget','/procurement':'budget','/school-bank':'budget','/budget':'budget','/correspondence':'general','/timetable':'academic','/substitutes':'personnel','/learner-analysis':'students','/personnel':'personnel','/supervision':'supervision','/supervision-admin':'administration'};
   if(owners[path])return owners[path];
   return Object.entries(routes).find(([,route])=>new URL(route,'https://school.invalid').pathname.replace(/\.html$/,'')===path)?.[0]||parents[key]||key;
  }

@@ -200,6 +200,25 @@
     return btn;
   }
 
+  // โหมดมุมมองบุคคลอื่น: ผู้ดูแลระบบเข้าดูระบบในสิทธิ์ของบัญชีนี้ (ดูได้อย่างเดียว) เพื่อทดสอบการมองเห็น
+  function buildViewAsButton(user) {
+    const btn = document.createElement("button");
+    btn.className = "btn btn-ghost";
+    btn.style.cssText = "padding:4px 12px;font-size:13px;width:auto;margin-top:6px";
+    btn.textContent = "ดูในมุมมองนี้";
+    btn.title = "เปิดระบบในสิทธิ์ของบัญชีนี้ (ดูได้อย่างเดียว) เพื่อทดสอบว่าเห็นเมนูและข้อมูลอะไรบ้าง";
+    btn.dataset.viewAs = String(user.id);
+    if (currentRole !== "superadmin") { btn.disabled = true; btn.title = ONLY_SUPER; }
+    else if (Number(user.id) === Number(currentAdminId)) { btn.disabled = true; btn.title = "นี่คือบัญชีของคุณเอง"; }
+    else if (user.status !== "active") { btn.disabled = true; btn.title = "บัญชีนี้ไม่ได้เปิดใช้งาน"; }
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try { await window.SchoolViewAs.start(user.id); }
+      catch (err) { alert(err.message); btn.disabled = false; }
+    });
+    return btn;
+  }
+
   async function loadUsers() {
     const { users } = await apiRequest("/api/admin/users");
     const tbody = document.getElementById("userRows");
@@ -271,6 +290,8 @@
 
       const actionTd = document.createElement("td");
       actionTd.appendChild(buildDeleteButton(user));
+      actionTd.appendChild(document.createElement("br"));
+      actionTd.appendChild(buildViewAsButton(user));
       tr.appendChild(actionTd);
 
       tbody.appendChild(tr);

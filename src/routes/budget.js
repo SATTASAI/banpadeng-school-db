@@ -1,4 +1,4 @@
-import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
+import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectFinancialRows, workingFiscalYear } from '../lib/project-finance.js';
 import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary, canManageProjectFinance } from "./project-workflow.js";
@@ -207,7 +207,7 @@ async function budgetLimitError(env, projectId, requestedAmount, excludeExpenseI
 async function overview(request, env) {
   const user = await currentUser(request, env);
   if (!user) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  const year = Number(new URL(request.url).searchParams.get("fiscal_year")) || fiscalYear();
+  const year = Number(new URL(request.url).searchParams.get("fiscal_year")) || await workingFiscalYear(env);
   const [summary, incomes, projects, requests, statusRows, audits, approvalRows, itemRows, roleRows, users] = await Promise.all([
     env.DB.prepare(`SELECT COALESCE((SELECT SUM(budget_amount) FROM projects WHERE fiscal_year=?),0) total_budget,
       COALESCE((SELECT SUM(amount) FROM project_expenses WHERE fiscal_year=? AND status='pending'),0) pending_amount,
@@ -493,8 +493,8 @@ async function updateIncome(request, env, id) {
   return jsonResponse({ ok: true });
 }
 
-function reportQuery(url) {
-  const year = Number(url.searchParams.get("fiscal_year")) || fiscalYear();
+function reportQuery(url, defaultYear) {
+  const year = Number(url.searchParams.get("fiscal_year")) || defaultYear;
   const department = String(url.searchParams.get("department") || "");
   const projectId = Number(url.searchParams.get("project_id"));
   const status = String(url.searchParams.get("status") || "");
@@ -520,7 +520,7 @@ function reportQuery(url) {
 async function reportRows(request, env) {
   const user = await currentUser(request, env);
   if (!user) return { response: jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401) };
-  const filters = reportQuery(new URL(request.url));
+  const filters = reportQuery(new URL(request.url), await workingFiscalYear(env));
   if (!(await canManageProjectFinance(env, user))) {
     // ครูทั่วไป: รายงานเฉพาะคำขอของตนและโครงการที่รับผิดชอบ
     filters.where += " AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?))";

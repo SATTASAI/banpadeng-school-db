@@ -180,7 +180,7 @@ window.ProjectWorkflow = (() => {
         const projectOwners=p?(projectData.projects.find(x=>x.id===p.id)?.owners||[]):[];
         const assigned=p?projectOwners.map(o=>Number(o.user_id)):[user.id];
         const ownerChoices=[...userData.users,...projectOwners.filter(o=>!userData.users.some(u=>Number(u.id)===Number(o.user_id))).map(o=>({id:o.user_id,full_name:o.full_name,role:'assigned'}))];
-        const currentYear=Number(today().slice(0,4))+(Number(today().slice(5,7))>=10?544:543);
+        const currentYear=Number(data.working_fiscal_year)||Number(today().slice(0,4))+(Number(today().slice(5,7))>=10?544:543);
         modal(`<h2>${p?'แก้ไขรายละเอียดโครงการ':'เพิ่มโครงการภายในฝ่าย'}</h2><form data-project-editor><div class="wf-grid">
           ${field('ชื่อโครงการ',`<input name="name" required maxlength="300" value="${esc(p?.name||'')}">`,true)}
           ${field('ประเภทเงิน',`<select name="funding_type" required><option value="">เลือกประเภทเงิน</option>${opts(fundingTypes,p?.funding_type)}</select>`)}

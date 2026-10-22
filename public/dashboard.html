@@ -225,7 +225,6 @@
       <a href="/supervision.html" data-page="supervision"><span class="nav-number">นิเทศ</span>ลงทะเบียนนิเทศ</a>
       <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>แจ้งซ่อม</a>
       <a href="/finance-requests.html" data-page="finance-requests"><span class="nav-number">เบิก</span>ขอเบิกจ่ายและจัดซื้อจัดจ้าง</a>
-      <a href="/substitutes.html" data-page="substitutes" title="จัดสอนแทนจากข้อมูลการลา" class="personnel-only" style="display:none"><span class="nav-number">แทน</span>จัดสอนแทน</a>
       <a href="/documents.html" data-page="documents"><span class="nav-number">09</span>เอกสาร</a>
       <a href="/reports.html" data-page="reports"><span class="nav-number">10</span>รายงาน</a>
       <div class="nav-label admin-only" style="display:none;">บริหารระบบ</div>
@@ -436,6 +435,7 @@
         link.textContent = item.label;
         if (item.evaluationOnly) { link.dataset.evaluationOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.supervisionOnly) { link.dataset.supervisionOnly=item.supervisionOnly; link.hidden=true; link.style.display='none'; }
+        if (item.substituteOnly) { link.classList.add('personnel-only'); link.title='จัดสอนแทนจากข้อมูลการลา'; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
         if (item.url === '/finance-register.html') {
           const badge=document.createElement('small');
@@ -551,6 +551,7 @@
     {title:"ขอเบิกจ่ายและจัดซื้อจัดจ้าง",subtitle:"ระบบสนับสนุน · ยื่นเอกสารขอเบิกจ่ายและติดตามจัดซื้อจัดจ้าง",page_key:"finance-requests",url:"/finance-requests.html",keywords:"ขอเบิก เบิกจ่าย จัดซื้อ จัดจ้าง เอกสารเบิกจ่าย คำขอใช้งบ"},
     {title:"บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง",subtitle:"ฝ่ายงบประมาณ · รับเรื่อง อนุมัติ ส่งต่อ และยืนยันการเบิกจ่าย",page_key:"budget",url:"/finance-register.html",keywords:"บันทึกเบิกจ่าย ทะเบียนเบิกจ่าย รับเรื่อง ยืนยันเบิกจ่าย พัสดุ จัดซื้อจัดจ้าง"},
     {title:"สถิติวันลา",subtitle:"ฝ่ายบุคคล · วันลาของครูรายบุคคลตามประเภท",page_key:"personnel",url:"/leave-stats.html",keywords:"สถิติ วันลา ลาป่วย ลากิจ รายบุคคล"},
+    {title:"จัดสอนแทน",subtitle:"ฝ่ายบุคคล · จัดครูสอนแทนจากข้อมูลการลา และออกคำสั่ง",page_key:"personnel",url:"/substitutes.html",keywords:"จัดสอนแทน สอนแทน ครูลา คำสั่งสอนแทน"},
     {title:"สถิติการสอนแทน",subtitle:"ฝ่ายบุคคล · จำนวนครั้งที่ครูถูกจัดสอนแทนรายสัปดาห์/เดือน",page_key:"personnel",url:"/substitute-stats.html",keywords:"สถิติ สอนแทน จัดสอนแทน รายสัปดาห์ รายเดือน"},
     {title:"ระบบดูแลช่วยเหลือนักเรียน",subtitle:"คัดกรอง เยี่ยมบ้าน และติดตาม",page_key:"student-support",url:"/support.html",keywords:"ทุน กลุ่มเสี่ยง เยี่ยมบ้าน"},
     {title:"เอกสารและคลังไฟล์",subtitle:"ค้นหาและจัดเก็บเอกสาร",page_key:"documents",url:"/documents.html",keywords:"ไฟล์ pdf หนังสือ เอกสาร"},
@@ -949,7 +950,7 @@
     }
 
     const substitutePermission=await apiRequest('/api/substitutes/permissions').catch(()=>({can_manage:false}));
-    document.querySelectorAll('.personnel-only').forEach(element=>element.style.display=substitutePermission.can_manage?'flex':'none');
+    document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
     await loadOverview();
 
     const initialKey = window.location.hash.replace("#", "");

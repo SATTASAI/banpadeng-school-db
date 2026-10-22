@@ -108,3 +108,15 @@ const ROLE_LABELS = {
 
 // Portrait phone layout shared by standalone pages and iframe modules.
 (() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/mobile.css";document.head.append(css);})();
+
+// ปีงบประมาณเริ่มต้นของหน้าโครงการ/เบิกจ่าย/จัดซื้อ: ผูกกับปีการศึกษาปัจจุบัน
+// (ปฏิทินงบประมาณขึ้นปีใหม่ 1 ต.ค. กลางภาคเรียนที่ 2 แต่โครงการของปีการศึกษายังต้องใช้ต่อจนจบปี)
+function calendarFiscalYear(){const d=new Date(Date.now()+7*3600e3);return d.getUTCFullYear()+(d.getUTCMonth()>=9?544:543);}
+let workingFiscalYearPromise=null;
+function workingFiscalYear(){
+  workingFiscalYearPromise=workingFiscalYearPromise||apiRequestNow("/api/projects/working-year").then(r=>Number(r?.fiscal_year)||calendarFiscalYear()).catch(()=>{workingFiscalYearPromise=null;return calendarFiscalYear();});
+  return workingFiscalYearPromise;
+}
+
+// โหมดมุมมองบุคคลอื่น (ผู้ดูแลระบบใช้ทดสอบการมองเห็น): แถบแจ้งเตือนบนหน้าต่างหลัก
+(() => {const script=document.createElement("script");script.src="/js/view-as.js";document.head.append(script);})();

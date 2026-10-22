@@ -1,5 +1,6 @@
 import { AUTH_COOKIE_NAME, verifyJWT } from "./crypto.js";
 import { sessionIsActive } from "./auth-sessions.js";
+import { activeViewAs } from "./view-as.js";
 
 export function parseCookies(request) {
   const header = request.headers.get("Cookie") || "";
@@ -47,6 +48,22 @@ export function getCurrentUser(request, env) {
   if (!userCache.has(request)) userCache.set(request, loadCurrentUser(request, env).catch((e) => { userCache.delete(request); throw e; }));
   return userCache.get(request);
 }
+// อ่านแถวผู้ใช้: ลองคอลัมน์ครบก่อน แล้วค่อยลดลงทีละขั้น: ไม่มีตาราง viewer_accounts → ตัดเฉพาะคอลัมน์ผู้ชม (ยังตรวจ session_version)
+// ไม่มีคอลัมน์ session_version (ฐานเดิมก่อน migration) → ใช้ชุดเล็กสุด
+async function fetchUserRow(env, id) {
+  const FULL = "SELECT id, email, full_name, role, status, session_version, password_changed_at, last_login_at, created_at";
+  const attempts = [FULL + ", " + VIEWER_COLUMNS, FULL, "SELECT id, email, full_name, role, status, created_at"];
+  for (let i = 0; i < attempts.length; i++) {
+    try { return await env.DB.prepare(attempts[i] + " FROM users WHERE id = ?").bind(id).first(); }
+    catch (error) {
+      const message = String(error?.message || error).toLowerCase();
+      const retry = (i === 0 && message.includes("viewer_accounts")) || message.includes("session_version") || message.includes("password_changed_at") || message.includes("last_login_at");
+      if (!retry || i === attempts.length - 1) throw error;
+    }
+  }
+  return null;
+}
+
 async function loadCurrentUser(request, env) {
   const cookies = parseCookies(request);
   const token = cookies[AUTH_COOKIE_NAME];
@@ -55,20 +72,7 @@ async function loadCurrentUser(request, env) {
   const payload = await verifyJWT(token, env.JWT_SECRET);
   if (!payload || !payload.sub) return null;
 
-  // ลองคอลัมน์ครบก่อน แล้วค่อยลดลงทีละขั้น: ไม่มีตาราง viewer_accounts → ตัดเฉพาะคอลัมน์ผู้ชม (ยังตรวจ session_version)
-  // ไม่มีคอลัมน์ session_version (ฐานเดิมก่อน migration) → ใช้ชุดเล็กสุด
-  const FULL = "SELECT id, email, full_name, role, status, session_version, password_changed_at, last_login_at, created_at";
-  const attempts = [FULL + ", " + VIEWER_COLUMNS, FULL, "SELECT id, email, full_name, role, status, created_at"];
-  let user;
-  for (let i = 0; i < attempts.length; i++) {
-    try { user = await env.DB.prepare(attempts[i] + " FROM users WHERE id = ?").bind(payload.sub).first(); break; }
-    catch (error) {
-      const message = String(error?.message || error).toLowerCase();
-      const retry = (i === 0 && message.includes("viewer_accounts")) || message.includes("session_version") || message.includes("password_changed_at") || message.includes("last_login_at");
-      if (!retry || i === attempts.length - 1) throw error;
-    }
-  }
-
+  const user = await fetchUserRow(env, payload.sub);
   if (!user || user.status !== "active") return null;
   applyViewer(user);
   if (viewerExpired(user)) return null;
@@ -76,8 +80,28 @@ async function loadCurrentUser(request, env) {
   // ออกจากระบบรายอุปกรณ์: session ที่ถูกยกเลิกใช้ต่อไม่ได้
   if (!await sessionIsActive(env, payload)) return null;
   Object.defineProperty(user, "session_id", { value: payload.sid || null, enumerable: false });
+
+  // โหมดมุมมองบุคคลอื่น: ผู้ดูแลระบบ (superadmin) ใช้ทดสอบว่าแต่ละบัญชีเห็นอะไร
+  // คำขอทั้งหมดของ session นี้จะถูกตรวจสิทธิ์ในฐานะบัญชีเป้าหมาย (ดูได้อย่างเดียว — index.js บล็อกการบันทึก)
+  // ตรวจว่ายังเป็น superadmin ทุกคำขอ ถ้าถูกลดสิทธิ์ โหมดนี้จะหยุดทันที
+  if (user.role === "superadmin" && payload.sid) {
+    const view = await activeViewAs(env, payload.sid, user.id);
+    if (view && Number(view.target_user_id) !== Number(user.id)) {
+      const target = await fetchUserRow(env, view.target_user_id);
+      if (target && target.status === "active") {
+        applyViewer(target);
+        Object.defineProperty(target, "session_id", { value: payload.sid, enumerable: false });
+        Object.defineProperty(target, "impersonator", { value: user, enumerable: false });
+        Object.defineProperty(target, "view_as", { value: { started_at: view.started_at, expires_at: view.expires_at }, enumerable: false });
+        return target;
+      }
+    }
+  }
   return user;
 }
+
+// เคลียร์ผู้ใช้ที่อ่านไว้ของคำขอนี้ (หลังจบโหมดมุมมองบุคคลอื่นในคำขอเดียวกัน)
+export function forgetCurrentUser(request) { if (request && typeof request === "object") userCache.delete(request); }
 
 export function jsonResponse(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
