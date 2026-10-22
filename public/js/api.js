@@ -31,7 +31,22 @@ if (window.parent !== window) {
 const DATABASE_QUOTA_KEY="school-database-quota";
 function storedDatabaseQuota(){try{const q=JSON.parse(sessionStorage.getItem(DATABASE_QUOTA_KEY)||"null");if(q&&Date.parse(q.reset_at)>Date.now())return q;sessionStorage.removeItem(DATABASE_QUOTA_KEY);}catch{}return null;}
 function setDatabaseQuota(data){try{if(data)sessionStorage.setItem(DATABASE_QUOTA_KEY,JSON.stringify(data));else sessionStorage.removeItem(DATABASE_QUOTA_KEY);}catch{}window.dispatchEvent(new CustomEvent("database-quota-changed",{detail:data}));}
-async function apiRequest(path, options = {}) {
+// กันกดส่งซ้ำฝั่งเบราว์เซอร์: คำขอบันทึกที่เหมือนกันทุกประการขณะคำขอแรกยังไม่เสร็จ จะใช้ผลลัพธ์เดียวกัน
+// (ไม่ยิงซ้ำไปเซิร์ฟเวอร์) และปิดปุ่มที่ถูกกดไว้จนกว่าจะบันทึกเสร็จ — เซิร์ฟเวอร์มีตัวกันซ้ำอีกชั้นหนึ่ง
+const pendingWrites=new Map();
+function apiRequest(path, options = {}) {
+  const method=String(options.method||"GET").toUpperCase();
+  if(["GET","HEAD","OPTIONS"].includes(method)||path.startsWith("/api/auth/"))return apiRequestNow(path,options);
+  const body=options.body==null?"":typeof FormData!=="undefined"&&options.body instanceof FormData?null:typeof options.body==="string"?options.body:JSON.stringify(options.body);
+  const key=body===null?null:`${method} ${path} ${body}`;
+  if(key&&pendingWrites.has(key))return pendingWrites.get(key);
+  const active=typeof document!=="undefined"?document.activeElement:null,button=active&&active.matches?.('button,input[type="submit"]')&&!active.disabled?active:null;
+  if(button){button.disabled=true;button.setAttribute("aria-busy","true");}
+  const promise=apiRequestNow(path,options).finally(()=>{if(key)pendingWrites.delete(key);if(button){button.disabled=false;button.removeAttribute("aria-busy");}});
+  if(key)pendingWrites.set(key,promise);
+  return promise;
+}
+async function apiRequestNow(path, options = {}) {
   const quota=storedDatabaseQuota();
   const retryAllowed=["/api/auth/login","/api/auth/me","/api/auth/logout"].includes(path);
   if(quota&&!retryAllowed){const error=new Error(quota.error);error.status=503;error.data=quota;throw error;}

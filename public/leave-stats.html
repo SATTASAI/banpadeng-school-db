@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>สถิติวันลา — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.st-page{max-width:1240px;margin:auto;padding:24px}.st-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.st-head h1{margin:0;color:var(--color-forest-900)}.st-head p{margin:5px 0 0;color:var(--color-text-muted);font-size:14px}.st-actions{display:flex;gap:8px;flex-wrap:wrap}.st-actions .btn{width:auto}
+.st-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.75)}
+.st-filters label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.st-filters select,.st-filters input{width:100%}
+.st-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.st-card{padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.85);box-shadow:0 10px 24px rgba(46,79,112,.06)}.st-card span{display:block;font-size:12px;color:var(--color-text-muted)}.st-card strong{display:block;margin-top:4px;font-size:22px;color:var(--color-forest-900);font-variant-numeric:tabular-nums}.st-card.warn strong{color:#b56708}
+.st-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:16px}.st-panel{padding:16px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.85)}.st-panel h2{font-size:16px;margin:0 0 10px}
+.st-bar{display:grid;grid-template-columns:110px 1fr 90px;gap:8px;align-items:center;font-size:13px;margin:6px 0}.st-bar i{display:block;height:10px;border-radius:999px;background:#3284cc;min-width:2px}.st-bar em{font-style:normal;text-align:right;color:var(--color-text-muted);font-variant-numeric:tabular-nums}
+.st-table{overflow:auto;border:1px solid var(--color-border);border-radius:16px;background:#fff}.st-table table{width:100%;border-collapse:collapse;min-width:980px;font-size:14px}
+.st-table th,.st-table td{padding:9px 10px;border-bottom:1px solid #e3ecf3;text-align:center;font-variant-numeric:tabular-nums}.st-table th{background:#f3f8fc;color:#244e72;font-weight:600;position:sticky;top:0}.st-table td:nth-child(2),.st-table th:nth-child(2){text-align:left}
+.st-table td small{display:block;color:var(--color-text-muted)}.st-table tr.st-flag td{background:#fff7ec}.st-flag-chip{display:inline-block;margin-top:3px;padding:1px 7px;border-radius:999px;background:#fde8e8;color:#a52828;font-size:12px}
+.st-zero{color:#b7c5d1}.st-note{font-size:13px;color:var(--color-text-muted);margin:10px 2px}.st-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}
+@media(max-width:820px){.st-page{padding:14px}.st-grid{grid-template-columns:1fr}}
+@media print{.st-filters,.st-actions,.app-topbar{display:none!important}.st-page{padding:0}.st-table{overflow:visible;border:0}.st-table table{min-width:0;font-size:11pt}}
+</style></head>
+<body>
+<main class="st-page">
+  <header class="st-head"><div><h1>สถิติวันลา</h1><p id="lead">ข้อมูลจากระบบการลาของครูและบุคลากร · นับเฉพาะใบลาที่อนุมัติแล้ว วันลานับตามใบลาและเฉพาะส่วนที่อยู่ในช่วงเวลาที่เลือก</p></div>
+    <div class="st-actions"><a class="btn btn-ghost" href="/leave.html">ระบบการลา</a><button class="btn btn-ghost" id="exportCsv">ดาวน์โหลด Excel (CSV)</button><button class="btn btn-primary" id="print">พิมพ์ / PDF</button></div></header>
+  <div class="st-error" id="error"></div>
+  <section class="st-filters">
+    <label>ปีงบประมาณ<select id="fy"></select></label>
+    <label>ช่วงเวลา<select id="period"></select></label>
+    <label>ค้นหาชื่อ<input id="search" type="search" placeholder="ชื่อครู / ตำแหน่ง"></label>
+    <label>เรียงตาม<select id="sort"><option value="days">วันลามากที่สุด</option><option value="times">จำนวนครั้งมากที่สุด</option><option value="sp">ป่วย+กิจ มากที่สุด</option><option value="name">ชื่อ</option></select></label>
+    <label>เกณฑ์ ป่วย+กิจ (ครั้ง)<input id="limitTimes" type="number" min="1" value="10"></label>
+    <label>เกณฑ์ ป่วย+กิจ (วัน)<input id="limitDays" type="number" min="1" step="0.5" value="23"></label>
+  </section>
+  <section class="st-cards" id="cards"></section>
+  <section class="st-grid"><div class="st-panel"><h2>วันลาแยกประเภท</h2><div id="byType"></div></div><div class="st-panel"><h2>จำนวนครั้งที่ลา รายเดือน (ตามวันที่เริ่มลา)</h2><div id="monthly"></div></div></section>
+  <div class="st-table"><table><thead id="thead"></thead><tbody id="rows"></tbody></table></div>
+  <p class="st-note">แถวสีส้ม = ลาป่วยและลากิจรวมกันเกินเกณฑ์ที่ตั้งไว้ด้านบน (ค่าเริ่มต้นตามเกณฑ์ครึ่งปีที่ใช้พิจารณาเลื่อนเงินเดือน: ไม่เกิน 10 ครั้ง หรือ 23 วัน — ควรดูแบบครึ่งปี และตรวจสอบระเบียบที่ใช้จริงอีกครั้ง)</p>
+</main>
+<script src="/js/api.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const num=v=>Number(v||0).toLocaleString('th-TH',{maximumFractionDigits:2});
+const TH_MONTH=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const monthLabel=m=>{const[y,mo]=m.split('-').map(Number);return `${TH_MONTH[mo-1]} ${String(y+543).slice(2)}`};
+const today=new Date(Date.now()+7*3600e3),currentFy=today.getUTCFullYear()+(today.getUTCMonth()>=9?544:543);
+let data=null,version=0,revision=null;
+function error(m=''){$('error').textContent=m;$('error').style.display=m?'block':'none'}
+function fillPeriods(){
+  const fy=Number($('fy').value),ce=fy-543,keep=$('period').value;
+  const months=[];for(let i=0;i<12;i++){const d=new Date(Date.UTC(ce-1,9+i,1));months.push(d.toISOString().slice(0,7))}
+  $('period').innerHTML=`<option value="year">ทั้งปีงบประมาณ</option><option value="h1">ครึ่งปีแรก (ต.ค.–มี.ค.)</option><option value="h2">ครึ่งปีหลัง (เม.ย.–ก.ย.)</option>`+months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
+  if([...$('period').options].some(o=>o.value===keep))$('period').value=keep;
+}
+for(let y=currentFy;y>=currentFy-5;y--)$('fy').insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);
+fillPeriods();
+async function load(){
+  const v=++version;error();
+  try{const d=await apiRequest(`/api/personnel/leave-stats?fiscal_year=${$('fy').value}&period=${encodeURIComponent($('period').value)}`);if(v!==version)return;data=d;render();}
+  catch(e){if(v===version)error(e.message)}
+}
+function rows(){
+  const q=$('search').value.trim().toLowerCase(),sort=$('sort').value;
+  const list=data.people.filter(r=>!q||(r.name+' '+r.position).toLowerCase().includes(q));
+  const by={days:(a,b)=>b.approved_days-a.approved_days||b.approved_times-a.approved_times,times:(a,b)=>b.approved_times-a.approved_times||b.approved_days-a.approved_days,
+    sp:(a,b)=>b.sick_personal_days-a.sick_personal_days||b.sick_personal_times-a.sick_personal_times,name:(a,b)=>a.name.localeCompare(b.name,'th')}[sort];
+  return list.sort((a,b)=>by(a,b)||a.name.localeCompare(b.name,'th'));
+}
+const flagged=r=>r.sick_personal_times>Number($('limitTimes').value||Infinity)||r.sick_personal_days>Number($('limitDays').value||Infinity);
+function render(){
+  if(!data)return;const s=data.summary,types=Object.entries(data.types);
+  $('lead').textContent=`${data.scope==='self'?'สถิติการลาของฉัน':'สถิติการลาครูและบุคลากรรายบุคคล'} · ${new Date(data.start+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} – ${new Date(data.end+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} · นับเฉพาะใบลาที่อนุมัติแล้ว`;
+  const list=rows(),flags=data.people.filter(flagged).length;
+  $('cards').innerHTML=[['ครั้งที่ลา (อนุมัติ)',s.approved_times],['วันลารวม',num(s.approved_days)],['ผู้ที่มีการลา',`${s.people_with_leave} / ${s.people}`],['เฉลี่ยวันลาต่อคน',num(s.people?s.approved_days/s.people:0)],['รออนุมัติ',s.pending,'warn'],['เกินเกณฑ์ ป่วย+กิจ',flags,flags?'warn':'']]
+    .map(([l,v,c=''])=>`<div class="st-card ${c}"><span>${l}</span><strong>${v}</strong></div>`).join('');
+  const maxType=Math.max(1,...data.by_type.map(t=>t.days));
+  $('byType').innerHTML=data.by_type.map(t=>`<div class="st-bar"><span>${esc(t.label)}</span><i style="width:${t.days/maxType*100}%"></i><em>${t.times} ครั้ง · ${num(t.days)} วัน</em></div>`).join('');
+  const maxMonth=Math.max(1,...data.monthly.map(m=>m.times));
+  $('monthly').innerHTML=data.monthly.length?data.monthly.map(m=>`<div class="st-bar"><span>${monthLabel(m.month)}</span><i style="width:${m.times/maxMonth*100}%;background:#35a165"></i><em>${m.times} ครั้ง</em></div>`).join(''):'<p class="st-note">ยังไม่มีการลาที่อนุมัติในช่วงนี้</p>';
+  $('thead').innerHTML=`<tr><th rowspan="2">ที่</th><th rowspan="2">ชื่อ-สกุล / ตำแหน่ง</th>${types.map(([,l])=>`<th colspan="2">${esc(l)}</th>`).join('')}<th colspan="2">รวม</th><th colspan="2">ป่วย+กิจ</th><th rowspan="2">รอ<br>อนุมัติ</th></tr><tr>${types.map(()=>'<th>ครั้ง</th><th>วัน</th>').join('')}<th>ครั้ง</th><th>วัน</th><th>ครั้ง</th><th>วัน</th></tr>`;
+  const cell=v=>`<td class="${Number(v)?'':'st-zero'}">${num(v)}</td>`;
+  $('rows').innerHTML=list.map((r,i)=>`<tr class="${flagged(r)?'st-flag':''}"><td>${i+1}</td><td><b>${esc(r.name)}</b><small>${esc(r.position||'')}</small>${flagged(r)?'<span class="st-flag-chip">เกินเกณฑ์ ป่วย+กิจ</span>':''}</td>
+    ${types.map(([k])=>cell(r.by_type[k].times)+cell(r.by_type[k].days)).join('')}${cell(r.approved_times)}${cell(r.approved_days)}${cell(r.sick_personal_times)}${cell(r.sick_personal_days)}${cell(r.pending)}</tr>`).join('')
+    ||`<tr><td colspan="${types.length*2+7}">ไม่พบข้อมูล</td></tr>`;
+}
+$('exportCsv').onclick=()=>{
+  if(!data)return;const types=Object.entries(data.types);
+  const head=['ที่','ชื่อ-สกุล','ตำแหน่ง',...types.flatMap(([,l])=>[l+' (ครั้ง)',l+' (วัน)']),'รวม (ครั้ง)','รวม (วัน)','ป่วย+กิจ (ครั้ง)','ป่วย+กิจ (วัน)','รออนุมัติ','เกินเกณฑ์'];
+  const body=rows().map((r,i)=>[i+1,r.name,r.position,...types.flatMap(([k])=>[r.by_type[k].times,r.by_type[k].days]),r.approved_times,r.approved_days,r.sick_personal_times,r.sick_personal_days,r.pending,flagged(r)?'ใช่':'']);
+  const csv=[[`สถิติวันลา ${$('period').selectedOptions[0].text} ปีงบประมาณ ${data.fiscal_year} (${data.start} ถึง ${data.end})`],head,...body].map(r=>r.map(v=>{const t=String(v??'');return /[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t}).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));a.download=`สถิติวันลา-${data.fiscal_year}-${data.period}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+};
+$('print').onclick=()=>window.print();
+$('fy').onchange=()=>{fillPeriods();load()};$('period').onchange=load;
+for(const id of ['search','sort','limitTimes','limitDays'])$(id).addEventListener('input',render);
+// อัปเดตทันทีเมื่อมีการบันทึกใบลา/อนุมัติในหน้าอื่น (ตัวนับ revision เดียวกับแดชบอร์ด)
+window.addEventListener('school-data-changed',load);
+try{const ch=new BroadcastChannel('school-data-changed');ch.onmessage=load;}catch{}
+setInterval(async()=>{if(document.hidden)return;try{const r=await apiRequest('/api/overview/revision');if(revision&&r.revision!==revision)load();revision=r.revision;}catch{}},10000);
+apiRequest('/api/auth/me').then(me=>{if(!me.user){location.href='/login.html';return}load()}).catch(e=>error(e.message));
+})();
+</script></body></html>

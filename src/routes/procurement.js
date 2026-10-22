@@ -300,7 +300,8 @@ async function context(env, user) {
 async function overview(request, env, user) {
   const url = new URL(request.url), year = Number(url.searchParams.get("fiscal_year")) || null;
   const ctx = await context(env, user);
-  const wide = ctx.officer || ctx.finance || ctx.director;
+  // mine=1: หน้าติดตามของผู้ขอ (ระบบสนับสนุน) — แสดงเฉพาะงานที่เกี่ยวข้องกับตนเอง แม้เป็นเจ้าหน้าที่
+  const wide = (ctx.officer || ctx.finance || ctx.director) && url.searchParams.get("mine") !== "1";
   const filters = [], values = [];
   if (year) { filters.push("c.fiscal_year=?"); values.push(year); }
   if (!wide) {
@@ -319,7 +320,7 @@ async function overview(request, env, user) {
     ORDER BY CASE c.status WHEN 'director_review' THEN 0 WHEN 'head_review' THEN 1 WHEN 'ordered' THEN 2 WHEN 'approved' THEN 3 WHEN 'draft' THEN 4 ELSE 5 END,
       c.updated_at DESC,c.id DESC`).bind(user.id, ...values).all();
   let eligible = [];
-  if (ctx.officer) {
+  if (ctx.officer && wide) {
     const { results } = await env.DB.prepare(`SELECT e.id,e.request_no,e.amount,e.request_purpose,e.needed_date,e.current_step,e.priority,e.fiscal_year,
         p.id project_id,p.name project_name,COALESCE(p.management_area,p.department) department,u.full_name requester_name
       FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
