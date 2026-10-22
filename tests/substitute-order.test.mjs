@@ -10,12 +10,13 @@ test('substitute orders export the chosen date, sorted assignments and Thai date
  assert.throws(()=>e.order([],meta),/ยังไม่มีรายการ/);
  assert.equal(rows[0].period,3);
 });
-test('support menu owns leave and substitution, without academic substitution or budget bank entries',()=>{
+test('personnel menu owns substitution, support menu owns leave, no academic substitution or budget bank entries',()=>{
  const nav=vm.createContext({URL});vm.runInContext(fs.readFileSync('public/js/navigation-catalog.js','utf8'),nav);
  const n=nav.SchoolNavigation,html=fs.readFileSync('public/dashboard.html','utf8');
  assert(!n.groups.academic.some(x=>x.url==='/substitutes.html'));assert(!n.groups.personnel.some(x=>x.url==='/leave.html'));assert(!n.groups.budget.some(x=>x.url==='/school-bank.html'));
- const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];assert(support.includes('data-page="leave"'));assert(support.includes('data-page="substitutes"'));assert(support.includes('class="personnel-only"'));
- assert.equal(n.parentFor('substitutes','/substitutes.html'),'substitutes');assert.equal(n.parentFor('leave','/leave.html'),'leave');
+ const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];assert(support.includes('data-page="leave"'));assert(!html.includes('data-page="substitutes"'));
+ const sub=n.groups.personnel.find(x=>x.url==='/substitutes.html');assert(sub&&sub.substituteOnly);assert(html.includes("item.substituteOnly"));
+ assert.equal(n.parentFor('substitutes','/substitutes.html'),'personnel');assert.equal(n.parentFor('leave','/leave.html'),'leave');
 });
 
 test('orders embed the Garuda in Word and PDF and resolve a unique director from current personnel',()=>{

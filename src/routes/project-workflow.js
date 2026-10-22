@@ -1,4 +1,4 @@
-import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows } from '../lib/project-finance.js';
+import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows, workingFiscalYear } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { executives, isDirector } from "../lib/leave-data.js";
 import { procurementBlocksDisbursement, procurementClosing } from "./procurement.js";
@@ -188,7 +188,7 @@ async function overview(request, env, user) {
   const fundingSummary = await projectFundingSummary(env,year,financialRows);
   const projects = await projectWorkflowSnapshots(env, user, department, year,financialRows);
   const ids = projects.map(p => p.id);
-  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) } });
+  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], working_fiscal_year: await workingFiscalYear(env), funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) } });
   const placeholders = ids.map(() => "?").join(",");
   const { results: requests } = await env.DB.prepare(`SELECT e.*,p.name AS project_name,COALESCE(p.management_area,p.department) AS department,u.full_name AS requester_name
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
@@ -211,7 +211,7 @@ async function overview(request, env, user) {
   const { results: notifications } = await env.DB.prepare(`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
     JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id
     WHERE n.user_id=? AND v.project_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`).bind(user.id,...ids).all();
-  return jsonResponse({ projects, notifications, funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
+  return jsonResponse({ projects, notifications, working_fiscal_year: await workingFiscalYear(env), funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
     can_director_approve: director && e.status === "pending" && e.current_step === "director_approval" && Number(e.created_by) !== Number(user.id),
     procurement: procurement.get(e.id) || null,
     can_close_balance: ["pending","approved"].includes(e.status) && procurement.get(e.id)?.status === "accepted" && money(procurement.get(e.id).total_amount) < money(e.amount)

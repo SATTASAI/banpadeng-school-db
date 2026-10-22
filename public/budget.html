@@ -117,7 +117,7 @@ function switchBudgetView(requested){
 }
 $("budgetViewSelect").onchange=event=>switchBudgetView(event.target.value);
 
-(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}const year=fy();$("year").innerHTML=[year-2,year-1,year,year+1].map(value=>`<option ${value===year?"selected":""}>${value}</option>`).join("");switchBudgetView(new URLSearchParams(location.search).get("view")||"otherProjects");await load();const project=Number(new URLSearchParams(location.search).get("project"));if(project>0)await financeWorkflow.openProject(project)})().catch(err=>error(err.message));
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}const year=await workingFiscalYear(),calendar=calendarFiscalYear();$("year").innerHTML=[...new Set([year-2,year-1,year,year+1,calendar])].sort().map(value=>`<option ${value===year?"selected":""}>${value}</option>`).join("");switchBudgetView(new URLSearchParams(location.search).get("view")||"otherProjects");await load();const project=Number(new URLSearchParams(location.search).get("project"));if(project>0)await financeWorkflow.openProject(project)})().catch(err=>error(err.message));
 </script>
 </body>
 </html>

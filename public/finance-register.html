@@ -21,8 +21,8 @@
 (async()=>{
   const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return}
   const year=document.getElementById('year');
-  const fy=(()=>{const d=new Date(Date.now()+7*3600e3);return d.getUTCFullYear()+(d.getUTCMonth()>=9?544:543)})();
-  for(let y=fy+1;y>=fy-4;y--)year.insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);
+  const fy=Math.max(await workingFiscalYear(),calendarFiscalYear());
+  for(let y=fy+1;y>=fy-5;y--)year.insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);
   const notifyCount=state=>{const count=(state.requests||[]).filter(e=>e.current_step==='finance_queue').length;
     if(window.parent!==window)window.parent.postMessage({type:'budget-navigation',url:'/finance-register.html',pendingCount:count},location.origin);};
   const app=ProjectWorkflow.mount(document.getElementById('register'),{finance:true,register:true,year:()=>year.value,onRefresh:state=>{

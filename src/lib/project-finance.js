@@ -42,3 +42,24 @@ export async function projectFinancialRows(env,fiscalYear=null,department=null) 
   reserved_amount:(p.pending_cents+p.approved_cents)/100,opening_spent_amount:p.opening_cents/100,confirmed_spent_amount:(p.paid_cents-p.opening_cents)/100,
   remaining_amount:(p.budget_cents-p.paid_cents)/100,available_amount:(p.budget_cents-p.paid_cents-p.pending_cents-p.approved_cents)/100}));
 }
+
+// ปีงบประมาณตามปฏิทินราชการ (ต.ค.–ก.ย.) ตามเวลาไทย
+export function calendarFiscalYear(date = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10)) {
+ const [year, month] = String(date).split('-').map(Number);
+ return year + (month >= 10 ? 544 : 543);
+}
+// "ปีงบประมาณที่ใช้งาน" ของโครงการ = ปีของโครงการในปีการศึกษาปัจจุบัน
+// โครงการของปีการศึกษาหนึ่งต้องใช้ต่อได้ทั้งปี (พ.ค.–มี.ค.) แม้ปฏิทินงบประมาณจะขึ้นปีใหม่ตั้งแต่ 1 ต.ค. แล้ว
+// ไม่เช่นนั้นหน้าเบิกจ่าย/จัดซื้อจะเปิดมาเป็นปีใหม่ที่ยังไม่มีโครงการ และโครงการที่เพิ่มในภาคเรียนที่ 2 จะไปอยู่คนละปีกับโครงการเดิม
+export async function workingFiscalYear(env) {
+ const calendar = calendarFiscalYear();
+ try {
+  const row = await env.DB.prepare(`SELECT y.year_be, MAX(p.fiscal_year) max_fy,
+    SUM(CASE WHEN p.fiscal_year=y.year_be THEN 1 ELSE 0 END) same_year
+    FROM academic_years y LEFT JOIN projects p ON p.academic_year_id=y.id AND p.status<>'cancelled'
+    WHERE y.status='active' GROUP BY y.id ORDER BY y.year_be DESC LIMIT 1`).first();
+  if (row && Number(row.same_year) > 0) return Number(row.year_be);
+  if (row?.max_fy) return Number(row.max_fy);
+ } catch { /* ตารางยังไม่พร้อม → ใช้ปฏิทิน */ }
+ return calendar;
+}

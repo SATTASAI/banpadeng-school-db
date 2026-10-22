@@ -15,7 +15,7 @@ import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
 import { handleStaffDeletionRoute } from './routes/staff-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
-import { money, sumMoney, financialTotals, projectFinancialRows } from './lib/project-finance.js';
+import { money, sumMoney, financialTotals, projectFinancialRows, workingFiscalYear, calendarFiscalYear } from './lib/project-finance.js';
 import {
   generateSalt,
   hashPassword,
@@ -24,7 +24,9 @@ import {
   buildSessionCookie,
   buildClearCookie,
 } from "./lib/crypto.js";
-import { getCurrentUser, jsonResponse, isAdmin, viewerMayAccess, viewerExpired, VIEWER_BLOCKED, VIEWER_COLUMNS, applyViewer, ensureViewerTable } from "./lib/auth.js";
+import { getCurrentUser, jsonResponse, isAdmin, viewerMayAccess, viewerExpired, VIEWER_BLOCKED, VIEWER_COLUMNS, applyViewer, ensureViewerTable, forgetCurrentUser } from "./lib/auth.js";
+import { VIEW_AS_BLOCKED, endViewAs, viewAsMayWrite } from "./lib/view-as.js";
+import { handleViewAsRoute, viewAsState } from "./routes/view-as.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { importStaffRows } from "./lib/staff-import.js";
@@ -723,7 +725,7 @@ async function handleSessions(request, env, pathname, method) {
 async function handleMe(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user) return jsonResponse({ user: null }, 200);
-  return jsonResponse({ user: { ...user, is_admin: isAdmin(user) } }, 200);
+  return jsonResponse({ user: { ...user, is_admin: isAdmin(user), view_as: viewAsState(user) } }, 200);
 }
 
 // ---------- /api/admin/users (GET) ----------
@@ -1818,8 +1820,8 @@ async function handleCreateProject(request, env, department) {
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
     return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
   }
-  const now = new Date(Date.now() + 7 * 3600 * 1000); // เวลาไทย
-  const defaultFiscalYear = now.getUTCFullYear() + (now.getUTCMonth() + 1 >= 10 ? 544 : 543);
+  // ปีงบประมาณของโครงการในปีการศึกษาปัจจุบัน (ไม่เปลี่ยนกลางปีการศึกษาเมื่อปฏิทินงบประมาณขึ้นปีใหม่ 1 ต.ค.)
+  const defaultFiscalYear = await workingFiscalYear(env);
   const fiscalYear = body.fiscal_year === "" || body.fiscal_year == null ? defaultFiscalYear : Number(body.fiscal_year);
   if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
 
@@ -4437,6 +4439,18 @@ const app = {
     const method = request.method;
 
     try {
+      // โหมดมุมมองบุคคลอื่น (ผู้ดูแลระบบทดสอบการมองเห็น): ดูได้อย่างเดียว ห้ามบันทึกในนามบัญชีอื่น
+      // ออกจากระบบระหว่างโหมดนี้ = จบโหมดก่อน แล้วออกจากระบบบัญชีผู้ดูแลตามปกติ
+      const writeMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
+      if (pathname.startsWith("/api/") && (writeMethod || pathname === "/api/evaluation-link/authorize") || pathname.startsWith("/evaluation-connect")) {
+        const acting = await getCurrentUser(request, env).catch(() => null);
+        if (acting?.impersonator) {
+          if (pathname === "/api/auth/logout") { await endViewAs(env, acting.session_id).catch(() => {}); forgetCurrentUser(request); }
+          else if (!writeMethod || !viewAsMayWrite(pathname)) return jsonResponse(VIEW_AS_BLOCKED, 403);
+        }
+      }
+      if (pathname === "/api/admin/view-as" || pathname === "/api/admin/view-as/candidates") return await handleViewAsRoute(request, env, pathname, method);
+
       // The independent evaluatesystem Worker owns evaluation screens and mutations.
       if (["/evaluate","/evaluate.html"].includes(pathname)) return Response.redirect(EVALUATION_ORIGIN+"/evaluate",302);
       if (["/evaluation-connect","/evaluation-connect.html","/api/evaluation-link/authorize"].includes(pathname)) {
@@ -4539,6 +4553,13 @@ const app = {
       if (schoolBankResponse) return schoolBankResponse;
       const balanceResponse = await handleProjectBalanceRoute(request,env,pathname,method);
       if (balanceResponse) return balanceResponse;
+      // ปีงบประมาณที่หน้าโครงการ/เบิกจ่าย/จัดซื้อใช้เป็นค่าเริ่มต้น (ผูกกับปีการศึกษาปัจจุบัน)
+      if (pathname === "/api/projects/working-year" && method === "GET") {
+        if (!await getCurrentUser(request, env)) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+        const period = await getCurrentAcademicPeriod(env);
+        return jsonResponse({ fiscal_year: await workingFiscalYear(env), calendar_fiscal_year: calendarFiscalYear(),
+          academic_year_be: period?.year_be || null, academic_term: period?.term_number || null }, 200, { "Cache-Control": "no-store" });
+      }
       const projectWorkflowResponse = await handleProjectWorkflowRoute(request, env, pathname, method);
       if (projectWorkflowResponse) return projectWorkflowResponse;
       const procurementResponse = await handleProcurementRoute(request, env, pathname, method);
