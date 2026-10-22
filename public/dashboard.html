@@ -184,6 +184,114 @@
     .dashboard-head { flex-direction:column; }
     .updated-at { text-align:left; }
   }
+  /* ---- แดชบอร์ดแบบกระชับ: การ์ดตัวเลข + แท็บหมวดข้อมูล ---- */
+  .main-content { padding:22px 30px 40px; }
+  .dashboard-head h2 { font-size:22px; }
+  .dashboard-head .academic-context { margin-top:6px; padding:5px 10px; border-radius:10px; display:inline-flex; font-size:12px; }
+  .dashboard-head .academic-context .btn { margin-left:6px; padding:3px 9px; font-size:11px; }
+  .dash-controls { text-align:right; font-size:13px; }
+  .dash-controls select { width:auto; margin:0 6px; padding:6px 10px; font-size:13px; }
+  .overview-grid { grid-template-columns:repeat(6,minmax(0,1fr)); gap:10px; margin-top:16px; }
+  .overview-card { padding:11px 14px; border-radius:13px; }
+  .overview-number { font-size:23px; line-height:1.2; }
+  .overview-label { font-size:12px; margin-top:2px; }
+  .dash-tabs { display:flex; gap:2px; margin-top:18px; border-bottom:1px solid var(--color-border); overflow-x:auto; scrollbar-width:none; }
+  .dash-tabs button { flex:none; width:auto; border:0; border-bottom:2px solid transparent; background:none; padding:9px 14px; font:inherit; font-size:14px; font-weight:600; color:var(--color-text-muted); cursor:pointer; white-space:nowrap; border-radius:8px 8px 0 0; }
+  .dash-tabs button:hover { color:var(--color-text); background:rgba(229,241,251,.6); }
+  .dash-tabs button[aria-selected="true"] { color:var(--color-ocean-700); border-bottom-color:var(--color-ocean-700); }
+  .dash-tab-badge { display:inline-block; min-width:18px; margin-left:4px; padding:0 6px; border-radius:999px; background:#e2483d; color:#fff; font-size:11px; line-height:18px; text-align:center; }
+  .dash-panel { padding-top:16px; }
+  .dash-panel > .dashboard-section:first-child { margin-top:0; }
+  .dash-panel .dashboard-section { margin-top:22px; }
+  .dash-cols { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+  .dash-cols .snapshot-card { padding:15px 17px; min-width:0; }
+  .card-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:10px; }
+  .card-head h3 { margin:0; font-size:15px; }
+  .link-btn { width:auto; border:0; background:none; padding:0; color:var(--color-ocean-700); font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+  .link-btn:hover { text-decoration:underline; }
+  .dash-cols .alert-list { margin-top:0; gap:6px; }
+  .dash-cols .alert-item { padding:7px 10px; }
+  .dash-cols .alert-item.zero .alert-count { color:var(--color-text-muted); font-weight:600; }
+  .dash-cols .quick-actions { margin-top:12px; }
+  .dash-cols .quick-actions .btn { padding:6px 12px; }
+  .dash-notice { margin-bottom:14px; padding:10px 14px; border-radius:12px; background:#fff6e6; border:1px solid #f1dcb4; color:#7a5414; font-size:14px; display:flex; gap:10px; align-items:center; justify-content:space-between; }
+  .dash-notice[hidden] { display:none; }
+  .mini-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .mini-grid.three { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .mini { min-width:0; padding:8px 10px; border-radius:11px; background:rgba(231,239,247,.55); }
+  .mini span { display:block; color:var(--color-text-muted); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mini b { display:block; color:var(--color-forest-900); font-size:17px; font-variant-numeric:tabular-nums; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .mini b.warn { color:var(--color-danger); } .mini b.good { color:var(--color-success); }
+  .mini-sub { margin:8px 0 0; color:var(--color-text-muted); font-size:12px; }
+  .meter { height:8px; margin:10px 0 4px; overflow:hidden; border-radius:999px; background:#E5EDF4; }
+  .meter > i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--color-ocean-500),var(--color-teal-500)); }
+  .meter > i.over { background:linear-gradient(90deg,#E27057,#C3444F); }
+  .att-head { display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; }
+  .att-big { font-size:30px; font-weight:700; color:var(--color-forest-900); font-variant-numeric:tabular-nums; }
+  .att-big small { font-size:14px; color:var(--color-text-muted); font-weight:600; }
+  .att-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .att-chip { padding:3px 9px; border-radius:999px; font-size:12px; font-weight:600; background:#EEF3F7; color:#4D6276; }
+  .att-chip.absent { background:#fde8e8; color:#a52828; } .att-chip.personal { background:#fff1dc; color:#9a4b08; }
+  .att-chip.sick { background:#efe9fb; color:#5d3fa0; } .att-chip.late { background:#e6f3fb; color:#1766a8; }
+  .muted-line { margin:0; color:var(--color-text-muted); font-size:13px; }
+  .att-empty { padding:14px; border:1px dashed var(--color-border); border-radius:12px; color:var(--color-text-muted); font-size:13px; background:rgba(255,255,255,.6); }
+  .att-trend { display:flex; align-items:flex-end; gap:5px; height:96px; margin-top:6px; padding:0 2px; }
+  .att-trend.small { height:64px; margin-top:10px; }
+  .att-trend.small div span:first-child { display:none; }
+  .att-trend div { flex:1; min-width:0; white-space:nowrap; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:3px; font-size:10.5px; color:var(--color-text-muted); }
+  .att-trend i { display:block; width:100%; max-width:34px; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,#3a9be9,#1e74cf); }
+  .att-trend div.current i { background:linear-gradient(180deg,#26b0a0,#138a7d); }
+  .att-detail-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); gap:14px; margin-top:14px; align-items:start; }
+  .att-detail-grid > * { min-width:0; }
+  .section-head .btn { width:auto; flex:none; padding:7px 12px; font-size:13px; text-decoration:none; }
+  .att-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .att-table th, .att-table td { padding:6px 7px; border-bottom:1px solid var(--color-border); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .att-table th:first-child, .att-table td:first-child { text-align:left; }
+  .att-table tfoot td { font-weight:700; }
+  .room-chips { display:grid; grid-template-columns:repeat(auto-fill,minmax(68px,1fr)); gap:5px; }
+  .room-chip { padding:4px 6px; border-radius:8px; font-size:10.5px; line-height:1.3; background:#f3f6f9; color:var(--color-text-muted); border:1px solid transparent; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .room-chip b { display:block; color:var(--color-text); font-size:12px; }
+  .room-chip.ok { background:#e6f6ec; border-color:#bfe5cd; } .room-chip.ok b { color:#176b3a; }
+  .stat-row { grid-template-columns:repeat(auto-fit,minmax(140px,1fr)) !important; gap:10px; margin-bottom:10px; }
+  .stat-row .budget-summary-card { padding:11px 14px; border-radius:13px; }
+  .stat-row .budget-summary-card strong { font-size:19px; }
+  .dash-more { margin-top:4px; }
+  .dash-more summary, .budget-projects summary { cursor:pointer; color:var(--color-ocean-700); font-size:13px; font-weight:600; padding:6px 0; }
+  .budget-projects { border-top:1px solid var(--color-border); }
+  .budget-projects summary { padding:9px 16px; list-style-position:inside; }
+  .budget-projects[open] summary { border-bottom:1px solid var(--color-border); }
+  .budget-projects .project-budget-list { border-top:0; max-height:420px; overflow:auto; }
+  .section-head .inline-link { margin-top:0; white-space:nowrap; }
+  .license-section .panel { max-height:420px; overflow:auto; padding:0; }
+  .license-section .panel table, #substituteTop table, #leaveTypeSummary table { font-size:13px; }
+  .license-section .panel th, .license-section .panel td, #substituteTop th, #substituteTop td, #leaveTypeSummary th, #leaveTypeSummary td { padding:7px 12px; }
+  .license-section .panel thead th { position:sticky; top:0; background:#f4f8fb; z-index:1; }
+  #projectAllocationChart .allocation-chart { padding:16px 18px; }
+  #projectAllocationChart .allocation-chart h3 { font-size:16px; }
+  #projectAllocationChart .ac-layout { margin-top:10px; }
+  #projectAllocationChart .ac-pie { width:180px; }
+  #projectAllocationChart .ac-table { max-height:300px; }
+  #projectAllocationChart .ac-table table { font-size:13.5px; }
+  #projectAllocationChart .ac-table th, #projectAllocationChart .ac-table td { padding:7px 8px; }
+  @media (max-width:1100px) { .overview-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .att-detail-grid { grid-template-columns:1fr; } }
+  @media (max-width:720px) {
+    .layout #overviewGrid .overview-card { padding:9px 12px; }
+    .layout #overviewGrid .overview-number { font-size:21px; }
+    .layout #overviewGrid .overview-label { font-size:12.5px; }
+    .layout .dash-panel .section-head { flex-direction:row; flex-wrap:wrap; align-items:flex-start; }
+    #projectAllocationChart .ac-table { max-height:260px; }
+  }
+  @media (max-width:720px) {
+    .main-content { padding:16px 14px 28px; }
+    .dashboard-head h2 { font-size:19px; }
+    .dash-controls { text-align:left; }
+    .overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+    .overview-card { padding:9px 12px; }
+    .overview-number { font-size:20px; }
+    .dash-cols { grid-template-columns:1fr; gap:10px; }
+    .dash-tabs button { padding:8px 11px; font-size:13px; }
+    .mini-grid.three { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
 </style>
 <style>.viewer-banner{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fff6e6;border:1px solid #f1dcb4;color:#7a5414;font-size:14px}.viewer-mode #balanceRequestInbox,.viewer-mode .license-section{display:none}</style>
 <link rel="stylesheet" href="/css/project-workflow.css">
@@ -262,103 +370,105 @@
       <div class="dashboard-head">
         <div>
           <h2 id="greeting" style="margin-bottom:2px;">สวัสดีครับ/ค่ะ</h2>
-          <p style="color:var(--color-text-muted); margin:0;">ข้อมูลภาพรวมสำหรับติดตามการดำเนินงานของโรงเรียนบ้านป่าเด็ง</p>
+          <div class="academic-context">
+            <span>ช่วงเวลาปัจจุบัน:</span>
+            <strong id="academicContextLabel">กำลังโหลด...</strong>
+            <span id="academicContextDates"></span>
+            <a class="btn btn-ghost" href="#academic-periods" data-dashboard-page="academic-periods">จัดการปีการศึกษา</a>
+          </div>
         </div>
-        <div>
-          <label for="dashboardFiscalYear" style="font-size:13px">ปีงบประมาณ</label>
-          <select id="dashboardFiscalYear" style="width:auto;margin-right:8px"><option value="all">ทุกปีงบประมาณ</option></select>
+        <div class="dash-controls">
+          <label for="dashboardFiscalYear">ปีงบประมาณ</label>
+          <select id="dashboardFiscalYear"><option value="all">ทุกปีงบประมาณ</option></select>
           <button class="btn btn-ghost" id="refreshOverviewBtn">อัปเดตข้อมูล</button>
           <div class="updated-at" id="updatedAt">—</div>
         </div>
       </div>
 
       <div class="error-box" id="errorBox"></div>
+      <div class="overview-grid" id="overviewGrid"></div>
 
-      <div class="academic-context">
-        <span>ช่วงเวลาปัจจุบัน:</span>
-        <strong id="academicContextLabel">กำลังโหลด...</strong>
-        <span id="academicContextDates"></span>
-        <a class="btn btn-ghost" href="#academic-periods" data-dashboard-page="academic-periods">จัดการปีการศึกษา</a>
+      <div class="dash-tabs" role="tablist" aria-label="หมวดข้อมูลแดชบอร์ด">
+        <button type="button" role="tab" data-tab="overview" aria-selected="true">ภาพรวม</button>
+        <button type="button" role="tab" data-tab="students" aria-selected="false">นักเรียน · มาเรียน</button>
+        <button type="button" role="tab" data-tab="personnel" aria-selected="false">บุคลากร</button>
+        <button type="button" role="tab" data-tab="budget" aria-selected="false">งบประมาณ <span class="dash-tab-badge" id="budgetTabBadge" hidden></span></button>
       </div>
 
-      <div class="overview-grid" id="overviewGrid"></div>
-      <section class="dashboard-section">
-        <div class="section-head"><div><h3 style="margin:0">ความเคลื่อนไหวเงิน</h3><p>รายรับที่บันทึกและเบิกจ่ายที่ยืนยันแล้ว ตามปีงบประมาณที่เลือก</p></div></div>
-        <div class="budget-summary-grid" id="financeSummary" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))"></div>
-      </section>
-      <section class="dashboard-section">
-        <div class="section-head"><div><h3 style="margin:0">สถิติการลาบุคลากร</h3><p>จำนวนคำขอและวันลาที่อนุมัติ ตามปีงบประมาณที่เลือก · วันลานับตามปฏิทิน</p></div></div>
-        <div class="budget-summary-grid" id="leaveSummary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
-        <div style="overflow:auto;margin-top:16px" id="leaveTypeSummary"></div>
-        <a class="inline-link" href="/leave-stats.html" data-open-url="/leave-stats.html">ดูสถิติวันลารายบุคคล →</a>
-      </section>
-      <section class="dashboard-section" id="substituteSection">
-        <div class="section-head"><div><h3 style="margin:0">สถิติการสอนแทน</h3><p id="substituteRange">จำนวนคาบที่จัดครูสอนแทน สัปดาห์นี้และเดือนนี้ · ตัวเลขชุดเดียวกับระบบจัดสอนแทน</p></div></div>
-        <div class="budget-summary-grid" id="substituteSummary" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))"></div>
-        <div style="overflow:auto;margin-top:16px" id="substituteTop"></div>
-        <a class="inline-link" href="/substitute-stats.html" data-open-url="/substitute-stats.html">ดูสถิติการสอนแทนรายบุคคล →</a>
-      </section>
-      <div id="projectAllocationChart"></div>
-      <section id="balanceRequestInbox"></section>
-      <section id="fundingSummary" style="margin-top:22px"></section>
+      <div class="dash-panel" data-panel="overview" role="tabpanel">
+        <div class="dash-notice" id="balanceNotice" hidden></div>
+        <div class="dash-cols">
+          <section class="snapshot-card" id="attendanceCard">
+            <div class="card-head"><h3>การมาเรียน</h3><button type="button" class="link-btn" data-goto-tab="students">รายละเอียด →</button></div>
+            <div id="attendanceMini"><p class="muted-line">กำลังโหลด...</p></div>
+          </section>
+          <section class="snapshot-card">
+            <div class="card-head"><h3>การแจ้งเตือนสำคัญ</h3></div>
+            <div class="alert-list" id="alertList"></div>
+            <div class="quick-actions">
+              <a class="btn btn-primary" href="#tasks" data-dashboard-page="tasks">ติดตามงาน</a>
+              <a class="btn btn-ghost" href="#leave" data-dashboard-page="leave">ตรวจคำขอลา</a>
+              <a class="btn btn-ghost" href="#reports" data-dashboard-page="reports">เปิดรายงาน</a>
+            </div>
+          </section>
+          <section class="snapshot-card">
+            <div class="card-head"><h3>งบประมาณโครงการ</h3><button type="button" class="link-btn" data-goto-tab="budget">รายละเอียด →</button></div>
+            <div id="budgetMini"></div>
+          </section>
+          <section class="snapshot-card">
+            <div class="card-head"><h3>บุคลากร</h3><button type="button" class="link-btn" data-goto-tab="personnel">รายละเอียด →</button></div>
+            <div id="personnelMini"></div>
+          </section>
+        </div>
+      </div>
 
-      <section class="dashboard-section">
-        <div class="section-head">
-          <div><h3 style="margin:0;">สรุปผลการดำเนินงานแต่ละฝ่าย</h3><p>จำนวนโครงการ ความคืบหน้าเฉลี่ย และกรอบงบประมาณที่บันทึกไว้</p></div>
-        </div>
-        <div class="department-grid" id="departmentGrid"></div>
-      </section>
+      <div class="dash-panel" data-panel="students" role="tabpanel" hidden>
+        <section class="dashboard-section" id="attendanceDetail"></section>
+      </div>
 
-      <section class="dashboard-section">
-        <div class="section-head">
-          <div><h3 style="margin:0;">งบประมาณโครงการทุกฝ่าย</h3><p>แสดงงบทั้งหมด ยอดใช้จริง และงบคงเหลือของทุกโครงการ แยกตามฝ่ายงาน</p></div>
-        </div>
-        <div class="budget-summary-grid">
-          <div class="budget-summary-card"><span>งบโครงการทั้งหมด</span><strong id="projectBudgetTotal">0 บาท</strong></div>
-          <div class="budget-summary-card spent"><span>ใช้จริงสะสม</span><strong id="projectBudgetSpent">0 บาท</strong></div>
-          <div class="budget-summary-card remaining" id="projectBudgetRemainingCard"><span>งบคงเหลือ</span><strong id="projectBudgetRemaining">0 บาท</strong></div>
-        </div>
-        <div class="budget-department-grid" id="departmentBudgetGrid"></div>
-      </section>
-
-      <section class="dashboard-section snapshot-grid">
-        <div class="snapshot-card">
-          <h3>การมาเรียนวันนี้</h3>
-          <p>ข้อมูลมาเรียน ขาด ลา และมาสาย ใช้ข้อมูลจาก Q-info เพื่อไม่บันทึกคะแนนหรือเวลาเรียนซ้ำซ้อน</p>
-          <span class="inline-link">รอเชื่อมข้อมูลสรุปจาก Q-info</span>
-        </div>
-        <div class="snapshot-card">
-          <h3>สถานะงบประมาณ</h3>
-          <div class="snapshot-value" id="projectBudgetUsage">0%</div>
-          <p>สัดส่วนยอดใช้จริงเทียบกับกรอบงบประมาณของทุกโครงการในระบบ</p>
-        </div>
-      </section>
-
-      <section class="dashboard-section snapshot-grid">
-        <div class="snapshot-card">
-          <h3>การแจ้งเตือนสำคัญ</h3>
-          <div class="alert-list" id="alertList"></div>
-        </div>
-        <div class="snapshot-card">
-          <h3>ทางลัดงานประจำ</h3>
-          <div class="quick-actions" style="margin:12px 0 0;">
-            <a class="btn btn-primary" href="#tasks" data-dashboard-page="tasks">ติดตามงาน</a>
-            <a class="btn btn-ghost" href="#leave" data-dashboard-page="leave">ตรวจคำขอลา</a>
-            <a class="btn btn-ghost" href="#reports" data-dashboard-page="reports">เปิดรายงาน</a>
+      <div class="dash-panel" data-panel="personnel" role="tabpanel" hidden>
+        <section class="dashboard-section">
+          <div class="section-head"><div><h3 style="margin:0">สถิติการลาบุคลากร</h3><p>จำนวนคำขอและวันลาที่อนุมัติ ตามปีงบประมาณที่เลือก · วันลานับตามปฏิทิน</p></div><a class="inline-link" href="/leave-stats.html" data-open-url="/leave-stats.html">รายบุคคล →</a></div>
+          <div class="budget-summary-grid stat-row" id="leaveSummary"></div>
+          <details class="dash-more"><summary>แยกตามประเภทการลา</summary><div style="overflow:auto" id="leaveTypeSummary"></div></details>
+        </section>
+        <section class="dashboard-section" id="substituteSection">
+          <div class="section-head"><div><h3 style="margin:0">สถิติการสอนแทน</h3><p id="substituteRange">จำนวนคาบที่จัดครูสอนแทน สัปดาห์นี้และเดือนนี้ · ตัวเลขชุดเดียวกับระบบจัดสอนแทน</p></div><a class="inline-link" href="/substitute-stats.html" data-open-url="/substitute-stats.html">รายบุคคล →</a></div>
+          <div class="budget-summary-grid stat-row" id="substituteSummary"></div>
+          <div style="overflow:auto" id="substituteTop"></div>
+        </section>
+        <section class="dashboard-section license-section">
+          <div class="section-head"><div><h3 style="margin:0">สถานะวันหมดอายุใบประกอบวิชาชีพ</h3><p>ติดตามระยะเวลาคงเหลือของครูและบุคลากรทุกคน</p></div></div>
+          <div class="license-legend">
+            <span class="license-chip green"><span class="license-dot"></span>มากกว่า 180 วัน <strong id="licenseGreenCount">0</strong></span>
+            <span class="license-chip orange"><span class="license-dot"></span>90–180 วัน <strong id="licenseOrangeCount">0</strong></span>
+            <span class="license-chip red"><span class="license-dot"></span>น้อยกว่า 90 วัน/หมดอายุ <strong id="licenseRedCount">0</strong></span>
+            <button type="button" class="link-btn" id="licenseToggle" hidden></button>
           </div>
-        </div>
-      </section>
+          <div class="panel" id="licensePanel"></div>
+          <div class="empty-state" id="licenseEmpty" style="display:none;">ยังไม่มีข้อมูลวันหมดอายุใบประกอบวิชาชีพ</div>
+        </section>
+      </div>
 
-      <div class="dashboard-section license-section">
-        <h3 style="margin-bottom:2px;">สถานะวันหมดอายุใบประกอบวิชาชีพ</h3>
-        <p style="color:var(--color-text-muted); margin:0; font-size:13px;">ติดตามระยะเวลาคงเหลือของครูและบุคลากรทุกคน</p>
-        <div class="license-legend">
-          <span class="license-chip green"><span class="license-dot"></span>มากกว่า 180 วัน <strong id="licenseGreenCount">0</strong></span>
-          <span class="license-chip orange"><span class="license-dot"></span>90–180 วัน <strong id="licenseOrangeCount">0</strong></span>
-          <span class="license-chip red"><span class="license-dot"></span>น้อยกว่า 90 วัน/หมดอายุ <strong id="licenseRedCount">0</strong></span>
-        </div>
-        <div class="panel" id="licensePanel"></div>
-        <div class="empty-state" id="licenseEmpty" style="display:none;">ยังไม่มีข้อมูลวันหมดอายุใบประกอบวิชาชีพ</div>
+      <div class="dash-panel" data-panel="budget" role="tabpanel" hidden>
+        <section class="dashboard-section">
+          <div class="section-head"><div><h3 style="margin:0">ความเคลื่อนไหวเงิน</h3><p>รายรับที่บันทึกและเบิกจ่ายที่ยืนยันแล้ว ตามปีงบประมาณที่เลือก</p></div></div>
+          <div class="budget-summary-grid stat-row" id="financeSummary"></div>
+        </section>
+        <section id="balanceRequestInbox"></section>
+        <div id="projectAllocationChart"></div>
+        <section id="fundingSummary" style="margin-top:22px"></section>
+        <section class="dashboard-section">
+          <div class="section-head">
+            <div><h3 style="margin:0;">งบประมาณโครงการทุกฝ่าย</h3><p>งบทั้งหมด ยอดใช้จริง และงบคงเหลือ แยกตามฝ่ายงาน · กดที่ฝ่ายเพื่อดูรายโครงการ</p></div>
+          </div>
+          <div class="budget-summary-grid">
+            <div class="budget-summary-card"><span>งบโครงการทั้งหมด</span><strong id="projectBudgetTotal">0 บาท</strong></div>
+            <div class="budget-summary-card spent"><span>ใช้จริงสะสม · <b id="projectBudgetUsage">0%</b></span><strong id="projectBudgetSpent">0 บาท</strong></div>
+            <div class="budget-summary-card remaining" id="projectBudgetRemainingCard"><span>งบคงเหลือ</span><strong id="projectBudgetRemaining">0 บาท</strong></div>
+          </div>
+          <div class="budget-department-grid" id="departmentBudgetGrid"></div>
+        </section>
       </div>
     </div>
 
@@ -688,6 +798,7 @@
   });
 
   const DEPARTMENT_LABELS = {
+    administration: "บริหาร",
     academic: "วิชาการ",
     early_childhood: "ปฐมวัย (งานอนุบาล)",
     budget: "งบประมาณ",
@@ -734,6 +845,113 @@
     if (remaining === 0) return "หมดอายุวันนี้";
     return `เหลือ ${remaining} วัน`;
   };
+
+  // ---- แท็บหมวดข้อมูล (จำแท็บล่าสุดไว้ในเบราว์เซอร์นี้) ----
+  const openBudgetDepartments = new Set();
+  let showAllLicenses = false;
+  const GRADES_URL = "https://grades.banpadengschool.ac.th";
+  function selectDashboardTab(name, focus = false) {
+    const tabs = [...document.querySelectorAll(".dash-tabs [data-tab]")];
+    if (!tabs.some((t) => t.dataset.tab === name)) name = "overview";
+    tabs.forEach((t) => { const on = t.dataset.tab === name; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
+    document.querySelectorAll(".dash-panel[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
+    try { localStorage.setItem("dashboard-tab", name); } catch {}
+  }
+  document.querySelectorAll(".dash-tabs [data-tab]").forEach((tab) => tab.addEventListener("click", () => selectDashboardTab(tab.dataset.tab)));
+  document.querySelector(".dash-tabs").addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = [...document.querySelectorAll(".dash-tabs [data-tab]")], i = tabs.findIndex((t) => t.getAttribute("aria-selected") === "true");
+    const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (i + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    event.preventDefault(); selectDashboardTab(tabs[next].dataset.tab, true);
+  });
+  document.getElementById("overviewWrap").addEventListener("click", (event) => {
+    const go = event.target.closest("[data-goto-tab]");
+    if (go) { selectDashboardTab(go.dataset.gotoTab); document.querySelector(".dash-tabs").scrollIntoView({ block: "start", behavior: "smooth" }); }
+  });
+  try { selectDashboardTab(localStorage.getItem("dashboard-tab") || "overview"); } catch { selectDashboardTab("overview"); }
+
+  // คำขอแก้ไขยอด (อยู่ในแท็บงบประมาณ) → แจ้งบนแท็บภาพรวมเมื่อมีรายการรอพิจารณา/แจ้งเตือน
+  new MutationObserver(() => {
+    const badge = document.querySelector("#balanceRequestInbox .pb-badge"), notice = document.getElementById("balanceNotice"), tabBadge = document.getElementById("budgetTabBadge");
+    const pending = Number((badge?.textContent.match(/(\d+)\s*รอพิจารณา/) || [])[1] || 0), unread = Number((badge?.textContent.match(/(\d+)\s*แจ้งเตือน/) || [])[1] || 0);
+    notice.hidden = !badge;
+    tabBadge.hidden = !(pending + unread); tabBadge.textContent = String(pending + unread);
+    if (badge) notice.innerHTML = `<span>${escapeHtml(document.querySelector("#balanceRequestInbox h3")?.firstChild?.textContent.trim() || "คำขอแก้ไขยอด")}: ${escapeHtml(badge.textContent)}</span><button type="button" class="link-btn" data-goto-tab="budget">เปิดดู →</button>`;
+  }).observe(document.getElementById("balanceRequestInbox"), { childList: true, subtree: true });
+
+  const shortDate = (iso, weekday = false) => iso ? new Intl.DateTimeFormat("th-TH", { ...(weekday ? { weekday: "short" } : {}), day: "numeric", month: "short" }).format(new Date(`${iso}T00:00:00`)) : "";
+  const trendLabel = (iso) => { const [, m, d] = String(iso).split("-").map(Number); return `${d}/${m}`; };
+  const pctText = (v) => v === null || v === undefined ? "—" : `${Number(v).toLocaleString("th-TH", { maximumFractionDigits: 1 })}%`;
+  const mini = (label, value, cls = "") => `<div class="mini"><span>${label}</span><b class="${cls}">${value}</b></div>`;
+  function attendanceStatus(a) {
+    if (a.in_session) return `${escapeHtml(a.term?.name || "")} · วันนี้ ${shortDate(a.today, true)}`;
+    const next = a.next_term ? `${escapeHtml(a.next_term.name)} เริ่ม ${formatThaiDate(a.next_term.start_date)}` : "ไม่มีวันเรียนวันนี้";
+    return a.report_date ? `${next} · แสดงวันเรียนล่าสุด ${shortDate(a.report_date, true)}` : next;
+  }
+  function attendanceChips(c) {
+    return `<div class="att-chips"><span class="att-chip absent">ขาด ${c.absent}</span><span class="att-chip personal">ลากิจ ${c.personal}</span><span class="att-chip sick">ลาป่วย ${c.sick}</span><span class="att-chip late">มาสาย ${c.late}</span></div>`;
+  }
+  function renderAttendance(a) {
+    const miniBox = document.getElementById("attendanceMini"), detail = document.getElementById("attendanceDetail");
+    const gradesLink = `<a class="btn btn-ghost" href="${GRADES_URL}/homeroom.html" target="_blank" rel="noopener">บันทึกการมาเรียนในระบบรายงานผล ↗</a>`;
+    if (!a || !a.available) {
+      const msg = !a ? "โหลดข้อมูลการมาเรียนไม่สำเร็จ" : a.reason === "no_year" ? "ยังไม่มีปีการศึกษาที่เปิดใช้งาน" : "ยังไม่พบตารางบันทึกการมาเรียนของระบบรายงานผลการเรียน";
+      miniBox.innerHTML = `<p class="muted-line">${msg}</p>`;
+      detail.innerHTML = `<div class="att-empty">${msg}</div>`;
+      return;
+    }
+    const status = attendanceStatus(a), d = a.day;
+    const source = `ข้อมูลจากระบบรายงานผลการเรียน (ครูประจำชั้นบันทึก) · ${a.last_recorded_at ? `บันทึกล่าสุด ${escapeHtml(formatThaiDate(String(a.last_recorded_at).slice(0, 10)))} ${escapeHtml(String(a.last_recorded_at).slice(11, 16))}` : "ยังไม่มีการบันทึก"}`;
+    if (!a.has_records || !d) {
+      const why = !d ? "ยังไม่ถึงวันเรียนวันแรกของปีการศึกษา" : "ครูประจำชั้นยังไม่ได้บันทึกการมาเรียนในระบบรายงานผลการเรียน — เมื่อเริ่มบันทึก ตัวเลขจะขึ้นที่นี่ทันที";
+      miniBox.innerHTML = `<p class="muted-line">${status}</p><div class="att-empty" style="margin-top:8px">${why}</div><p class="mini-sub">นักเรียน ${Number(a.day?.enrolled ?? a.grades.reduce((n, g) => n + g.enrolled, 0)).toLocaleString("th-TH")} คน · ${a.rooms.total} ห้อง</p>`;
+      detail.innerHTML = `<div class="section-head"><div><h3 style="margin:0">การมาเรียนของนักเรียน</h3><p>${status}</p></div>${gradesLink}</div><div class="att-empty">${why}<br><small>${source}</small></div>`;
+      return;
+    }
+    const max = 100, minPct = Math.min(90, ...a.trend.map((t) => t.present_pct ?? 100));
+    const floor = Math.max(0, Math.floor(minPct / 5) * 5 - 5);
+    const barsHtml = (scale) => a.trend.map((t) => `<div class="${t.date === a.report_date ? "current" : ""}" title="${shortDate(t.date, true)} · มา ${t.present}/${t.enrolled} · ขาด ${t.absent} ลากิจ ${t.personal} ลาป่วย ${t.sick} มาสาย ${t.late}"><span>${pctText(t.present_pct)}</span><i style="height:${Math.max(4, ((Number(t.present_pct ?? 0) - floor) / (max - floor)) * scale)}px"></i><span>${trendLabel(t.date)}</span></div>`).join("");
+    const bars = barsHtml(62);
+    miniBox.innerHTML = `<div class="att-head"><span class="att-big">${pctText(d.present_pct)}</span><span class="muted-line">มาเรียน ${d.present.toLocaleString("th-TH")} / ${d.enrolled.toLocaleString("th-TH")} คน</span></div>
+      <p class="muted-line">${status}</p>${attendanceChips(d)}
+      ${a.trend.length > 1 ? `<div class="att-trend small" aria-label="ร้อยละมาเรียน ${a.trend.length} วันเรียนล่าสุด">${barsHtml(44)}</div>` : ""}
+      <p class="mini-sub">ทั้งปีถึงวันนี้ ${pctText(a.year.rate_pct)} · ต่ำกว่าเกณฑ์ ${a.pass_pct}% <b style="color:${a.year.below_threshold ? "var(--color-danger)" : "inherit"}">${a.year.below_threshold} คน</b> · บันทึกแล้ว ${a.rooms.recorded_recent}/${a.rooms.total} ห้อง (10 วันเรียนล่าสุด)</p>`;
+    const total = a.grades.reduce((s, g) => { for (const k of ["enrolled", "present", "absent", "personal", "sick", "late", "below_threshold", "rooms"]) s[k] = (s[k] || 0) + g[k]; return s; }, {});
+    const row = (g, label) => `<tr><td>${label}</td><td>${g.rooms}</td><td>${g.enrolled}</td><td>${g.present}</td><td>${g.absent}</td><td>${g.personal}</td><td>${g.sick}</td><td>${g.late}</td><td>${pctText(g.present_pct ?? (g.enrolled ? Math.round(g.present * 1000 / g.enrolled) / 10 : null))}</td><td style="color:${g.below_threshold ? "var(--color-danger)" : "inherit"}">${g.below_threshold}</td></tr>`;
+    const recentFrom = a.trend[0]?.date || "";
+    detail.innerHTML = `<div class="section-head"><div><h3 style="margin:0">การมาเรียนของนักเรียน</h3><p>${status}</p></div>${gradesLink}</div>
+      <div class="budget-summary-grid stat-row">
+        <div class="budget-summary-card"><span>มาเรียน ${shortDate(a.report_date, true)}</span><strong>${pctText(d.present_pct)}</strong></div>
+        <div class="budget-summary-card"><span>มา / ทั้งหมด (คน)</span><strong>${d.present} / ${d.enrolled}</strong></div>
+        <div class="budget-summary-card"><span>ขาด · ลากิจ · ลาป่วย</span><strong>${d.absent} · ${d.personal} · ${d.sick}</strong></div>
+        <div class="budget-summary-card"><span>มาสาย</span><strong>${d.late}</strong></div>
+        <div class="budget-summary-card"><span>ร้อยละมาเรียนทั้งปี (${a.year.school_days_elapsed}/${a.year.school_days_total} วันเรียน)</span><strong>${pctText(a.year.rate_pct)}</strong></div>
+        <div class="budget-summary-card ${a.year.below_threshold ? "over" : ""}"><span>มาเรียนต่ำกว่าเกณฑ์ ${a.pass_pct}%</span><strong>${a.year.below_threshold} คน</strong></div>
+      </div>
+      <div class="att-detail-grid">
+        <div class="snapshot-card"><div class="card-head"><h3>แยกตามระดับชั้น · ${shortDate(a.report_date, true)}</h3></div>
+          <div style="overflow:auto"><table class="att-table"><thead><tr><th>ชั้น</th><th>ห้อง</th><th>นักเรียน</th><th>มา</th><th>ขาด</th><th>ลากิจ</th><th>ลาป่วย</th><th>สาย</th><th>ร้อยละ</th><th>ต่ำกว่าเกณฑ์ทั้งปี</th></tr></thead>
+          <tbody>${a.grades.map((g) => row(g, escapeHtml(g.grade))).join("")}</tbody><tfoot>${row(total, "รวม")}</tfoot></table></div></div>
+        <div style="display:grid;gap:14px;align-content:start">
+          <div class="snapshot-card"><div class="card-head"><h3>แนวโน้ม ${a.trend.length} วันเรียนล่าสุด</h3></div><div class="att-trend">${bars}</div></div>
+          <div class="snapshot-card"><div class="card-head"><h3>การบันทึกรายห้อง</h3><span class="muted-line">${a.rooms.recorded_recent}/${a.rooms.total} ห้อง</span></div>
+            <div class="room-chips">${a.rooms.list.map((r) => { const ok = r.last_date && r.last_date >= recentFrom; return `<div class="room-chip ${ok ? "ok" : ""}" title="${ok ? "มีบันทึกใน 10 วันเรียนล่าสุด" : "ยังไม่มีบันทึกใน 10 วันเรียนล่าสุด (ไม่มีบันทึก = มาเรียนครบ)"}"><b>${escapeHtml(r.grade)}/${escapeHtml(r.classroom)}</b>${r.last_date ? shortDate(r.last_date) : "ยังไม่บันทึก"}</div>`; }).join("")}</div>
+            <p class="mini-sub">ระบบรายงานผลบันทึกเฉพาะนักเรียนที่ขาด ลา หรือมาสาย นักเรียนที่ไม่มีบันทึกถือว่ามาเรียน</p></div>
+        </div>
+      </div>
+      <p class="mini-sub">${source}</p>`;
+  }
+  function renderOverviewMini(data, licenseCounts) {
+    const budget = Number(data.total_project_budget || 0), spent = Number(data.total_project_spent || 0), usage = budget > 0 ? Math.round((spent / budget) * 100) : 0;
+    const f = data.finance_summary || {};
+    document.getElementById("budgetMini").innerHTML = `<div class="att-head"><span class="att-big">${usage}%</span><span class="muted-line">ใช้จริง ${formatMoney(spent)} จาก ${formatMoney(budget)}</span></div>
+      <div class="meter"><i class="${usage > 100 ? "over" : ""}" style="width:${Math.min(usage, 100)}%"></i></div>
+      <div class="mini-grid" style="margin-top:10px">${mini("งบคงเหลือ", formatMoney(data.total_project_remaining), Number(data.total_project_remaining) < 0 ? "warn" : "good")}${mini("รอตรวจสอบ/เบิกจ่าย", formatMoney(f.reserved_amount))}${mini("รายรับที่บันทึก", formatMoney(f.received_amount))}${mini("เบิกจ่ายยืนยันแล้ว", formatMoney(f.paid_amount))}</div>`;
+    const leave = data.leave_summary || {}, sub = data.substitute_summary, viewer = document.body.classList.contains("viewer-mode");
+    document.getElementById("personnelMini").innerHTML = `<div class="mini-grid three">${mini("ลาวันนี้", Number(leave.on_leave_today || 0))}${mini("คำขอลารออนุมัติ", Number(leave.pending || 0), Number(leave.pending) ? "warn" : "")}${mini("วันลาที่อนุมัติ", Number(leave.approved_days || 0))}
+      ${sub ? `${mini("สอนแทนสัปดาห์นี้", `${Number(sub.week_total || 0)} คาบ`)}${mini("สอนแทนเดือนนี้", `${Number(sub.month_total || 0)} คาบ`)}${mini("ครูที่สอนแทนเดือนนี้", Number(sub.teachers_month || 0))}` : ""}</div>
+      ${viewer ? "" : `<p class="mini-sub">ใบประกอบวิชาชีพ: หมดอายุ/น้อยกว่า 90 วัน <b style="color:${licenseCounts.red ? "var(--color-danger)" : "inherit"}">${licenseCounts.red}</b> · 90–180 วัน <b>${licenseCounts.orange}</b> · ปกติ ${licenseCounts.green}</p>`}`;
+  }
 
   let overviewInFlight = false, overviewDirty = false, overviewRevision = null, revisionInFlight = false;
   function refreshLiveOverview() { if (dashboardUser && !document.hidden) loadOverview().catch(() => {}); }
@@ -788,7 +1006,7 @@
       `;
 
       ProjectWorkflow.renderFundingSummary(document.getElementById("fundingSummary"),data.funding_summary);
-      ProjectAllocationChart.renderDepartments(document.getElementById("projectAllocationChart"),data.department_summary,data.fiscal_year?`ปีงบประมาณ ${data.fiscal_year}`:"ทุกปีงบประมาณ");
+      ProjectAllocationChart.renderDepartments(document.getElementById("projectAllocationChart"),data.department_summary,data.fiscal_year?`ปีงบประมาณ ${data.fiscal_year}`:"ทุกปีงบประมาณ",{switcher:true,labels:Object.fromEntries(Object.entries(DEPARTMENT_LABELS).map(([k,v])=>[k,`ฝ่าย${v}`]))});
       const period = data.current_academic_period;
       document.getElementById("academicContextLabel").textContent = period
         ? `${period.academic_year_label} · ${period.academic_term_name || "ยังไม่เปิดภาคเรียน"}`
@@ -797,19 +1015,6 @@
       document.getElementById("academicContextDates").textContent = period?.academic_term_start_date
         ? `${formatThaiDate(period.academic_term_start_date)} – ${formatThaiDate(period.academic_term_end_date)}`
         : "";
-
-      document.getElementById("departmentGrid").innerHTML = data.department_summary.map((department) => `
-        <article class="department-card">
-          <h4>ฝ่าย${DEPARTMENT_LABELS[department.department] || department.department}</h4>
-          <div class="department-metric">${department.project_count}</div>
-          <div class="department-meta">โครงการ · คืบหน้าเฉลี่ย ${department.average_progress}%</div>
-          <div class="department-budget-line">
-            <span>งบทั้งหมด</span><strong>${formatMoney(department.total_budget)}</strong>
-            <span>ใช้แล้ว</span><strong>${formatMoney(department.spent_budget)}</strong>
-            <span>คงเหลือ</span><strong style="color:${department.remaining_budget < 0 ? "var(--color-danger)" : "var(--color-success)"}">${formatMoney(department.remaining_budget)}</strong>
-          </div>
-        </article>
-      `).join("");
 
       document.getElementById("projectBudgetTotal").textContent = formatMoney(data.total_project_budget);
       document.getElementById("projectBudgetSpent").textContent = formatMoney(data.total_project_spent);
@@ -830,7 +1035,7 @@
           <div class="budget-department-head">
             <div>
               <h4>ฝ่าย${escapeHtml(DEPARTMENT_LABELS[department.department] || department.department)}</h4>
-              <p>${projects.length} โครงการ · ใช้งบ ${usagePercent}%</p>
+              <p>${projects.length} โครงการ · คืบหน้าเฉลี่ย ${Number(department.average_progress||0)}% · ใช้งบ ${usagePercent}%</p>
             </div>
             <button class="btn btn-ghost" data-open-department="${escapeHtml(department.department)}">เปิดฝ่ายงาน</button>
           </div>
@@ -840,7 +1045,7 @@
             <div class="budget-department-total"><span>${department.remaining_budget < 0 ? "เกินงบ" : "คงเหลือ"}</span><strong style="color:${department.remaining_budget < 0 ? "var(--color-danger)" : "var(--color-success)"}" title="${formatMoney(department.remaining_budget)}">${formatMoney(department.remaining_budget)}</strong></div>
           </div>
           <div class="budget-usage-track" title="ใช้ไป ${usagePercent}%"><div class="budget-usage-fill ${usagePercent > 100 ? "over" : ""}" style="width:${Math.min(usagePercent, 100)}%"></div></div>
-          ${projects.length ? `<div class="project-budget-list">${projects.map((project) => {
+          ${projects.length ? `<details class="budget-projects" data-budget-dept="${escapeHtml(department.department)}"${openBudgetDepartments.has(department.department) ? " open" : ""}><summary>รายการโครงการ (${projects.length})</summary><div class="project-budget-list">${projects.map((project) => {
             const isOver = project.remaining_amount < 0;
             return `<div class="project-budget-row">
               <div class="project-budget-name">
@@ -853,10 +1058,13 @@
                 <strong class="${isOver ? "over" : ""}">${isOver ? "เกินงบ" : "เหลือ"} ${formatMoney(Math.abs(project.remaining_amount))}</strong>
               </div>
             </div>`;
-          }).join("")}</div>` : `<div class="budget-empty">ยังไม่มีโครงการในฝ่ายนี้</div>`}
+          }).join("")}</div></details>` : `<div class="budget-empty">ยังไม่มีโครงการในฝ่ายนี้</div>`}
         </article>`;
       }).join("");
 
+      document.querySelectorAll("[data-budget-dept]").forEach((box) => box.addEventListener("toggle", () => {
+        if (box.open) openBudgetDepartments.add(box.dataset.budgetDept); else openBudgetDepartments.delete(box.dataset.budgetDept);
+      }));
       document.querySelectorAll("[data-open-department]").forEach((button) => {
         button.addEventListener("click", () => showPage(button.getAttribute("data-open-department")));
       });
@@ -864,14 +1072,15 @@
         counts[licenseStatus(item.days_remaining).color]++;
         return counts;
       }, { green: 0, orange: 0, red: 0 });
-      document.getElementById("alertList").innerHTML = `
-        <div class="alert-item"><span>งานเลยกำหนด</span><span class="alert-count">${data.overdue_tasks}</span></div>
-        <div class="alert-item"><span>คำขอลารอดำเนินการ</span><span class="alert-count">${data.pending_leave_requests}</span></div>
-        <div class="alert-item"><span>รายการเบิกจ่ายรอตรวจสอบ/จ่าย</span><span class="alert-count">${data.pending_project_expenses} · ${formatMoney(data.pending_project_expense_amount)}</span></div>
-        <div class="alert-item"><span>พัสดุคงเหลือต่ำ/ต้องติดตาม</span><span class="alert-count">${data.inventory_low_stock_count + data.inventory_attention_count}</span></div>
-        <div class="alert-item"><span>รายการยืมพัสดุเลยกำหนด</span><span class="alert-count">${data.inventory_overdue_borrow_count}</span></div>
-        <div class="alert-item"><span>ใบประกอบที่ต้องติดตามภายใน 180 วัน</span><span class="alert-count">${licenseCounts.orange + licenseCounts.red}</span></div>
-      `;
+      const alertRow = (label, count, text = count) => `<div class="alert-item${Number(count) ? "" : " zero"}"><span>${label}</span><span class="alert-count">${text}</span></div>`;
+      document.getElementById("alertList").innerHTML = [
+        alertRow("งานเลยกำหนด", data.overdue_tasks),
+        alertRow("คำขอลารอดำเนินการ", data.pending_leave_requests),
+        alertRow("รายการเบิกจ่ายรอตรวจสอบ/จ่าย", data.pending_project_expenses, `${data.pending_project_expenses} · ${formatMoney(data.pending_project_expense_amount)}`),
+        alertRow("พัสดุคงเหลือต่ำ/ต้องติดตาม", data.inventory_low_stock_count + data.inventory_attention_count),
+        alertRow("รายการยืมพัสดุเลยกำหนด", data.inventory_overdue_borrow_count),
+        document.body.classList.contains("viewer-mode") ? "" : alertRow("ใบประกอบที่ต้องติดตามภายใน 180 วัน", licenseCounts.orange + licenseCounts.red),
+      ].join("");
 
       document.getElementById("licenseGreenCount").textContent = licenseCounts.green;
       document.getElementById("licenseOrangeCount").textContent = licenseCounts.orange;
@@ -879,14 +1088,23 @@
 
       const licensePanel = document.getElementById("licensePanel");
       const licenseEmpty = document.getElementById("licenseEmpty");
+      const licenseToggle = document.getElementById("licenseToggle");
+      const licenseWatch = data.licenses_expiring.filter((r) => licenseStatus(r.days_remaining).color !== "green");
+      const licenseRows = showAllLicenses ? data.licenses_expiring : licenseWatch;
+      licenseToggle.hidden = licenseWatch.length === data.licenses_expiring.length;
+      licenseToggle.textContent = showAllLicenses ? "แสดงเฉพาะที่ต้องติดตาม" : `แสดงทั้งหมด (${data.licenses_expiring.length})`;
+      licenseToggle.onclick = () => { showAllLicenses = !showAllLicenses; loadOverview(); };
       if (data.licenses_expiring.length === 0) {
         licensePanel.innerHTML = "";
         licenseEmpty.style.display = "block";
+      } else if (!licenseRows.length) {
+        licenseEmpty.style.display = "none";
+        licensePanel.innerHTML = `<p class="muted-line" style="padding:12px 14px">ไม่มีใบประกอบวิชาชีพที่จะหมดอายุภายใน 180 วัน</p>`;
       } else {
         licenseEmpty.style.display = "none";
         licensePanel.innerHTML = `<table>
           <thead><tr><th>ชื่อบุคลากร</th><th>วันหมดอายุ</th><th>ระยะเวลาคงเหลือ</th><th>สถานะ</th></tr></thead>
-          <tbody>${data.licenses_expiring
+          <tbody>${licenseRows
             .map((r) => {
               const status = licenseStatus(r.days_remaining);
               return `<tr class="license-row-${status.color}">
@@ -899,6 +1117,8 @@
             .join("")}</tbody>
         </table>`;
       }
+      renderAttendance(data.attendance_summary);
+      renderOverviewMini(data, licenseCounts);
       document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด ${new Intl.DateTimeFormat("th-TH", {
         dateStyle: "medium",
         timeStyle: "medium",

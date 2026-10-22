@@ -56,6 +56,7 @@ import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots
 import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
 import { substituteDashboardSummary } from "./lib/personnel-stats.js";
+import { attendanceDashboard } from "./lib/student-attendance.js";
 import { checkSubmitGuard } from "./lib/submit-guard.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
 import { teachingMaster, loadByPersonnel } from "./lib/teaching-master.js";
@@ -4395,6 +4396,7 @@ async function handleOverview(request, env) {
     funding_summary: await projectFundingSummary(env,budgetFiscalYear,financials),
     // สถิติสอนแทน: ชุดเดียวกับหน้าสถิติการสอนแทนและหน้าจัดสอนแทน (src/lib/personnel-stats.js)
     substitute_summary: user.role === "viewer" ? null : await substituteDashboardSummary(env, user).catch(() => null),
+    attendance_summary: await attendanceDashboard(env).catch((error) => { console.error("attendance summary", error); return null; }),
     ...activity,
   },200,{ "Cache-Control": "no-store" });
 }

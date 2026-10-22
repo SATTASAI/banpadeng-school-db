@@ -46,7 +46,9 @@ export async function ensureDashboardRevision(env) {
   ]);
   const tables=['projects','project_expenses','project_owners','budget_income','leave_requests','tasks','students','personnel_records',
     'project_balance_requests','project_balance_changes','users','academic_years','academic_terms','inventory_items','inventory_transactions',
-    'substitute_assignments','substitute_absences'];
+    'substitute_assignments','substitute_absences',
+    // บันทึกการมาเรียน/ปฏิทินวันหยุดจากระบบ grades (ฐานข้อมูลเดียวกัน) → แดชบอร์ดอัปเดตทันทีเมื่อครูประจำชั้นบันทึก
+    'gr_attendance','gr_holidays','student_enrollments'];
   const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   const names=new Set(existing.results.map(r=>r.name));
   const statements=[];
