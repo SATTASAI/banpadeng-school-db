@@ -22,10 +22,21 @@ window.ProjectAllocationChart=(()=>{
     <div class="ac-layout"><div class="ac-pie" role="img" aria-label="แผนภูมิวงกลมสัดส่วนงบจัดสรร ${esc(scope)} รายละเอียดและเปอร์เซ็นต์อยู่ในตาราง" style="background:${total?'conic-gradient('+segments.join(',')+')':'#e3ebf2'}"></div><div class="ac-table"><table><thead><tr><th>โครงการ</th><th>งบที่ได้รับ (บาท)</th><th>สัดส่วน</th></tr></thead><tbody>${rows.map((p,i)=>`<tr data-allocation-project="${p.id}"><td><span class="ac-dot" style="background:${p.color}"></span>${esc(p.name)}<small>ปี ${p.fiscal_year||'—'} · รหัสโครงการ ${p.id}</small></td><td>${money(p.cents/100)}</td><td>${(hundredths[i]/100).toFixed(2)}%</td></tr>`).join('')||'<tr><td colspan="3">ยังไม่มีโครงการ</td></tr>'}</tbody></table></div></div>${!total?'<p class="ac-caption">ยังไม่มีงบจัดสรร จึงยังคำนวณสัดส่วนไม่ได้</p>':''}
     <p class="ac-caption">คำนวณจากงบจัดสรรของโครงการ${theme?'ภายในฝ่ายนี้':''} · รวมโครงการทุกสถานะ · เปอร์เซ็นต์ปัดทศนิยม 2 ตำแหน่ง</p></section>`;
  }
- function renderDepartments(root,departments,period='ทุกปีงบประมาณ'){
+ // options.switcher: แสดงทีละฝ่าย มีปุ่มเลือกฝ่าย (แดชบอร์ด) — จำฝ่ายที่เลือกไว้ระหว่างรีเฟรชข้อมูล
+ function renderDepartments(root,departments,period='ทุกปีงบประมาณ',options={}){
   if(!root)return;
   root.replaceChildren();
-  for(const group of departments){const panel=document.createElement('div');root.append(panel);render(panel,group.projects||[],period,group.department);}
+  if(!options.switcher){for(const group of departments){const panel=document.createElement('div');root.append(panel);render(panel,group.projects||[],period,group.department);}return;}
+  if(!departments.length)return;
+  const label=g=>options.labels?.[g.department]||themes[g.department]?.label||g.department;
+  if(!departments.some(g=>g.department===root.dataset.selected))root.dataset.selected=departments[0].department;
+  const bar=document.createElement('div'),panel=document.createElement('div');
+  bar.className='ac-switch';bar.setAttribute('role','group');bar.setAttribute('aria-label','เลือกฝ่ายที่จะแสดงแผนภูมิ');
+  const show=()=>{const g=departments.find(x=>x.department===root.dataset.selected);render(panel,g.projects||[],period,g.department);
+   bar.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.dept===g.department)));};
+  bar.innerHTML=departments.map(g=>`<button type="button" data-dept="${esc(g.department)}">${esc(label(g))} <small>${(g.projects||[]).length}</small></button>`).join('');
+  bar.onclick=e=>{const b=e.target.closest('button[data-dept]');if(!b)return;root.dataset.selected=b.dataset.dept;show();};
+  root.append(bar,panel);show();
  }
  return {render,renderDepartments};
 })();

@@ -1,3 +1,10 @@
 .allocation-chart{margin-top:22px;padding:22px;border:1px solid #dce7ef;border-radius:16px;background:#ffffffdf;box-shadow:0 8px 22px #31587d0a}.allocation-chart h3{margin:0;font-size:20px}.ac-caption{margin:8px 0;color:#657c90;font-size:14px}.ac-layout{display:flex;align-items:center;gap:30px;margin-top:20px}.ac-pie{width:240px;aspect-ratio:1;border-radius:50%;flex-shrink:0;box-shadow:0 5px 15px #34516c16;border:4px solid #fff}.ac-table{flex:1;min-width:0;overflow:auto;max-height:370px}.ac-table table{width:100%;border-collapse:collapse;font-size:15px}.ac-table th{text-align:left;background:#f4f8fb;position:sticky;top:0}.ac-table th,.ac-table td{padding:10px 9px;border-bottom:1px solid #e7edf4}.ac-table th:nth-child(n+2),.ac-table td:nth-child(n+2){text-align:right;white-space:nowrap}.ac-table td:first-child{overflow-wrap:anywhere;min-width:160px}.ac-table small{display:block;color:#7b8c9a;font-size:12px;margin:3px 0 0 18px}.ac-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}@media(max-width:750px){.ac-layout{flex-direction:column;gap:16px}.ac-pie{width:210px}.ac-table{width:100%}.allocation-chart{padding:16px}}
 
 .allocation-chart{border-top:3px solid var(--ac-tone,#247BAC)}.allocation-chart h3{color:var(--ac-tone,#247BAC)}
+
+/* ปุ่มเลือกฝ่าย (แดชบอร์ด แสดงทีละฝ่าย) */
+.ac-switch{display:flex;flex-wrap:wrap;gap:6px;margin:22px 0 10px}
+.ac-switch button{width:auto;border:1px solid var(--color-border,#d8e2ea);background:rgba(255,255,255,.8);border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;color:var(--color-text-muted,#5a6b7b);cursor:pointer}
+.ac-switch button small{opacity:.7}
+.ac-switch button[aria-pressed="true"]{background:#1669C9;border-color:#1669C9;color:#fff}
+.ac-switch + div .allocation-chart{margin-top:0}
