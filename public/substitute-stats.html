@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>สถิติการสอนแทน — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.st-page{max-width:1180px;margin:auto;padding:24px}.st-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:16px}
+.st-head h1{margin:0;color:var(--color-forest-900)}.st-head p{margin:5px 0 0;color:var(--color-text-muted);font-size:14px}.st-actions{display:flex;gap:8px;flex-wrap:wrap}.st-actions .btn{width:auto}
+.st-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px;padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.75)}
+.st-filters label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.st-filters label[hidden]{display:none}.st-filters select,.st-filters input{width:100%}
+.st-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.st-card{padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.85);box-shadow:0 10px 24px rgba(46,79,112,.06)}.st-card span{display:block;font-size:12px;color:var(--color-text-muted)}.st-card strong{display:block;margin-top:4px;font-size:22px;color:var(--color-forest-900);font-variant-numeric:tabular-nums}
+.st-panel{padding:16px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.85);margin-bottom:16px}.st-panel h2{font-size:16px;margin:0 0 10px}
+.st-days{display:flex;align-items:flex-end;gap:4px;height:110px;overflow-x:auto;padding-bottom:20px}.st-day{flex:1 0 22px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:11px;color:var(--color-text-muted);position:relative}.st-day i{display:block;width:70%;border-radius:6px 6px 0 0;background:#3284cc;min-height:2px}.st-day b{font-weight:600;color:#244e72}.st-day small{position:absolute;bottom:-18px}
+.st-table{overflow:auto;border:1px solid var(--color-border);border-radius:16px;background:#fff}.st-table table{width:100%;border-collapse:collapse;min-width:720px;font-size:14px}
+.st-table th,.st-table td{padding:9px 10px;border-bottom:1px solid #e3ecf3;text-align:center;font-variant-numeric:tabular-nums}.st-table th{background:#f3f8fc;color:#244e72;font-weight:600}.st-table td:nth-child(2),.st-table th:nth-child(2){text-align:left}
+.st-table td small{display:block;color:var(--color-text-muted)}.st-meter{display:flex;align-items:center;gap:8px}.st-meter i{flex:1;height:8px;border-radius:999px;background:#e8edf2;overflow:hidden}.st-meter i>u{display:block;height:100%;background:#ef8f22;border-radius:inherit}
+.st-zero{color:#b7c5d1}.st-note{font-size:13px;color:var(--color-text-muted);margin:10px 2px}.st-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}
+@media(max-width:720px){.st-page{padding:14px}}
+@media print{.st-filters,.st-actions{display:none!important}.st-page{padding:0}.st-table{overflow:visible;border:0}.st-table table{min-width:0;font-size:11pt}}
+</style></head>
+<body>
+<main class="st-page">
+  <header class="st-head"><div><h1>สถิติการสอนแทน</h1><p id="lead">จำนวนคาบที่ครูแต่ละท่านถูกจัดสอนแทน · ข้อมูลชุดเดียวกับระบบจัดสอนแทนและหน้าแดชบอร์ด อัปเดตทันทีเมื่อมีการจัดสอนแทน</p></div>
+    <div class="st-actions"><a class="btn btn-ghost" href="/substitutes.html" id="manageLink">จัดสอนแทน</a><button class="btn btn-ghost" id="exportCsv">ดาวน์โหลด Excel (CSV)</button><button class="btn btn-primary" id="print">พิมพ์ / PDF</button></div></header>
+  <div class="st-error" id="error"></div>
+  <section class="st-filters">
+    <label>ดูเป็น<select id="mode"><option value="week">รายสัปดาห์</option><option value="month" selected>รายเดือน</option><option value="custom">กำหนดช่วงวันที่</option></select></label>
+    <label id="refWrap">วันที่อ้างอิง<input type="date" id="ref"></label>
+    <label id="startWrap" hidden>ตั้งแต่วันที่<input type="date" id="start"></label>
+    <label id="endWrap" hidden>ถึงวันที่<input type="date" id="end"></label>
+    <label>ค้นหาชื่อ<input id="search" type="search" placeholder="ชื่อครู"></label>
+    <label>แสดง<select id="show"><option value="all">ครูทุกคน</option><option value="used">เฉพาะที่ถูกจัด</option></select></label>
+  </section>
+  <section class="st-cards" id="cards"></section>
+  <section class="st-panel"><h2 id="dailyTitle">จำนวนคาบสอนแทนรายวัน</h2><div class="st-days" id="daily"></div></section>
+  <div class="st-table"><table><thead><tr><th>ที่</th><th>ชื่อ-สกุล</th><th id="rangeHead">ในช่วงที่เลือก (คาบ)</th><th>สัปดาห์ของวันที่อ้างอิง</th><th>เดือนของวันที่อ้างอิง</th><th>สอนแทนให้ครู (คน)</th><th>ตนเองลาแล้วมีผู้สอนแทน (คาบ)</th></tr></thead><tbody id="rows"></tbody></table></div>
+  <p class="st-note">1 ครั้ง = 1 คาบที่ได้รับมอบหมายให้สอนแทน · ในหน้าจัดสอนแทน รายชื่อครูว่างจะเรียงคนที่ถูกจัดน้อยก่อน เพื่อช่วยกระจายภาระให้เท่ากัน</p>
+</main>
+<script src="/js/api.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso=d=>d.toISOString().slice(0,10),todayIso=iso(new Date(Date.now()+7*3600e3));
+const thDate=v=>new Date(v+'T00:00:00').toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'});
+let data=null,version=0,revision=null;
+$('ref').value=todayIso;$('start').value=todayIso.slice(0,8)+'01';$('end').value=todayIso;
+function error(m=''){$('error').textContent=m;$('error').style.display=m?'block':'none'}
+function range(){
+  const ref=$('ref').value||todayIso,d=new Date(ref+'T00:00:00Z');
+  if($('mode').value==='week'){const day=d.getUTCDay()||7;const s=new Date(d);s.setUTCDate(d.getUTCDate()+1-day);const e=new Date(s);e.setUTCDate(s.getUTCDate()+6);return {start:iso(s),end:iso(e)}}
+  if($('mode').value==='month'){const s=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),1)),e=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0));return {start:iso(s),end:iso(e)}}
+  return {start:$('start').value,end:$('end').value};
+}
+async function load(){
+  const v=++version,r=range();error();
+  if(!r.start||!r.end||r.start>r.end){error('เลือกช่วงวันที่ให้ถูกต้อง');return}
+  try{const d=await apiRequest(`/api/personnel/substitute-stats?date=${$('ref').value||todayIso}&start=${r.start}&end=${r.end}`);if(v!==version)return;data=d;render();}
+  catch(e){if(v===version)error(e.message)}
+}
+function rows(){const q=$('search').value.trim().toLowerCase();return data.people.filter(r=>(!q||r.name.toLowerCase().includes(q))&&($('show').value==='all'||r.range||r.week||r.month));}
+function render(){
+  if(!data)return;const s=data.summary,list=rows(),used=data.people.filter(r=>r.range),max=Math.max(1,...data.people.map(r=>r.range));
+  $('lead').textContent=`${data.scope==='self'?'สถิติการสอนแทนของฉัน':'จำนวนคาบที่ครูแต่ละท่านถูกจัดสอนแทน'} · ${thDate(data.range.start)} – ${thDate(data.range.end)} · ข้อมูลชุดเดียวกับระบบจัดสอนแทนและแดชบอร์ด`;
+  $('rangeHead').textContent=`${thDate(data.range.start)}–${thDate(data.range.end)} (คาบ)`;
+  $('cards').innerHTML=[['คาบสอนแทนในช่วงที่เลือก',s.range_total],['ครูที่ถูกจัดในช่วงนี้',used.length],['เฉลี่ยต่อครูที่ถูกจัด',used.length?(s.range_total/used.length).toFixed(1):0],['สูงสุดต่อคน',used.length?max:0],['สัปดาห์ของวันที่อ้างอิง',s.week_total],['เดือนของวันที่อ้างอิง',s.month_total]]
+    .map(([l,v])=>`<div class="st-card"><span>${l}</span><strong>${v}</strong></div>`).join('');
+  const days=[];for(let d=new Date(data.range.start+'T00:00:00Z');iso(d)<=data.range.end&&days.length<62;d.setUTCDate(d.getUTCDate()+1))days.push(iso(d));
+  const byDay=new Map(data.daily.map(x=>[x.date,x.count])),dmax=Math.max(1,...data.daily.map(x=>x.count));
+  $('daily').innerHTML=days.filter(d=>{const w=new Date(d+'T00:00:00Z').getUTCDay();return w&&w<6}).map(d=>{const n=byDay.get(d)||0;return `<div class="st-day" title="${thDate(d)}: ${n} คาบ">${n?`<b>${n}</b>`:''}<i style="height:${n/dmax*80}%"></i><small>${Number(d.slice(8))}</small></div>`}).join('');
+  const cell=v=>`<td class="${v?'':'st-zero'}">${v}</td>`;
+  $('rows').innerHTML=list.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.name)}</b><small>${esc(r.position)}</small></td><td><div class="st-meter"><b>${r.range}</b><i><u style="width:${r.range/max*100}%"></u></i></div></td>${cell(r.week)}${cell(r.month)}${cell(r.covered_teachers)}${cell(r.absences)}</tr>`).join('')||'<tr><td colspan="7">ไม่พบข้อมูล</td></tr>';
+}
+$('mode').onchange=()=>{const custom=$('mode').value==='custom';$('startWrap').hidden=$('endWrap').hidden=!custom;load()};
+for(const id of ['ref','start','end'])$(id).onchange=load;
+for(const id of ['search','show'])$(id).addEventListener('input',render);
+$('print').onclick=()=>window.print();
+$('exportCsv').onclick=()=>{if(!data)return;
+  const csv=[[`สถิติการสอนแทน ${data.range.start} ถึง ${data.range.end}`],['ที่','ชื่อ-สกุล','ตำแหน่ง','ในช่วงที่เลือก (คาบ)','สัปดาห์ของวันที่อ้างอิง','เดือนของวันที่อ้างอิง','สอนแทนให้ครู (คน)','ตนเองลาแล้วมีผู้สอนแทน (คาบ)'],
+    ...rows().map((r,i)=>[i+1,r.name,r.position,r.range,r.week,r.month,r.covered_teachers,r.absences])].map(r=>r.map(v=>{const t=String(v??'');return /[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t}).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));a.download=`สถิติการสอนแทน-${data.range.start}-${data.range.end}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
+// ซิงค์กับระบบจัดสอนแทน: รีโหลดทันทีเมื่อบันทึกในแท็บ/หน้าอื่น และตรวจ revision เดียวกับแดชบอร์ด
+window.addEventListener('school-data-changed',load);
+try{const ch=new BroadcastChannel('school-data-changed');ch.onmessage=load;}catch{}
+setInterval(async()=>{if(document.hidden)return;try{const r=await apiRequest('/api/overview/revision');if(revision&&r.revision!==revision)load();revision=r.revision;}catch{}},10000);
+apiRequest('/api/auth/me').then(async me=>{if(!me.user){location.href='/login.html';return}
+  const p=await apiRequest('/api/substitutes/permissions').catch(()=>({can_manage:false}));$('manageLink').hidden=!p.can_manage;load();}).catch(e=>error(e.message));
+})();
+</script></body></html>

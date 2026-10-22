@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/project-workflow.css"><link rel="stylesheet" href="/css/project-balance.css">
+<style>
+.fr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px}.fr-head h1{margin:0}.fr-head p{margin:4px 0 0;color:var(--color-text-muted);font-size:14px}
+.fr-head select{width:auto;min-width:150px}.fr-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.fr-tools .btn{width:auto}
+.fr-notice{padding:12px 14px;border:1px solid #cfdfec;border-radius:12px;background:#f3f9fd;margin-bottom:14px;font-size:14px}
+</style></head>
+<body><div class="app-shell"><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← หน้าหลัก</a></div></div>
+<main class="app-main wf-page">
+  <div class="finance-desk-anchor"></div>
+  <div class="fr-head"><div><h1>บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง</h1>
+    <p>รับเอกสารขอเบิกจ่ายที่ครูยื่นจาก ระบบสนับสนุน · รับเรื่อง → ตรวจแล้วเสนอผู้อำนวยการ → ผู้อำนวยการอนุมัติ → ยืนยันการเบิกจ่าย (ขั้นตอนเดิม)</p></div>
+    <div class="fr-tools"><select id="year" aria-label="ปีงบประมาณ"><option value="">ทุกปีงบประมาณ</option></select><button class="btn btn-ghost" id="refresh">รีเฟรช</button></div></div>
+  <div class="fr-notice" id="permissionNotice" hidden></div>
+  <div id="register"></div>
+</main></div>
+<script src="/js/api.js"></script><script src="/js/finance-desk-tabs.js"></script><script src="/js/project-balance.js"></script><script src="/js/project-workflow.js"></script>
+<script>
+(async()=>{
+  const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return}
+  const year=document.getElementById('year');
+  const fy=(()=>{const d=new Date(Date.now()+7*3600e3);return d.getUTCFullYear()+(d.getUTCMonth()>=9?544:543)})();
+  for(let y=fy+1;y>=fy-4;y--)year.insertAdjacentHTML('beforeend',`<option value="${y}">${y}</option>`);
+  const notifyCount=state=>{const count=(state.requests||[]).filter(e=>e.current_step==='finance_queue').length;
+    if(window.parent!==window)window.parent.postMessage({type:'budget-navigation',url:'/finance-register.html',pendingCount:count},location.origin);};
+  const app=ProjectWorkflow.mount(document.getElementById('register'),{finance:true,register:true,year:()=>year.value,onRefresh:state=>{
+    const p=state.permissions||{},notice=document.getElementById('permissionNotice');
+    notice.hidden=Boolean(p.can_finance||p.can_director);
+    notice.textContent='หน้านี้สำหรับเจ้าหน้าที่การเงิน เจ้าหน้าที่พัสดุ และผู้อำนวยการ — รายการด้านล่างแสดงเฉพาะคำขอที่คุณเกี่ยวข้อง ยื่นคำขอใหม่ได้ที่ ระบบสนับสนุน › ขอเบิกจ่ายและจัดซื้อจัดจ้าง';
+    if(p.can_finance||p.can_director)notifyCount(state);}});
+  year.onchange=()=>app.refresh();
+  document.getElementById('refresh').onclick=()=>app.refresh();
+  await app.refresh();
+})().catch(e=>{document.getElementById('register').textContent=e.message});
+</script></body></html>

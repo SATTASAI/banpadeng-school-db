@@ -1,3 +1,4 @@
+import {substituteLoad} from '../lib/personnel-stats.js';
 import {loadStructure,validateStructure,ensureStructureSchema,canEditStructure,BANDS} from "../lib/timetable-structure.js";
 import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable} from "../lib/timetable-permissions.js";
@@ -207,7 +208,12 @@ async function coverage(env,date,teacherId){
   const {results:absences}=await env.DB.prepare("SELECT teacher_id FROM substitute_absences WHERE absence_date=?").bind(date).all();
   const leaveData=await (await leaveAbsences(env,date)).json();
   const unavailable=new Set([...absences.map(a=>a.teacher_id),...leaveData.leave_requests.map(r=>r.teacher_id)]);
-  return reply({term,date,teacher_id:teacherId,lessons:lessons.map(l=>({...l,available_teachers:teachers.filter(t=>!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))}))});
+  // ภาระสอนแทนของสัปดาห์/เดือนของวันที่เลือก — ตัวเลขชุดเดียวกับหน้าสถิติการสอนแทนและแดชบอร์ด
+  // เรียงครูที่ถูกจัดน้อยก่อน เพื่อกระจายงานสอนแทนให้เท่ากัน
+  const load=await substituteLoad(env,{date});const loadById=new Map((load.people||[]).map(p=>[p.personnel_id,p]));
+  const withLoad=teachers.map(t=>({...t,week_count:loadById.get(t.id)?.week||0,month_count:loadById.get(t.id)?.month||0}))
+    .sort((a,b)=>a.week_count-b.week_count||a.month_count-b.month_count||String(a.full_name).localeCompare(String(b.full_name),'th'));
+  return reply({term,date,teacher_id:teacherId,load:{week:load.week,month:load.month},lessons:lessons.map(l=>({...l,available_teachers:withLoad.filter(t=>!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))}))});
 }
 async function assign(request,env,user){
   const body=await request.json().catch(()=>null),date=body?.date,teacherId=validId(body?.teacher_id),entryId=validId(body?.entry_id),subId=validId(body?.substitute_teacher_id);

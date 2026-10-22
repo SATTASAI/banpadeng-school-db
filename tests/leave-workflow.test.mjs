@@ -65,7 +65,8 @@ test('one active deputy gets an early read-only notice, but multiple unassigned 
  assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(first.id).deputy_personnel_id,null);
  assert(!await notice(env,5,`leave:${first.id}:pending`));assert(!await notice(env,6,`leave:${first.id}:pending`));
  env.raw.exec("UPDATE users SET role='teacher' WHERE id=6");
- const second=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ // ใบลาที่ข้อมูลเหมือนกันทุกช่องภายในไม่กี่วินาทีถือเป็นการกดส่งซ้ำ (submit-guard) จึงเปลี่ยนเหตุผล
+ const second=await (await call(env,'/api/leave-requests','POST',{...form,reason:form.reason+' (ครั้งที่ 2)'},2)).json();
  assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(second.id).deputy_personnel_id,deputy);
  assert(await notice(env,5,`leave:${second.id}:pending`));
  assert.equal((await call(env,'/api/leave-requests/'+second.id,'PATCH',{action:'review',note:'ยังไม่ส่งต่อ'},5)).status,403);
@@ -92,7 +93,7 @@ test('head configures the early deputy before forwarding; unassigned pending lea
  assert(await notice(env,5,`leave:${id}:pending`));
  assert.equal((await call(env,`/api/leave-requests/${id}`,'GET',undefined,5)).status,200);
  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
- const next=(await (await call(env,'/api/leave-requests','POST',form,2)).json()).id;
+ const next=(await (await call(env,'/api/leave-requests','POST',{...form,reason:form.reason+' (ครั้งที่ 2)'},2)).json()).id;
  assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(next).deputy_personnel_id,deputy);
 });
 test('personnel-scoped deputy assignment resolves the first leave when there are several deputies',async()=>{

@@ -112,7 +112,7 @@ html.embedded .pc-back{display:none}html.embedded body{background:transparent}
   <div id="dBody"></div>
 </div></div>
 
-<script src="/js/api.js"></script>
+<script src="/js/api.js"></script><script src="/js/finance-desk-tabs.js"></script>
 <script>
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
@@ -131,18 +131,21 @@ function error(msg=""){$("error").textContent=msg;$("error").classList.toggle("v
 function openModal(id){$(id).classList.add("open")}function closeModal(id){$(id).classList.remove("open")}
 document.addEventListener("click",e=>{const c=e.target.closest("[data-close]");if(c)closeModal(c.dataset.close)});
 
+// ?mine=1 = เมนู ระบบสนับสนุน › ติดตามจัดซื้อจัดจ้าง (เฉพาะงานที่เกี่ยวข้องกับฉัน แม้เป็นเจ้าหน้าที่)
+const PROCUREMENT_MINE=new URLSearchParams(location.search).get("mine")==="1";
+if(PROCUREMENT_MINE){const h=document.querySelector(".pc-head h1");if(h)h.textContent="ติดตามจัดซื้อจัดจ้างของฉัน";const p=document.querySelector(".pc-head p");if(p)p.textContent="งานจัดซื้อจัดจ้างจากคำขอเบิกของฉัน โครงการที่ฉันรับผิดชอบ และงานที่ฉันเป็นผู้ตรวจรับ — ฝ่ายงบประมาณดำเนินการที่เมนู บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง";}
 async function load(){
   error();
-  data=await apiRequest(`/api/procurement/overview?fiscal_year=${$("year").value}`);
-  $("newBtn").style.display=data.permissions.can_create?"":"none";
+  data=await apiRequest(`/api/procurement/overview?fiscal_year=${$("year").value}${PROCUREMENT_MINE?"&mine=1":""}`);
+  $("newBtn").style.display=data.permissions.can_create&&!PROCUREMENT_MINE?"":"none";
   const notices=[];
   if(data.permissions.is_officer&&!data.roles.procurement_officer)notices.push("ยังไม่ได้กำหนด <b>เจ้าหน้าที่พัสดุ</b> — ผู้ดูแลระบบตั้งได้ที่ ฝ่ายงบประมาณ › ตั้งค่าผู้อนุมัติ (ระหว่างนี้ผู้บริหาร/ผู้ดูแลระบบดำเนินการแทนได้)");
   if(data.permissions.is_officer&&!data.roles.procurement_head)notices.push("ยังไม่ได้กำหนด <b>หัวหน้าเจ้าหน้าที่พัสดุ</b> — รายงานจะส่งถึงผู้อำนวยการโดยตรง");
   $("notice").innerHTML=notices.map(n=>`<div class="pc-notice">${n}</div>`).join("");
   renderTodo();renderChips();renderList();
   const q=new URLSearchParams(location.search);
-  if(q.get("case")){openCase(Number(q.get("case")));history.replaceState(null,"",location.pathname)}
-  else if(q.get("expense")&&data.permissions.can_create){openForm(null,Number(q.get("expense")));history.replaceState(null,"",location.pathname)}
+  if(q.get("case")){openCase(Number(q.get("case")));history.replaceState(null,"",location.pathname+(PROCUREMENT_MINE?"?mine=1":""))}
+  else if(q.get("expense")&&data.permissions.can_create){openForm(null,Number(q.get("expense")));history.replaceState(null,"",location.pathname+(PROCUREMENT_MINE?"?mine=1":""))}
 }
 function mine(c){const me=meId;return (c.status==="director_review"&&data.permissions.is_director&&Number(c.created_by)!==me)||(c.status==="head_review"&&Number(c.head_user_id)===me)||c.my_inspection_pending}
 function renderTodo(){

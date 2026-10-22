@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ขอเบิกจ่ายและจัดซื้อจัดจ้าง — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/project-workflow.css">
+<style>
+.rq-page{max-width:1100px;margin:auto}.rq-page h1{margin:0}.rq-lead{margin:6px 0 16px;color:var(--color-text-muted)}
+.rq-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:22px}
+.rq-card{display:block;padding:18px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88);text-decoration:none;color:inherit;box-shadow:0 8px 22px #376b8a0d}
+.rq-card:hover{box-shadow:0 12px 28px #376b8a1f}.rq-card h2{margin:0 0 6px;font-size:17px;color:#1c507c}.rq-card p{margin:0;color:var(--color-text-muted);font-size:14px}
+.rq-card .rq-count{float:right;min-width:26px;padding:2px 8px;border-radius:999px;background:#fff0e7;color:#a85120;font-weight:700;font-size:13px;text-align:center}
+.rq-list{display:grid;gap:8px}.rq-item{display:grid;grid-template-columns:minmax(110px,.7fr) minmax(0,2fr) auto auto;gap:12px;align-items:center;padding:12px 14px;border:1px solid var(--color-border);border-radius:12px;background:#fff;text-decoration:none;color:inherit}
+.rq-item small{display:block;color:var(--color-text-muted);font-size:13px}.rq-amount{font-variant-numeric:tabular-nums;text-align:right}
+.rq-empty{padding:18px;text-align:center;color:var(--color-text-muted);border:1px dashed var(--color-border);border-radius:12px}
+@media(max-width:700px){.rq-item{grid-template-columns:1fr auto}.rq-item>span:nth-child(2){grid-column:1/-1;order:-1}}
+</style></head>
+<body><div class="app-shell"><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← หน้าหลัก</a></div></div>
+<main class="app-main wf-page rq-page">
+  <h1>ขอเบิกจ่ายและจัดซื้อจัดจ้าง</h1>
+  <p class="rq-lead">ระบบสนับสนุนสำหรับครูทุกคน: กรอกเอกสารขอเบิกจ่ายจากโครงการที่รับผิดชอบ ส่งให้ฝ่ายงบประมาณ และติดตามการจัดซื้อจัดจ้าง/ตรวจรับพัสดุ</p>
+  <div class="wf-steps">ยื่นเอกสาร (ที่นี่) → ฝ่ายงบประมาณรับเรื่อง → จัดซื้อจัดจ้าง/ตรวจรับ (ถ้ามี) → ผู้อำนวยการอนุมัติ → ยืนยันการเบิกจ่าย</div>
+  <div class="rq-cards">
+    <a class="rq-card" href="/project-documents.html"><h2>ยื่นขอเบิกจ่าย <span class="rq-count" id="draftCount" hidden></span></h2><p>จัดทำเอกสารขอเบิกจ่ายจากโครงการ บันทึกร่าง ส่งเอกสาร และแนบไฟล์เพิ่มเติม</p></a>
+    <a class="rq-card" href="/procurement.html?mine=1"><h2>ติดตามจัดซื้อจัดจ้าง</h2><p>สถานะจัดซื้อจัดจ้างจากคำขอของฉัน และงานที่ฉันได้รับแต่งตั้งเป็นผู้ตรวจรับพัสดุ</p></a>
+    <a class="rq-card" href="/budget.html?view=requests"><h2>คำขอใช้งบ (แบบลงนาม)</h2><p>คำขอแบบลงนามตามลำดับขั้นเดิม และรายการที่รอท่านลงนาม</p></a>
+  </div>
+  <h2 style="font-size:18px">คำขอของฉัน</h2>
+  <div class="rq-list" id="mine"><div class="rq-empty">กำลังโหลด...</div></div>
+</main></div>
+<script src="/js/api.js"></script>
+<script>
+(async()=>{
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money=v=>Number(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const states={draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',finance_queue:'รอฝ่ายงบประมาณรับเรื่อง',finance_processing:'ฝ่ายงบประมาณกำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'อนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันการเบิกจ่ายแล้ว',rejected:'ไม่อนุมัติ'};
+  const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return}
+  const data=await apiRequest('/api/project-documents/overview');
+  const mine=(data.requests||[]).filter(e=>Number(e.created_by)===Number(me.user.id));
+  const drafts=mine.filter(e=>['draft','returned'].includes(e.current_step)).length,badge=document.getElementById('draftCount');
+  badge.hidden=!drafts;badge.textContent=drafts?`ร่าง ${drafts}`:'';
+  document.getElementById('mine').innerHTML=mine.slice(0,30).map(e=>`<a class="rq-item" href="/project-documents.html?project=${Number(e.project_id)}">
+    <span><b>${esc(e.request_no)}</b><small>${esc(String(e.submitted_at||e.expense_date||'').slice(0,10))}</small></span>
+    <span><b>${esc(e.project_name)}</b><small>${esc(e.request_purpose)}${e.procurement?' · จัดซื้อ '+esc(e.procurement.case_no):''}</small></span>
+    <span class="rq-amount">${money(e.amount)} บาท</span>
+    <span class="wf-state ${esc(e.current_step)}">${states[e.current_step]||esc(e.status)}</span></a>`).join('')
+    ||'<div class="rq-empty">ยังไม่มีคำขอเบิกจ่ายของคุณ — เริ่มได้ที่ "ยื่นขอเบิกจ่าย"</div>';
+})().catch(e=>{document.getElementById('mine').innerHTML=`<div class="rq-empty">${String(e.message).replace(/[<>&]/g,'')}</div>`});
+</script></body></html>

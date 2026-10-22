@@ -2,6 +2,7 @@ import { workScopeSummary } from "../lib/work-scopes.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
+import { leaveStatistics, substituteLoad, canViewPersonnelStats } from "../lib/personnel-stats.js";
 
 const PROFILE_FIELDS = [
   ["personnel_type", "ประเภทบุคลากร"],
@@ -111,5 +112,35 @@ async function overview(request, env) {
 export async function handlePersonnelRoute(request, env, pathname, method) {
   if (!pathname.startsWith("/api/personnel")) return null;
   if (pathname === "/api/personnel/overview" && method === "GET") return overview(request, env);
+  if (pathname === "/api/personnel/leave-stats" && method === "GET") return leaveStatsRoute(request, env);
+  if (pathname === "/api/personnel/substitute-stats" && method === "GET") return substituteStatsRoute(request, env);
   return jsonResponse({ error: "ไม่พบ endpoint ฝ่ายบริหารงานบุคคลนี้" }, 404);
+}
+
+// หน้าสถิติวันลา (ฝ่ายบุคคล) — ผู้บริหาร/ฝ่ายบุคลากร/ผู้ดูแลระบบเห็นทุกคน ครูทั่วไปเห็นเฉพาะของตนเอง
+async function leaveStatsRoute(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensurePersonnelData(env);
+  await ensureLeaveData(env);
+  const q = new URL(request.url).searchParams, all = await canViewPersonnelStats(env, user);
+  const data = await leaveStatistics(env, { fiscalYear: q.get("fiscal_year"), period: q.get("period") || "year", onlyUserId: all ? null : user.id });
+  if (data.error) return jsonResponse({ error: data.error }, 400);
+  return jsonResponse({ ...data, scope: all ? "all" : "self" }, 200, { "Cache-Control": "private, no-store" });
+}
+
+// หน้าสถิติการสอนแทน — ตัวเลขชุดเดียวกับหน้าจัดสอนแทนและแดชบอร์ด (substituteLoad)
+async function substituteStatsRoute(request, env) {
+  const user = await getCurrentUser(request, env);
+  if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensurePersonnelData(env);
+  const q = new URL(request.url).searchParams, all = await canViewPersonnelStats(env, user);
+  let own = null;
+  if (!all) {
+    own = await env.DB.prepare(`SELECT a.personnel_id FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active' WHERE a.user_id=? LIMIT 1`).bind(user.id).first();
+    if (!own) return jsonResponse({ error: "บัญชีนี้ยังไม่ได้ผูกกับทะเบียนบุคลากร จึงยังไม่มีสถิติการสอนแทน" }, 404);
+  }
+  const data = await substituteLoad(env, { date: q.get("date") || undefined, start: q.get("start"), end: q.get("end"), onlyPersonnelId: own?.personnel_id ?? null });
+  if (data.error) return jsonResponse({ error: data.error }, 400);
+  return jsonResponse({ ...data, scope: all ? "all" : "self" }, 200, { "Cache-Control": "private, no-store" });
 }

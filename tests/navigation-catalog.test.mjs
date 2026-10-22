@@ -10,15 +10,23 @@ test('menu destinations are unique, concise, and implemented; budget tabs remain
  for(const url of urls){const u=new URL(url,'https://school.test');if(u.origin==='https://school.test'){assert(fs.existsSync('public'+u.pathname),url);assert(!u.searchParams.has('section'),url);assert.notEqual(u.pathname,'/modules.html');}}
  const segmenter=new Intl.Segmenter('th',{granularity:'grapheme'});
  for(const label of [...Object.values(n.labels),...Object.values(n.groups).flatMap(links=>links.map(i=>i.label))])assert([...segmenter.segment(label)].length<=24,label);
- const views=n.groups.budget.filter(i=>i.url.startsWith('/budget.html')).map(i=>new URL(i.url,'https://school.test').searchParams.get('view'));
+ const views=[...n.groups.budget,...n.groups['finance-requests']].filter(i=>i.url.startsWith('/budget.html')).map(i=>new URL(i.url,'https://school.test').searchParams.get('view'));
  for(const view of views)assert(fs.readFileSync('public/budget.html','utf8').includes(`data-view="${view}"`),view);
- assert(views.includes('requests')&&views.includes('disbursements')&&views.includes('plans')&&views.includes('otherProjects'));
+ assert(views.includes('requests')&&views.includes('plans')&&views.includes('otherProjects'));
+ // คำขอฝั่งผู้ขออยู่ใน ระบบสนับสนุน; ฝ่ายงบประมาณรับเรื่องที่เมนู บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง (ทะเบียนเบิกจ่าย/จัดซื้อเป็นแท็บในหน้านั้น)
+ assert(n.groups.budget.some(i=>i.url==='/finance-register.html'&&i.label==='บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง'));
+ assert(!n.groups.budget.some(i=>['/procurement.html','/budget.html?view=requests','/budget.html?view=disbursements'].includes(i.url)));
+ assert.deepEqual(plain(n.groups['finance-requests'].map(i=>i.url)),['/project-documents.html','/procurement.html?mine=1','/budget.html?view=requests']);
+ const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];
+ assert(support.includes('data-page="maintenance"')&&support.includes('data-page="finance-requests"'));
+ assert(!n.groups.general.some(i=>i.url==='/maintenance.html'));
+ assert(n.groups.personnel.some(i=>i.url==='/leave-stats.html')&&n.groups.personnel.some(i=>i.url==='/substitute-stats.html'));
 });
 test('legacy links reach canonical pages and keep requested records and department directories',()=>{
  assert.equal(n.canonicalUrl('/modules.html?module=students'),'/students.html');
  for(const dept of ['academic','budget','personnel','general','early_childhood','administration'])assert.equal(n.routes[dept],'/department-staff.html?dept='+dept);
  const url=new URL(n.canonicalUrl('/work-center.html?area=staff&topic=8&record=42'),'https://school.test');assert.equal(url.searchParams.get('record'),'42');assert.equal(url.searchParams.get('scope'),'personnel-development');assert.equal(n.parentFor('staff',url.href),'personnel');assert.equal(n.destinationKey(url.href),n.destinationKey(n.scopeUrl('personnel-development')));
- assert.equal(n.parentFor('project-documents','/project-documents.html?project=12'),'documents');assert.equal(n.parentFor('departments','/department.html?dept=academic&project=4'),'academic');assert.equal(n.parentFor('maintenance','/maintenance?request=4'),'general');assert.equal(n.workScopeFor('academic','8'),null);assert.equal(n.workScopeFor('staff','0'),null);
+ assert.equal(n.parentFor('project-documents','/project-documents.html?project=12'),'finance-requests');assert.equal(n.parentFor('departments','/department.html?dept=academic&project=4'),'academic');assert.equal(n.parentFor('maintenance','/maintenance?request=4'),'maintenance');assert.equal(n.parentFor('','/procurement.html?case=3'),'budget');assert.equal(n.parentFor('','/procurement.html?mine=1'),'finance-requests');assert.equal(n.parentFor('','/finance-register.html'),'budget');assert.equal(n.parentFor('','/leave-stats.html'),'personnel');assert.equal(n.workScopeFor('academic','8'),null);assert.equal(n.workScopeFor('staff','0'),null);
  for(const [key,s] of Object.entries(n.workScopes))assert.deepEqual(plain(s.contexts),WORK_SCOPES[key]);
 });
 test('merged work scopes include legacy records once and exclude unrelated topics',()=>{
@@ -53,7 +61,7 @@ test('budget uses one sidebar navigation in the workspace and synchronizes the s
  const html=fs.readFileSync('public/budget.html','utf8');
  assert(!html.includes('<nav class="tabs">'));
  assert(html.includes('.embedded .budget-page-picker{display:none}'));
- assert(!n.groups.budget.some(item=>item.url==='/budget.html?view=roles'));assert.equal(n.routes.approvers,'/budget.html?view=roles');assert.equal(n.parentFor('approvers','/budget.html?view=roles'),'approvers');assert.equal(n.parentFor('budget','/budget.html?view=requests'),'budget');
+ assert(!n.groups.budget.some(item=>item.url==='/budget.html?view=roles'));assert.equal(n.routes.approvers,'/budget.html?view=roles');assert.equal(n.parentFor('approvers','/budget.html?view=roles'),'approvers');assert.equal(n.parentFor('budget','/budget.html?view=requests'),'finance-requests');assert.equal(n.parentFor('budget','/budget.html?view=disbursements'),'budget');
  assert(fs.readFileSync('public/dashboard.html','utf8').includes('data-page="approvers" class="admin-only"'));
  assert(n.groups.budget.some(item=>item.url==='/budget.html?view=audit'));
  const nodes=new Map();

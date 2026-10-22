@@ -53,6 +53,8 @@ import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots
 
 import { handleProjectBalanceRoute } from "./routes/project-balance.js";
 import { dashboardActivitySummary, ensureDashboardRevision, dashboardRevision } from "./lib/dashboard-summary.js";
+import { substituteDashboardSummary } from "./lib/personnel-stats.js";
+import { checkSubmitGuard } from "./lib/submit-guard.js";
 import { handlePasswordResetRoute } from "./routes/password-reset.js";
 import { teachingMaster, loadByPersonnel } from "./lib/teaching-master.js";
 import { ensureLinePersonalSchema, handleLinePersonalEvent, handleLinePersonalRoute, getLinkedLineUsers, maintenancePersonalRecipients, maintenancePersonalHeadline } from "./lib/line-personal.js";
@@ -4389,6 +4391,8 @@ async function handleOverview(request, env) {
     licenses_expiring: user.role === "viewer" ? [] : licensesExpiring,
     current_academic_period: currentAcademicPeriod,
     funding_summary: await projectFundingSummary(env,budgetFiscalYear,financials),
+    // สถิติสอนแทน: ชุดเดียวกับหน้าสถิติการสอนแทนและหน้าจัดสอนแทน (src/lib/personnel-stats.js)
+    substitute_summary: user.role === "viewer" ? null : await substituteDashboardSummary(env, user).catch(() => null),
     ...activity,
   },200,{ "Cache-Control": "no-store" });
 }
@@ -4731,8 +4735,13 @@ const app = {
 const LINE_FEED_SKIP = /^\/api\/(line\/webhook|auth\/|evaluation\/|evaluation-link\/|notifications\/read|leave-view)/;
 export default {
   async fetch(request, env, context) {
-    const response = applySecurityHeaders(await app.fetch(request, env, context));
     const { pathname } = new URL(request.url);
+    // กันกดส่งซ้ำ/ส่งถี่ในระบบที่แจ้งเตือน LINE ก่อนบันทึก (ถ้าตัวกันขัดข้อง ให้ทำงานต่อตามปกติ)
+    let guard = null;
+    try { guard = await checkSubmitGuard(request, env, pathname); } catch (error) { console.error("submit guard", error); }
+    if (guard?.response) return applySecurityHeaders(guard.response);
+    const response = applySecurityHeaders(await app.fetch(request, env, context));
+    if (guard?.release && response.status >= 400) await guard.release().catch(() => {});
     if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
       && response.status < 400 && env.LINE_CHANNEL_ACCESS_TOKEN && context?.waitUntil) {
       context.waitUntil(dispatchLineNotifications(env, { trigger: "event", origin: publicOrigin(env, request) }).catch(() => {}));
