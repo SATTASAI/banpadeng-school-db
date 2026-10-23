@@ -66,7 +66,8 @@ export function ensureSupervisionSchema(env){
  ready.set(env.DB,p);return p;
 }
 
-const EXEC_POSITION=`REPLACE(COALESCE(p.position,''),' ','') LIKE '%ผู้อำนวยการ%' AND REPLACE(COALESCE(p.position,''),' ','') NOT LIKE '%ผู้ช่วยผู้อำนวยการ%'`;
+// ใช้ instr() แทน LIKE: รูปแบบ LIKE ภาษาไทยยาวเกินขีดจำกัดของ D1 (LIKE or GLOB pattern too complex)
+const EXEC_POSITION=`instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้อำนวยการ')>0 AND instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้ช่วยผู้อำนวยการ')=0`;
 const NONE={register:false,evaluate:false,view_all:false,manage_evaluators:false,staff:false,executive:false};
 export async function supervisionPermissions(env,user){
  if(!user?.role||user.role==='viewer')return {...NONE};
