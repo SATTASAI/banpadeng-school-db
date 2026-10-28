@@ -39,6 +39,7 @@ import {
   resolveAcademicCenterKey,
 } from "./lib/academic-registry.js";
 import { handleAcademicPeriodRoute } from "./routes/academic-periods.js";
+import { handleWorkCalendarRoute } from "./routes/work-calendar.js";
 import { handleBackupExport, getBackupOverview } from "./routes/backup-export.js";
 import { handleDriveAudit } from "./routes/drive-audit.js";
 import { handleDriveBackupManifest, handleDriveBackupFile } from "./routes/drive-backup.js";
@@ -4543,6 +4544,8 @@ const app = {
       const timetableSyncResponse = await handleTimetableSyncRoute(request, env, pathname, method);
       if (timetableSyncResponse) return timetableSyncResponse;
 
+      const workCalendarResponse = await handleWorkCalendarRoute(request, env, pathname, method);
+      if (workCalendarResponse) return workCalendarResponse;
       const academicPeriodResponse = await handleAcademicPeriodRoute(request, env, pathname, method);
       if (academicPeriodResponse) return academicPeriodResponse;
       const learnerAnalysisResponse = await handleLearnerAnalysisRoute(request, env, pathname, method);

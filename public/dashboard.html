@@ -315,7 +315,7 @@
 </style>
 <style>.viewer-banner{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fff6e6;border:1px solid #f1dcb4;color:#7a5414;font-size:14px}.viewer-mode #balanceRequestInbox,.viewer-mode .license-section{display:none}</style>
 <link rel="stylesheet" href="/css/project-workflow.css">
-<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"><link rel="stylesheet" href="/css/mobile.css"></head>
+<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"><link rel="stylesheet" href="/css/mobile.css"><link rel="stylesheet" href="/css/work-calendar.css"></head>
 <body>
 <div class="global-search-backdrop" id="globalSearchBackdrop" aria-hidden="true"></div>
 <button class="mobile-nav-backdrop" id="mobileNavBackdrop" type="button" aria-label="ปิดเมนู" hidden></button>
@@ -413,6 +413,7 @@
         <button type="button" role="tab" data-tab="students" aria-selected="false">นักเรียน · มาเรียน</button>
         <button type="button" role="tab" data-tab="personnel" aria-selected="false">บุคลากร</button>
         <button type="button" role="tab" data-tab="budget" aria-selected="false">งบประมาณ <span class="dash-tab-badge" id="budgetTabBadge" hidden></span></button>
+        <button type="button" role="tab" data-tab="calendar" aria-selected="false">ปฏิทินปฏิบัติงาน</button>
       </div>
 
       <div class="dash-panel" data-panel="overview" role="tabpanel">
@@ -470,6 +471,10 @@
         </section>
       </div>
 
+      <div class="dash-panel" data-panel="calendar" role="tabpanel" hidden>
+        <section class="dashboard-section" id="workCalendar"></section>
+      </div>
+
       <div class="dash-panel" data-panel="budget" role="tabpanel" hidden>
         <section class="dashboard-section">
           <div class="section-head"><div><h3 style="margin:0">ความเคลื่อนไหวเงิน</h3><p>รายรับที่บันทึกและเบิกจ่ายที่ยืนยันแล้ว ตามปีงบประมาณที่เลือก</p></div></div>
@@ -500,6 +505,7 @@
 <script src="/js/navigation-catalog.js"></script>
 <script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
 <script src="/js/project-workflow.js"></script>
+<script src="/js/work-calendar.js"></script>
 <script>
   const mobileMenuButton=document.getElementById('mobileMenuToggle');
   const mobileNav=document.getElementById('mobileSidebar');
@@ -870,12 +876,14 @@
   const openBudgetDepartments = new Set();
   let showAllLicenses = false;
   const GRADES_URL = "https://grades.banpadengschool.ac.th";
+  let workCalendarLoaded = false;
   function selectDashboardTab(name, focus = false) {
     const tabs = [...document.querySelectorAll(".dash-tabs [data-tab]")];
     if (!tabs.some((t) => t.dataset.tab === name)) name = "overview";
     tabs.forEach((t) => { const on = t.dataset.tab === name; t.setAttribute("aria-selected", String(on)); t.tabIndex = on ? 0 : -1; if (on && focus) t.focus(); });
     document.querySelectorAll(".dash-panel[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
     try { localStorage.setItem("dashboard-tab", name); } catch {}
+    if (name === "calendar" && !workCalendarLoaded && window.WorkCalendar) { workCalendarLoaded = true; WorkCalendar.render(document.getElementById("workCalendar")); }
   }
   document.querySelectorAll(".dash-tabs [data-tab]").forEach((tab) => tab.addEventListener("click", () => selectDashboardTab(tab.dataset.tab)));
   document.querySelector(".dash-tabs").addEventListener("keydown", (event) => {
@@ -1212,6 +1220,10 @@
   // ผู้ชมภายนอก: เห็นเฉพาะภาพรวม ทำเนียบ/โครงการของฝ่ายงาน และตารางสอน (ดูอย่างเดียว ไม่มีข้อมูลส่วนบุคคล)
   function enterViewerMode(user) {
     document.body.classList.add("viewer-mode");
+    // ผู้ชมภายนอกไม่เห็นปฏิทินปฏิบัติงาน
+    document.querySelector('.dash-tabs [data-tab="calendar"]')?.remove();
+    document.querySelector('.dash-panel[data-panel="calendar"]')?.remove();
+    if (!document.querySelector('.dash-tabs [aria-selected="true"]')) selectDashboardTab("overview");
     const keep = new Set(["administration","academic","early_childhood","budget","personnel","general"]);
     document.querySelectorAll(".sidebar nav > a[data-page], .sidebar nav > .nav-group").forEach((el) => {
       const key = el.dataset.page || el.dataset.navGroup;
