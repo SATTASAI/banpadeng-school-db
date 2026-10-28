@@ -609,3 +609,7 @@ html.embedded .page-back { display:none; }
 
 /* Cloudflare Turnstile (กันบอท) */
 .turnstile-box{min-height:65px;margin:4px 0 14px}
+
+/* ชื่อคนในตารางอยู่บรรทัดเดียว — ตารางในแผงเลื่อนซ้ายขวาได้แทน (span.nm ใส่ให้อัตโนมัติจาก api.js) */
+td .nm { white-space: nowrap; }
+.panel:has(> table), .panel:has(> * > table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }

@@ -120,3 +120,31 @@ function workingFiscalYear(){
 
 // โหมดมุมมองบุคคลอื่น (ผู้ดูแลระบบใช้ทดสอบการมองเห็น): แถบแจ้งเตือนบนหน้าต่างหลัก
 (() => {const script=document.createElement("script");script.src="/js/view-as.js";document.head.append(script);})();
+
+// ชื่อคนในตารางอยู่บรรทัดเดียว (มือถือ: ตารางเลื่อนซ้ายขวาแทนการตัดชื่อเป็นหลายบรรทัด)
+// หาข้อความในช่องตารางที่ขึ้นต้นด้วยคำนำหน้าชื่อ แล้วห่อด้วย span.nm (white-space: nowrap) — ใช้กับทุกหน้าโดยไม่ต้องแก้ทีละตาราง
+(() => {
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function" || typeof MutationObserver === "undefined") return;
+  const PREFIX = /^\s*(นางสาว|นาง|นาย|เด็กชาย|เด็กหญิง|ด\.ช\.|ด\.ญ\.|ว่าที่|ดร\.|ผศ\.|รศ\.|ครู)/;
+  const mark = (root) => {
+    if (!root.querySelectorAll) return;
+    const cells = root.matches?.("td") ? [root] : root.querySelectorAll("td");
+    for (const td of cells) {
+      const walker = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!PREFIX.test(n.nodeValue) || n.parentElement?.closest(".nm, button, select, textarea, input")) continue;
+        const span = document.createElement("span");
+        span.className = "nm";
+        n.parentNode.insertBefore(span, n);
+        span.appendChild(n);
+        break;
+      }
+    }
+  };
+  const start = () => {
+    mark(document.body);
+    new MutationObserver((list) => { for (const m of list) for (const node of m.addedNodes) if (node.nodeType === 1) mark(node); else if (node.nodeType === 3 && node.parentElement?.closest("td")) mark(node.parentElement.closest("td")); })
+      .observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
+})();
