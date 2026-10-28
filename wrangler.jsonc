@@ -16,7 +16,7 @@
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
   // ส่งแจ้งเตือนทุกระบบทาง LINE รายบุคคล (src/lib/line-feed.js) — เก็บตกทุก 2 นาที
   "triggers": { "crons": ["*/2 * * * *"] },
-  // ที่เก็บรูปแจ้งซ่อม (และไฟล์ R2 เดิม) — ต้องประกาศในไฟล์นี้ ไม่งั้น binding หายทุกครั้งที่ deploy
+  // ไฟล์ R2 เดิม (อ่านอย่างเดียว; ไฟล์ใหม่เก็บใน Google Drive) — ต้องประกาศในไฟล์นี้ ไม่งั้น binding หายทุกครั้งที่ deploy
   "r2_buckets": [
     { "binding": "FILES", "bucket_name": "banpadeng-school-files" }
   ],
