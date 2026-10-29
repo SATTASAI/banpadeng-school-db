@@ -10,19 +10,21 @@
  // เวลาจาก D1 เป็น UTC รูปแบบ "YYYY-MM-DD HH:MM:SS"
  const stamp=s=>{if(!s)return '—';const d=new Date(String(s).replace(' ','T')+'Z');return d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})+' น.';};
  const pill=s=>`<span class="sv-pill st-${esc(s)}">${esc(STATUS[s]||s)}</span>`;
+ // เลยวันนิเทศแล้วแต่ยังไม่มีผล
+ const overdue=r=>r?.overdue?`<span class="sv-pill sv-overdue">${r.status==='confirmed'?'ค้างบันทึกคะแนน':'เลยกำหนด ไม่มีผู้รับนิเทศ'}</span>`:'';
  const classLabel=r=>[r.grade_level,r.classroom].filter(Boolean).join('/')+(r.room_name?` · ${r.room_name}`:'');
  const level=p=>p>=90?'ดีเยี่ยม':p>=80?'ดีมาก':p>=70?'ดี':p>=60?'พอใช้':'ควรพัฒนา';
  const pct=n=>Number(n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
  function stats(list){
-  const c={all:list.length,pending:0,confirmed:0,evaluated:0};list.forEach(r=>{if(c[r.status]!=null)c[r.status]++;});
+  const c={all:list.length,pending:0,confirmed:0,evaluated:0,overdue:0};list.forEach(r=>{if(c[r.status]!=null)c[r.status]++;if(r.overdue)c.overdue++;});
   const card=(l,v,color)=>`<div class="sv-stat"><span><i style="background:${color}"></i>${l}</span><b>${v}</b></div>`;
-  return `<div class="sv-stats">${card('ลงทะเบียนทั้งหมด',c.all,'#8aa0b4')}${card('รอยืนยัน',c.pending,'#d98a1f')}${card('ยืนยันแล้ว',c.confirmed,'#2B86E5')}${card('ประเมินเสร็จ',c.evaluated,'#187E6B')}</div>`;
+  return `<div class="sv-stats">${card('ลงทะเบียนทั้งหมด',c.all,'#8aa0b4')}${card('รอยืนยัน',c.pending,'#d98a1f')}${card('ยืนยันแล้ว',c.confirmed,'#2B86E5')}${card('ประเมินเสร็จ',c.evaluated,'#187E6B')}${c.overdue?card('ค้าง/เลยกำหนด',c.overdue,'#c8483d'):''}</div>`;
  }
  function details(r,{times}={}){
   const t=times?.[r.period-1];
   return `<dl class="sv-dl"><dt>ครู</dt><dd>${esc(r.teacher_name)}</dd><dt>วันที่</dt><dd>${date(r.visit_date,true)}</dd>
   <dt>คาบ</dt><dd>คาบ ${r.period}${t?` (${t.start}–${t.end} น.)`:''}</dd><dt>วิชา</dt><dd>${esc(r.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(classLabel(r))||'—'}</dd>
-  <dt>ประเภท</dt><dd>${esc(r.type_label)}</dd><dt>สถานะ</dt><dd>${pill(r.status)}</dd>
+  <dt>ประเภท</dt><dd>${esc(r.type_label)}</dd><dt>สถานะ</dt><dd>${pill(r.status)} ${overdue(r)}</dd>
   ${r.supervisor_name?`<dt>ผู้นิเทศ</dt><dd>${esc(r.supervisor_name)}${r.supervisor_position?` (${esc(r.supervisor_position)})`:''}</dd>`:''}
   <dt>หัวข้อ</dt><dd>${r.topic?esc(r.topic):'<span style="color:#8aa0b4">ไม่ได้ระบุ</span>'}</dd></dl>`;
  }
@@ -50,5 +52,5 @@
   const t=document.createElement('div');t.className='sv-toast'+(error?' err':'');t.textContent=message;box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();setTimeout(()=>t.remove(),error?5500:3800);
  }
- root.SupervisionUI={STATUS,DAYS,esc,date,shortDate,stamp,pill,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
+ root.SupervisionUI={STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
 })(typeof window==='undefined'?globalThis:window);
