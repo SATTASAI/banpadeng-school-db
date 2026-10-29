@@ -57,7 +57,9 @@ export async function attendanceDashboard(env, { today = bangkokToday(), trendDa
 
   const [{ results: terms }, holidayRows, settings] = await Promise.all([
     env.DB.prepare('SELECT term_number, name, start_date, end_date FROM academic_terms WHERE academic_year_id=? ORDER BY term_number').bind(yearId).all(),
-    have.has('gr_holidays') ? env.DB.prepare('SELECT holiday_date FROM gr_holidays WHERE academic_year_id=?').bind(yearId).all().then((r) => r.results) : [],
+    // วันกิจกรรม (kind = 'activity') ยังนับเป็นวันเรียน — ไม่นับเป็นวันหยุด
+    have.has('gr_holidays') ? env.DB.prepare("SELECT holiday_date FROM gr_holidays WHERE academic_year_id=? AND COALESCE(kind,'holiday') <> 'activity'").bind(yearId).all()
+      .catch(() => env.DB.prepare('SELECT holiday_date FROM gr_holidays WHERE academic_year_id=?').bind(yearId).all()).then((r) => r.results) : [],
     have.has('gr_settings') ? env.DB.prepare('SELECT attendance_pass_pct FROM gr_settings WHERE academic_year_id=?').bind(yearId).first() : null,
   ]);
   const passPct = Number(settings?.attendance_pass_pct ?? 80);

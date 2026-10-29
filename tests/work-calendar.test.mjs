@@ -38,3 +38,18 @@ test('work calendar works before grades tables exist',async()=>{
  assert.equal(r.status,200);
  assert.deepEqual((await r.json()).holidays,[]);
 });
+
+test('work calendar splits activity days (still school days) from holidays',async()=>{
+ const {raw,env,req}=await fixture();
+ const y=raw.prepare("SELECT id FROM academic_years LIMIT 1").get().id;
+ raw.exec(`CREATE TABLE gr_holidays(academic_year_id INTEGER, holiday_date TEXT, name TEXT, kind TEXT NOT NULL DEFAULT 'holiday', created_by INTEGER, PRIMARY KEY(academic_year_id,holiday_date));
+  CREATE TABLE gr_holiday_seeds(academic_year_id INTEGER, holiday_date TEXT, name TEXT, PRIMARY KEY(academic_year_id,holiday_date));`);
+ const before=(await (await handleWorkCalendarRoute(req('/api/work-calendar'),env,'/api/work-calendar','GET')).json()).school_days;
+ const d=raw.prepare("SELECT start_date FROM academic_terms WHERE academic_year_id=? ORDER BY term_number LIMIT 1").get(y).start_date;
+ raw.prepare("INSERT INTO gr_holidays(academic_year_id,holiday_date,name,kind) VALUES(?,?,?,?)").run(y,d,'กีฬาสี','activity');
+ const b=await (await handleWorkCalendarRoute(req('/api/work-calendar'),env,'/api/work-calendar','GET')).json();
+ assert.equal(b.holidays.length,0);
+ assert.equal(b.activities.length,1);
+ assert.equal(b.activities[0].name,'กีฬาสี');
+ assert.equal(b.school_days,before);
+});

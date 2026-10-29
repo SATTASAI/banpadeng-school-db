@@ -1,4 +1,4 @@
-// ปฏิทินปฏิบัติงานบนหน้า dashboard — อ่านวันหยุดจากระบบผลการเรียน (gr_holidays ใน D1 เดียวกัน) แบบอ่านอย่างเดียว
+// ปฏิทินปฏิบัติงานบนหน้า dashboard — อ่านวันหยุด/วันกิจกรรมจากระบบผลการเรียน (gr_holidays ใน D1 เดียวกัน) แบบอ่านอย่างเดียว
 // แก้วันหยุดได้ที่ระบบ grades โดยฝ่ายวัดผลเท่านั้น · ผู้ชมภายนอกดูไม่ได้
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
 import { importantDaysBetween } from "../lib/thai-observances.js";
@@ -18,12 +18,17 @@ export async function handleWorkCalendarRoute(request, env, pathname, method) {
     : await env.DB.prepare("SELECT id, year_be, label, status, start_date, end_date FROM academic_years ORDER BY (status = 'active') DESC, year_be DESC LIMIT 1").first();
   if (!year) return jsonResponse({ error: "ยังไม่มีปีการศึกษาในระบบ" }, 404);
 
-  const [terms, holidays] = await Promise.all([
-    safeAll(env.DB.prepare("SELECT term_number, start_date, end_date FROM academic_terms WHERE academic_year_id = ? ORDER BY term_number").bind(year.id)),
-    safeAll(env.DB.prepare(`SELECT h.holiday_date, h.name, CASE WHEN s.name = h.name THEN 1 ELSE 0 END AS gov FROM gr_holidays h
+  // gr_holidays.kind: 'holiday' = วันหยุด · 'activity' = วันกิจกรรม (ยังนับเป็นวันเรียน) — ถ้าระบบ grades ยังไม่มีคอลัมน์ kind ถือเป็นวันหยุดทั้งหมด
+  const calSql = (withKind) => `SELECT h.holiday_date, h.name, ${withKind ? "COALESCE(h.kind, 'holiday')" : "'holiday'"} AS kind,
+      CASE WHEN s.name = h.name ${withKind ? "AND COALESCE(h.kind, 'holiday') = 'holiday' " : ""}THEN 1 ELSE 0 END AS gov FROM gr_holidays h
       LEFT JOIN gr_holiday_seeds s ON s.academic_year_id = h.academic_year_id AND s.holiday_date = h.holiday_date
-      WHERE h.academic_year_id = ? ORDER BY h.holiday_date`).bind(year.id)),
+      WHERE h.academic_year_id = ? ORDER BY h.holiday_date`;
+  const [terms, allDays] = await Promise.all([
+    safeAll(env.DB.prepare("SELECT term_number, start_date, end_date FROM academic_terms WHERE academic_year_id = ? ORDER BY term_number").bind(year.id)),
+    env.DB.prepare(calSql(true)).bind(year.id).all().then((r) => r.results || [])
+      .catch(() => safeAll(env.DB.prepare(calSql(false)).bind(year.id))),
   ]);
+  const holidays = allDays.filter((h) => h.kind !== "activity"), activities = allDays.filter((h) => h.kind === "activity");
   const off = new Set(holidays.map((h) => h.holiday_date));
   let schoolDays = 0;
   for (const t of terms) {
@@ -37,6 +42,6 @@ export async function handleWorkCalendarRoute(request, env, pathname, method) {
   const important_days = from && to && /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) ? importantDaysBetween(from, to) : [];
   return jsonResponse({
     year: { id: year.id, year_be: year.year_be, label: year.label },
-    terms, holidays, important_days, school_days: schoolDays,
+    terms, holidays, activities, important_days, school_days: schoolDays,
   });
 }
