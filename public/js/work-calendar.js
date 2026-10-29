@@ -22,17 +22,21 @@
     try { c = await apiRequest("/api/work-calendar"); }
     catch (err) { view.innerHTML = `<div class="error-box" style="display:block">${esc(err.message || "โหลดปฏิทินไม่สำเร็จ")}</div>`; return; }
     const hol = new Map(c.holidays.map((h) => [h.holiday_date, h.name]));
+    const activities = c.activities || [];
+    const act = new Map(activities.map((h) => [h.holiday_date, h.name])); // วันกิจกรรม — นับเป็นวันเรียน (สีเขียว)
     const govSet = new Set(c.holidays.filter((h) => h.gov).map((h) => h.holiday_date));
     const importantDays = c.important_days || [];
     const important = new Map();
     for (const d of importantDays) important.set(d.date, [important.get(d.date), d.name].filter(Boolean).join(" / "));
     const groups = [];
-    for (const h of c.holidays) {
+    const entries = [...c.holidays.map((h) => ({ ...h, kind: "holiday" })), ...activities.map((h) => ({ ...h, kind: "activity", gov: 0 }))]
+      .sort((x, y) => x.holiday_date.localeCompare(y.holiday_date));
+    for (const h of entries) {
       const g = groups.at(-1);
       let next = g && addDays(g.to, 1);
       while (next && [0, 6].includes(wdOf(next))) next = addDays(next, 1);
-      if (g && g.name === h.name && !!h.gov === g.gov && next === h.holiday_date) { g.to = h.holiday_date; g.dates.push(h.holiday_date); }
-      else groups.push({ name: h.name, from: h.holiday_date, to: h.holiday_date, dates: [h.holiday_date], gov: !!h.gov });
+      if (g && g.name === h.name && g.kind === h.kind && !!h.gov === g.gov && next === h.holiday_date) { g.to = h.holiday_date; g.dates.push(h.holiday_date); }
+      else groups.push({ name: h.name, kind: h.kind, from: h.holiday_date, to: h.holiday_date, dates: [h.holiday_date], gov: !!h.gov });
     }
     const terms = c.terms;
     const termOf = (iso) => terms.find((t) => iso >= t.start_date && iso <= t.end_date);
@@ -49,7 +53,7 @@
     view.innerHTML = `<div class="work-cal">
       <div class="cal-summary">
         ${terms.map((t, i) => `<div class="cal-stat"><span>ภาคเรียนที่ ${t.term_number}</span><strong>${termDays[i]}</strong><small>วันเรียน · ${thDate(t.start_date, false)} – ${thDate(t.end_date, false)}</small></div>`).join("")}
-        <div class="cal-stat total"><span>รวมทั้งปี</span><strong>${c.school_days}</strong><small>วันเรียน (จ.–ศ. ไม่รวมวันหยุด) · หยุด ${c.holidays.length} วัน</small></div>
+        <div class="cal-stat total"><span>รวมทั้งปี</span><strong>${c.school_days}</strong><small>วันเรียน (จ.–ศ. ไม่รวมวันหยุด) · หยุด ${c.holidays.length} วัน${activities.length ? ` · กิจกรรม ${activities.length} วัน` : ""}</small></div>
       </div>
       <div class="cal-panel">
         <div class="cal-top">
@@ -63,14 +67,14 @@
         ${months.length ? '<div class="cal-months" id="workCalMonths"></div>' : ""}
         <div class="cal-grid" id="workCalGrid" role="grid"></div>
         <div class="cal-legend">
-          <span><i class="lg hol"></i>วันหยุด (ราชการ / โรงเรียน / เสาร์–อาทิตย์)</span><span><i class="lg important"></i>วันสำคัญที่ไม่ใช่วันหยุด</span><span><i class="lg off"></i>ปิดภาคเรียน</span>
+          <span><i class="lg hol"></i>วันหยุด (ราชการ / โรงเรียน / เสาร์–อาทิตย์)</span><span><i class="lg act"></i>วันกิจกรรม (นับเป็นวันเรียน)</span><span><i class="lg important"></i>วันสำคัญที่ไม่ใช่วันหยุด</span><span><i class="lg off"></i>ปิดภาคเรียน</span>
         </div>
-        <p class="cal-hint">สีแดง = วันหยุด · สีเหลือง = วันสำคัญที่ยังนับเป็นวันเรียนเมื่ออยู่ในภาคเรียน · หากตรงวันหยุด ช่องวันเป็นสีแดงและแสดงชื่อวันสำคัญประกอบ</p>
-        <p class="cal-hint">ดูอย่างเดียว · วันหยุดดึงจากระบบผลการเรียน (grades) — วันหยุดราชการระบบใส่ให้ทุกปี ส่วนวันหยุดอื่นกำหนดโดยฝ่ายวัดผล</p>
+        <p class="cal-hint">สีแดง = วันหยุด · สีเขียว = วันกิจกรรม (ยังนับเป็นวันเรียน) · สีเหลือง = วันสำคัญที่ยังนับเป็นวันเรียนเมื่ออยู่ในภาคเรียน · หากตรงวันหยุด ช่องวันเป็นสีแดงและแสดงชื่อวันสำคัญประกอบ</p>
+        <p class="cal-hint">ดูอย่างเดียว · วันหยุดดึงจากระบบผลการเรียน (grades) — วันหยุดราชการระบบใส่ให้ทุกปี ส่วนวันหยุดอื่นและวันกิจกรรมกำหนดโดยฝ่ายวัดผล</p>
       </div>
       <div class="cal-panel">
-        <div class="cal-head"><h3>วันหยุดทั้งปี</h3><span>${groups.length} รายการ · แตะเพื่อไปที่เดือนนั้น</span></div>
-        <div class="cal-list">${groups.map((g, i) => `<button type="button" class="cal-item${g.gov ? " gov" : ""}" data-go="${i}"><span class="cal-item-date">${thRange(g.from, g.to)}</span><span class="cal-item-name">${esc(g.name)}${g.gov ? ' <em class="gov-tag">ราชการ</em>' : ""}</span><span class="cal-item-n">${g.dates.length} วัน</span></button>`).join("") || '<p class="cal-empty">ฝ่ายวัดผลยังไม่ได้ตั้งวันหยุด</p>'}</div>
+        <div class="cal-head"><h3>วันหยุดและวันกิจกรรมทั้งปี</h3><span>${groups.length} รายการ · แตะเพื่อไปที่เดือนนั้น</span></div>
+        <div class="cal-list">${groups.map((g, i) => `<button type="button" class="cal-item${g.gov ? " gov" : ""}${g.kind === "activity" ? " act" : ""}" data-go="${i}"><span class="cal-item-date">${thRange(g.from, g.to)}</span><span class="cal-item-name">${esc(g.name)}${g.gov ? ' <em class="gov-tag">ราชการ</em>' : ""}${g.kind === "activity" ? ' <em class="act-tag">กิจกรรม</em>' : ""}</span><span class="cal-item-n">${g.dates.length} วัน</span></button>`).join("") || '<p class="cal-empty">ฝ่ายวัดผลยังไม่ได้ตั้งวันหยุด</p>'}</div>
       </div>
       <div class="cal-panel">
         <div class="cal-head"><h3>วันสำคัญในปีการศึกษา</h3><span>แสดงประกอบปฏิทิน · ไม่เพิ่มวันหยุด</span></div>
@@ -100,11 +104,11 @@
       const cells = Math.ceil((lead + dim) / 7) * 7;
       for (let i = 0; i < cells; i++) {
         const iso = addDays(first, i - lead), [, cm, cd] = iso.split("-").map(Number), wd = wdOf(iso);
-        const other = cm !== m, name = hol.get(iso), term = termOf(iso), event = important.get(iso), weekend = wd === 0 || wd === 6;
-        const cls = ["cal-day", other && "other", weekend && "we", name && "hol", event && !name && !weekend && "important", govSet.has(iso) && "gov", !term && "off", iso === today && "today"].filter(Boolean).join(" ");
+        const other = cm !== m, name = hol.get(iso), aname = !name && act.get(iso), term = termOf(iso), event = important.get(iso), weekend = wd === 0 || wd === 6;
+        const cls = ["cal-day", other && "other", weekend && "we", name && "hol", aname && "act", event && !name && !aname && !weekend && "important", govSet.has(iso) && "gov", !term && "off", iso === today && "today"].filter(Boolean).join(" ");
         const marks = terms.flatMap((t) => [iso === t.start_date && `<em class="mark open">เปิดภาค ${t.term_number}</em>`, iso === t.end_date && `<em class="mark close">ปิดภาค ${t.term_number}</em>`]).filter(Boolean).join("");
-        const label = `${TH_WD[wd]} ${cd} ${TH_MONTHS[cm - 1]} ${Number(iso.slice(0, 4)) + 543}${name ? ` วันหยุด ${name}` : weekend ? " วันหยุดประจำสัปดาห์" : ""}${event ? ` วันสำคัญ ${event}` : ""}`;
-        html += `<div class="${cls}" title="${esc(label)}" aria-label="${esc(label)}"><span class="num">${cd}</span>${marks}${name ? `<span class="hname">${esc(name)}</span>` : ""}${event ? `<span class="iname">${esc(event)}</span>` : ""}</div>`;
+        const label = `${TH_WD[wd]} ${cd} ${TH_MONTHS[cm - 1]} ${Number(iso.slice(0, 4)) + 543}${name ? ` วันหยุด ${name}` : aname ? ` วันกิจกรรม ${aname}` : weekend ? " วันหยุดประจำสัปดาห์" : ""}${event ? ` วันสำคัญ ${event}` : ""}`;
+        html += `<div class="${cls}" title="${esc(label)}" aria-label="${esc(label)}"><span class="num">${cd}</span>${marks}${name ? `<span class="hname">${esc(name)}</span>` : aname ? `<span class="aname">${esc(aname)}</span>` : ""}${event ? `<span class="iname">${esc(event)}</span>` : ""}</div>`;
       }
       grid.innerHTML = html;
     }
