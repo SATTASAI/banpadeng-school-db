@@ -222,6 +222,8 @@ function askCancel(id){
  m.querySelector('#cOk').onclick=async()=>{m.querySelector('#cOk').disabled=true;try{await apiRequest(`/api/supervision/requests/${id}/cancel`,{method:'POST',body:{}});U.close();U.toast('ยกเลิกนัดหมายแล้ว');render();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
+ const pr=e.target.closest('[data-print]');if(pr){const list=state.mine||[],r=list.find(x=>x.id===Number(pr.dataset.print));
+  if(r)U.printForm(r,{round:list.filter(x=>x.evaluation).sort((a,b)=>a.visit_date.localeCompare(b.visit_date)).findIndex(x=>x.id===r.id)+1||null});return;}
  const el=e.target.closest('[data-view],[data-week],[data-book],[data-detail],[data-cancel],[data-result],[data-evidence]');if(!el)return;
  if(el.dataset.evidence){U.close();openEvidence(Number(el.dataset.evidence));return;}
  if(el.dataset.view){state.view=el.dataset.view;state.focus=null;render();}

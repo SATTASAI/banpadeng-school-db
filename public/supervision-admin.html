@@ -89,8 +89,8 @@ function viewEvaluate(){
   <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
   ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div>
   ${r.evidence?(r.evidence.submitted_at?U.evidence(r):`<div class="sv-notice warn">รอครูส่งลิงก์คลิปและภาพการสอน${r.evidence.due_date?` (กำหนด ${U.date(r.evidence.due_date)})`:''} ระบบจะแจ้งเตือนเมื่อครูส่ง จึงบันทึกคะแนนได้</div>${U.evidence(r)}`):''}</section>
-  <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
-  <div>${secs.map(sec=>`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`+sec.items.map(q=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>
+  <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">ด้านที่ 1–3: 3 = ดีมาก · 2 = พอใช้ · 1 = ควรปรับปรุง · ด้านที่ 4: ปฏิบัติ 2 / ไม่ปฏิบัติ 0</span></div>
+  <div>${secs.map((sec,si)=>`${sec.label!==secs[si-1]?.label?`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`:''}${sec.group?`<h4 style="margin:10px 0 2px;color:#33506b;font-size:14.5px">${esc(sec.group)}</h4>`:''}`+sec.items.map((q,k)=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${k+1}</span><span>${esc(q)}</span></div><div class="sv-scale${sec.options.length===2?' two':''}" role="radiogroup" aria-label="${esc(q)}">${sec.options.map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}" title="${esc(sec.labels?.[v]||'')}">${sec.options.length===2?esc(sec.labels[v]):v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>
   <label class="sv-field" style="margin-top:8px">ข้อเสนอแนะเพื่อพัฒนา<textarea id="sugg" maxlength="3000" placeholder="จุดเด่นที่พบ และสิ่งที่ควรพัฒนาต่อ">${esc(d.suggestion)}</textarea></label></section>
   <aside class="sv-card sv-summary" id="summary" aria-live="polite"></aside></div>`;
  summary();
@@ -104,7 +104,7 @@ function summary(){
   <div><div class="sv-kv"><span>ประเมินแล้ว</span><b>${done} / ${N} ข้อ</b></div><div class="sv-kv"><span>คะแนนรวม</span><b>${total} / ${M}</b></div><div class="sv-kv"><span>ระดับคุณภาพ</span><span class="lv lv-${U.level(p)}">${done?U.level(p):'—'}</span></div></div>
   ${waiting?'<p class="sv-hint">รอครูส่งคลิปและภาพก่อนจึงบันทึกผลได้</p>':''}${done===N||waiting?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ ${N} ข้อจึงบันทึกได้</p>'}
   <button type="button" class="sv-btn primary" id="saveEval"${complete?'':' disabled'}>บันทึกผลการนิเทศ</button>
-  <p class="sv-hint">เกณฑ์: ร้อยละ 90 ขึ้นไป ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ควรพัฒนา</p>`;
+  <p class="sv-hint">เกณฑ์ (คะแนนเต็ม ${M}): 90–100 ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ปรับปรุง</p>`;
  $('saveEval').onclick=saveEval;
 }
 async function saveEval(){
@@ -114,6 +114,8 @@ async function saveEval(){
  }catch(e){U.toast(e.message,true);btn.disabled=false;}
 }
 /* ---------- ผลการนิเทศ ---------- */
+// ครั้งที่นิเทศ = ลำดับผลที่ประเมินแล้วของครูคนนั้น (เรียงตามวันนิเทศ)
+const roundOf=(r,list)=>list.filter(x=>x.teacher_user_id===r.teacher_user_id&&x.evaluation).sort((a,b)=>a.visit_date.localeCompare(b.visit_date)||a.period-b.period).findIndex(x=>x.id===r.id)+1||null;
 /* ---------- ปฏิทินการจองนิเทศของครูทุกคน (รายสัปดาห์ วัน × คาบ) ---------- */
 const addD=(s,n)=>{const d=U.parse(s);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
 async function calendarHtml(){
@@ -159,7 +161,7 @@ async function viewResults(){
  if(state.focus)document.getElementById('r-'+state.focus)?.scrollIntoView({block:'center'});
 }
 /* ---------- ประเมินผลการนิเทศ (สรุปสำหรับผู้บริหาร) ---------- */
-const LEVELS=[['ดีเยี่ยม','#187E6B'],['ดีมาก','#2B86E5'],['ดี','#5B6FD8'],['พอใช้','#d98a1f'],['ควรพัฒนา','#c8483d']];
+const LEVELS=[['ดีเยี่ยม','#187E6B'],['ดีมาก','#2B86E5'],['ดี','#5B6FD8'],['พอใช้','#d98a1f'],['ปรับปรุง','#c8483d']];
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
 function summaryData(){
  const done=state.list.filter(r=>r.evaluation&&(state.sumType==='all'||r.type_label===state.sumType));
@@ -167,7 +169,7 @@ function summaryData(){
  // ค่าเฉลี่ยรายข้อ แยกตามประเภทการนิเทศ (ข้อประเมินแต่ละประเภทไม่เหมือนกัน)
  const groups=new Map();
  done.forEach(r=>{let g=groups.get(r.type_label);if(!g){g={label:r.type_label,count:0,items:new Map()};groups.set(r.type_label,g);}g.count++;
-  r.evaluation.items.forEach(it=>{const k=it.label;if(!g.items.has(k))g.items.set(k,[]);g.items.get(k).push(Number(it.score));});});
+  r.evaluation.items.forEach(it=>{const k=it.label;if(!g.items.has(k))g.items.set(k,{max:Number(it.max)||5,sc:[]});g.items.get(k).sc.push(Number(it.score));});});
  const teachers=new Map();
  [...done].sort((a,b)=>String(a.evaluation.evaluated_at).localeCompare(String(b.evaluation.evaluated_at))).forEach(r=>{
   let t=teachers.get(r.teacher_user_id);if(!t){t={name:r.teacher_name,position:r.teacher_position,list:[]};teachers.set(r.teacher_user_id,t);}t.list.push(r);});
@@ -188,10 +190,10 @@ function viewSummary(){
  const maxL=Math.max(1,...Object.values(d.levels));
  const bar=(label,value,max,color,text)=>`<div style="display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:10px;align-items:center;font-size:14px"><span>${label}</span><span style="background:#eef3f8;border-radius:99px;height:10px;overflow:hidden"><i style="display:block;height:100%;width:${Math.round(value/max*100)}%;background:${color};border-radius:99px"></i></span><b style="min-width:48px;text-align:right">${text}</b></div>`;
  const levelCard=`<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">การกระจายระดับคุณภาพ</h2>${LEVELS.map(([l,c])=>bar(esc(l),d.levels[l],maxL,c,`${d.levels[l]} ครั้ง`)).join('')}</section>`;
- const itemCards=[...d.groups.values()].map(g=>{const items=[...g.items.entries()].map(([label,sc])=>({label,mean:avg(sc)}));
-  const lo=Math.min(...items.map(i=>i.mean)),hi=Math.max(...items.map(i=>i.mean));
-  return `<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">ค่าเฉลี่ยรายข้อ — ${esc(g.label)} <small style="font-weight:500;color:#607991">(${g.count} ครั้ง, เต็ม 5)</small></h2>
-   ${items.map(i=>bar(esc(i.label)+(i.mean===lo&&lo<hi?' <span class="sv-tag" style="background:#fdecea;color:#b23b30">ควรพัฒนา</span>':i.mean===hi&&lo<hi?' <span class="sv-tag" style="background:#e3f4ef;color:#187E6B">จุดเด่น</span>':''),i.mean,5,i.mean===lo&&lo<hi?'#c8483d':'#2B86E5',i.mean.toFixed(2))).join('')}</section>`;}).join('');
+ const itemCards=[...d.groups.values()].map(g=>{const items=[...g.items.entries()].map(([label,{max,sc}])=>({label,max,mean:avg(sc),rel:avg(sc)/max}));
+  const lo=Math.min(...items.map(i=>i.rel)),hi=Math.max(...items.map(i=>i.rel));
+  return `<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">ค่าเฉลี่ยรายข้อ — ${esc(g.label)} <small style="font-weight:500;color:#607991">(${g.count} ครั้ง · ด้าน 1–3 เต็ม 3 · ด้าน 4 เต็ม 2)</small></h2>
+   ${items.map(i=>bar(esc(i.label)+(i.rel===lo&&lo<hi?' <span class="sv-tag" style="background:#fdecea;color:#b23b30">ควรพัฒนา</span>':i.rel===hi&&lo<hi?' <span class="sv-tag" style="background:#e3f4ef;color:#187E6B">จุดเด่น</span>':''),i.mean,i.max,i.rel===lo&&lo<hi?'#c8483d':'#2B86E5',`${i.mean.toFixed(2)}/${i.max}`)).join('')}</section>`;}).join('');
  const trend=t=>t==null?'<span style="color:#8aa0b4">—</span>':t>0?`<span style="color:#187E6B">▲ ${U.pct(t)}</span>`:t<0?`<span style="color:#c8483d">▼ ${U.pct(-t)}</span>`:'<span style="color:#607991">คงที่</span>';
  const table=`<section class="sv-card" style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:17px">ผลรายครู <small style="font-weight:500;color:#607991">เรียงจากคะแนนเฉลี่ยน้อยไปมาก เพื่อวางแผนนิเทศติดตาม</small></h2>
   <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:14px;min-width:560px"><thead><tr style="text-align:left;color:#607991;border-bottom:1px solid #e3eaf1">
@@ -204,7 +206,7 @@ function viewSummary(){
 }
 function exportSummary(){
  const d=summaryData(),q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
- const lines=[['ครู','ตำแหน่ง','วันที่นิเทศ','คาบ','ประเภท','วิชา','ชั้น/ห้อง','ผู้นิเทศ','คะแนนรวม (25)','ร้อยละ','ระดับ','ข้อเสนอแนะ'].map(q).join(',')];
+ const lines=[['ครู','ตำแหน่ง','วันที่นิเทศ','คาบ','ประเภท','วิชา','ชั้น/ห้อง','ผู้นิเทศ','คะแนนรวม (100)','ร้อยละ','ระดับ','ข้อเสนอแนะ'].map(q).join(',')];
  [...d.done].sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th')||a.visit_date.localeCompare(b.visit_date)).forEach(r=>{const e=r.evaluation;
   lines.push([r.teacher_name,r.teacher_position,r.visit_date,r.period,r.type_label,r.subject,U.classLabel(r),e.evaluator_name,e.total,Number(e.percent).toFixed(2),e.level,e.suggestion].map(q).join(','));});
  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
@@ -248,6 +250,7 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
+ const pr=e.target.closest('[data-print]');if(pr){const r=state.list.find(x=>x.id===Number(pr.dataset.print));if(r)U.printForm(r,{round:roundOf(r,state.list)});return;}
  const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot],[data-away-eval]');if(!el)return;
  if(el.dataset.awayEval){askAway(Number(el.dataset.awayEval));return;}
  if(el.dataset.calweek!=null){const n=Number(el.dataset.calweek);state.calStart=n===0?null:addD(state.calStart,n);viewResults().catch(err=>U.toast(err.message,true));return;}
@@ -267,7 +270,7 @@ document.addEventListener('change',e=>{
  const t=e.target;
  if(t.id==='evalSel'){state.draft=t.value?{id:Number(t.value),scores:Array(state.perm.form.sections.reduce((a,x)=>a+x.items.length,0)).fill(null),suggestion:''}:null;render(false);}
  else if(t.id==='teacherSel'){state.teacher=t.value;state.focus=null;render(false);}
- else{const m=/^s(\d)$/.exec(t.name||'');if(m&&state.draft){state.draft.scores[Number(m[1])]=Number(t.value);summary();}}
+ else{const m=/^s(\d+)$/.exec(t.name||'');if(m&&state.draft){state.draft.scores[Number(m[1])]=Number(t.value);summary();}}
 });
 document.addEventListener('input',e=>{if(e.target.id==='sugg'&&state.draft)state.draft.suggestion=e.target.value;});
 (async()=>{

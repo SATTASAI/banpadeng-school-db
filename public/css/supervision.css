@@ -97,7 +97,7 @@ button.sv-slot{cursor:pointer}
 .sv-bar{height:8px;border-radius:99px;background:#eef3f8;overflow:hidden}.sv-bar i{display:block;height:100%;background:#1669C9;border-radius:99px;transition:width .2s}
 .sv-kv{display:flex;justify-content:space-between;gap:10px;font-size:14.5px;padding:6px 0;border-bottom:1px dashed #dbe6ef}.sv-kv:last-child{border-bottom:0}
 .sv-prov{font-size:12.5px;font-weight:700;color:#9a4b08;background:#fff1dc;border-radius:6px;padding:2px 8px}
-.lv{font-weight:700}.lv-ดีเยี่ยม,.lv-ดีมาก{color:#187E6B}.lv-ดี{color:#1a5fae}.lv-พอใช้{color:#9a4b08}.lv-ควรพัฒนา{color:#a8333c}
+.lv{font-weight:700}.lv-ดีเยี่ยม,.lv-ดีมาก{color:#187E6B}.lv-ดี{color:#1a5fae}.lv-พอใช้{color:#9a4b08}.lv-ควรพัฒนา,.lv-ปรับปรุง{color:#a8333c}
 .sv-hint{font-size:13px;color:#607991;margin:0}
 /* results */
 .sv-res{border:1px solid #d5e2ed;border-radius:14px;background:#fff;overflow:hidden}
@@ -160,3 +160,7 @@ button.sv-slot{cursor:pointer}
 .sv-slot .sv-bdots{display:flex;gap:3px;margin-top:2px}
 .sv-slot .sv-bdots .sv-bdot{width:8px;height:8px}
 .sv-slot small.sv-bname{display:flex;align-items:center;gap:4px}
+
+.sv-done{font-size:12.5px;font-weight:700;color:#a8333c;white-space:nowrap}.sv-done.on{color:#187E6B}
+.sv-scale.two label{width:auto;padding:0 12px}
+.sv-res-foot .sv-btn{margin-left:auto}

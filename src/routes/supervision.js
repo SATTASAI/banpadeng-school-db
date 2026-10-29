@@ -7,7 +7,19 @@ import {ensureDepartmentStaff,belongsToDepartment} from './department-staff.js';
 import {loadStructure,DEFAULT_STRUCTURE} from '../lib/timetable-structure.js';
 
 // ผู้ประเมินนิเทศการสอนและห้องเรียนพร้อมกันในคาบเดียว ใช้แบบประเมินเดียว 10 ข้อ (การสอน 5 + ห้องเรียน 5)
-export const FORM_SECTIONS=[{label:'ด้านการสอน',items:['การออกแบบแผนการจัดการเรียนรู้','การจัดกิจกรรมที่เน้นผู้เรียนเป็นสำคัญ','การใช้สื่อและแหล่งเรียนรู้','การวัดและประเมินผลการเรียนรู้','การบริหารชั้นเรียนและการมีส่วนร่วม']},{label:'ด้านห้องเรียน',items:['ความสะอาดและความเป็นระเบียบ','ความปลอดภัยในห้องเรียน','การจัดมุมเรียนรู้และสื่อการสอน','บรรยากาศที่ส่งเสริมการเรียนรู้','การแสดงผลงานและข้อมูลผู้เรียน']}];
+// แบบนิเทศการสอน (ตามแบบฟอร์มโรงเรียน) — ด้าน 1–3 ให้ 3/2/1, ด้าน 4 ปฏิบัติ 2 / ไม่ปฏิบัติ 0 · คะแนนเต็ม 100
+const RATE3={options:[3,2,1],labels:{3:'ดีมาก',2:'พอใช้',1:'ควรปรับปรุง'}};
+const DONE2={options:[2,0],labels:{2:'ปฏิบัติ',0:'ไม่ปฏิบัติ'}};
+const ENV4='ด้านที่ ๔ สิ่งแวดล้อมและบรรยากาศในห้องเรียน';
+export const FORM_SECTIONS=[
+ {label:'ด้านที่ ๑ ครูผู้สอน',...RATE3,items:['ครูผู้สอนมีการวิเคราะห์หลักสูตร สอดคล้องมาตรฐานและบริบทผู้เรียน','ครูมีนวัตกรรมในการจัดการเรียนรู้ที่เหมาะสมกับวัยของผู้เรียน','ครูผู้สอนมีกระบวนการจัดการเรียนรู้ที่หลากหลายและเน้นผู้เรียนเป็นสำคัญ','ครูผู้สอนเปิดโอกาสให้นักเรียนสะท้อนคิด','ครูผู้สอนสอดแทรกคุณธรรม จริยธรรม']},
+ {label:'ด้านที่ ๒ การจัดการเรียนการสอน',...RATE3,items:['กิจกรรมการเรียนรู้มีความสอดคล้องกับมาตรฐานและสมรรถนะ','กิจกรรมการเรียนรู้มีการส่งเสริมทักษะชีวิตและอาชีพ','กิจกรรมการเรียนรู้มีการอภิปรายสะท้อนผล','กิจกรรมการเรียนรู้มีความหลากหลายและเน้นผู้เรียนเป็นสำคัญ','จัดกิจกรรมส่งเสริมให้ผู้เรียนมีคุณลักษณะที่พึงประสงค์']},
+ {label:'ด้านที่ ๓ ผู้เรียน',...RATE3,items:['ผู้เรียนสามารถเข้าถึงสิ่งที่เรียนและเข้าใจบทเรียน','ผู้เรียนสามารถเชื่อมโยงความรู้หรือประสบการณ์เดิมกับการเรียนรู้ใหม่','ผู้เรียนสามารถแสวงหาความรู้ คิดวิเคราะห์ และสรุปองค์ความรู้ด้วยตนเองได้','ผู้เรียนมีความกระตือรือร้นในการร่วมกิจกรรมการเรียนรู้','ผู้เรียนสะท้อนกลับการเรียนรู้และนำความรู้ไปประยุกต์ใช้ได้','ผู้เรียนมีพฤติกรรมที่พึงประสงค์']},
+ {label:ENV4,group:'หมวดที่ 1 : ความสะอาด ปลอดภัย และความเป็นระเบียบ',...DONE2,items:['ห้องเรียนสะอาด','การจัดห้องเรียนมีความเป็นระเบียบเรียบร้อย','มีบันทึกเวรทำความสะอาดประจำวัน','มุมอุปกรณ์ทำความสะอาดและถังขยะพร้อมใช้งาน','ชั้น/ตู้เก็บเอกสารมีการจัดเก็บอย่างเหมาะสม','มุมเก็บถาดอาหาร','มุมเก็บแปรงสีฟัน','มุมเก็บแก้วน้ำ']},
+ {label:ENV4,group:'หมวดที่ 2 : เอกสารและหลักฐานทางการจัดการเรียนรู้',...DONE2,items:['บันทึก ปพ.8 ครบถ้วนและเป็นปัจจุบัน','บันทึกการสอนซ่อมเสริม','บันทึกการดื่มนม','บันทึกการแปรงฟัน','บันทึกรับประทานอาหารกลางวัน','สมุดบันทึกความดี','สมุด HOME ROOM','สมุดวิเคราะห์ผู้เรียนรายบุคคล']},
+ {label:ENV4,group:'หมวดที่ 3 : สื่อ การสื่อสาร และการส่งเสริมการเรียนรู้',...DONE2,items:['มีสื่อส่งเสริมคุณธรรมและกำลังใจในห้องเรียน','มีมุมสะท้อนความคิดของผู้เรียน','ป้ายสมาชิกในห้องเรียน','ป้ายสถิติรายวัน','ป้ายนิเทศ 8 กลุ่มสาระ','ป้ายข้อตกลงในห้องเรียน','สัญลักษณ์ ชาติ ศาสนา พระมหากษัตริย์','มุมผลงานนักเรียน','มุมสื่ออิเล็กทรอนิกส์ (TV/คอมพิวเตอร์)','มุมส่งเสริมการเรียนรู้และนันทนาการ']}
+];
+export const FORM_ITEM_DEFS=FORM_SECTIONS.flatMap(sec=>sec.items.map(label=>({section:sec.label,group:sec.group||null,label,options:sec.options,max:Math.max(...sec.options)})));
 export const FORM_ITEMS=FORM_SECTIONS.flatMap(s=>s.items);
 export const COMBINED_LABEL='นิเทศการสอนและห้องเรียน';
 // ช่วงชั้น — คาบเดียวกันวันเดียวกันลงได้ช่วงชั้นละ 1 คน
@@ -22,11 +34,11 @@ export function bandOf(grade){
 // ค่า supervision_type ในฐานข้อมูล: คำขอใหม่ทั้งหมดเก็บเป็น teaching (= นิเทศการสอนและห้องเรียน); classroom คงไว้สำหรับข้อมูลเดิม
 export const SUPERVISION_TYPES={teaching:{label:COMBINED_LABEL},classroom:{label:'นิเทศห้องเรียน'}};
 const LEGACY_LABELS={teaching:'นิเทศการสอน',classroom:'นิเทศห้องเรียน'};
-export const MAX_SCORE=FORM_ITEMS.length*5;
-export const QUALITY_LEVELS=[[90,'ดีเยี่ยม'],[80,'ดีมาก'],[70,'ดี'],[60,'พอใช้'],[0,'ควรพัฒนา']];
+export const MAX_SCORE=FORM_ITEM_DEFS.reduce((a,i)=>a+i.max,0); // 100
+export const QUALITY_LEVELS=[[90,'ดีเยี่ยม'],[80,'ดีมาก'],[70,'ดี'],[60,'พอใช้'],[0,'ปรับปรุง']];
 export function qualityLevel(percent){return QUALITY_LEVELS.find(([min])=>percent>=min)[1];}
 export function summarizeScores(scores){
- if(!Array.isArray(scores)||scores.length!==FORM_ITEMS.length||!scores.every(s=>Number.isInteger(s)&&s>=1&&s<=5))return null;
+ if(!Array.isArray(scores)||scores.length!==FORM_ITEM_DEFS.length||!scores.every((s,i)=>FORM_ITEM_DEFS[i].options.includes(s)))return null;
  const total=scores.reduce((a,b)=>a+b,0),percent=Math.round(total/MAX_SCORE*10000)/100;
  return {total,percent,level:qualityLevel(percent)};
 }
@@ -98,6 +110,11 @@ export function ensureSupervisionSchema(env){
   const cols=new Set((await env.DB.prepare('PRAGMA table_info(supervision_requests)').all()).results.map(c=>c.name));
   const add=[['evidence_requested_at','TEXT'],['evidence_requested_by','INTEGER'],['evidence_note','TEXT'],['evidence_video_url','TEXT'],['evidence_submitted_at','TEXT'],['evidence_due_date','TEXT'],['evidence_reminded_on','TEXT'],['evidence_overdue_notified','INTEGER'],['grade_band','TEXT']].filter(([c])=>!cols.has(c));
   for(const [c,t] of add)await env.DB.prepare(`ALTER TABLE supervision_requests ADD COLUMN ${c} ${t}`).run().catch(e=>{if(!/duplicate column/i.test(String(e.message)))throw e;});
+  // เปลี่ยนเป็นแบบนิเทศใหม่ (42 ข้อ เต็ม 100): ล้างผลแบบเดิม รายการกลับไปรอผู้นิเทศบันทึกคะแนนใหม่
+  const oldIds=(await env.DB.prepare('SELECT request_id id FROM supervision_evaluations WHERE json_array_length(items_json)<>?').bind(FORM_ITEM_DEFS.length).all()).results.map(r=>r.id);
+  for(let i=0;i<oldIds.length;i+=50){const ids=oldIds.slice(i,i+50),q=ids.map(()=>'?').join(',');
+   await env.DB.batch([env.DB.prepare(`UPDATE supervision_requests SET status='confirmed',updated_at=datetime('now') WHERE id IN (${q}) AND status='evaluated'`).bind(...ids),
+    env.DB.prepare(`DELETE FROM supervision_evaluations WHERE request_id IN (${q})`).bind(...ids)]);}
   // เติมช่วงชั้นให้รายการเดิม
   const {results:nob}=await env.DB.prepare('SELECT id,grade_level FROM supervision_requests WHERE grade_band IS NULL AND grade_level IS NOT NULL').all();
   const fill=nob.map(r=>[r.id,bandOf(r.grade_level)]).filter(([,b])=>b).map(([id,b])=>env.DB.prepare('UPDATE supervision_requests SET grade_band=? WHERE id=?').bind(b,id));
@@ -191,7 +208,9 @@ const SELECT=`SELECT r.*,tu.full_name teacher_name,su.full_name supervisor_name,
  e.items_json,e.total,e.percent,e.quality_level,e.suggestion,e.evaluated_at,e.evaluator_user_id,eu.full_name evaluator_name,
  (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=r.teacher_user_id LIMIT 1) teacher_position,
  (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=r.supervisor_user_id LIMIT 1) supervisor_position,
- (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=e.evaluator_user_id LIMIT 1) evaluator_position
+ (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=e.evaluator_user_id LIMIT 1) evaluator_position,
+ (SELECT t.term_number FROM academic_terms t WHERE t.id=r.academic_term_id) term_number,
+ (SELECT y.year_be FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id WHERE t.id=r.academic_term_id) year_be
  FROM supervision_requests r JOIN users tu ON tu.id=r.teacher_user_id LEFT JOIN users su ON su.id=r.supervisor_user_id
  LEFT JOIN supervision_evaluations e ON e.request_id=r.id LEFT JOIN users eu ON eu.id=e.evaluator_user_id`;
 // ผลเดิมที่ประเมินแบบแยก (5 ข้อ) แสดงชื่อประเภทเดิม
@@ -201,7 +220,7 @@ function typeLabel(row){
 }
 function shape(row,{withResult}){
  const out={id:row.id,teacher_user_id:row.teacher_user_id,teacher_name:row.teacher_name,teacher_position:row.teacher_position||null,
-  academic_term_id:row.academic_term_id,grade_band:row.grade_band||bandOf(row.grade_level),visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
+  academic_term_id:row.academic_term_id,term_number:row.term_number??null,year_be:row.year_be??null,grade_band:row.grade_band||bandOf(row.grade_level),visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
   supervision_type:row.supervision_type,type_label:typeLabel(row),topic:row.topic,status:row.status,
   supervisor_user_id:row.supervisor_user_id,supervisor_name:row.supervisor_name,supervisor_position:row.supervisor_position||null,
   accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at,
@@ -416,8 +435,8 @@ async function act(request,env,user,id,action,perms,services){
   if(row.evidence_requested_at&&!row.evidence_submitted_at)return fail('รอครูส่งลิงก์คลิปและภาพการสอนก่อน จึงบันทึกคะแนนจากหลักฐานได้',409);
   const body=await request.json().catch(()=>null);
   const scores=Array.isArray(body?.scores)?body.scores.map(Number):null,summary=summarizeScores(scores);
-  if(!summary)return fail('กรุณาให้คะแนนครบทุกข้อ ข้อละ 1–5 คะแนน');
-  const items=FORM_SECTIONS.flatMap(sec=>sec.items.map(label=>({section:sec.label,label}))).map((it,i)=>({...it,score:scores[i]}));
+  if(!summary)return fail('กรุณาให้คะแนนครบทุกข้อ (ด้านที่ 1–3 ให้ 3/2/1 · ด้านที่ 4 ปฏิบัติ/ไม่ปฏิบัติ)');
+  const items=FORM_ITEM_DEFS.map(({section,group,label,max},i)=>({section,group,label,max,score:scores[i]}));
   const suggestion=longText(body.suggestion,3000);
   let results;
   try{

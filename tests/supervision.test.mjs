@@ -43,13 +43,19 @@ async function school(){
  env.raw.prepare("INSERT INTO department_staff(department,personnel_id,is_head) VALUES('academic',?,1)").run(pid(7));
  return {env,pid};
 }
+const FULL=[...Array(16).fill(3),...Array(26).fill(2)];           // 100
+const GOOD=[...Array(16).fill(3),...Array(20).fill(2),...Array(6).fill(0)]; // 88 ดีมาก
+const MID=[...Array(16).fill(2),...Array(26).fill(2)];             // 84
+const LOW=[...Array(16).fill(1),...Array(26).fill(0)];             // 16
 const manual={visit_date:'2030-01-07',period:2,supervision_type:'teaching',topic:'การใช้คำถาม',subject:'ภาษาไทย',grade_level:'ป.4',classroom:'1'};
 
-test('scores: combined 10-item form, percent out of 50 and quality bands',()=>{
- assert.deepEqual(summarizeScores([5,4,5,4,5,5,4,5,4,5]),{total:46,percent:92,level:'ดีเยี่ยม'});
- assert.equal(summarizeScores([5,4,5,4,5]),null,'old 5-item form rejected');
- assert.equal(summarizeScores([3,3,3,3,3,3,3,3,3,3]).level,'พอใช้');assert.equal(qualityLevel(80),'ดีมาก');assert.equal(qualityLevel(59.99),'ควรพัฒนา');
- assert.equal(summarizeScores([5,5,5,5]),null);assert.equal(summarizeScores([5,5,5,5,5,5,5,5,5,6]),null);assert.equal(summarizeScores([5,5,5,5,5,5,5,5,5,4.5]),null);
+test('scores: school form — 16 items 3/2/1 + 26 items 2/0, total out of 100 and quality bands',()=>{
+ assert.deepEqual(summarizeScores(FULL),{total:100,percent:100,level:'ดีเยี่ยม'});
+ assert.deepEqual(summarizeScores(GOOD),{total:88,percent:88,level:'ดีมาก'});
+ assert.equal(summarizeScores(LOW).level,'ปรับปรุง');assert.equal(qualityLevel(80),'ดีมาก');assert.equal(qualityLevel(59.99),'ปรับปรุง');assert.equal(qualityLevel(60),'พอใช้');
+ assert.equal(summarizeScores([5,4,5,4,5,5,4,5,4,5]),null,'old 10-item form rejected');
+ assert.equal(summarizeScores([...FULL.slice(0,41),1]),null,'checklist item only 2 or 0');
+ assert.equal(summarizeScores([0,...FULL.slice(1)]),null,'rating item only 3/2/1');
  assert.equal(slotStarted('2030-01-07','09:30',{date:'2030-01-07',minutes:9*60+29}),false);
  assert.equal(slotStarted('2030-01-07','09:30',{date:'2030-01-07',minutes:9*60+30}),true);
  assert.equal(slotStarted('2030-01-06','09:30',{date:'2030-01-07',minutes:0}),true);
@@ -86,12 +92,12 @@ test('full flow: register → executives notified → accept → score → teach
  const clash=await json(env,`/api/supervision/requests/${other}/accept`,'POST',{},5);assert.equal(clash.status,409);assert.match(clash.body.error,/วันและคาบเดียวกัน/);
  await ok(env,`/api/supervision/requests/${other}/accept`,'POST',{},6);
 
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5,5,4,5,4,5]},6)).status,403,'only the accepting executive scores');
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5]},5)).status,400,'all ten items required');
- const saved=await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5,5,4,5,4,5],suggestion:'ใช้คำถามปลายเปิดดีมาก'},5);
- assert.equal(saved.request.status,'evaluated');assert.equal(saved.request.evaluation.total,46);assert.equal(saved.request.evaluation.percent,92);assert.equal(saved.request.evaluation.level,'ดีเยี่ยม'); assert.equal(saved.request.type_label,'นิเทศการสอนและห้องเรียน');assert.equal(saved.request.evaluation.items.length,10);assert.equal(saved.request.evaluation.items[5].section,'ด้านห้องเรียน');
- assert.equal(saved.request.evaluation.items[0].label,'การออกแบบแผนการจัดการเรียนรู้');
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[1,1,1,1,1,1,1,1,1,1]},5)).status,409,'cannot overwrite');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:GOOD},6)).status,403,'only the accepting executive scores');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:GOOD.slice(0,10)},5)).status,400,'all 42 items required');
+ const saved=await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:GOOD,suggestion:'ใช้คำถามปลายเปิดดีมาก'},5);
+ assert.equal(saved.request.status,'evaluated');assert.equal(saved.request.evaluation.total,88);assert.equal(saved.request.evaluation.percent,88);assert.equal(saved.request.evaluation.level,'ดีมาก'); assert.equal(saved.request.type_label,'นิเทศการสอนและห้องเรียน');assert.equal(saved.request.evaluation.items.length,42);assert.equal(saved.request.evaluation.items[5].section,'ด้านที่ ๒ การจัดการเรียนการสอน');
+ assert.equal(saved.request.evaluation.items[0].label,'ครูผู้สอนมีการวิเคราะห์หลักสูตร สอดคล้องมาตรฐานและบริบทผู้เรียน');assert.equal(saved.request.evaluation.items[41].max,2);assert.equal(saved.request.evaluation.items[41].group.startsWith('หมวดที่ 3'),true);
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:LOW},5)).status,409,'cannot overwrite');
  assert.equal((await json(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2)).status,409,'evaluated cannot be cancelled');
 
  const mine2=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests;
@@ -99,13 +105,13 @@ test('full flow: register → executives notified → accept → score → teach
  const mine3=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,3)).requests;
  assert.deepEqual(mine3.map(r=>r.id),[other],'teacher sees only own requests');
  assert((await ok(env,'/api/notifications','GET',undefined,2)).notifications.some(n=>/ผลการนิเทศของคุณพร้อมแล้ว/.test(n.message)));
- for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,46,'executives, academic and admin see results: '+u);}
+ for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,88,'executives, academic and admin see results: '+u);}
 });
 
 test('academic head appoints evaluators; appointed evaluators see only the results they scored',async()=>{
  const {env}=await school();
  const first=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
- await ok(env,`/api/supervision/requests/${first}/accept`,'POST',{},5);await ok(env,`/api/supervision/requests/${first}/evaluate`,'POST',{scores:[3,3,3,3,3,3,3,3,3,3]},5);
+ await ok(env,`/api/supervision/requests/${first}/accept`,'POST',{},5);await ok(env,`/api/supervision/requests/${first}/evaluate`,'POST',{scores:MID},5);
  assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},2)).status,403,'teachers cannot appoint');
  assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},5)).status,403,'executives cannot appoint unless academic head/admin');
  await ok(env,'/api/supervision/evaluators','POST',{user_id:3},7);
@@ -120,9 +126,9 @@ test('academic head appoints evaluators; appointed evaluators see only the resul
  await ok(env,`/api/supervision/requests/${second}/release`,'POST',{},3);
  assert.equal((await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,7)).requests.find(r=>r.id===second).status,'pending');
  await ok(env,`/api/supervision/requests/${second}/accept`,'POST',{},3);
- await ok(env,`/api/supervision/requests/${second}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},3);
+ await ok(env,`/api/supervision/requests/${second}/evaluate`,'POST',{scores:MID},3);
  const all=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests;
- assert.equal(all.find(r=>r.id===second).evaluation.percent,80);
+ assert.equal(all.find(r=>r.id===second).evaluation.percent,84);
  assert.equal(all.find(r=>r.id===first).evaluation,undefined,'not shown: scored by someone else');
  await ok(env,'/api/supervision/evaluators/3','DELETE',undefined,1);
  assert.equal((await ok(env,'/api/supervision/permissions','GET',undefined,3)).evaluate,false);
@@ -290,7 +296,7 @@ test('evaluator unavailable → teacher sends video link + images → evaluator 
  assert.match(note,/ส่งลิงก์คลิปการสอน/);
  const r=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id);
  assert.equal(r.evidence.note,'ติดประชุม');assert.equal(r.evidence.submitted_at,null);assert.equal(r.evidence.due_date,'2030-01-10','3 days after visit');
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},5)).status,409,'wait for evidence');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:MID},5)).status,409,'wait for evidence');
  // ภาพต้องอยู่ใน Drive: ยังไม่ได้ตั้งค่าจึงอัปโหลดไม่ได้
  const fd=new FormData();fd.append('file',new File([new Uint8Array([0xff,0xd8,0xff,0xe0,0,0,0,0,0,0,0,0,0,0,0,0])],'a.jpg',{type:'image/jpeg'}));
  const token=await signJWT({sub:2},env.JWT_SECRET);
@@ -309,7 +315,7 @@ test('evaluator unavailable → teacher sends video link + images → evaluator 
  assert.equal((await call(env,`/api/supervision/evidence/files/${fid}`,'GET',undefined,3)).status,404,'other teachers cannot view');
  await ok(env,'/api/supervision/evaluators','POST',{user_id:3},1);
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests.find(x=>x.id===id).evidence,undefined,'appointed evaluator not responsible sees no evidence');
- await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},5);
+ await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:MID},5);
  assert.equal((await json(env,`/api/supervision/evidence/files/${fid}`,'DELETE',undefined,2)).status,409,'locked after evaluation');
  }finally{globalThis.fetch=realFetch;}
 });
@@ -343,4 +349,19 @@ test('evidence: release with nothing sent clears the request; cancel purges file
   const r=await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-13',minutes:8*60});
   assert.equal(r.trashed,1);assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_drive_trash').get().n,0);
  }finally{globalThis.fetch=realFetch;}
+});
+
+test('switching to the school form clears old-form results; requests go back to awaiting scores',async()=>{
+ const {env}=await school();
+ const id=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ const old=JSON.stringify(Array.from({length:10},(_,i)=>({section:'ด้านการสอน',label:'ข้อ '+i,score:4})));
+ env.raw.prepare("INSERT INTO supervision_evaluations(request_id,evaluator_user_id,items_json,total,percent,quality_level) VALUES(?,?,?,?,?,?)").run(id,5,old,40,80,'ดีมาก');
+ env.raw.prepare("UPDATE supervision_requests SET status='evaluated' WHERE id=?").run(id);
+ const fresh={...env,DB:{...env.DB}}; // new isolate → schema check runs again
+ const r=(await ok(fresh,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id);
+ assert.equal(r.status,'confirmed');assert.equal(r.supervisor_user_id,5);assert.equal(r.evaluation,undefined);
+ await ok(fresh,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:FULL},5);
+ const again={...env,DB:{...env.DB}};
+ assert.equal((await ok(again,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id).evaluation.total,100,'new-form results are kept');
 });
