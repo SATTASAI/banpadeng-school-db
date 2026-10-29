@@ -56,6 +56,8 @@ button.sv-slot{cursor:pointer}
 .sv-slot.booked.pending{background:#fff1dc}.sv-slot.booked.confirmed{background:#e6f0fb}.sv-slot.booked.evaluated{background:#e3f4ec}
 .sv-slot.booked .state{margin-top:auto;font-weight:700;font-size:12.5px}
 .sv-slot.past{background:#f6f9fc;opacity:.6}
+.sv-slot.full{background:#fdf1f1;border-color:#f2c9c9;color:#9b3b3b;cursor:not-allowed}
+.sv-slot.full small{color:#b54848;font-weight:600}
 .sv-slot.none{border:0;color:#c9d6e2;align-items:center;justify-content:center}
 .sv-slot.off{border:0;background:#f6f9fc;color:#8aa0b4;align-items:center;justify-content:center;font-size:12.5px}
 .sv-list{display:flex;flex-direction:column;gap:10px}

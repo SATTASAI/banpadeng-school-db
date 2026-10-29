@@ -151,6 +151,9 @@ function shape(row,{withResult}){
 async function loadRequest(env,id){return env.DB.prepare(`${SELECT} WHERE r.id=?`).bind(id).first();}
 const TH_DAYS=['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'],TH_MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
 export function thaiDate(iso){const d=new Date(iso+'T00:00:00Z');return `${TH_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${TH_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()+543}`;}
+// ผู้ประเมินมี 3 คน: วันที่+คาบเดียวกันรับลงทะเบียนนิเทศได้สูงสุด 3 คำขอ (ไม่นับที่ยกเลิก)
+export const SLOT_CAPACITY=3;
+const FULL_MSG='ลงทะเบียนไม่ได้เนื่องจากคาบเต็ม กรุณาเลือกคาบอื่น';
 const slotLabel=r=>`${thaiDate(r.visit_date)} คาบ ${r.period}`;
 
 async function week(env,user,url){
@@ -171,7 +174,8 @@ async function week(env,user,url){
  }
  const marks=dates.map(()=>'?').join(',');
  const {results:mine}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' AND r.visit_date IN (${marks})`).bind(user.id,...dates).all();
- return reply({start,end:dates[4],now,linked:personnelIds.length>0,
+ const {results:fullRows}=await env.DB.prepare(`SELECT visit_date,period,COUNT(*) n FROM supervision_requests WHERE status<>'cancelled' AND visit_date IN (${marks}) GROUP BY visit_date,period HAVING COUNT(*)>=?`).bind(...dates,SLOT_CAPACITY).all();
+ return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full:fullRows.map(r=>`${r.visit_date}|${r.period}`),
   terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,
    mode:t.plan?'timetable':'manual',times:t.structure.times,lunch:t.structure.lunch,
    lessons:t.lessons.map(l=>({entry_id:l.id,weekday:l.weekday,period:l.period,subject:l.subject,grade_level:l.grade_level,classroom:l.classroom,room_name:l.room_name}))})),
@@ -202,9 +206,11 @@ async function createRequest(request,env,user){
  }
  let id;
  try{
+  // นับและเพิ่มในคำสั่งเดียว กันกดพร้อมกันแล้วเกินจำนวนผู้ประเมิน
   const result=await env.DB.prepare(`INSERT INTO supervision_requests(teacher_user_id,teacher_personnel_id,academic_term_id,visit_date,weekday,period,source,timetable_entry_id,subject,grade_level,classroom,room_name,supervision_type,topic)
-   VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
-   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null).run();
+   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<?`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
+   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,date,period,SLOT_CAPACITY).run();
+  if(!result.meta.changes)return fail(FULL_MSG,409);
   id=Number(result.meta.last_row_id);
  }catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('คุณลงทะเบียนคาบนี้ไว้แล้ว',409);throw e;}
  const room=[lesson.grade_level,lesson.classroom].filter(Boolean).join('/');
