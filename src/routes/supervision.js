@@ -80,11 +80,14 @@ export function ensureSupervisionSchema(env){
    id INTEGER PRIMARY KEY AUTOINCREMENT,request_id INTEGER NOT NULL REFERENCES supervision_requests(id) ON DELETE CASCADE,
    drive_file_id TEXT NOT NULL,file_name TEXT NOT NULL,mime_type TEXT NOT NULL,file_size INTEGER NOT NULL,
    uploaded_by INTEGER NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
-  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_evidence_request ON supervision_evidence_files(request_id)')
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_evidence_request ON supervision_evidence_files(request_id)'),
+  // ไฟล์ Drive ที่ลบไม่สำเร็จ — Cron ลองลบซ้ำ ไม่ให้ภาพค้างใน Drive
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS supervision_drive_trash (
+   drive_file_id TEXT PRIMARY KEY,attempts INTEGER NOT NULL DEFAULT 0,last_error TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')))`)
  ]).then(async()=>{
   // คอลัมน์หลักฐานแทนการนิเทศ (ผู้ประเมินรับนิเทศแล้วแจ้งไม่ว่างไปนิเทศ → ครูส่งลิงก์คลิปและภาพ)
   const cols=new Set((await env.DB.prepare('PRAGMA table_info(supervision_requests)').all()).results.map(c=>c.name));
-  const add=[['evidence_requested_at','TEXT'],['evidence_requested_by','INTEGER'],['evidence_note','TEXT'],['evidence_video_url','TEXT'],['evidence_submitted_at','TEXT']].filter(([c])=>!cols.has(c));
+  const add=[['evidence_requested_at','TEXT'],['evidence_requested_by','INTEGER'],['evidence_note','TEXT'],['evidence_video_url','TEXT'],['evidence_submitted_at','TEXT'],['evidence_due_date','TEXT'],['evidence_reminded_on','TEXT'],['evidence_overdue_notified','INTEGER']].filter(([c])=>!cols.has(c));
   for(const [c,t] of add)await env.DB.prepare(`ALTER TABLE supervision_requests ADD COLUMN ${c} ${t}`).run().catch(e=>{if(!/duplicate column/i.test(String(e.message)))throw e;});
  }).catch(e=>{ready.delete(env.DB);throw e;});
  ready.set(env.DB,p);return p;
@@ -192,7 +195,8 @@ function shape(row,{withResult}){
   // เลยวันนิเทศแล้วแต่ยังไม่มีผล: pending = ไม่มีผู้รับนิเทศ, confirmed = ค้างบันทึกคะแนน
   overdue:(row.status==='pending'||row.status==='confirmed')&&row.visit_date<bangkokNow().date,
   can_cancel:row.status!=='evaluated'&&bangkokNow().date<row.visit_date};
- if(row.evidence_requested_at)out.evidence={requested_at:row.evidence_requested_at,note:row.evidence_note||null,video_url:row.evidence_video_url||null,submitted_at:row.evidence_submitted_at||null,files:[]};
+ if(row.evidence_requested_at)out.evidence={requested_at:row.evidence_requested_at,note:row.evidence_note||null,video_url:row.evidence_video_url||null,submitted_at:row.evidence_submitted_at||null,due_date:row.evidence_due_date||null,
+  late:!row.evidence_submitted_at&&!!row.evidence_due_date&&row.evidence_due_date<bangkokNow().date,files:[]};
  if(row.status==='evaluated'&&withResult){
   let items=[];try{items=JSON.parse(row.items_json);}catch{}
   out.evaluation={items,total:row.total,percent:row.percent,level:row.quality_level,suggestion:row.suggestion,evaluated_at:row.evaluated_at,
@@ -202,7 +206,7 @@ function shape(row,{withResult}){
 }
 async function loadRequest(env,id){return env.DB.prepare(`${SELECT} WHERE r.id=?`).bind(id).first();}
 // แนบรายการภาพหลักฐานให้คำขอที่ผู้ประเมินแจ้งไม่ว่างไปนิเทศ
-export const EVIDENCE_MAX_IMAGES=10;
+export const EVIDENCE_MAX_IMAGES=10,EVIDENCE_DAYS=3;
 async function withEvidence(env,list){
  const ids=list.filter(r=>r.evidence).map(r=>r.id);
  if(!ids.length)return list;
@@ -303,15 +307,22 @@ async function listRequests(env,user,url,perms){
  const {results}=await env.DB.prepare(`${SELECT} WHERE r.status<>'cancelled' ORDER BY r.visit_date,r.period,r.id`).all();
  // ผู้ประเมินที่ได้รับแต่งตั้ง (ไม่ใช่ฝ่ายบริหาร/ฝ่ายวิชาการ) เห็นคะแนนเฉพาะรายการที่ตนประเมิน
  const released=new Set((await env.DB.prepare('SELECT request_id FROM supervision_releases WHERE user_id=?').bind(user.id).all()).results.map(r=>Number(r.request_id)));
+ // ซ่อนได้เฉพาะเมื่อยังมีผู้ประเมินคนอื่นที่ยังไม่ถอนรายการนั้น และยังไม่เลยวันนิเทศ — ไม่ให้คำขอหายจากทุกคน
+ const pool=released.size?await evaluatorIds(env):[];
+ const releasers=new Map();
+ if(released.size){const {results:rr}=await env.DB.prepare(`SELECT request_id,user_id FROM supervision_releases WHERE request_id IN (${[...released].map(()=>'?').join(',')})`).bind(...released).all();
+  for(const x of rr){const k=Number(x.request_id);if(!releasers.has(k))releasers.set(k,new Set());releasers.get(k).add(Number(x.user_id));}}
+ const someoneElse=r=>pool.some(id=>id!==r.teacher_user_id&&!releasers.get(r.id)?.has(id));
  // หลักฐาน (คลิป/ภาพ) เห็นได้เฉพาะครูเจ้าของ ผู้รับนิเทศ และฝ่ายบริหาร/ฝ่ายวิชาการ
  const list=results.map(r=>{const out=shape(r,{withResult:perms.view_all||r.evaluator_user_id===user.id||r.teacher_user_id===user.id});
   if(out.evidence&&!(perms.view_all||r.supervisor_user_id===user.id||r.teacher_user_id===user.id))delete out.evidence;
   // รายการที่ตนเองถอนการรับแล้วและยังรอผู้รับใหม่ — ไม่ค้างในแท็บคำขอของผู้ที่ถอน
-  out.released_by_me=out.status==='pending'&&released.has(out.id);return out;});
+  out.released_by_me=out.status==='pending'&&released.has(out.id);
+  out.hidden_for_me=out.released_by_me&&!out.overdue&&someoneElse(r);return out;});
  return reply({scope,requests:await withEvidence(env,list)});
 }
 
-async function act(request,env,user,id,action,perms){
+async function act(request,env,user,id,action,perms,services){
  const row=await loadRequest(env,id);
  if(!row||row.status==='cancelled')return fail('ไม่พบรายการนิเทศ',404);
  if(action==='cancel'){
@@ -320,6 +331,7 @@ async function act(request,env,user,id,action,perms){
   if(!(bangkokNow().date<row.visit_date))return fail('ยกเลิกหรือเลื่อนนัดได้ก่อนวันนิเทศอย่างน้อย 1 วันเท่านั้น',409);
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='cancelled',cancelled_at=datetime('now'),cancelled_by=?,updated_at=datetime('now') WHERE id=? AND status IN ('pending','confirmed')").bind(user.id,id).run();
   if(!r.meta.changes)return fail('สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
+  await purgeEvidence(env,id,services);
   const to=row.supervisor_user_id?[row.supervisor_user_id]:await evaluatorIds(env);
   const notes=notifyStatements(env,to,id,`${row.teacher_name} ยกเลิกคำขอ${COMBINED_LABEL} ${slotLabel(row)}`,user.id);
   if(notes.length)await env.DB.batch(notes);
@@ -349,6 +361,9 @@ async function act(request,env,user,id,action,perms){
  if(action==='release'){
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='pending',supervisor_user_id=NULL,accepted_at=NULL,updated_at=datetime('now') WHERE id=? AND status='confirmed' AND supervisor_user_id=?").bind(id,user.id).run();
   if(!r.meta.changes)return fail('ถอนการรับได้เฉพาะรายการที่ยังไม่ประเมิน',409);
+  // แจ้งไม่ว่างไว้แต่ครูยังไม่ได้ส่งอะไร → ล้างคำขอหลักฐาน ผู้รับคนใหม่เลือกเองว่าจะไปนิเทศหรือขอคลิปและภาพ
+  if(row.evidence_requested_at&&!row.evidence_submitted_at&&!Number((await env.DB.prepare('SELECT COUNT(*) n FROM supervision_evidence_files WHERE request_id=?').bind(id).first()).n))
+   await env.DB.prepare('UPDATE supervision_requests SET evidence_requested_at=NULL,evidence_requested_by=NULL,evidence_note=NULL,evidence_due_date=NULL,evidence_reminded_on=NULL,evidence_overdue_notified=NULL WHERE id=?').bind(id).run();
   const others=(await evaluatorIds(env)).filter(x=>x!==row.teacher_user_id);
   await env.DB.batch([
    env.DB.prepare('INSERT OR REPLACE INTO supervision_releases(request_id,user_id) VALUES(?,?)').bind(id,user.id),
@@ -360,16 +375,20 @@ async function act(request,env,user,id,action,perms){
  if(action==='unavailable'){
   // ผู้ประเมินรับนิเทศแล้วแต่ไม่ว่างไปนิเทศ → ขอให้ครูส่งลิงก์คลิปการสอนและภาพการสอน/สื่อการสอนแทน
   if(row.status!=='confirmed')return fail('แจ้งไม่ว่างไปนิเทศได้เฉพาะรายการที่คุณรับนิเทศแล้วและยังไม่ประเมิน',409);
-  if(row.evidence_requested_at)return fail('แจ้งครูให้ส่งคลิปและภาพแทนไว้แล้ว',409);
+  if(row.evidence_requested_at)return fail('รายการนี้ขอให้ครูส่งคลิปและภาพแทนไว้แล้ว',409);
+  const notReady=services?.ready?.(env);if(notReady||!services?.upload)return fail(`ยังไม่พร้อมรับภาพจากครู: ${notReady||'ยังไม่ได้ตั้งค่า Google Drive'} กรุณาแจ้งผู้ดูแลระบบ`,503);
   const body=await request.json().catch(()=>({}));const note=longText(body?.note,500)||null;
-  const r=await env.DB.prepare("UPDATE supervision_requests SET evidence_requested_at=datetime('now'),evidence_requested_by=?,evidence_note=?,updated_at=datetime('now') WHERE id=? AND status='confirmed' AND supervisor_user_id=? AND evidence_requested_at IS NULL").bind(user.id,note,id,user.id).run();
+  // กำหนดส่ง: EVIDENCE_DAYS วันหลังวันนิเทศ หรือหลังวันที่แจ้ง (ถ้าแจ้งหลังวันนิเทศ)
+  const today=bangkokNow().date,due=addDays(row.visit_date>today?row.visit_date:today,EVIDENCE_DAYS);
+  const r=await env.DB.prepare("UPDATE supervision_requests SET evidence_requested_at=datetime('now'),evidence_requested_by=?,evidence_note=?,evidence_due_date=?,evidence_reminded_on=?,updated_at=datetime('now') WHERE id=? AND status='confirmed' AND supervisor_user_id=? AND evidence_requested_at IS NULL").bind(user.id,note,due,today,id,user.id).run();
   if(!r.meta.changes)return fail('สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
-  const notes=notifyStatements(env,[row.teacher_user_id],id,`${user.full_name} ไม่สะดวกไปนิเทศ ${slotLabel(row)} กรุณาส่งลิงก์คลิปการสอน และภาพการสอนหรือสื่อการสอน (ไม่เกิน ${EVIDENCE_MAX_IMAGES} ภาพ) แทน ที่เมนูลงทะเบียนนิเทศ → นัดหมายของฉัน${note?' · หมายเหตุ: '+note:''}`,user.id);
+  const notes=notifyStatements(env,[row.teacher_user_id],id,`${user.full_name} ไม่สะดวกไปนิเทศ ${slotLabel(row)} กรุณาส่งลิงก์คลิปการสอน และภาพการสอนหรือสื่อการสอน (ไม่เกิน ${EVIDENCE_MAX_IMAGES} ภาพ) แทน ภายใน ${thaiDate(due)} ที่เมนูลงทะเบียนนิเทศ → นัดหมายของฉัน${note?' · หมายเหตุ: '+note:''}`,user.id);
   if(notes.length)await env.DB.batch(notes);
   return reply({ok:true});
  }
  if(action==='evaluate'){
   if(row.status!=='confirmed')return fail('บันทึกคะแนนได้เฉพาะรายการที่ยืนยันนัดหมายแล้ว',409);
+  if(row.evidence_requested_at&&!row.evidence_submitted_at)return fail('รอครูส่งลิงก์คลิปและภาพการสอนก่อน จึงบันทึกคะแนนจากหลักฐานได้',409);
   const body=await request.json().catch(()=>null);
   const scores=Array.isArray(body?.scores)?body.scores.map(Number):null,summary=summarizeScores(scores);
   if(!summary)return fail('กรุณาให้คะแนนครบทุกข้อ ข้อละ 1–5 คะแนน');
@@ -505,9 +524,47 @@ async function uploadEvidenceImage(request,env,user,id,services){
  // นับซ้ำหลังอัปโหลด กันกดพร้อมกันหลายภาพจนเกินจำนวน
  const ins=await env.DB.prepare(`INSERT INTO supervision_evidence_files(request_id,drive_file_id,file_name,mime_type,file_size,uploaded_by)
   SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_evidence_files WHERE request_id=?)<?`).bind(id,drive.id,name,check.mimeType,file.size,user.id,id,EVIDENCE_MAX_IMAGES).run();
- if(!ins.meta.changes){await services.remove?.(env,drive.id).catch(()=>{});return fail(`แนบภาพได้ไม่เกิน ${EVIDENCE_MAX_IMAGES} ภาพ`,409);}
+ if(!ins.meta.changes){await removeDrive(env,drive.id,services);return fail(`แนบภาพได้ไม่เกิน ${EVIDENCE_MAX_IMAGES} ภาพ`,409);}
  const fid=Number(ins.meta.last_row_id);
  return reply({ok:true,file:{id:fid,file_name:name,url:`/api/supervision/evidence/files/${fid}`}},201);
+}
+// ลบไฟล์ใน Drive ไม่สำเร็จ → เก็บไว้ให้ Cron ลองลบซ้ำ
+async function removeDrive(env,driveFileId,services){
+ try{if(!services?.remove)throw new Error('ยังไม่ได้ตั้งค่าการลบไฟล์ Drive');await services.remove(env,driveFileId);}
+ catch(e){await env.DB.prepare('INSERT OR IGNORE INTO supervision_drive_trash(drive_file_id,last_error) VALUES(?,?)').bind(driveFileId,String(e.message||e).slice(0,300)).run().catch(()=>{});}
+}
+async function purgeEvidence(env,requestId,services){
+ const {results}=await env.DB.prepare('SELECT id,drive_file_id FROM supervision_evidence_files WHERE request_id=?').bind(requestId).all();
+ if(!results.length)return;
+ await env.DB.prepare('DELETE FROM supervision_evidence_files WHERE request_id=?').bind(requestId).run();
+ for(const f of results)await removeDrive(env,f.drive_file_id,services);
+}
+// งานรอบ Cron: ลบไฟล์ Drive ที่ค้าง + เตือนครูวันละครั้งจนกว่าจะส่งหลักฐาน + แจ้งผู้ประเมินเมื่อเลยกำหนด
+export async function supervisionMaintenance(env,services,now=bangkokNow()){
+ if(!env?.DB||!await tableExists(env,'supervision_requests'))return {skipped:true};
+ await ensureSupervisionSchema(env);
+ const out={reminded:0,overdue:0,trashed:0};
+ const {results:trash}=await env.DB.prepare('SELECT drive_file_id,attempts FROM supervision_drive_trash WHERE attempts<10 ORDER BY created_at LIMIT 10').all();
+ for(const t of trash){
+  try{await services.remove(env,t.drive_file_id);await env.DB.prepare('DELETE FROM supervision_drive_trash WHERE drive_file_id=?').bind(t.drive_file_id).run();out.trashed++;}
+  catch(e){await env.DB.prepare('UPDATE supervision_drive_trash SET attempts=attempts+1,last_error=? WHERE drive_file_id=?').bind(String(e.message||e).slice(0,300),t.drive_file_id).run();}
+ }
+ // เตือนครูเวลา 07:00 น. ขึ้นไป วันละครั้ง
+ if(now.minutes>=7*60){
+  const {results:due}=await env.DB.prepare(`SELECT r.id,r.teacher_user_id,r.supervisor_user_id,r.visit_date,r.period,r.evidence_due_date,r.evidence_overdue_notified,tu.full_name teacher_name
+   FROM supervision_requests r JOIN users tu ON tu.id=r.teacher_user_id WHERE r.status='confirmed' AND r.evidence_requested_at IS NOT NULL AND r.evidence_submitted_at IS NULL
+   AND (r.evidence_reminded_on IS NULL OR r.evidence_reminded_on<?) LIMIT 50`).bind(now.date).all();
+  for(const r of due){
+   const late=r.evidence_due_date&&r.evidence_due_date<now.date;
+   const stmts=[env.DB.prepare('UPDATE supervision_requests SET evidence_reminded_on=? WHERE id=?').bind(now.date,r.id),
+    ...notifyStatements(env,[r.teacher_user_id],r.id,late?`เลยกำหนดส่งคลิปและภาพการนิเทศ ${slotLabel(r)} (กำหนด ${thaiDate(r.evidence_due_date)}) กรุณาส่งโดยเร็ว`
+     :`เตือน: ยังไม่ได้ส่งลิงก์คลิปและภาพการสอนแทนการนิเทศ ${slotLabel(r)} กำหนดส่ง ${thaiDate(r.evidence_due_date)}`,null)];
+   if(late&&!r.evidence_overdue_notified){stmts.push(env.DB.prepare('UPDATE supervision_requests SET evidence_overdue_notified=1 WHERE id=?').bind(r.id),
+    ...notifyStatements(env,[r.supervisor_user_id],r.id,`${r.teacher_name} ยังไม่ส่งคลิปและภาพการนิเทศ ${slotLabel(r)} เลยกำหนด ${thaiDate(r.evidence_due_date)} แล้ว`,null));out.overdue++;}
+   await env.DB.batch(stmts);out.reminded++;
+  }
+ }
+ return out;
 }
 async function evidenceFile(env,fileId){
  return env.DB.prepare('SELECT f.*,r.teacher_user_id,r.supervisor_user_id,r.status FROM supervision_evidence_files f JOIN supervision_requests r ON r.id=f.request_id WHERE f.id=?').bind(fileId).first();
@@ -516,7 +573,7 @@ async function readEvidenceImage(env,user,fileId,perms,services){
  const f=await evidenceFile(env,fileId);
  if(!f||!(f.teacher_user_id===user.id||f.supervisor_user_id===user.id||perms.view_all))return fail('ไม่พบภาพ หรือไม่มีสิทธิ์ดู',404);
  if(!services?.read)return fail('ยังไม่ได้ตั้งค่าการจัดเก็บภาพใน Google Drive',503);
- try{return new Response(await services.read(env,f.drive_file_id),{headers:{'Content-Type':f.mime_type,'Cache-Control':'private, max-age=3600','X-Content-Type-Options':'nosniff'}});}
+ try{return new Response(await services.read(env,f.drive_file_id),{headers:{'Content-Type':f.mime_type,'Cache-Control':'private, max-age=604800, immutable','X-Content-Type-Options':'nosniff'}});}
  catch(e){return fail(e.message||'เปิดภาพไม่สำเร็จ',502);}
 }
 async function deleteEvidenceImage(env,user,fileId,services){
@@ -524,7 +581,7 @@ async function deleteEvidenceImage(env,user,fileId,services){
  if(!f||f.teacher_user_id!==user.id)return fail('ไม่พบภาพ หรือไม่ใช่ภาพของคุณ',404);
  if(f.status!=='confirmed')return fail('รายการนี้ประเมินแล้ว ลบภาพไม่ได้',409);
  await env.DB.prepare('DELETE FROM supervision_evidence_files WHERE id=?').bind(fileId).run();
- await services?.remove?.(env,f.drive_file_id).catch(()=>{});
+ await removeDrive(env,f.drive_file_id,services);
  return reply({ok:true});
 }
 
@@ -540,7 +597,7 @@ export async function handleSupervisionRoute(request,env,pathname,method,service
  if(pathname==='/api/supervision/requests'&&method==='GET')return listRequests(env,user,url,perms);
  if(pathname==='/api/supervision/requests'&&method==='POST')return createRequest(request,env,user);
  const m=pathname.match(/^\/api\/supervision\/requests\/(\d+)\/(cancel|accept|release|unavailable|evaluate)$/);
- if(m&&method==='POST')return act(request,env,user,Number(m[1]),m[2],perms);
+ if(m&&method==='POST')return act(request,env,user,Number(m[1]),m[2],perms,services);
  const sub=pathname.match(/^\/api\/supervision\/requests\/(\d+)\/evidence$/);
  if(sub&&method==='POST')return submitEvidence(request,env,user,Number(sub[1]));
  // ภาพหลักฐาน: อยู่นอก /requests เพื่อไม่ให้การอัปโหลด/ลบภาพทีละรูปถูกนับเป็นการส่งซ้ำหรือยกเลิกถี่

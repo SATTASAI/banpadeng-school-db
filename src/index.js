@@ -5,7 +5,7 @@ import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
-import {handleSupervisionRoute} from './routes/supervision.js';
+import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
 import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -3692,6 +3692,7 @@ async function deleteGoogleDriveFile(env, fileId) {
 // ภาพหลักฐานแทนการนิเทศ (ครูส่งเมื่อผู้ประเมินแจ้งไม่ว่างไปนิเทศ) — เก็บใน Google Drive โฟลเดอร์ "ภาพการนิเทศ"
 const SUPERVISION_FILE_SERVICES = {
   validate: (file, entityType) => validateManagedFile(file, entityType),
+  ready: (env) => requireDriveConfig(env),
   async upload(env, file, requestId, name, mimeType) {
     const driveError = requireDriveConfig(env);
     if (driveError) throw new Error(driveError);
@@ -4859,6 +4860,8 @@ export default {
     return response;
   },
   async scheduled(event, env, context) {
-    context.waitUntil(dispatchLineNotifications(env, { trigger: "cron" }).catch((error) => console.error("line feed", error)));
+    // เตือน/งานค้างของระบบนิเทศก่อน แล้วจึงส่ง LINE ในรอบเดียวกัน
+    context.waitUntil(supervisionMaintenance(env, SUPERVISION_FILE_SERVICES).catch((error) => console.error("supervision maintenance", error))
+      .then(() => dispatchLineNotifications(env, { trigger: "cron" })).catch((error) => console.error("line feed", error)));
   },
 };

@@ -32,7 +32,9 @@
  const safeUrl=u=>/^https?:\/\//i.test(String(u||''))?esc(u):'#';
  function evidenceTag(r){
   if(!r?.evidence||r.status==='evaluated')return '';
-  return r.evidence.submitted_at?'<span class="sv-pill sv-ev done">ส่งคลิปและภาพแล้ว</span>':'<span class="sv-pill sv-ev">ผู้ประเมินไม่ว่าง · รอครูส่งคลิปและภาพ</span>';
+  if(r.evidence.submitted_at)return '<span class="sv-pill sv-ev done">ส่งคลิปและภาพแล้ว</span>';
+  return r.evidence.late?`<span class="sv-pill sv-overdue">เลยกำหนดส่งคลิปและภาพ (${shortDate(r.evidence.due_date)})</span>`
+   :`<span class="sv-pill sv-ev">ผู้ประเมินไม่ว่าง · รอครูส่งคลิปและภาพ${r.evidence.due_date?` ภายใน ${shortDate(r.evidence.due_date)}`:''}</span>`;
  }
  function evidence(r,{deletable}={}){
   const e=r?.evidence;if(!e)return '';
@@ -41,7 +43,7 @@
    ${e.note?`<div class="sv-hint">หมายเหตุจากผู้ประเมิน: ${esc(e.note)}</div>`:''}
    <div><span class="sv-hint">คลิปการสอน:</span> ${e.video_url?`<a href="${safeUrl(e.video_url)}" target="_blank" rel="noopener noreferrer">${esc(e.video_url)}</a>`:'<span style="color:#8aa0b4">ยังไม่ได้ส่ง</span>'}</div>
    <div><span class="sv-hint">ภาพการสอน/สื่อการสอน (${e.files.length}/10)</span>${imgs?`<div class="sv-thumbs">${imgs}</div>`:' <span style="color:#8aa0b4">ยังไม่มีภาพ</span>'}</div>
-   ${e.submitted_at?`<small class="sv-hint">ครูส่งหลักฐานเมื่อ ${stamp(e.submitted_at)}</small>`:''}</div>`;
+   ${e.submitted_at?`<small class="sv-hint">ครูส่งหลักฐานเมื่อ ${stamp(e.submitted_at)}</small>`:e.due_date?`<small class="sv-hint">กำหนดส่ง ${date(e.due_date,true)}</small>`:''}</div>`;
  }
  function result(r,focus){
   const e=r.evaluation;if(!e)return '';

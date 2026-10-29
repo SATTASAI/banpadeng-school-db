@@ -17,7 +17,8 @@ const allowed=()=>TABS.filter(t=>t[2](state.perm));
 const sortAsc=(a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1;
 const me=()=>state.perm.user.id;
 // รายการที่ตนเองถอนการรับแล้ว (ยังรอผู้รับใหม่) ไม่แสดงค้างในแท็บคำขอของผู้ที่ถอน
-const visible=()=>state.list.filter(r=>!r.released_by_me);
+// (ยังแสดงถ้าไม่มีผู้ประเมินคนอื่นที่รับได้ หรือเลยวันนิเทศแล้ว — ดูได้ที่ตัวกรอง "ที่ฉันถอนแล้ว")
+const visible=()=>state.list.filter(r=>!r.hidden_for_me);
 
 function renderTabs(){
  const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=visible().filter(r=>r.status==='pending').length;
@@ -52,17 +53,17 @@ function reqRow(r){
 }
 function viewRequests(){
  const all=visible().sort(sortAsc),f=state.filter;
- const list=f==='all'?all:f==='mine'?all.filter(r=>r.supervisor_user_id===me()):all.filter(r=>r.status===f);
+ const list=f==='released'?state.list.filter(r=>r.released_by_me).sort(sortAsc):f==='all'?all:f==='mine'?all.filter(r=>r.supervisor_user_id===me()):all.filter(r=>r.status===f);
  const chip=(k,l)=>`<button type="button" class="sv-chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`;
  $('view').innerHTML=U.stats(all)+`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
-  <div class="sv-chips" role="group" aria-label="กรองสถานะ">${chip('all','ทั้งหมด')}${chip('pending','รอผู้บริหารรับนิเทศ')}${chip('confirmed','ยืนยันนัดหมายแล้ว')}${chip('evaluated','ประเมินแล้ว')}${chip('mine','ที่ฉันรับผิดชอบ')}</div>
+  <div class="sv-chips" role="group" aria-label="กรองสถานะ">${chip('all','ทั้งหมด')}${chip('pending','รอผู้บริหารรับนิเทศ')}${chip('confirmed','ยืนยันนัดหมายแล้ว')}${chip('evaluated','ประเมินแล้ว')}${chip('mine','ที่ฉันรับผิดชอบ')}${state.list.some(r=>r.released_by_me)?chip('released','ที่ฉันถอนแล้ว'):''}</div>
   <div class="sv-list">${list.length?list.map(reqRow).join(''):`<div class="sv-empty"><b>${all.length?'ไม่มีรายการในสถานะนี้':'ยังไม่มีคำขอนิเทศ'}</b>${all.length?'ลองเลือกตัวกรองอื่น':'เมื่อครูลงทะเบียนรับการนิเทศ รายการจะแสดงที่นี่และมีแจ้งเตือน'}</div>`}</div></section>`;
  if(state.focus)document.getElementById('q-'+state.focus)?.scrollIntoView({block:'center'});
 }
 function askAway(id){
  const r=state.list.find(x=>x.id===id);if(!r)return;
  const m=U.modal(`<header><h2>แจ้งไม่ว่างไปนิเทศ</h2></header><div class="body">${U.details(r)}
-  <p class="sv-hint">ระบบจะแจ้งเตือนครู (กระดิ่งในระบบและ LINE) ให้ส่งลิงก์คลิปการสอน 1 ลิงก์ และภาพการสอนหรือสื่อการสอนไม่เกิน 10 ภาพแทน คุณยังเป็นผู้รับผิดชอบและบันทึกคะแนนจากหลักฐานนั้น</p>
+  <p class="sv-hint">ระบบจะแจ้งเตือนครู (กระดิ่งในระบบและ LINE) ให้ส่งลิงก์คลิปการสอน 1 ลิงก์ และภาพการสอนหรือสื่อการสอนไม่เกิน 10 ภาพแทน ภายใน 3 วันหลังวันนิเทศ และเตือนครูทุกเช้าจนกว่าจะส่ง คุณยังเป็นผู้รับผิดชอบ และบันทึกคะแนนได้เมื่อครูส่งหลักฐานแล้ว</p>
   <label class="sv-field">หมายเหตุถึงครู (ไม่บังคับ)<textarea id="awNote" maxlength="500" placeholder="เช่น ติดประชุมนอกสถานที่ ขอคลิปทั้งคาบ"></textarea></label></div>
   <footer><button type="button" class="sv-btn" data-close data-autofocus>ยกเลิก</button><button type="button" class="sv-btn primary" id="awOk">แจ้งครูให้ส่งคลิปและภาพ</button></footer>`);
  m.querySelector('#awOk').onclick=async()=>{const b=m.querySelector('#awOk');b.disabled=true;
@@ -87,7 +88,7 @@ function viewEvaluate(){
  $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">${sel}
   <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
   ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div>
-  ${r.evidence?(r.evidence.submitted_at?U.evidence(r):`<div class="sv-notice warn">คุณแจ้งไม่ว่างไปนิเทศแล้ว รอครูส่งลิงก์คลิปและภาพการสอน ระบบจะแจ้งเตือนเมื่อครูส่ง</div>${U.evidence(r)}`):''}</section>
+  ${r.evidence?(r.evidence.submitted_at?U.evidence(r):`<div class="sv-notice warn">รอครูส่งลิงก์คลิปและภาพการสอน${r.evidence.due_date?` (กำหนด ${U.date(r.evidence.due_date)})`:''} ระบบจะแจ้งเตือนเมื่อครูส่ง จึงบันทึกคะแนนได้</div>${U.evidence(r)}`):''}</section>
   <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
   <div>${secs.map(sec=>`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`+sec.items.map(q=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>
   <label class="sv-field" style="margin-top:8px">ข้อเสนอแนะเพื่อพัฒนา<textarea id="sugg" maxlength="3000" placeholder="จุดเด่นที่พบ และสิ่งที่ควรพัฒนาต่อ">${esc(d.suggestion)}</textarea></label></section>
@@ -96,11 +97,12 @@ function viewEvaluate(){
 }
 function summary(){
  const box=$('summary');if(!box||!state.draft)return;const s=state.draft.scores;
- const N=s.length,M=state.perm.max_score,done=s.filter(v=>v!=null).length,total=s.reduce((a,v)=>a+(v||0),0),p=total/M*100,complete=done===N;
+ const N=s.length,M=state.perm.max_score,done=s.filter(v=>v!=null).length,total=s.reduce((a,v)=>a+(v||0),0),p=total/M*100;
+ const cur=state.list.find(x=>x.id===state.draft.id),waiting=!!(cur?.evidence&&!cur.evidence.submitted_at),complete=done===N&&!waiting;
  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;color:#163e67">สรุปผล</h3>${complete?'<span class="sv-pill st-evaluated">ครบทุกข้อ</span>':'<span class="sv-prov">ผลชั่วคราว</span>'}</div>
   <div class="sv-big"><b>${U.pct(p)}</b><span style="color:#607991">ร้อยละ</span></div><div class="sv-bar"><i style="width:${p}%"></i></div>
   <div><div class="sv-kv"><span>ประเมินแล้ว</span><b>${done} / ${N} ข้อ</b></div><div class="sv-kv"><span>คะแนนรวม</span><b>${total} / ${M}</b></div><div class="sv-kv"><span>ระดับคุณภาพ</span><span class="lv lv-${U.level(p)}">${done?U.level(p):'—'}</span></div></div>
-  ${complete?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ ${N} ข้อจึงบันทึกได้</p>'}
+  ${waiting?'<p class="sv-hint">รอครูส่งคลิปและภาพก่อนจึงบันทึกผลได้</p>':''}${done===N||waiting?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ ${N} ข้อจึงบันทึกได้</p>'}
   <button type="button" class="sv-btn primary" id="saveEval"${complete?'':' disabled'}>บันทึกผลการนิเทศ</button>
   <p class="sv-hint">เกณฑ์: ร้อยละ 90 ขึ้นไป ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ควรพัฒนา</p>`;
  $('saveEval').onclick=saveEval;

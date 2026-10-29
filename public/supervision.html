@@ -119,7 +119,7 @@ function row(r){
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small></div>
   <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
   <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${U.evidenceTag(r)}${owner}</div>
-  ${r.evidence&&r.status==='confirmed'&&!r.evidence.submitted_at?`<div class="sv-notice warn" style="margin-top:8px">${esc(r.supervisor_name||'ผู้ประเมิน')} ไม่สะดวกไปนิเทศในคาบนี้ กรุณาส่งลิงก์คลิปการสอน และภาพการสอนหรือสื่อการสอน (ไม่เกิน 10 ภาพ) แทน${r.evidence.note?`<br><small>หมายเหตุ: ${esc(r.evidence.note)}</small>`:''}</div>`:''}</div>
+  ${r.evidence&&r.status==='confirmed'&&!r.evidence.submitted_at?`<div class="sv-notice warn" style="margin-top:8px">${esc(r.supervisor_name||'ผู้ประเมิน')} ไม่สะดวกไปนิเทศในคาบนี้ กรุณาส่งลิงก์คลิปการสอน และภาพการสอนหรือสื่อการสอน (ไม่เกิน 10 ภาพ) แทน${r.evidence.due_date?`<br><b>กำหนดส่ง ${U.date(r.evidence.due_date)}</b>`:''}${r.evidence.note?`<br><small>หมายเหตุ: ${esc(r.evidence.note)}</small>`:''}</div>`:''}</div>
   <div class="acts">${r.evidence&&r.status==='confirmed'?`<button type="button" class="sv-btn sm primary" data-evidence="${r.id}">${r.evidence.submitted_at?'แก้ไขคลิปและภาพ':'ส่งคลิปและภาพ'}</button>`:''}<button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:r.can_cancel?`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`:''}</div></div>`;
 }
 async function renderMine(view){
@@ -144,11 +144,23 @@ async function openDetail(id){
 /* ---------- ส่งหลักฐานแทนการนิเทศ: ลิงก์คลิป 1 ลิงก์ + ภาพไม่เกิน 10 ภาพ (เก็บใน Google Drive) ---------- */
 const MAX_IMAGES=10;
 // ย่อภาพจากกล้องมือถือให้ไม่เกิน 1600 px และบีบอัด JPEG (ระบบรับภาพละไม่เกิน 2 MB)
+// เปิดภาพด้วย createImageBitmap ก่อน ไม่ได้ (เช่น HEIC บางเครื่อง/เบราว์เซอร์เก่า) จึงใช้ <img>
+async function decode(file){
+ if(typeof createImageBitmap==='function'){try{const b=await createImageBitmap(file);return {src:b,w:b.width,h:b.height,done:()=>b.close?.()};}catch{}}
+ const url=URL.createObjectURL(file),img=new Image();
+ try{img.src=url;await img.decode();return {src:img,w:img.naturalWidth,h:img.naturalHeight,done:()=>URL.revokeObjectURL(url)};}
+ catch{URL.revokeObjectURL(url);return null;}
+}
 async function shrink(file){
- if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name))throw new Error(`${file.name}: แนบได้เฉพาะไฟล์ภาพ`);
- const bmp=await createImageBitmap(file).catch(()=>{throw new Error(`${file.name}: เปิดภาพไม่ได้ กรุณาเลือกภาพ JPG หรือ PNG`);});
- const scale=Math.min(1,1600/Math.max(bmp.width,bmp.height)),c=document.createElement('canvas');
- c.width=Math.round(bmp.width*scale);c.height=Math.round(bmp.height*scale);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);bmp.close?.();
+ if(!/^image\//i.test(file.type)&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name))throw new Error(`${file.name}: แนบได้เฉพาะไฟล์ภาพ`);
+ const pic=await decode(file);
+ if(!pic){
+  // ย่อไม่ได้ แต่เป็น JPG/PNG/WEBP ขนาดไม่เกิน 2 MB ส่งไฟล์เดิมได้
+  if(/^image\/(jpeg|png|webp)$/i.test(file.type)&&file.size<=2*1024*1024)return file;
+  throw new Error(`${file.name}: เปิดภาพไม่ได้ กรุณาเลือกภาพ JPG หรือ PNG (iPhone: ตั้งค่า > กล้อง > รูปแบบ > เข้ากันได้มากที่สุด)`);
+ }
+ const scale=Math.min(1,1600/Math.max(pic.w,pic.h)),c=document.createElement('canvas');
+ c.width=Math.round(pic.w*scale);c.height=Math.round(pic.h*scale);c.getContext('2d').drawImage(pic.src,0,0,c.width,c.height);pic.done();
  for(const q of [0.82,0.7,0.55]){const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));if(blob&&blob.size<=1.9*1024*1024)return new File([blob],file.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'});}
  throw new Error(`${file.name}: ภาพใหญ่เกินไป`);
 }
@@ -158,7 +170,10 @@ async function openEvidence(id){
  const m=U.modal(`<header><h2>ส่งคลิปและภาพการสอนแทนการนิเทศ</h2></header><div class="body">
   <p class="sv-hint" style="margin-top:0">${U.date(r.visit_date,true)} · คาบ ${r.period} · ${esc(r.subject)} ${esc(U.classLabel(r))}<br>${esc(r.supervisor_name||'ผู้ประเมิน')} ไม่สะดวกไปนิเทศ จะประเมินจากคลิปและภาพที่คุณส่ง</p>
   ${e.note?`<div class="sv-notice">หมายเหตุจากผู้ประเมิน: ${esc(e.note)}</div>`:''}
-  <label class="sv-field">ลิงก์คลิปการสอน (YouTube, Google Drive ฯลฯ — ตั้งค่าให้ผู้มีลิงก์เปิดดูได้)<input id="evUrl" type="url" inputmode="url" maxlength="500" placeholder="https://" value="${esc(e.video_url||'')}"></label>
+  ${e.due_date&&!e.submitted_at?`<div class="sv-notice${e.late?' error':' warn'}">กำหนดส่ง ${U.date(e.due_date,true)}${e.late?' — เลยกำหนดแล้ว กรุณาส่งโดยเร็ว':''}</div>`:''}
+  <label class="sv-field">ลิงก์คลิปการสอน (YouTube, Google Drive ฯลฯ)<input id="evUrl" type="url" inputmode="url" maxlength="500" placeholder="https://" value="${esc(e.video_url||'')}"></label>
+  <p class="sv-hint" style="margin:-4px 0 0">คลิปมีหน้านักเรียน: YouTube ให้ตั้งเป็น <b>ไม่เป็นสาธารณะ (Unlisted)</b> · Google Drive ให้แชร์แบบ <b>ทุกคนที่มีลิงก์ดูได้</b> หรือแชร์ให้ผู้ประเมิน ห้ามตั้งเป็นสาธารณะ</p>
+  <label style="display:flex;gap:8px;align-items:flex-start;font-size:14px"><input type="checkbox" id="evPrivacy"${e.submitted_at?' checked':''} style="width:auto;margin-top:3px">ตรวจแล้วว่าผู้ประเมินเปิดลิงก์นี้ได้ และคลิปไม่ได้เผยแพร่เป็นสาธารณะ</label>
   <div class="sv-field">ภาพการสอนหรือสื่อการสอน (<span id="evCount">${e.files.length}</span>/${MAX_IMAGES} ภาพ)
    <div class="sv-thumbs" id="evThumbs">${e.files.map(f=>thumb(f)).join('')}</div>
    <label class="sv-btn sm" style="width:auto;align-self:flex-start;margin-top:8px" id="evPick">+ เพิ่มภาพ<input type="file" id="evFiles" accept="image/*" multiple hidden></label></div>
@@ -185,9 +200,10 @@ async function openEvidence(id){
   err('');const url=m.querySelector('#evUrl').value.trim();
   if(!/^https?:\/\/\S+\.\S+/i.test(url))return err('กรุณาใส่ลิงก์คลิปการสอน (ขึ้นต้นด้วย https://)');
   if(!count())return err('กรุณาแนบภาพการสอนหรือสื่อการสอนอย่างน้อย 1 ภาพ');
+  if(!m.querySelector('#evPrivacy').checked)return err('กรุณาตรวจการตั้งค่าการแชร์คลิป แล้วติ๊กยืนยัน');
   if(m.querySelector('.sv-thumb.loading'))return err('รอให้อัปโหลดภาพเสร็จก่อน');
   const b=m.querySelector('#evOk');b.disabled=true;
-  try{await apiRequest(`/api/supervision/requests/${id}/evidence`,{method:'POST',body:{video_url:url}});U.close();U.toast('ส่งคลิปและภาพแล้ว ระบบแจ้งผู้ประเมินแล้ว');render();}
+  try{await apiRequest(`/api/supervision/requests/${id}/evidence`,{method:'POST',body:{video_url:url,images:[...m.querySelectorAll('[data-ev-del]')].map(b=>Number(b.dataset.evDel))}});U.close();U.toast('ส่งคลิปและภาพแล้ว ระบบแจ้งผู้ประเมินแล้ว');render();}
   catch(x){err(x.message);b.disabled=false;}
  };
 }

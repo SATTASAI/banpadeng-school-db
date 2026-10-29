@@ -6,7 +6,9 @@ import {DatabaseSync} from 'node:sqlite';
 import worker from '../src/index.js';
 import {signJWT} from '../src/lib/crypto.js';
 import {ensureBudgetSchema} from '../src/routes/budget.js';
-import {summarizeScores,qualityLevel,slotStarted} from '../src/routes/supervision.js';
+import {summarizeScores,qualityLevel,slotStarted,supervisionMaintenance} from '../src/routes/supervision.js';
+// Drive ปลอม: ตั้งค่าครบแต่เรียกเครือข่ายไม่ได้ (ทดสอบเส้นทางล้มเหลว/ลบซ้ำ)
+const DRIVE={GOOGLE_DRIVE_CLIENT_ID:'x',GOOGLE_DRIVE_CLIENT_SECRET:'x',GOOGLE_DRIVE_REFRESH_TOKEN:'x',GOOGLE_DRIVE_FOLDER_ID:'x'};
 
 async function fixture(){
  const raw=new DatabaseSync(':memory:');raw.exec(fs.readFileSync(new URL('../schema.sql',import.meta.url),'utf8'));
@@ -249,9 +251,13 @@ test('release: request leaves the releaser’s request list but stays pending fo
  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},6);
  await ok(env,`/api/supervision/requests/${id}/release`,'POST',{},6);
  const mine=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).requests.find(r=>r.id===id);
- assert.equal(mine.status,'pending');assert.equal(mine.released_by_me,true,'hidden from the evaluator who released it');
+ assert.equal(mine.status,'pending');assert.equal(mine.released_by_me,true);assert.equal(mine.hidden_for_me,true,'hidden from the evaluator who released it');
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,5)).requests.find(r=>r.id===id).released_by_me,false,'others can still accept');
  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ await ok(env,`/api/supervision/requests/${id}/release`,'POST',{note:'x'},5);
+ // ผู้ประเมินทุกคนถอนแล้ว → กลับมาแสดงให้ทุกคน คำขอไม่หาย
+ for(const u of [5,6])assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(r=>r.id===id).hidden_for_me,false,'visible again: '+u);
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{a:1},6);
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).requests.find(r=>r.id===id).released_by_me,false);
 });
 
@@ -262,17 +268,22 @@ test('evaluator unavailable → teacher sends video link + images → evaluator 
  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
  assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{},6)).status,403,'only the accepting evaluator');
  assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},2)).status,409,'not requested yet');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{note:'ติดประชุม'},5)).status,503,'Drive must be configured first');
+ Object.assign(env,DRIVE);const realFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('Google Drive offline');};
+ try{
  await ok(env,`/api/supervision/requests/${id}/unavailable`,'POST',{note:'ติดประชุม'},5);
  assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{note:'อีกครั้ง'},5)).status,409);
  const note=env.raw.prepare('SELECT message FROM supervision_notifications WHERE user_id=2 ORDER BY id DESC').get().message;
  assert.match(note,/ส่งลิงก์คลิปการสอน/);
  const r=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id);
- assert.equal(r.evidence.note,'ติดประชุม');assert.equal(r.evidence.submitted_at,null);
+ assert.equal(r.evidence.note,'ติดประชุม');assert.equal(r.evidence.submitted_at,null);assert.equal(r.evidence.due_date,'2030-01-10','3 days after visit');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},5)).status,409,'wait for evidence');
  // ภาพต้องอยู่ใน Drive: ยังไม่ได้ตั้งค่าจึงอัปโหลดไม่ได้
  const fd=new FormData();fd.append('file',new File([new Uint8Array([0xff,0xd8,0xff,0xe0,0,0,0,0,0,0,0,0,0,0,0,0])],'a.jpg',{type:'image/jpeg'}));
  const token=await signJWT({sub:2},env.JWT_SECRET);
  const up=await worker.fetch(new Request(`https://school.test/api/supervision/evidence/${id}/images`,{method:'POST',headers:{Cookie:`bpd_session=${token}`},body:fd}),env,{});
  assert.equal(up.status,502);assert.match((await up.json()).error,/Google Drive/);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_evidence_files').get().n,0);
  assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},3)).status,403,'only the owner');
  assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'javascript:alert(1)'},2)).status,400);
  assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},2)).status,400,'needs at least one image');
@@ -287,4 +298,36 @@ test('evaluator unavailable → teacher sends video link + images → evaluator 
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests.find(x=>x.id===id).evidence,undefined,'appointed evaluator not responsible sees no evidence');
  await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},5);
  assert.equal((await json(env,`/api/supervision/evidence/files/${fid}`,'DELETE',undefined,2)).status,409,'locked after evaluation');
+ }finally{globalThis.fetch=realFetch;}
+});
+
+test('evidence: release with nothing sent clears the request; cancel purges files; cron reminds and flags overdue',async()=>{
+ const {env}=await school();Object.assign(env,DRIVE);
+ const realFetch=globalThis.fetch;globalThis.fetch=async()=>{throw new Error('offline');};
+ try{
+  const id=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+  await ok(env,`/api/supervision/requests/${id}/unavailable`,'POST',{},5);
+  await ok(env,`/api/supervision/requests/${id}/release`,'POST',{},5);
+  assert.equal(env.raw.prepare('SELECT evidence_requested_at v FROM supervision_requests WHERE id=?').get(id).v,null,'cleared: teacher sent nothing');
+  await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},6);
+  await ok(env,`/api/supervision/requests/${id}/unavailable`,'POST',{n:2},6);
+  // cron: ก่อน 07:00 ไม่เตือน, หลังจากนั้นวันละครั้ง, เลยกำหนดแจ้งผู้ประเมินครั้งเดียว
+  const count=u=>env.raw.prepare('SELECT COUNT(*) n FROM supervision_notifications WHERE user_id=?').get(u).n;
+  env.raw.prepare("UPDATE supervision_requests SET evidence_reminded_on=NULL WHERE id=?").run(id);
+  const t0=count(2),s0=count(6);
+  await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-08',minutes:6*60});assert.equal(count(2),t0);
+  await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-08',minutes:8*60});assert.equal(count(2),t0+1);
+  await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-08',minutes:9*60});assert.equal(count(2),t0+1,'once a day');
+  await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-12',minutes:8*60});assert.equal(count(2),t0+2);assert.equal(count(6),s0+1,'evaluator told when overdue');
+  await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-13',minutes:8*60});assert.equal(count(6),s0+1,'overdue told once');
+  // ครูยกเลิกนัด → ลบภาพ; Drive ลบไม่ได้ → เก็บไว้ลองลบซ้ำใน cron
+  env.raw.prepare("INSERT INTO supervision_evidence_files(request_id,drive_file_id,file_name,mime_type,file_size,uploaded_by) VALUES(?,?,?,?,?,?)").run(id,'drvX','a.jpg','image/jpeg',10,2);
+  env.raw.prepare("UPDATE supervision_requests SET visit_date='2099-01-07' WHERE id=?").run(id);
+  await ok(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2);
+  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_evidence_files').get().n,0);
+  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_drive_trash').get().n,1);
+  const r=await supervisionMaintenance(env,{remove:async()=>{}},{date:'2030-01-13',minutes:8*60});
+  assert.equal(r.trashed,1);assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_drive_trash').get().n,0);
+ }finally{globalThis.fetch=realFetch;}
 });
