@@ -112,10 +112,10 @@ test('academic head appoints evaluators; appointed evaluators see only the resul
 
  const own=(await ok(env,'/api/supervision/requests','POST',{...manual,period:3},3)).request.id;
  assert.equal((await json(env,`/api/supervision/requests/${own}/accept`,'POST',{},3)).status,403,'no self-evaluation');
- const second=(await ok(env,'/api/supervision/requests','POST',{...manual,period:4},2)).request.id;
+ const second=(await ok(env,'/api/supervision/requests','POST',{...manual,period:4},7)).request.id;
  await ok(env,`/api/supervision/requests/${second}/accept`,'POST',{},3);
  await ok(env,`/api/supervision/requests/${second}/release`,'POST',{},3);
- assert.equal((await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(r=>r.id===second).status,'pending');
+ assert.equal((await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,7)).requests.find(r=>r.id===second).status,'pending');
  await ok(env,`/api/supervision/requests/${second}/accept`,'POST',{},3);
  await ok(env,`/api/supervision/requests/${second}/evaluate`,'POST',{scores:[4,4,4,4,4]},3);
  const all=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests;
@@ -166,11 +166,76 @@ test('a date + period accepts at most 3 registrations (3 evaluators); 4th is tol
  for(const u of [2,3,7])await ok(env,'/api/supervision/requests','POST',manual,u);
  const full=await json(env,'/api/supervision/requests','POST',manual,6);
  assert.equal(full.status,409);assert.equal(full.body.error,'ลงทะเบียนไม่ได้เนื่องจากคาบเต็ม กรุณาเลือกคาบอื่น');
- await ok(env,'/api/supervision/requests','POST',{...manual,period:3},6); // other period still open
- await ok(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-14'},6); // same period, other date still open
+ await ok(env,'/api/supervision/requests','POST',{...manual,period:3},1); // other period still open
+ await ok(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-14'},5); // same period, other date still open
  const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,6);
  assert.equal(week.capacity,3);assert.deepEqual(week.full,['2030-01-07|2']);
  const id=env.raw.prepare("SELECT id FROM supervision_requests WHERE teacher_user_id=2").get().id;
  await ok(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2); // a cancellation frees a seat
  await ok(env,'/api/supervision/requests','POST',manual,6);
+});
+
+test('one registration per teacher per term; rebooking after cancelling is allowed',async()=>{
+ const {env}=await school();
+ const first=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+ const again=await json(env,'/api/supervision/requests','POST',{...manual,period:5},2);
+ assert.equal(again.status,409);assert.match(again.body.error,/ภาคเรียนละ 1 ครั้ง/);
+ assert.equal((await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2)).terms[0].registered.id,first);
+ await ok(env,`/api/supervision/requests/${first}/cancel`,'POST',{},2);
+ await ok(env,'/api/supervision/requests','POST',{...manual,period:5},2);
+});
+
+test('holidays and activity days cannot be booked',async()=>{
+ const {env}=await school();
+ env.raw.exec(`CREATE TABLE IF NOT EXISTS gr_holidays(id INTEGER PRIMARY KEY,academic_year_id INTEGER,holiday_date TEXT,name TEXT,kind TEXT);
+  INSERT INTO gr_holidays(academic_year_id,holiday_date,name,kind) VALUES(90,'2030-01-08','วันหยุดทดสอบ','holiday'),(90,'2030-01-09','กีฬาสี','activity');`);
+ const h=await json(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-08'},2);assert.equal(h.status,400);assert.match(h.body.error,/วันหยุด \(วันหยุดทดสอบ\)/);
+ const a=await json(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-09'},2);assert.equal(a.status,400);assert.match(a.body.error,/วันกิจกรรม/);
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2);
+ assert.equal(week.days[1].holiday.kind,'holiday');assert.equal(week.days[2].holiday.kind,'activity');assert.equal(week.days[0].holiday,null);
+});
+
+test('evaluator unavailability lowers the slot capacity and blocks accepting that slot',async()=>{
+ const {env}=await school();
+ assert.equal((await json(env,'/api/supervision/unavailability','POST',{date:'2030-01-07',period:2},2)).status,403,'teachers cannot');
+ await ok(env,'/api/supervision/unavailability','POST',{date:'2030-01-07',period:2,note:'ประชุม'},5);
+ await ok(env,'/api/supervision/unavailability','POST',{date:'2030-01-07'},6); // whole day
+ assert.equal((await json(env,'/api/supervision/unavailability','POST',{date:'2030-01-07'},6)).status,409,'duplicate');
+ // 3 − 2 ไม่ว่าง = รับได้ 1 คำขอ
+ await ok(env,'/api/supervision/requests','POST',manual,2);
+ const full=await json(env,'/api/supervision/requests','POST',manual,3);assert.equal(full.status,409);assert.match(full.body.error,/คาบเต็ม/);
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,3);assert(week.full.includes('2030-01-07|2'));assert(!week.full.includes('2030-01-07|3'));
+ const id=env.raw.prepare('SELECT id FROM supervision_requests WHERE teacher_user_id=2').get().id;
+ const blocked=await json(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);assert.equal(blocked.status,409);assert.match(blocked.body.error,/แจ้งไม่ว่าง/);
+ const list=(await ok(env,'/api/supervision/unavailability','GET',undefined,5)).items;assert.equal(list.length,2);
+ const mineRow=list.find(r=>r.mine);
+ assert.equal((await json(env,`/api/supervision/unavailability/${list.find(r=>!r.mine).id}`,'DELETE',undefined,5)).status,404,'only own');
+ await ok(env,`/api/supervision/unavailability/${mineRow.id}`,'DELETE',undefined,5);
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ // แจ้งไม่ว่างทับนัดที่รับไว้แล้วไม่ได้
+ const clash=await json(env,'/api/supervision/unavailability','POST',{date:'2030-01-07',period:2},5);assert.equal(clash.status,409);assert.match(clash.body.error,/ถอนการรับ/);
+});
+
+test('cancel only until the day before; overdue flag; revoking an evaluator frees their open assignments',async()=>{
+ const {env}=await school();
+ const {date:today}=(await import('../src/routes/supervision.js')).bangkokNow();
+ const yesterday=new Date(Date.parse(today+'T00:00:00Z')-86400000).toISOString().slice(0,10);
+ const ins=(u,d,st,sup)=>Number(env.raw.prepare("INSERT INTO supervision_requests(teacher_user_id,academic_term_id,visit_date,weekday,period,source,subject,supervision_type,status,supervisor_user_id) VALUES(?,90,?,1,1,'manual','ไทย','teaching',?,?)").run(u,d,st,sup).lastInsertRowid);
+ const todayId=ins(2,today,'pending',null);
+ const c=await json(env,`/api/supervision/requests/${todayId}/cancel`,'POST',{},2);assert.equal(c.status,409);assert.match(c.body.error,/ก่อนวันนิเทศอย่างน้อย 1 วัน/);
+ const late=ins(3,yesterday,'confirmed',5);
+ const mine=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,3)).requests[0];
+ assert.equal(mine.overdue,true);assert.equal(mine.can_cancel,false);
+ assert.equal((await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests[0].overdue,false);
+
+ await ok(env,'/api/supervision/evaluators','POST',{user_id:7},1);
+ const open=(await ok(env,'/api/supervision/requests','POST',manual,6)).request.id;
+ await ok(env,`/api/supervision/requests/${open}/accept`,'POST',{},7);
+ await ok(env,'/api/supervision/unavailability','POST',{date:'2030-01-08'},7);
+ const res=await ok(env,'/api/supervision/evaluators/7','DELETE',undefined,1);assert.equal(res.released,1);
+ const back=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,5)).requests.find(r=>r.id===open);
+ assert.equal(back.status,'pending');assert.equal(back.supervisor_user_id,null);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_unavailability WHERE user_id=7').get().n,0);
+ assert((await ok(env,'/api/notifications','GET',undefined,6)).notifications.some(n=>/ถูกถอนสิทธิ์/.test(n.message)));
+ assert.equal(late>0,true);
 });

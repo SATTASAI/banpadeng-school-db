@@ -134,3 +134,4 @@ button.sv-slot{cursor:pointer}
 @media(max-width:1000px){.sv-eval,.sv-res-body{grid-template-columns:minmax(0,1fr)}.sv-summary{position:static}}
 @media(max-width:760px){.sv-page{padding:14px}.sv-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.sv-row{grid-template-columns:minmax(0,1fr)}.sv-row .acts{justify-content:flex-start}.sv-item{grid-template-columns:minmax(0,1fr)}.sv-types,.sv-grid2{grid-template-columns:1fr}.sv-weekbar .meta{margin-left:0;flex-basis:100%}}
 @media(prefers-reduced-motion:reduce){.sv-bar i{transition:none}}
+.sv-pill.sv-overdue{background:#fdecea;color:#b23b30}

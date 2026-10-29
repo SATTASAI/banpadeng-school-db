@@ -61,7 +61,13 @@ export function ensureSupervisionSchema(env){
    id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id),
    request_id INTEGER NOT NULL REFERENCES supervision_requests(id) ON DELETE CASCADE,
    message TEXT NOT NULL,actor_id INTEGER,created_at TEXT NOT NULL DEFAULT(datetime('now')),read_at TEXT)`),
-  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_notifications_user ON supervision_notifications(user_id,read_at)')
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_notifications_user ON supervision_notifications(user_id,read_at)'),
+  // วัน/คาบที่ผู้ประเมินไม่ว่าง (ผู้ประเมินตั้งเอง) period ว่าง = ไม่ว่างทั้งวัน — ลดจำนวนที่รับลงทะเบียนของคาบนั้น
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS supervision_unavailability (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,user_id INTEGER NOT NULL REFERENCES users(id),unavailable_date TEXT NOT NULL,
+   period INTEGER CHECK(period IS NULL OR period BETWEEN 1 AND 6),note TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
+  env.DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS uq_supervision_unavailability ON supervision_unavailability(user_id,unavailable_date,COALESCE(period,0))'),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_unavailability_date ON supervision_unavailability(unavailable_date)')
  ]).catch(e=>{ready.delete(env.DB);throw e;});
  ready.set(env.DB,p);return p;
 }
@@ -128,6 +134,24 @@ async function periodTimes(env,termId){
  try{return (await loadStructure(env,termId)).structure;}catch{return DEFAULT_STRUCTURE;}
 }
 
+// วันหยุด/วันกิจกรรมจากปฏิทินระบบผลการเรียน (gr_holidays ใน D1 เดียวกัน) — วันกิจกรรมไม่มีการสอนปกติ จึงไม่เปิดให้ลงทะเบียน
+async function holidaysOn(env,dates){
+ const out=new Map();
+ if(!dates.length||!await tableExists(env,'gr_holidays'))return out;
+ const marks=dates.map(()=>'?').join(',');
+ const sql=k=>`SELECT substr(holiday_date,1,10) d,name,${k?"COALESCE(kind,'holiday')":"'holiday'"} kind FROM gr_holidays WHERE substr(holiday_date,1,10) IN (${marks})`;
+ const {results}=await env.DB.prepare(sql(true)).bind(...dates).all().catch(()=>env.DB.prepare(sql(false)).bind(...dates).all());
+ for(const r of results)if(!out.has(r.d)||r.kind==='holiday')out.set(r.d,{name:r.name||'',kind:r.kind==='activity'?'activity':'holiday'});
+ return out;
+}
+const holidayMsg=h=>h.kind==='activity'?`วันที่เลือกเป็นวันกิจกรรม${h.name?' ('+h.name+')':''} ไม่มีการสอนปกติ กรุณาเลือกวันอื่น`:`วันที่เลือกเป็นวันหยุด${h.name?' ('+h.name+')':''} กรุณาเลือกวันอื่น`;
+// จำนวนที่รับลงทะเบียนได้ของวันที่+คาบ = 3 − ผู้ประเมินที่แจ้งไม่ว่าง (ไม่ติดลบ)
+const CAPACITY_SQL=`MAX(0,?-(SELECT COUNT(DISTINCT user_id) FROM supervision_unavailability WHERE unavailable_date=? AND (period IS NULL OR period=?)))`;
+async function termRequestOf(env,userId,termId){
+ return env.DB.prepare("SELECT id,visit_date,period FROM supervision_requests WHERE teacher_user_id=? AND academic_term_id=? AND status<>'cancelled' LIMIT 1").bind(userId,termId).first();
+}
+const TERM_LIMIT_MSG='ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง คุณลงทะเบียนในภาคเรียนนี้แล้ว หากต้องการเปลี่ยนวันหรือคาบ ให้ยกเลิกนัดเดิมก่อน (ก่อนวันนิเทศอย่างน้อย 1 วัน)';
+
 const SELECT=`SELECT r.*,tu.full_name teacher_name,su.full_name supervisor_name,
  e.items_json,e.total,e.percent,e.quality_level,e.suggestion,e.evaluated_at,e.evaluator_user_id,eu.full_name evaluator_name,
  (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=r.teacher_user_id LIMIT 1) teacher_position,
@@ -140,7 +164,10 @@ function shape(row,{withResult}){
   academic_term_id:row.academic_term_id,visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
   supervision_type:row.supervision_type,type_label:SUPERVISION_TYPES[row.supervision_type]?.label,topic:row.topic,status:row.status,
   supervisor_user_id:row.supervisor_user_id,supervisor_name:row.supervisor_name,supervisor_position:row.supervisor_position||null,
-  accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at};
+  accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at,
+  // เลยวันนิเทศแล้วแต่ยังไม่มีผล: pending = ไม่มีผู้รับนิเทศ, confirmed = ค้างบันทึกคะแนน
+  overdue:(row.status==='pending'||row.status==='confirmed')&&row.visit_date<bangkokNow().date,
+  can_cancel:row.status!=='evaluated'&&bangkokNow().date<row.visit_date};
  if(row.status==='evaluated'&&withResult){
   let items=[];try{items=JSON.parse(row.items_json);}catch{}
   out.evaluation={items,total:row.total,percent:row.percent,level:row.quality_level,suggestion:row.suggestion,evaluated_at:row.evaluated_at,
@@ -174,9 +201,17 @@ async function week(env,user,url){
  }
  const marks=dates.map(()=>'?').join(',');
  const {results:mine}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' AND r.visit_date IN (${marks})`).bind(user.id,...dates).all();
- const {results:fullRows}=await env.DB.prepare(`SELECT visit_date,period,COUNT(*) n FROM supervision_requests WHERE status<>'cancelled' AND visit_date IN (${marks}) GROUP BY visit_date,period HAVING COUNT(*)>=?`).bind(...dates,SLOT_CAPACITY).all();
- return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full:fullRows.map(r=>`${r.visit_date}|${r.period}`),
-  terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,
+ const {results:counts}=await env.DB.prepare(`SELECT visit_date,period,COUNT(*) n FROM supervision_requests WHERE status<>'cancelled' AND visit_date IN (${marks}) GROUP BY visit_date,period`).bind(...dates).all();
+ const {results:away}=await env.DB.prepare(`SELECT user_id,unavailable_date d,period FROM supervision_unavailability WHERE unavailable_date IN (${marks})`).bind(...dates).all();
+ const capacityOf=(d,p)=>Math.max(0,SLOT_CAPACITY-new Set(away.filter(a=>a.d===d&&(a.period==null||Number(a.period)===p)).map(a=>a.user_id)).size);
+ const used=new Map(counts.map(r=>[`${r.visit_date}|${r.period}`,Number(r.n)]));
+ const full=[];for(const d of dates)for(let p=1;p<=6;p++)if((used.get(`${d}|${p}`)||0)>=capacityOf(d,p))full.push(`${d}|${p}`);
+ const holidays=await holidaysOn(env,dates);
+ days.forEach(d=>{d.holiday=holidays.get(d.date)||null;});
+ const registered=new Map();
+ for(const id of terms.keys()){const r=await termRequestOf(env,user.id,id);registered.set(id,r?{id:r.id,visit_date:r.visit_date,period:r.period}:null);}
+ return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,
+  terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,registered:registered.get(t.term.id),
    mode:t.plan?'timetable':'manual',times:t.structure.times,lunch:t.structure.lunch,
    lessons:t.lessons.map(l=>({entry_id:l.id,weekday:l.weekday,period:l.period,subject:l.subject,grade_level:l.grade_level,classroom:l.classroom,room_name:l.room_name}))})),
   days,requests:mine.map(r=>shape(r,{withResult:true})),default_times:DEFAULT_STRUCTURE.times});
@@ -192,6 +227,8 @@ async function createRequest(request,env,user){
  const term=await termFor(env,date);if(!term)return fail('วันที่เลือกไม่อยู่ในภาคเรียน');
  const structure=await periodTimes(env,term.id);
  if(slotStarted(date,structure.times[period-1].start))return fail('ไม่สามารถเลือกวันหรือคาบที่ผ่านมาแล้ว');
+ const holiday=(await holidaysOn(env,[date])).get(date);if(holiday)return fail(holidayMsg(holiday));
+ if(await termRequestOf(env,user.id,term.id))return fail(TERM_LIMIT_MSG,409);
  const plan=await publishedPlan(env,term.id),personnelIds=await personnelIdsOf(env,user.id);
  let lesson;
  if(plan){
@@ -206,11 +243,12 @@ async function createRequest(request,env,user){
  }
  let id;
  try{
-  // นับและเพิ่มในคำสั่งเดียว กันกดพร้อมกันแล้วเกินจำนวนผู้ประเมิน
+  // นับและเพิ่มในคำสั่งเดียว กันกดพร้อมกันแล้วเกินจำนวนผู้ประเมินที่ว่าง และกันลงทะเบียนเกินภาคละ 1 ครั้ง
   const result=await env.DB.prepare(`INSERT INTO supervision_requests(teacher_user_id,teacher_personnel_id,academic_term_id,visit_date,weekday,period,source,timetable_entry_id,subject,grade_level,classroom,room_name,supervision_type,topic)
-   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<?`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
-   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,date,period,SLOT_CAPACITY).run();
-  if(!result.meta.changes)return fail(FULL_MSG,409);
+   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<${CAPACITY_SQL}
+   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE teacher_user_id=? AND academic_term_id=? AND status<>'cancelled')`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
+   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,date,period,SLOT_CAPACITY,date,period,user.id,term.id).run();
+  if(!result.meta.changes)return fail(await termRequestOf(env,user.id,term.id)?TERM_LIMIT_MSG:FULL_MSG,409);
   id=Number(result.meta.last_row_id);
  }catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('คุณลงทะเบียนคาบนี้ไว้แล้ว',409);throw e;}
  const room=[lesson.grade_level,lesson.classroom].filter(Boolean).join('/');
@@ -237,6 +275,7 @@ async function act(request,env,user,id,action,perms){
  if(action==='cancel'){
   if(row.teacher_user_id!==user.id)return fail('ยกเลิกได้เฉพาะคำขอของตนเอง',403);
   if(row.status==='evaluated')return fail('รายการที่ประเมินแล้วยกเลิกไม่ได้',409);
+  if(!(bangkokNow().date<row.visit_date))return fail('ยกเลิกหรือเลื่อนนัดได้ก่อนวันนิเทศอย่างน้อย 1 วันเท่านั้น',409);
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='cancelled',cancelled_at=datetime('now'),cancelled_by=?,updated_at=datetime('now') WHERE id=? AND status IN ('pending','confirmed')").bind(user.id,id).run();
   if(!r.meta.changes)return fail('สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
   const to=row.supervisor_user_id?[row.supervisor_user_id]:await evaluatorIds(env);
@@ -250,6 +289,8 @@ async function act(request,env,user,id,action,perms){
   if(row.status!=='pending')return fail(row.supervisor_name?`รายการนี้ ${row.supervisor_name} รับนิเทศแล้ว`:'สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
   const clash=await env.DB.prepare(`SELECT u.full_name FROM supervision_requests r JOIN users u ON u.id=r.teacher_user_id WHERE r.supervisor_user_id=? AND r.visit_date=? AND r.period=? AND r.status IN ('confirmed','evaluated') AND r.id<>?`).bind(user.id,row.visit_date,row.period,id).first();
   if(clash)return fail(`คุณรับนิเทศ ${clash.full_name} ในวันและคาบเดียวกันไว้แล้ว`,409);
+  if(await env.DB.prepare('SELECT 1 FROM supervision_unavailability WHERE user_id=? AND unavailable_date=? AND (period IS NULL OR period=?)').bind(user.id,row.visit_date,row.period).first())
+   return fail('คุณแจ้งไม่ว่างในวันและคาบนี้ไว้ ลบวันไม่ว่างก่อนจึงจะรับนิเทศได้',409);
   let r;
   try{r=await env.DB.prepare("UPDATE supervision_requests SET status='confirmed',supervisor_user_id=?,accepted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending'").bind(user.id,id).run();}
   catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('คุณรับนิเทศในวันและคาบเดียวกันไว้แล้ว',409);throw e;}
@@ -319,9 +360,49 @@ async function evaluators(request,env,user,method,userId){
   return reply({ok:true});
  }
  if(method==='DELETE'){
-  const pending=await env.DB.prepare("SELECT COUNT(*) n FROM supervision_requests WHERE supervisor_user_id=? AND status='confirmed'").bind(userId).first();
-  await env.DB.prepare('DELETE FROM supervision_evaluators WHERE user_id=?').bind(userId).run();
-  return reply({ok:true,open_assignments:Number(pending?.n||0)});
+  // ถอนสิทธิ์: นัดที่รับไว้แต่ยังไม่ประเมินกลับไปรอผู้รับนิเทศใหม่ และลบวันไม่ว่างของผู้นั้น
+  const {results:open}=await env.DB.prepare(`${SELECT} WHERE r.supervisor_user_id=? AND r.status='confirmed'`).bind(userId).all();
+  await env.DB.batch([
+   env.DB.prepare('DELETE FROM supervision_evaluators WHERE user_id=?').bind(userId),
+   env.DB.prepare('DELETE FROM supervision_unavailability WHERE user_id=?').bind(userId),
+   env.DB.prepare("UPDATE supervision_requests SET status='pending',supervisor_user_id=NULL,accepted_at=NULL,updated_at=datetime('now') WHERE supervisor_user_id=? AND status='confirmed'").bind(userId)
+  ]);
+  if(open.length){
+   const others=await evaluatorIds(env);
+   await env.DB.batch(open.flatMap(r=>[
+    ...notifyStatements(env,[r.teacher_user_id],r.id,`ผู้นิเทศเดิมถูกถอนสิทธิ์ประเมิน นัด ${slotLabel(r)} กลับไปรอผู้บริหารรับนิเทศ`,user.id),
+    ...notifyStatements(env,others.filter(x=>x!==r.teacher_user_id&&x!==userId),r.id,`${r.teacher_name} ${slotLabel(r)} กลับไปรอผู้รับนิเทศใหม่ (ผู้นิเทศเดิมถูกถอนสิทธิ์)`,user.id)
+   ]));
+  }
+  return reply({ok:true,released:open.length});
+ }
+ return fail('Method not allowed',405);
+}
+
+// วันไม่ว่างของผู้ประเมิน — ผู้ประเมินแจ้งเอง เห็นของผู้ประเมินทุกคนเพื่อประสานกัน ลบได้เฉพาะของตนเอง
+async function unavailability(request,env,user,method,id,perms){
+ if(!perms.evaluate)return fail('เฉพาะ ผอ. รอง ผอ. และผู้มีสิทธิ์ประเมินเท่านั้น',403);
+ const today=bangkokNow().date;
+ if(method==='GET'){
+  const {results}=await env.DB.prepare(`SELECT s.id,s.user_id,u.full_name,s.unavailable_date,s.period,s.note,s.created_at FROM supervision_unavailability s JOIN users u ON u.id=s.user_id
+   WHERE s.unavailable_date>=? ORDER BY s.unavailable_date,COALESCE(s.period,0),u.full_name`).bind(today).all();
+  return reply({items:results.map(r=>({...r,mine:r.user_id===user.id}))});
+ }
+ if(method==='POST'&&!id){
+  const body=await request.json().catch(()=>null),date=body?.date,period=body?.period==null||body.period===''?null:Number(body.period);
+  if(!validDate(date)||!weekdayOf(date))return fail('เลือกวันจันทร์ถึงศุกร์ให้ถูกต้อง');
+  if(date<today)return fail('ไม่สามารถแจ้งไม่ว่างย้อนหลังได้');
+  if(period!==null&&(!Number.isInteger(period)||period<1||period>6))return fail('เลือกคาบให้ถูกต้อง');
+  const busy=await env.DB.prepare(`SELECT r.period,u.full_name FROM supervision_requests r JOIN users u ON u.id=r.teacher_user_id WHERE r.supervisor_user_id=? AND r.status='confirmed' AND r.visit_date=?${period?' AND r.period=?':''} LIMIT 1`).bind(user.id,date,...(period?[period]:[])).first();
+  if(busy)return fail(`คุณรับนิเทศ ${busy.full_name} คาบ ${busy.period} ในวันนี้ไว้แล้ว ถอนการรับก่อนจึงจะแจ้งไม่ว่างได้`,409);
+  try{await env.DB.prepare('INSERT INTO supervision_unavailability(user_id,unavailable_date,period,note) VALUES(?,?,?,?)').bind(user.id,date,period,text(body.note,200)||null).run();}
+  catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('แจ้งไม่ว่างวันและคาบนี้ไว้แล้ว',409);throw e;}
+  return reply({ok:true},201);
+ }
+ if(method==='DELETE'&&id){
+  const r=await env.DB.prepare('DELETE FROM supervision_unavailability WHERE id=? AND user_id=?').bind(id,user.id).run();
+  if(!r.meta.changes)return fail('ไม่พบรายการ หรือไม่ใช่รายการของคุณ',404);
+  return reply({ok:true});
  }
  return fail('Method not allowed',405);
 }
@@ -339,6 +420,8 @@ export async function handleSupervisionRoute(request,env,pathname,method){
  if(pathname==='/api/supervision/requests'&&method==='POST')return createRequest(request,env,user);
  const m=pathname.match(/^\/api\/supervision\/requests\/(\d+)\/(cancel|accept|release|evaluate)$/);
  if(m&&method==='POST')return act(request,env,user,Number(m[1]),m[2],perms);
+ const ua=pathname.match(/^\/api\/supervision\/unavailability(?:\/(\d+))?$/);
+ if(ua)return unavailability(request,env,user,method,ua[1]?Number(ua[1]):null,perms);
  const ev=pathname.match(/^\/api\/supervision\/evaluators(?:\/(\d+))?$/);
  if(ev){
   if(!perms.manage_evaluators)return fail('เฉพาะหัวหน้าฝ่ายวิชาการหรือผู้ดูแลระบบ',403);

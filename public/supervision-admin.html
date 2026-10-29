@@ -12,7 +12,7 @@
 const U=SupervisionUI,{esc}=U,$=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 const state={perm:null,view:params.get('view'),filter:'all',teacher:'all',sumType:'all',list:[],draft:null,focus:Number(params.get('request'))||null};
-const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate','บันทึกคะแนน',p=>p.evaluate],['results','ผลการนิเทศ',p=>p.view_all||p.evaluate],['summary','ประเมินผลการนิเทศ',p=>p.view_all],['evaluators','ผู้มีสิทธิ์ประเมิน',p=>p.manage_evaluators]];
+const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate','บันทึกคะแนน',p=>p.evaluate],['results','ผลการนิเทศ',p=>p.view_all||p.evaluate],['summary','ประเมินผลการนิเทศ',p=>p.view_all],['evaluators','ผู้มีสิทธิ์ประเมิน',p=>p.manage_evaluators],['away','วันไม่ว่าง',p=>p.evaluate]];
 const allowed=()=>TABS.filter(t=>t[2](state.perm));
 const sortAsc=(a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1;
 const me=()=>state.perm.user.id;
@@ -25,7 +25,7 @@ async function load(){if(state.perm.evaluate||state.perm.view_all)state.list=(aw
 async function render(reload=true){
  try{
   if(reload)await load();renderTabs();
-  await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,summary:viewSummary,evaluators:viewEvaluators})[state.view]();
+  await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,summary:viewSummary,evaluators:viewEvaluators,away:viewAway})[state.view]();
  }catch(e){$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;}
 }
 /* ---------- คำขอนิเทศ ---------- */
@@ -46,7 +46,7 @@ function reqRow(r){
  }
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small><div style="margin-top:4px;font-weight:600">${esc(r.teacher_name)}</div></div>
   <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
-  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${owner}</div></div><div class="acts">${acts}</div></div>`;
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${owner}</div></div><div class="acts">${acts}</div></div>`;
 }
 function viewRequests(){
  const all=[...state.list].sort(sortAsc),f=state.filter;
@@ -160,6 +160,22 @@ function exportSummary(){
  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
  a.href=URL.createObjectURL(blob);a.download=`ประเมินผลการนิเทศ-${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
+/* ---------- วันไม่ว่างของผู้ประเมิน ---------- */
+async function viewAway(){
+ const {items}=await apiRequest('/api/supervision/unavailability');
+ const row=a=>`<div class="sv-row" style="grid-template-columns:auto 1fr auto"><div class="when"><b>${U.date(a.unavailable_date)}</b><small>${a.period?`คาบ ${a.period}`:'ทั้งวัน'}</small></div>
+  <div class="meta"><div class="line"><b>${esc(a.full_name)}</b>${a.mine?'<span class="sv-tag">ของคุณ</span>':''}</div>${a.note?`<div class="topic">${esc(a.note)}</div>`:''}</div>
+  <div class="acts">${a.mine?`<button type="button" class="sv-btn sm danger" data-away-del="${a.id}">ลบ</button>`:''}</div></div>`;
+ $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">
+  <div><h2 style="margin:0 0 4px;color:#163e67;font-size:19px">แจ้งวันหรือคาบที่ไม่ว่างนิเทศ</h2><p class="sv-hint">เช่น ลา ไปราชการ ประชุม หรือมีสอน ระบบจะลดจำนวนคำขอที่ครูลงทะเบียนได้ในคาบนั้นลงตามจำนวนผู้ประเมินที่ไม่ว่าง (ปกติ 3 คำขอต่อคาบ) และคุณจะรับนิเทศคาบนั้นไม่ได้ คำขอที่ลงทะเบียนไว้ก่อนแล้วยังคงอยู่</p></div>
+  <div class="sv-toolbar" style="flex-wrap:wrap;gap:8px"><input type="date" id="awayDate" aria-label="วันที่" min="${new Date(Date.now()+7*3600000).toISOString().slice(0,10)}">
+   <select id="awayPeriod" aria-label="คาบ"><option value="">ทั้งวัน</option>${[1,2,3,4,5,6].map(p=>`<option value="${p}">คาบ ${p}</option>`).join('')}</select>
+   <input id="awayNote" maxlength="200" placeholder="หมายเหตุ (ไม่บังคับ)" style="flex:1;min-width:160px"><button type="button" class="sv-btn primary" id="awayAdd">บันทึกวันไม่ว่าง</button></div>
+  <div class="sv-list">${items.length?items.map(row).join(''):'<div class="sv-empty"><b>ยังไม่มีผู้ประเมินแจ้งวันไม่ว่าง</b>ทุกคาบรับลงทะเบียนได้ 3 คำขอ</div>'}</div></section>`;
+ $('awayAdd').onclick=async()=>{const date=$('awayDate').value;if(!date)return U.toast('เลือกวันที่ก่อน',true);
+  try{await apiRequest('/api/supervision/unavailability',{method:'POST',body:{date,period:$('awayPeriod').value||null,note:$('awayNote').value}});U.toast('บันทึกวันไม่ว่างแล้ว');viewAway();}catch(e){U.toast(e.message,true);}};
+}
+async function delAway(id){try{await apiRequest(`/api/supervision/unavailability/${id}`,{method:'DELETE'});U.toast('ลบวันไม่ว่างแล้ว');}catch(e){U.toast(e.message,true);}viewAway();}
 /* ---------- ผู้มีสิทธิ์ประเมิน ---------- */
 async function viewEvaluators(){
  const data=await apiRequest('/api/supervision/evaluators');
@@ -177,12 +193,13 @@ async function viewEvaluators(){
   try{await apiRequest('/api/supervision/evaluators',{method:'POST',body:{user_id:id}});U.toast('เพิ่มผู้มีสิทธิ์ประเมินแล้ว');viewEvaluators();}catch(e){U.toast(e.message,true);}};
 }
 function revoke(id,name){
- const m=U.modal(`<header><h2>ถอนสิทธิ์ประเมินของ ${esc(name)}?</h2></header><div class="body"><p style="margin:0">รายการที่ประเมินไปแล้วยังคงอยู่ รายการที่รับนิเทศไว้แต่ยังไม่ประเมิน ผู้นั้นจะบันทึกคะแนนไม่ได้จนกว่าจะได้สิทธิ์คืน หรือให้ถอนการรับเพื่อให้ผู้อื่นรับแทน</p></div>
+ const m=U.modal(`<header><h2>ถอนสิทธิ์ประเมินของ ${esc(name)}?</h2></header><div class="body"><p style="margin:0">รายการที่ประเมินไปแล้วยังคงอยู่ รายการที่รับนิเทศไว้แต่ยังไม่ประเมินจะกลับไปรอผู้รับนิเทศใหม่ และระบบแจ้งครูให้ทราบ</p></div>
   <footer><button type="button" class="sv-btn" data-close data-autofocus>ไม่ถอน</button><button type="button" class="sv-btn danger solid" id="rOk">ถอนสิทธิ์</button></footer>`);
- m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.open_assignments?`ถอนสิทธิ์แล้ว (มีนัดที่รับไว้ยังไม่ประเมิน ${r.open_assignments} รายการ)`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
+ m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke]');if(!el)return;
+ const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del]');if(!el)return;
+ if(el.dataset.awayDel){el.disabled=true;delAway(Number(el.dataset.awayDel));return;}
  if(el.dataset.sumtype){state.sumType=el.dataset.sumtype;viewSummary();return;}
  if(el.dataset.export!==undefined){exportSummary();return;}
  if(el.dataset.tab){state.view=el.dataset.tab;state.focus=null;render(false);}

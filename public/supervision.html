@@ -44,6 +44,7 @@ async function renderRegister(){
  const cell=(d,p)=>{
   const term=termOf(d);
   if(!term)return '<td><div class="sv-slot off">นอกภาคเรียน</div></td>';
+  if(d.holiday)return `<td><div class="sv-slot off" title="${esc(d.holiday.name)}">${d.holiday.kind==='activity'?'วันกิจกรรม':'วันหยุด'}${d.holiday.name?`<small>${esc(d.holiday.name)}</small>`:''}</div></td>`;
   const t=term.times[p-1],req=w.requests.find(r=>r.visit_date===d.date&&r.period===p);
   const lesson=term.mode==='timetable'?term.lessons.find(l=>l.weekday===d.weekday&&l.period===p):null;
   if(term.mode==='timetable'&&!lesson&&!req)return '<td><div class="sv-slot none" aria-hidden="true">·</div></td>';
@@ -51,7 +52,8 @@ async function renderRegister(){
   const label=lesson?`<b>${esc(lesson.subject)}</b><small>${esc(U.classLabel(lesson))}</small>`:'';
   if(req){booked++;return `<td><button type="button" class="sv-slot booked ${req.status}" data-detail="${req.id}"><b>${esc(req.subject)}</b><small>${esc(U.classLabel(req))}</small><span class="state">${esc(req.type_label)} · ${U.STATUS[req.status]}</span></button></td>`;}
   if(past(d.date,t.start))return `<td><div class="sv-slot past">${label}<small style="margin-top:auto">ผ่านมาแล้ว</small></div></td>`;
-  if((w.full||[]).includes(`${d.date}|${p}`))return `<td><div class="sv-slot full" title="ผู้ประเมินรับครบ ${w.capacity||3} คนแล้ว">${label}<small style="margin-top:auto">คาบเต็ม</small></div></td>`;
+  if(term.registered)return `<td><div class="sv-slot past" title="ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง">${label}<small style="margin-top:auto">ลงทะเบียนภาคนี้แล้ว</small></div></td>`;
+  if((w.full||[]).includes(`${d.date}|${p}`))return `<td><div class="sv-slot full" title="ผู้ประเมินที่ว่างรับครบแล้ว">${label}<small style="margin-top:auto">คาบเต็ม</small></div></td>`;
   return `<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
  };
  let rows='';
@@ -68,6 +70,7 @@ async function renderRegister(){
  const notices=[];
  if(manual)notices.push('<div class="sv-notice warn">ภาคเรียนนี้ยังไม่มีตารางสอนที่เผยแพร่ เลือกคาบที่คุณสอนจริง แล้วกรอกวิชาและชั้นเรียนในหน้าต่างยืนยัน เมื่อฝ่ายวิชาการเผยแพร่ตารางสอนแล้ว ระบบจะแสดงเฉพาะคาบสอนของคุณให้อัตโนมัติ</div>');
  if(timetable&&!w.linked)notices.push('<div class="sv-notice error">บัญชีของคุณยังไม่ผูกกับทะเบียนบุคลากร ระบบจึงหาคาบสอนของคุณไม่ได้ กรุณาติดต่อผู้ดูแลระบบ</div>');
+ w.terms.filter(t=>t.registered).forEach(t=>notices.push(`<div class="sv-notice">คุณลงทะเบียน${esc(t.name)}แล้ว (${U.date(t.registered.visit_date)} คาบ ${t.registered.period}) ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง หากต้องการเปลี่ยนวันหรือคาบ ให้ยกเลิกนัดเดิมก่อนวันนิเทศอย่างน้อย 1 วัน</div>`));
  if(!w.terms.length)notices.push('<div class="sv-notice">สัปดาห์นี้ไม่อยู่ในภาคเรียน เลื่อนไปสัปดาห์ถัดไปเพื่อลงทะเบียน</div>');
  const lbl=`${U.shortDate(dates[0])} – ${U.parse(dates[4]).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}`;
  $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">
@@ -107,8 +110,8 @@ function row(r){
  const owner=r.supervisor_name?`<span class="owner">ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b></span>`:'<span class="owner">รอ ผอ. หรือรอง ผอ. รับนิเทศ</span>';
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small></div>
   <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
-  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${owner}</div></div>
-  <div class="acts"><button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`}</div></div>`;
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${owner}</div></div>
+  <div class="acts"><button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:r.can_cancel?`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`:''}</div></div>`;
 }
 async function renderMine(view){
  await loadMine();const list=state.mine;
@@ -125,7 +128,7 @@ function findRequest(id){return (state.mine||[]).find(r=>r.id===id)||(state.week
 async function openDetail(id){
  if(!findRequest(id))await loadMine();const r=findRequest(id);if(!r)return U.toast('ไม่พบรายการ',true);
  const m=U.modal(`<header><h2>รายละเอียดนัดหมาย</h2></header><div class="body">${U.details(r)}</div><footer>
-  ${r.status!=='evaluated'?`<button type="button" class="sv-btn danger" data-cancel="${r.id}">ยกเลิกนัดหมาย</button>`:`<button type="button" class="sv-btn primary" data-result="${r.id}">ดูผลการนิเทศ</button>`}
+  ${r.status==='evaluated'?`<button type="button" class="sv-btn primary" data-result="${r.id}">ดูผลการนิเทศ</button>`:r.can_cancel?`<button type="button" class="sv-btn danger" data-cancel="${r.id}">ยกเลิกนัดหมาย</button>`:'<span class="sv-hint" style="margin-right:auto">ยกเลิกหรือเลื่อนนัดได้ก่อนวันนิเทศอย่างน้อย 1 วันเท่านั้น</span>'}
   <button type="button" class="sv-btn" data-close data-autofocus>ปิด</button></footer>`);
 }
 function askCancel(id){
