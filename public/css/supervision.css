@@ -148,3 +148,15 @@ button.sv-slot{cursor:pointer}
 .sv-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 .sv-thumb-del{position:absolute;top:4px;right:4px;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:99px;background:rgba(20,30,45,.7);color:#fff;font-size:18px;line-height:28px;cursor:pointer}
 .sv-thumb.loading{display:flex;align-items:center;justify-content:center;font-size:12px;color:#607991}
+
+/* ช่วงชั้น: อนุบาล เขียว · ป.1–3 ฟ้า · ป.4–6 ม่วง */
+.sv-band{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:1px 9px;white-space:nowrap;border:1px solid transparent}
+.sv-band.b-k{background:#e3f6e8;color:#1f7a3d;border-color:#9fdab1}
+.sv-band.b-p13{background:#e2f2fd;color:#11649b;border-color:#94cdf2}
+.sv-band.b-p46{background:#efe7fb;color:#6338a8;border-color:#c5aef0}
+.sv-bdot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle}
+.sv-bdot.b-k{background:#34a853}.sv-bdot.b-p13{background:#2b9be8}.sv-bdot.b-p46{background:#8a5cd6}
+.sv-slot.band-k{box-shadow:inset 4px 0 0 #34a853}.sv-slot.band-p13{box-shadow:inset 4px 0 0 #2b9be8}.sv-slot.band-p46{box-shadow:inset 4px 0 0 #8a5cd6}
+.sv-slot .sv-bdots{display:flex;gap:3px;margin-top:2px}
+.sv-slot .sv-bdots .sv-bdot{width:8px;height:8px}
+.sv-slot small.sv-bname{display:flex;align-items:center;gap:4px}

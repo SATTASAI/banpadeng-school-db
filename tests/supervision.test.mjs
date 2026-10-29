@@ -82,7 +82,7 @@ test('full flow: register → executives notified → accept → score → teach
  assert((await ok(env,'/api/notifications','GET',undefined,2)).notifications.some(n=>/รับนิเทศของคุณแล้ว/.test(n.message)));
 
  // ผู้บริหารคนเดียวรับนิเทศวันและคาบเดียวกันซ้ำไม่ได้
- const other=(await ok(env,'/api/supervision/requests','POST',{...manual,subject:'คณิตศาสตร์'},3)).request.id;
+ const other=(await ok(env,'/api/supervision/requests','POST',{...manual,subject:'คณิตศาสตร์',grade_level:'ป.2'},3)).request.id;
  const clash=await json(env,`/api/supervision/requests/${other}/accept`,'POST',{},5);assert.equal(clash.status,409);assert.match(clash.body.error,/วันและคาบเดียวกัน/);
  await ok(env,`/api/supervision/requests/${other}/accept`,'POST',{},6);
 
@@ -166,7 +166,7 @@ test('menus: teacher registration under support, executive pages under administr
 
 test('a date + period accepts at most 3 registrations (3 evaluators); 4th is told the slot is full',async()=>{
  const {env}=await school();
- for(const u of [2,3,7])await ok(env,'/api/supervision/requests','POST',manual,u);
+ for(const [u,g] of [[2,'ป.4'],[3,'ป.1'],[7,'อ.2']])await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:g},u);
  const full=await json(env,'/api/supervision/requests','POST',manual,6);
  assert.equal(full.status,409);assert.equal(full.body.error,'ลงทะเบียนไม่ได้เนื่องจากคาบเต็ม กรุณาเลือกคาบอื่น');
  await ok(env,'/api/supervision/requests','POST',{...manual,period:3},1); // other period still open
@@ -176,6 +176,19 @@ test('a date + period accepts at most 3 registrations (3 evaluators); 4th is tol
  const id=env.raw.prepare("SELECT id FROM supervision_requests WHERE teacher_user_id=2").get().id;
  await ok(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2); // a cancellation frees a seat
  await ok(env,'/api/supervision/requests','POST',manual,6);
+});
+
+test('same date + period: one registration per grade band (อนุบาล / ป.1–3 / ป.4–6)',async()=>{
+ const {env}=await school();
+ const r=await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:'ป.5'},2);assert.equal(r.request.grade_band,'p46');
+ const same=await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'ป.6'},3);
+ assert.equal(same.status,409);assert.match(same.body.error,/ช่วงชั้นป\.4–6/);
+ await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:'ป.3'},3);
+ await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.1'},7);
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,6);
+ assert.deepEqual([...week.taken['2030-01-07|2']].sort(),['k','p13','p46']);
+ assert.equal((await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'ม.1'},6)).status,400,'unknown band');
+ await ok(env,'/api/supervision/requests','POST',{...manual,period:3,grade_level:'ป.4'},6); // other period OK
 });
 
 test('one registration per teacher per term; rebooking after cancelling is allowed',async()=>{
@@ -208,7 +221,7 @@ test('evaluator unavailability lowers the slot capacity and blocks accepting tha
  assert.equal((await json(env,'/api/supervision/unavailability','POST',{date:'2030-01-07'},6)).status,409,'duplicate');
  // 3 − 2 ไม่ว่าง = รับได้ 1 คำขอ
  await ok(env,'/api/supervision/requests','POST',manual,2);
- const full=await json(env,'/api/supervision/requests','POST',manual,3);assert.equal(full.status,409);assert.match(full.body.error,/คาบเต็ม/);
+ const full=await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'ป.1'},3);assert.equal(full.status,409);assert.match(full.body.error,/คาบเต็ม/);
  const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,3);assert(week.full.includes('2030-01-07|2'));assert(!week.full.includes('2030-01-07|3'));
  const id=env.raw.prepare('SELECT id FROM supervision_requests WHERE teacher_user_id=2').get().id;
  const blocked=await json(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);assert.equal(blocked.status,409);assert.match(blocked.body.error,/แจ้งไม่ว่าง/);

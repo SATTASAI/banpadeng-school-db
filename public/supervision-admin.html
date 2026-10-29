@@ -48,7 +48,7 @@ function reqRow(r){
   if(r.evaluation)acts=`<button type="button" class="sv-btn sm" data-result="${r.id}">ดูผล</button>`;
  }
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small><div style="margin-top:4px;font-weight:600">${esc(r.teacher_name)}</div></div>
-  <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
+  <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.bandTag(r)}${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
   <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${U.evidenceTag(r)}${owner}</div></div><div class="acts">${acts}</div></div>`;
 }
 function viewRequests(){
@@ -127,7 +127,7 @@ async function calendarHtml(){
    const list=booked.filter(r=>r.visit_date===d.date&&r.period===p);
    if(!d.term_id){tr+='<td><div class="sv-slot off">นอกภาคเรียน</div></td>';continue;}
    if(d.holiday?.kind==='holiday'){tr+=`<td><div class="sv-slot off">วันหยุด</div></td>`;continue;}
-   tr+=list.length?`<td><button type="button" class="sv-slot booked ${list.every(r=>r.status==='evaluated')?'evaluated':list.some(r=>r.status==='pending')?'pending':'confirmed'}" data-calslot="${d.date}|${p}"><b>${list.length} คน</b>${list.slice(0,3).map(r=>`<small>${esc(r.teacher_name)}</small>`).join('')}</button></td>`
+   tr+=list.length?`<td><button type="button" class="sv-slot booked ${list.every(r=>r.status==='evaluated')?'evaluated':list.some(r=>r.status==='pending')?'pending':'confirmed'}" data-calslot="${d.date}|${p}"><b>${list.length} คน</b>${list.slice(0,3).map(r=>`<small class="sv-bname"><i class="sv-bdot b-${U.bandKey(r)}"></i>${esc(r.teacher_name)}</small>`).join('')}</button></td>`
     :'<td><div class="sv-slot none" aria-hidden="true">·</div></td>';
   }
   return tr+'</tr>';
@@ -136,14 +136,14 @@ async function calendarHtml(){
  return `<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px"><h2 style="margin:0;color:#163e67;font-size:19px">ปฏิทินการจองนิเทศ</h2>
   <div class="sv-weekbar"><button type="button" class="sv-btn sm" data-calweek="-7" aria-label="สัปดาห์ก่อน">‹</button><b>${lbl}</b><button type="button" class="sv-btn sm" data-calweek="7" aria-label="สัปดาห์ถัดไป">›</button>
   <button type="button" class="sv-btn sm" data-calweek="0">สัปดาห์ปัจจุบัน</button><span class="meta">ลงทะเบียน ${booked.length} คาบ · กดที่คาบเพื่อดูรายชื่อ</span></div>
-  <div class="sv-legend"><span><i style="background:#fff1dc"></i>มีรายการรอผู้รับนิเทศ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินครบแล้ว</span></div>
+  <div class="sv-legend"><span><i style="background:#fff1dc"></i>มีรายการรอผู้รับนิเทศ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินครบแล้ว</span></div>${U.bandLegend()}
   <div class="sv-scroll"><table class="sv-grid"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 function openCalSlot(key){
  const [date,p]=key.split('|'),period=Number(p),list=state.list.filter(r=>r.visit_date===date&&r.period===period).sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th'));
  const t=((state.calWeek?.terms[0]?.times)||state.calWeek?.default_times||[])[period-1];
  U.modal(`<header><h2>${U.date(date,true)} · คาบ ${period}${t?` (${t.start}–${t.end} น.)`:''}</h2></header><div class="body"><div class="sv-list">${list.map(r=>`<div class="sv-row" style="grid-template-columns:1fr"><div class="meta">
-  <div class="line"><b>${esc(r.teacher_name)}</b></div><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
+  <div class="line"><b>${esc(r.teacher_name)}</b>${U.bandTag(r)}</div><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
   <div class="line">${U.pill(r.status)}${U.overdue(r)}<span class="owner">${r.supervisor_name?`ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b>`:'ยังไม่มีผู้รับนิเทศ'}</span></div></div></div>`).join('')}</div></div>
   <footer><button type="button" class="sv-btn" data-close data-autofocus>ปิด</button></footer>`);
 }

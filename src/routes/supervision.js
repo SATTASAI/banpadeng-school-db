@@ -10,6 +10,15 @@ import {loadStructure,DEFAULT_STRUCTURE} from '../lib/timetable-structure.js';
 export const FORM_SECTIONS=[{label:'ด้านการสอน',items:['การออกแบบแผนการจัดการเรียนรู้','การจัดกิจกรรมที่เน้นผู้เรียนเป็นสำคัญ','การใช้สื่อและแหล่งเรียนรู้','การวัดและประเมินผลการเรียนรู้','การบริหารชั้นเรียนและการมีส่วนร่วม']},{label:'ด้านห้องเรียน',items:['ความสะอาดและความเป็นระเบียบ','ความปลอดภัยในห้องเรียน','การจัดมุมเรียนรู้และสื่อการสอน','บรรยากาศที่ส่งเสริมการเรียนรู้','การแสดงผลงานและข้อมูลผู้เรียน']}];
 export const FORM_ITEMS=FORM_SECTIONS.flatMap(s=>s.items);
 export const COMBINED_LABEL='นิเทศการสอนและห้องเรียน';
+// ช่วงชั้น — คาบเดียวกันวันเดียวกันลงได้ช่วงชั้นละ 1 คน
+export const GRADE_BANDS={k:'อนุบาล',p13:'ป.1–3',p46:'ป.4–6'};
+export function bandOf(grade){
+ const g=String(grade||'').replace(/\s+/g,'');
+ if(/^(อ\.?\d|อนุบาล|K\d?)/i.test(g))return 'k';
+ const m=g.match(/^(?:ป\.?|ประถม(?:ศึกษา)?(?:ปีที่)?|P)(\d)/i);
+ if(!m)return null;const n=Number(m[1]);
+ return n>=1&&n<=3?'p13':n>=4&&n<=6?'p46':null;
+}
 // ค่า supervision_type ในฐานข้อมูล: คำขอใหม่ทั้งหมดเก็บเป็น teaching (= นิเทศการสอนและห้องเรียน); classroom คงไว้สำหรับข้อมูลเดิม
 export const SUPERVISION_TYPES={teaching:{label:COMBINED_LABEL},classroom:{label:'นิเทศห้องเรียน'}};
 const LEGACY_LABELS={teaching:'นิเทศการสอน',classroom:'นิเทศห้องเรียน'};
@@ -87,8 +96,12 @@ export function ensureSupervisionSchema(env){
  ]).then(async()=>{
   // คอลัมน์หลักฐานแทนการนิเทศ (ผู้ประเมินรับนิเทศแล้วแจ้งไม่ว่างไปนิเทศ → ครูส่งลิงก์คลิปและภาพ)
   const cols=new Set((await env.DB.prepare('PRAGMA table_info(supervision_requests)').all()).results.map(c=>c.name));
-  const add=[['evidence_requested_at','TEXT'],['evidence_requested_by','INTEGER'],['evidence_note','TEXT'],['evidence_video_url','TEXT'],['evidence_submitted_at','TEXT'],['evidence_due_date','TEXT'],['evidence_reminded_on','TEXT'],['evidence_overdue_notified','INTEGER']].filter(([c])=>!cols.has(c));
+  const add=[['evidence_requested_at','TEXT'],['evidence_requested_by','INTEGER'],['evidence_note','TEXT'],['evidence_video_url','TEXT'],['evidence_submitted_at','TEXT'],['evidence_due_date','TEXT'],['evidence_reminded_on','TEXT'],['evidence_overdue_notified','INTEGER'],['grade_band','TEXT']].filter(([c])=>!cols.has(c));
   for(const [c,t] of add)await env.DB.prepare(`ALTER TABLE supervision_requests ADD COLUMN ${c} ${t}`).run().catch(e=>{if(!/duplicate column/i.test(String(e.message)))throw e;});
+  // เติมช่วงชั้นให้รายการเดิม
+  const {results:nob}=await env.DB.prepare('SELECT id,grade_level FROM supervision_requests WHERE grade_band IS NULL AND grade_level IS NOT NULL').all();
+  const fill=nob.map(r=>[r.id,bandOf(r.grade_level)]).filter(([,b])=>b).map(([id,b])=>env.DB.prepare('UPDATE supervision_requests SET grade_band=? WHERE id=?').bind(b,id));
+  for(let i=0;i<fill.length;i+=50)await env.DB.batch(fill.slice(i,i+50));
  }).catch(e=>{ready.delete(env.DB);throw e;});
  ready.set(env.DB,p);return p;
 }
@@ -188,7 +201,7 @@ function typeLabel(row){
 }
 function shape(row,{withResult}){
  const out={id:row.id,teacher_user_id:row.teacher_user_id,teacher_name:row.teacher_name,teacher_position:row.teacher_position||null,
-  academic_term_id:row.academic_term_id,visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
+  academic_term_id:row.academic_term_id,grade_band:row.grade_band||bandOf(row.grade_level),visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
   supervision_type:row.supervision_type,type_label:typeLabel(row),topic:row.topic,status:row.status,
   supervisor_user_id:row.supervisor_user_id,supervisor_name:row.supervisor_name,supervisor_position:row.supervisor_position||null,
   accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at,
@@ -220,6 +233,7 @@ export function thaiDate(iso){const d=new Date(iso+'T00:00:00Z');return `${TH_DA
 // ผู้ประเมินมี 3 คน: วันที่+คาบเดียวกันรับลงทะเบียนนิเทศได้สูงสุด 3 คำขอ (ไม่นับที่ยกเลิก)
 export const SLOT_CAPACITY=3;
 const FULL_MSG='ลงทะเบียนไม่ได้เนื่องจากคาบเต็ม กรุณาเลือกคาบอื่น';
+const bandMsg=b=>`คาบนี้มีครูช่วงชั้น${GRADE_BANDS[b]}ลงทะเบียนแล้ว ลงคาบเดียวกันได้เฉพาะคนละช่วงชั้น กรุณาเลือกคาบอื่น`;
 const slotLabel=r=>`${thaiDate(r.visit_date)} คาบ ${r.period}`;
 
 async function week(env,user,url){
@@ -244,12 +258,15 @@ async function week(env,user,url){
  const {results:away}=await env.DB.prepare(`SELECT user_id,unavailable_date d,period FROM supervision_unavailability WHERE unavailable_date IN (${marks})`).bind(...dates).all();
  const capacityOf=(d,p)=>Math.max(0,SLOT_CAPACITY-new Set(away.filter(a=>a.d===d&&(a.period==null||Number(a.period)===p)).map(a=>a.user_id)).size);
  const used=new Map(counts.map(r=>[`${r.visit_date}|${r.period}`,Number(r.n)]));
+ // ช่วงชั้นที่ลงทะเบียนแล้วในแต่ละคาบ (ไม่เปิดเผยชื่อครู)
+ const {results:bandRows}=await env.DB.prepare(`SELECT visit_date,period,grade_band b FROM supervision_requests WHERE status<>'cancelled' AND grade_band IS NOT NULL AND visit_date IN (${marks})`).bind(...dates).all();
+ const taken={};for(const r of bandRows)(taken[`${r.visit_date}|${r.period}`]||=[]).push(r.b);
  const full=[];for(const d of dates)for(let p=1;p<=6;p++)if((used.get(`${d}|${p}`)||0)>=capacityOf(d,p))full.push(`${d}|${p}`);
  const holidays=await holidaysOn(env,dates);
  days.forEach(d=>{d.holiday=holidays.get(d.date)||null;});
  const registered=new Map();
  for(const id of terms.keys()){const r=await termRequestOf(env,user.id,id);registered.set(id,r?{id:r.id,visit_date:r.visit_date,period:r.period}:null);}
- return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,
+ return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,taken,
   terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,registered:registered.get(t.term.id),
    mode:t.plan?'timetable':'manual',times:t.structure.times,lunch:t.structure.lunch,
    lessons:t.lessons.map(l=>({entry_id:l.id,weekday:l.weekday,period:l.period,subject:l.subject,grade_level:l.grade_level,classroom:l.classroom,room_name:l.room_name}))})),
@@ -281,14 +298,22 @@ async function createRequest(request,env,user){
   if(!subject||!grade)return fail('ยังไม่มีตารางสอนที่เผยแพร่ กรุณากรอกวิชาและชั้นเรียนที่สอนในคาบนี้');
   lesson={id:null,teacher_id:personnelIds[0]||null,subject,grade_level:grade,classroom,room_name:text(body.room_name,60)||null};
  }
+ const band=bandOf(lesson.grade_level);
+ if(!band)return fail('ระบุช่วงชั้นของคาบนี้ไม่ได้ (อนุบาล / ป.1–3 / ป.4–6) กรุณาตรวจชั้นเรียน');
+ const bandTaken=()=>env.DB.prepare("SELECT 1 FROM supervision_requests WHERE visit_date=? AND period=? AND grade_band=? AND status<>'cancelled'").bind(date,period,band).first();
  let id;
  try{
   // นับและเพิ่มในคำสั่งเดียว กันกดพร้อมกันแล้วเกินจำนวนผู้ประเมินที่ว่าง และกันลงทะเบียนเกินภาคละ 1 ครั้ง
-  const result=await env.DB.prepare(`INSERT INTO supervision_requests(teacher_user_id,teacher_personnel_id,academic_term_id,visit_date,weekday,period,source,timetable_entry_id,subject,grade_level,classroom,room_name,supervision_type,topic)
-   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<${CAPACITY_SQL}
-   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE teacher_user_id=? AND academic_term_id=? AND status<>'cancelled')`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
-   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,date,period,SLOT_CAPACITY,date,period,user.id,term.id).run();
-  if(!result.meta.changes)return fail(await termRequestOf(env,user.id,term.id)?TERM_LIMIT_MSG:FULL_MSG,409);
+  const result=await env.DB.prepare(`INSERT INTO supervision_requests(teacher_user_id,teacher_personnel_id,academic_term_id,visit_date,weekday,period,source,timetable_entry_id,subject,grade_level,classroom,room_name,supervision_type,topic,grade_band)
+   SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<${CAPACITY_SQL}
+   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE teacher_user_id=? AND academic_term_id=? AND status<>'cancelled')
+   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE visit_date=? AND period=? AND grade_band=? AND status<>'cancelled')`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
+   lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,band,date,period,SLOT_CAPACITY,date,period,user.id,term.id,date,period,band).run();
+  if(!result.meta.changes){
+   if(await termRequestOf(env,user.id,term.id))return fail(TERM_LIMIT_MSG,409);
+   const slotFull=!(await env.DB.prepare(`SELECT 1 ok WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<${CAPACITY_SQL}`).bind(date,period,SLOT_CAPACITY,date,period).first());
+   return fail(!slotFull&&await bandTaken()?bandMsg(band):FULL_MSG,409);
+  }
   id=Number(result.meta.last_row_id);
  }catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('คุณลงทะเบียนคาบนี้ไว้แล้ว',409);throw e;}
  const room=[lesson.grade_level,lesson.classroom].filter(Boolean).join('/');
@@ -494,6 +519,7 @@ async function evidenceTarget(env,user,id){
  if(row.teacher_user_id!==user.id)return {error:fail('ส่งหลักฐานได้เฉพาะคำขอของตนเอง',403)};
  if(!row.evidence_requested_at)return {error:fail('ผู้ประเมินยังไม่ได้แจ้งให้ส่งคลิปและภาพแทน',409)};
  if(row.status!=='confirmed')return {error:fail('รายการนี้ประเมินแล้ว แก้ไขหลักฐานไม่ได้',409)};
+ if(row.evidence_submitted_at)return {error:fail('ส่งคลิปและภาพแล้ว แก้ไขไม่ได้',409)};
  return {row};
 }
 async function submitEvidence(request,env,user,id){
@@ -503,9 +529,10 @@ async function submitEvidence(request,env,user,id){
  if(!url)return fail('กรุณาใส่ลิงก์คลิปการสอนให้ถูกต้อง (ขึ้นต้นด้วย https://)');
  const n=Number((await env.DB.prepare('SELECT COUNT(*) n FROM supervision_evidence_files WHERE request_id=?').bind(id).first()).n);
  if(!n)return fail('กรุณาแนบภาพการสอนหรือสื่อการสอนอย่างน้อย 1 ภาพ');
- const again=!!row.evidence_submitted_at;
- await env.DB.prepare("UPDATE supervision_requests SET evidence_video_url=?,evidence_submitted_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(url,id).run();
- const notes=notifyStatements(env,[row.supervisor_user_id],id,`${row.teacher_name} ${again?'แก้ไข':'ส่ง'}ลิงก์คลิปการสอนและภาพ ${n} ภาพแล้ว: ${slotLabel(row)} — ประเมินจากหลักฐานได้ที่แท็บบันทึกคะแนน`,user.id);
+ // ส่งได้ครั้งเดียว — กันกดส่งซ้ำพร้อมกัน
+ const sent=await env.DB.prepare("UPDATE supervision_requests SET evidence_video_url=?,evidence_submitted_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='confirmed' AND evidence_submitted_at IS NULL").bind(url,id).run();
+ if(!sent.meta.changes)return fail('ส่งคลิปและภาพแล้ว แก้ไขไม่ได้',409);
+ const notes=notifyStatements(env,[row.supervisor_user_id],id,`${row.teacher_name} ส่งลิงก์คลิปการสอนและภาพ ${n} ภาพแล้ว: ${slotLabel(row)} — ประเมินจากหลักฐานได้ที่แท็บบันทึกคะแนน`,user.id);
  if(notes.length)await env.DB.batch(notes);
  return reply({ok:true,request:(await withEvidence(env,[shape(await loadRequest(env,id),{withResult:true})]))[0]});
 }
@@ -567,7 +594,7 @@ export async function supervisionMaintenance(env,services,now=bangkokNow()){
  return out;
 }
 async function evidenceFile(env,fileId){
- return env.DB.prepare('SELECT f.*,r.teacher_user_id,r.supervisor_user_id,r.status FROM supervision_evidence_files f JOIN supervision_requests r ON r.id=f.request_id WHERE f.id=?').bind(fileId).first();
+ return env.DB.prepare('SELECT f.*,r.teacher_user_id,r.supervisor_user_id,r.status,r.evidence_submitted_at FROM supervision_evidence_files f JOIN supervision_requests r ON r.id=f.request_id WHERE f.id=?').bind(fileId).first();
 }
 async function readEvidenceImage(env,user,fileId,perms,services){
  const f=await evidenceFile(env,fileId);
@@ -580,6 +607,7 @@ async function deleteEvidenceImage(env,user,fileId,services){
  const f=await evidenceFile(env,fileId);
  if(!f||f.teacher_user_id!==user.id)return fail('ไม่พบภาพ หรือไม่ใช่ภาพของคุณ',404);
  if(f.status!=='confirmed')return fail('รายการนี้ประเมินแล้ว ลบภาพไม่ได้',409);
+ if(f.evidence_submitted_at)return fail('ส่งคลิปและภาพแล้ว ลบภาพไม่ได้',409);
  await env.DB.prepare('DELETE FROM supervision_evidence_files WHERE id=?').bind(fileId).run();
  await removeDrive(env,f.drive_file_id,services);
  return reply({ok:true});

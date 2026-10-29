@@ -12,6 +12,17 @@
  const pill=s=>`<span class="sv-pill st-${esc(s)}">${esc(STATUS[s]||s)}</span>`;
  // เลยวันนิเทศแล้วแต่ยังไม่มีผล
  const overdue=r=>r?.overdue?`<span class="sv-pill sv-overdue">${r.status==='confirmed'?'ค้างบันทึกคะแนน':'เลยกำหนด ไม่มีผู้รับนิเทศ'}</span>`:'';
+ // ช่วงชั้น: อนุบาล (เขียว) · ป.1–3 (ฟ้า) · ป.4–6 (ม่วง)
+ const BANDS={k:'อนุบาล',p13:'ป.1–3',p46:'ป.4–6'};
+ function bandOf(grade){
+  const g=String(grade||'').replace(/\s+/g,'');
+  if(/^(อ\.?\d|อนุบาล|K\d?)/i.test(g))return 'k';
+  const m=g.match(/^(?:ป\.?|ประถม(?:ศึกษา)?(?:ปีที่)?|P)(\d)/i);if(!m)return null;const n=Number(m[1]);
+  return n>=1&&n<=3?'p13':n>=4&&n<=6?'p46':null;
+ }
+ const bandKey=r=>r?.grade_band||bandOf(r?.grade_level);
+ const bandTag=r=>{const b=bandKey(r);return b?`<span class="sv-band b-${b}">${BANDS[b]}</span>`:'';};
+ const bandLegend=()=>`<div class="sv-legend">${Object.entries(BANDS).map(([k,l])=>`<span><i class="sv-bdot b-${k}"></i>${l}</span>`).join('')}</div>`;
  const classLabel=r=>[r.grade_level,r.classroom].filter(Boolean).join('/')+(r.room_name?` · ${r.room_name}`:'');
  const level=p=>p>=90?'ดีเยี่ยม':p>=80?'ดีมาก':p>=70?'ดี':p>=60?'พอใช้':'ควรพัฒนา';
  const pct=n=>Number(n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -23,7 +34,7 @@
  function details(r,{times}={}){
   const t=times?.[r.period-1];
   return `<dl class="sv-dl"><dt>ครู</dt><dd>${esc(r.teacher_name)}</dd><dt>วันที่</dt><dd>${date(r.visit_date,true)}</dd>
-  <dt>คาบ</dt><dd>คาบ ${r.period}${t?` (${t.start}–${t.end} น.)`:''}</dd><dt>วิชา</dt><dd>${esc(r.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(classLabel(r))||'—'}</dd>
+  <dt>คาบ</dt><dd>คาบ ${r.period}${t?` (${t.start}–${t.end} น.)`:''}</dd><dt>วิชา</dt><dd>${esc(r.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(classLabel(r))||'—'} ${bandTag(r)}</dd>
   <dt>ประเภท</dt><dd>${esc(r.type_label)}</dd><dt>สถานะ</dt><dd>${pill(r.status)} ${overdue(r)}</dd>
   ${r.supervisor_name?`<dt>ผู้นิเทศ</dt><dd>${esc(r.supervisor_name)}${r.supervisor_position?` (${esc(r.supervisor_position)})`:''}</dd>`:''}
   <dt>หัวข้อ</dt><dd>${r.topic?esc(r.topic):'<span style="color:#8aa0b4">ไม่ได้ระบุ</span>'}</dd></dl>${evidence(r)}`;
@@ -69,5 +80,5 @@
   const t=document.createElement('div');t.className='sv-toast'+(error?' err':'');t.textContent=message;box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();setTimeout(()=>t.remove(),error?5500:3800);
  }
- root.SupervisionUI={evidence,evidenceTag,STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
+ root.SupervisionUI={BANDS,bandOf,bandKey,bandTag,bandLegend,evidence,evidenceTag,STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
 })(typeof window==='undefined'?globalThis:window);
