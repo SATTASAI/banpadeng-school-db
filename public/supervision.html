@@ -44,7 +44,7 @@ async function renderRegister(){
  const cell=(d,p)=>{
   const term=termOf(d);
   if(!term)return '<td><div class="sv-slot off">นอกภาคเรียน</div></td>';
-  if(d.holiday)return `<td><div class="sv-slot off" title="${esc(d.holiday.name)}">${d.holiday.kind==='activity'?'วันกิจกรรม':'วันหยุด'}${d.holiday.name?`<small>${esc(d.holiday.name)}</small>`:''}</div></td>`;
+  if(d.holiday?.kind==='holiday')return `<td><div class="sv-slot off" title="${esc(d.holiday.name)}">วันหยุด${d.holiday.name?`<small>${esc(d.holiday.name)}</small>`:''}</div></td>`;
   const t=term.times[p-1],req=w.requests.find(r=>r.visit_date===d.date&&r.period===p);
   const lesson=term.mode==='timetable'?term.lessons.find(l=>l.weekday===d.weekday&&l.period===p):null;
   if(term.mode==='timetable'&&!lesson&&!req)return '<td><div class="sv-slot none" aria-hidden="true">·</div></td>';
@@ -54,7 +54,8 @@ async function renderRegister(){
   if(past(d.date,t.start))return `<td><div class="sv-slot past">${label}<small style="margin-top:auto">ผ่านมาแล้ว</small></div></td>`;
   if(term.registered)return `<td><div class="sv-slot past" title="ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง">${label}<small style="margin-top:auto">ลงทะเบียนภาคนี้แล้ว</small></div></td>`;
   if((w.full||[]).includes(`${d.date}|${p}`))return `<td><div class="sv-slot full" title="ผู้ประเมินที่ว่างรับครบแล้ว">${label}<small style="margin-top:auto">คาบเต็ม</small></div></td>`;
-  return `<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
+  const act=d.holiday?.kind==='activity'?`<small class="sv-act">วันกิจกรรม${d.holiday.name?' · '+esc(d.holiday.name):''}</small>`:'';
+  return `<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}${act}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
  };
  let rows='';
  w.days.forEach((d,i)=>{
@@ -88,16 +89,18 @@ function openBook(date,period){
    <label class="sv-field">วิชาที่สอนในคาบนี้<input id="bSubject" maxlength="120" required placeholder="เช่น ภาษาไทย ท14101"></label>
    <div class="sv-grid2"><label class="sv-field">ชั้น<select id="bGrade"><option value="">เลือกชั้น</option>${GRADES.map(g=>`<option>${g}</option>`).join('')}</select></label>
    <label class="sv-field">ห้อง (ถ้ามี)<input id="bClass" maxlength="30" placeholder="เช่น 1"></label></div>`;
- const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${fixed}
+ const act=d.holiday?.kind==='activity'?d.holiday:null;
+ const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${act?`<div class="sv-notice warn"><b>วันนี้ตรงกับวันกิจกรรม${act.name?' ('+esc(act.name)+')':''}</b><br>ยืนยันจะจองคาบนี้วันนี้ใช่ไหม</div>`:''}${fixed}
   <div><div class="sv-field" style="margin-bottom:6px">ประเภทการนิเทศ</div><div class="sv-types">
    <div><input type="radio" name="bType" id="bt1" value="teaching" checked><label for="bt1"><b>นิเทศการสอน</b><small>สังเกตการจัดการเรียนรู้ในคาบ</small></label></div>
    <div><input type="radio" name="bType" id="bt2" value="classroom"><label for="bt2"><b>นิเทศห้องเรียน</b><small>สภาพแวดล้อมและการจัดห้องเรียน</small></label></div></div></div>
   <label class="sv-field">หัวข้อที่ต้องการรับข้อเสนอแนะ (ไม่บังคับ)<textarea id="bTopic" maxlength="500" placeholder="เช่น การใช้คำถามกระตุ้นการคิด การจัดกลุ่มผู้เรียน"></textarea></label>
   <div class="sv-notice error" id="bError" hidden></div></div>
-  <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>ยืนยันลงทะเบียน</button></footer>`);
+  <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>${act?'ยืนยันจองวันกิจกรรม':'ยืนยันลงทะเบียน'}</button></footer>`);
  m.querySelector('#bOk').onclick=async()=>{
   const btn=m.querySelector('#bOk'),err=m.querySelector('#bError');err.hidden=true;
   const body={visit_date:date,period,supervision_type:m.querySelector('input[name=bType]:checked').value,topic:m.querySelector('#bTopic').value};
+  if(act)body.confirm_activity=true;
   if(!lesson){body.subject=m.querySelector('#bSubject').value;body.grade_level=m.querySelector('#bGrade').value;body.classroom=m.querySelector('#bClass').value;
    if(!body.subject.trim()||!body.grade_level){err.textContent='กรอกวิชาและเลือกชั้นก่อน';err.hidden=false;return;}}
   btn.disabled=true;

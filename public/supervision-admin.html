@@ -98,12 +98,46 @@ async function saveEval(){
  }catch(e){U.toast(e.message,true);btn.disabled=false;}
 }
 /* ---------- ผลการนิเทศ ---------- */
-function viewResults(){
+/* ---------- ปฏิทินการจองนิเทศของครูทุกคน (รายสัปดาห์ วัน × คาบ) ---------- */
+const addD=(s,n)=>{const d=U.parse(s);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+async function calendarHtml(){
+ const w=await apiRequest('/api/supervision/week'+(state.calStart?`?start=${state.calStart}`:''));state.calStart=w.start;state.calWeek=w;
+ const times=(w.terms[0]?.times)||w.default_times,dates=w.days.map(d=>d.date);
+ const booked=state.list.filter(r=>dates.includes(r.visit_date));
+ let head='<th class="pcol">วัน</th>';for(let p=1;p<=6;p++)head+=`<th><b>คาบ ${p}</b><span style="color:#607991">${times[p-1].start}–${times[p-1].end}</span></th>`;
+ const rows=w.days.map(d=>{
+  let tr=`<tr${d.date===w.now.date?' class="today"':''}><th class="pcol" scope="row"><b>${U.DAYS[d.weekday]}</b>${U.shortDate(d.date)}${d.holiday?`<small style="display:block;color:${d.holiday.kind==='activity'?'#187E6B':'#c8483d'}">${d.holiday.kind==='activity'?'วันกิจกรรม':'วันหยุด'}</small>`:''}</th>`;
+  for(let p=1;p<=6;p++){
+   const list=booked.filter(r=>r.visit_date===d.date&&r.period===p);
+   if(!d.term_id){tr+='<td><div class="sv-slot off">นอกภาคเรียน</div></td>';continue;}
+   if(d.holiday?.kind==='holiday'){tr+=`<td><div class="sv-slot off">วันหยุด</div></td>`;continue;}
+   tr+=list.length?`<td><button type="button" class="sv-slot booked ${list.every(r=>r.status==='evaluated')?'evaluated':list.some(r=>r.status==='pending')?'pending':'confirmed'}" data-calslot="${d.date}|${p}"><b>${list.length} คน</b>${list.slice(0,3).map(r=>`<small>${esc(r.teacher_name)}</small>`).join('')}</button></td>`
+    :'<td><div class="sv-slot none" aria-hidden="true">·</div></td>';
+  }
+  return tr+'</tr>';
+ }).join('');
+ const lbl=`${U.shortDate(dates[0])} – ${U.parse(dates[4]).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})}`;
+ return `<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px"><h2 style="margin:0;color:#163e67;font-size:19px">ปฏิทินการจองนิเทศ</h2>
+  <div class="sv-weekbar"><button type="button" class="sv-btn sm" data-calweek="-7" aria-label="สัปดาห์ก่อน">‹</button><b>${lbl}</b><button type="button" class="sv-btn sm" data-calweek="7" aria-label="สัปดาห์ถัดไป">›</button>
+  <button type="button" class="sv-btn sm" data-calweek="0">สัปดาห์ปัจจุบัน</button><span class="meta">ลงทะเบียน ${booked.length} คาบ · กดที่คาบเพื่อดูรายชื่อ</span></div>
+  <div class="sv-legend"><span><i style="background:#fff1dc"></i>มีรายการรอผู้รับนิเทศ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินครบแล้ว</span></div>
+  <div class="sv-scroll"><table class="sv-grid"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+function openCalSlot(key){
+ const [date,p]=key.split('|'),period=Number(p),list=state.list.filter(r=>r.visit_date===date&&r.period===period).sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th'));
+ const t=((state.calWeek?.terms[0]?.times)||state.calWeek?.default_times||[])[period-1];
+ U.modal(`<header><h2>${U.date(date,true)} · คาบ ${period}${t?` (${t.start}–${t.end} น.)`:''}</h2></header><div class="body"><div class="sv-list">${list.map(r=>`<div class="sv-row" style="grid-template-columns:1fr"><div class="meta">
+  <div class="line"><b>${esc(r.teacher_name)}</b></div><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
+  <div class="line">${U.pill(r.status)}${U.overdue(r)}<span class="owner">${r.supervisor_name?`ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b>`:'ยังไม่มีผู้รับนิเทศ'}</span></div></div></div>`).join('')}</div></div>
+  <footer><button type="button" class="sv-btn" data-close data-autofocus>ปิด</button></footer>`);
+}
+async function viewResults(){
  const all=state.list,teachers=[...new Map(all.map(r=>[r.teacher_user_id,r.teacher_name])).entries()].sort((a,b)=>a[1].localeCompare(b[1],'th'));
  let done=all.filter(r=>r.evaluation);if(state.teacher!=='all')done=done.filter(r=>String(r.teacher_user_id)===state.teacher);
  done.sort((a,b)=>String(b.evaluation.evaluated_at).localeCompare(String(a.evaluation.evaluated_at)));
  const scope=state.perm.view_all?'ผลการนิเทศของครูทุกคน':'ผลการนิเทศที่คุณเป็นผู้ประเมิน';
- $('view').innerHTML=U.stats(state.teacher==='all'?all:all.filter(r=>String(r.teacher_user_id)===state.teacher))+
+ const cal=await calendarHtml();
+ $('view').innerHTML=cal+'<div style="height:16px"></div>'+U.stats(state.teacher==='all'?all:all.filter(r=>String(r.teacher_user_id)===state.teacher))+
   `<div class="sv-toolbar" style="margin-top:16px"><span style="color:#607991">${scope}</span><label class="sv-field" style="flex-direction:row;align-items:center;display:flex;gap:8px;margin-left:auto">ครู<select id="teacherSel"><option value="all">ครูทุกคน</option>${teachers.map(([id,n])=>`<option value="${id}"${state.teacher===String(id)?' selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
   <div class="sv-list" style="margin-top:12px">${done.length?done.map(r=>U.result(r,state.focus===r.id)).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงเมื่อผู้นิเทศบันทึกคะแนนครบและกดบันทึกผล</div></section>'}</div>`;
  if(state.focus)document.getElementById('r-'+state.focus)?.scrollIntoView({block:'center'});
@@ -198,7 +232,9 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del]');if(!el)return;
+ const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot]');if(!el)return;
+ if(el.dataset.calweek!=null){const n=Number(el.dataset.calweek);state.calStart=n===0?null:addD(state.calStart,n);viewResults().catch(err=>U.toast(err.message,true));return;}
+ if(el.dataset.calslot){openCalSlot(el.dataset.calslot);return;}
  if(el.dataset.awayDel){el.disabled=true;delAway(Number(el.dataset.awayDel));return;}
  if(el.dataset.sumtype){state.sumType=el.dataset.sumtype;viewSummary();return;}
  if(el.dataset.export!==undefined){exportSummary();return;}

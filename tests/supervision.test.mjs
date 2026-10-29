@@ -185,12 +185,14 @@ test('one registration per teacher per term; rebooking after cancelling is allow
  await ok(env,'/api/supervision/requests','POST',{...manual,period:5},2);
 });
 
-test('holidays and activity days cannot be booked',async()=>{
+test('holidays cannot be booked; activity days need confirmation',async()=>{
  const {env}=await school();
  env.raw.exec(`CREATE TABLE IF NOT EXISTS gr_holidays(id INTEGER PRIMARY KEY,academic_year_id INTEGER,holiday_date TEXT,name TEXT,kind TEXT);
   INSERT INTO gr_holidays(academic_year_id,holiday_date,name,kind) VALUES(90,'2030-01-08','วันหยุดทดสอบ','holiday'),(90,'2030-01-09','กีฬาสี','activity');`);
  const h=await json(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-08'},2);assert.equal(h.status,400);assert.match(h.body.error,/วันหยุด \(วันหยุดทดสอบ\)/);
- const a=await json(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-09'},2);assert.equal(a.status,400);assert.match(a.body.error,/วันกิจกรรม/);
+ const a=await json(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-09'},2);assert.equal(a.status,409);assert.equal(a.body.code,'activity_day');
+ assert.equal(a.body.error,'วันนี้ตรงกับวันกิจกรรม (กีฬาสี) ยืนยันจะจองคาบนี้วันนี้ใช่ไหม');
+ assert.equal((await ok(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-09',confirm_activity:true},2)).request.visit_date,'2030-01-09');
  const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2);
  assert.equal(week.days[1].holiday.kind,'holiday');assert.equal(week.days[2].holiday.kind,'activity');assert.equal(week.days[0].holiday,null);
 });
