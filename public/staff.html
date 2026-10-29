@@ -139,7 +139,7 @@
     const panel = document.getElementById("staffPanel");
     panel.innerHTML = staff
       .map((s) => {
-        const canEdit = currentUser.is_admin || currentUser.id === s.user_id || !!s.can_edit;
+        const canEdit = !!currentUser.is_admin; // ครูแก้ข้อมูลของตัวเองที่หน้าบัญชีของฉัน
         const details = [
           s.personnel_type ? `ประเภท ${PERSONNEL_TYPE_LABELS[s.personnel_type] || s.personnel_type}` : null,
           s.position,
@@ -165,7 +165,7 @@
               <div class="staff-sub">${esc(details || "ยังไม่มีข้อมูลเพิ่มเติม")}</div>
             </div>
             <div class="staff-acts">
-            ${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
+            ${!canEdit && (currentUser.id === s.user_id || s.can_edit) ? `<a href="/account.html#personal" style="font-size:13px;color:var(--color-forest-700)">แก้ที่บัญชีของฉัน</a>` : ""}${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
             ${currentUser.role === "superadmin" ? `<button class="icon-btn" data-delete="${s.id}" style="background:none; border:none; color:var(--color-danger); cursor:pointer; text-decoration:underline; font-size:13px;">ลบ</button>` : ""}
             </div>
           </div>`;

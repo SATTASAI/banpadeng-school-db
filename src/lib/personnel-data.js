@@ -252,16 +252,21 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     profile.responsible_projects || null,
     profile.teaching_periods ?? null,
   ];
+  // academic_rank: ส่งมา (รวม null = ไม่มีวิทยฐานะ) = ตั้งตามปุ่มที่เลือก · ไม่ส่ง = คงค่าเดิม
+  const setRank = Object.prototype.hasOwnProperty.call(profile, "academic_rank");
+  const rankValue = setRank ? profile.academic_rank || null : null;
   if (person) {
     await env.DB.batch([env.DB.prepare(
       `UPDATE personnel_records SET
-         user_id = ?, email = ?, full_name = ?, position = ?, subjects = COALESCE(?, subjects),
+         user_id = ?, email = ?, full_name = ?, position = ?,
+         academic_rank = CASE WHEN ? = 1 THEN ? ELSE academic_rank END, subjects = COALESCE(?, subjects),
          phone = ?, homeroom_classroom = COALESCE(?, homeroom_classroom), departments = ?,
          responsible_projects = COALESCE(?, responsible_projects),
          teaching_periods = COALESCE(?, teaching_periods), updated_at = datetime('now')
        WHERE id = ? AND (user_id IS NULL OR user_id = ?)`
     ).bind(
-      person.account_deleted_at ? profile.user_id : person.user_id || profile.user_id, email, fullName, values[0], values[1], values[2], values[3],
+      person.account_deleted_at ? profile.user_id : person.user_id || profile.user_id, email, fullName, values[0],
+      setRank ? 1 : 0, rankValue, values[1], values[2], values[3],
       values[4], values[5], values[6], person.id, person.user_id),
       env.DB.prepare(`INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)
         ON CONFLICT(user_id) DO UPDATE SET personnel_id=excluded.personnel_id`).bind(profile.user_id,person.id),
@@ -277,11 +282,11 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
     : normalizedName;
   const result = await env.DB.prepare(
     `INSERT INTO personnel_records
-       (user_id, full_name, normalized_name, email, position, subjects, phone,
+       (user_id, full_name, normalized_name, email, position, academic_rank, subjects, phone,
         homeroom_classroom, departments, responsible_projects, teaching_periods, source_file)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'สมัครสมาชิกด้วยตนเอง')`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'สมัครสมาชิกด้วยตนเอง')`
   ).bind(
-    profile.user_id, fullName, uniqueNormalizedName, email, values[0], values[1], values[2],
+    profile.user_id, fullName, uniqueNormalizedName, email, values[0], rankValue, values[1], values[2],
     values[3], values[4], values[5], values[6]
   ).run();
   await env.DB.prepare("INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)")
