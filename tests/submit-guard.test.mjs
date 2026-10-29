@@ -26,3 +26,24 @@ test('rate limit and maintenance LINE resend cooldown',async()=>{
  assert(!(await checkSubmitGuard(req('/api/maintenance/requests/7/notify',{}),env,'/api/maintenance/requests/7/notify',t+121000)).response);
  assert.equal(await checkSubmitGuard(req('/api/tasks',{a:1},{cookie:''}),env,'/api/tasks',t),null);
 });
+test('same work resent many times and submit/cancel toggling are blocked',async()=>{
+ const env={DB:d1(new DatabaseSync(':memory:'))},t=1_800_000_000_000,p='/api/supervision/requests',b={visit_date:'2030-01-07',period:2};
+ assert(!(await checkSubmitGuard(req(p,b),env,p,t)).response);
+ assert(!(await checkSubmitGuard(req(p,b),env,p,t+30000)).response,'second send after 20s allowed');
+ const third=await checkSubmitGuard(req(p,b),env,p,t+60000);assert.equal(third.response.status,429);assert.equal((await third.response.json()).code,'REPEAT_LIMITED');
+ assert(!(await checkSubmitGuard(req(p,b),env,p,t+601000)).response,'allowed again after the window');
+ // ส่ง-ยกเลิกสลับไปมา
+ const env2={DB:d1(new DatabaseSync(':memory:'))};
+ for(let i=0;i<3;i++){
+  assert(!(await checkSubmitGuard(req(p,{...b,period:i+1}),env2,p,t+i*1000)).response);
+  assert(!(await checkSubmitGuard(req(`${p}/${i}/cancel`,{}),env2,`${p}/${i}/cancel`,t+i*1000+500)).response);
+ }
+ const again=await checkSubmitGuard(req(p,{...b,period:6}),env2,p,t+5000);assert.equal(again.response.status,429);assert.equal((await again.response.json()).code,'CHURN_LIMITED');
+ assert(!(await checkSubmitGuard(req('/api/leave-requests',{x:1}),env2,'/api/leave-requests',t+5000)).response,'other systems unaffected');
+ assert(!(await checkSubmitGuard(req(p,{...b,period:6}),env2,p,t+601000)).response,'released after the window');
+ // ยกเลิกที่ไม่สำเร็จไม่นับ
+ const env3={DB:d1(new DatabaseSync(':memory:'))};
+ for(let i=0;i<5;i++){const g=await checkSubmitGuard(req('/api/leave-requests/9',{},{method:'DELETE'}),env3,'/api/leave-requests/9',t+i);await g.release();}
+ assert(!(await checkSubmitGuard(req('/api/leave-requests',{y:1}),env3,'/api/leave-requests',t+10)).response);
+ assert(!(await checkSubmitGuard(req('/api/procurement/cases/3',{action:'cancel',note:'x'}),env3,'/api/procurement/cases/3',t+20)).response);
+});
