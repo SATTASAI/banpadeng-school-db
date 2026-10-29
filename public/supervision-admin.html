@@ -65,28 +65,28 @@ async function act(id,action,okMessage){
 function viewEvaluate(){
  const mine=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).sort(sortAsc);
  if(state.draft&&!mine.some(r=>r.id===state.draft.id))state.draft=null;
- if(!state.draft&&mine.length===1)state.draft={id:mine[0].id,scores:[null,null,null,null,null],suggestion:''};
+ if(!state.draft&&mine.length===1)state.draft={id:mine[0].id,scores:Array(state.perm.form.sections.reduce((a,x)=>a+x.items.length,0)).fill(null),suggestion:''};
  if(!mine.length){$('view').innerHTML=`<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีนัดหมายที่รอบันทึกคะแนน</b>ไปที่แท็บ “คำขอนิเทศ” แล้วกดรับนิเทศก่อน<div style="margin-top:12px"><button type="button" class="sv-btn primary" data-tab="requests">ไปที่คำขอนิเทศ</button></div></div></section>`;return;}
  const d=state.draft;
  const sel=`<label class="sv-field">นัดหมายที่คุณรับนิเทศไว้ (${mine.length} รายการ)<select id="evalSel"><option value="">— เลือกครูและนัดหมาย —</option>${mine.map(r=>`<option value="${r.id}"${d?.id===r.id?' selected':''}>${esc(r.teacher_name)} · ${U.date(r.visit_date)} คาบ ${r.period} · ${esc(r.type_label)}</option>`).join('')}</select></label>`;
  if(!d){$('view').innerHTML=`<section class="sv-card">${sel}</section>`;return;}
- const r=state.list.find(x=>x.id===d.id),items=state.perm.types[r.supervision_type].items;
+ const r=state.list.find(x=>x.id===d.id),secs=state.perm.form.sections;let n=0;
  $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">${sel}
   <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
   ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div></section>
-  <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(r.type_label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
-  <div>${items.map((q,i)=>`<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`).join('')}</div>
+  <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
+  <div>${secs.map(sec=>`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`+sec.items.map(q=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>
   <label class="sv-field" style="margin-top:8px">ข้อเสนอแนะเพื่อพัฒนา<textarea id="sugg" maxlength="3000" placeholder="จุดเด่นที่พบ และสิ่งที่ควรพัฒนาต่อ">${esc(d.suggestion)}</textarea></label></section>
   <aside class="sv-card sv-summary" id="summary" aria-live="polite"></aside></div>`;
  summary();
 }
 function summary(){
  const box=$('summary');if(!box||!state.draft)return;const s=state.draft.scores;
- const done=s.filter(v=>v!=null).length,total=s.reduce((a,v)=>a+(v||0),0),p=total/25*100,complete=done===5;
+ const N=s.length,M=state.perm.max_score,done=s.filter(v=>v!=null).length,total=s.reduce((a,v)=>a+(v||0),0),p=total/M*100,complete=done===N;
  box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;color:#163e67">สรุปผล</h3>${complete?'<span class="sv-pill st-evaluated">ครบทุกข้อ</span>':'<span class="sv-prov">ผลชั่วคราว</span>'}</div>
   <div class="sv-big"><b>${U.pct(p)}</b><span style="color:#607991">ร้อยละ</span></div><div class="sv-bar"><i style="width:${p}%"></i></div>
-  <div><div class="sv-kv"><span>ประเมินแล้ว</span><b>${done} / 5 ข้อ</b></div><div class="sv-kv"><span>คะแนนรวม</span><b>${total} / 25</b></div><div class="sv-kv"><span>ระดับคุณภาพ</span><span class="lv lv-${U.level(p)}">${done?U.level(p):'—'}</span></div></div>
-  ${complete?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ 5 ข้อจึงบันทึกได้</p>'}
+  <div><div class="sv-kv"><span>ประเมินแล้ว</span><b>${done} / ${N} ข้อ</b></div><div class="sv-kv"><span>คะแนนรวม</span><b>${total} / ${M}</b></div><div class="sv-kv"><span>ระดับคุณภาพ</span><span class="lv lv-${U.level(p)}">${done?U.level(p):'—'}</span></div></div>
+  ${complete?'':'<p class="sv-hint">ยังให้คะแนนไม่ครบ ผลนี้เป็นผลชั่วคราว ต้องให้คะแนนครบ ${N} ข้อจึงบันทึกได้</p>'}
   <button type="button" class="sv-btn primary" id="saveEval"${complete?'':' disabled'}>บันทึกผลการนิเทศ</button>
   <p class="sv-hint">เกณฑ์: ร้อยละ 90 ขึ้นไป ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ควรพัฒนา</p>`;
  $('saveEval').onclick=saveEval;
@@ -146,11 +146,11 @@ async function viewResults(){
 const LEVELS=[['ดีเยี่ยม','#187E6B'],['ดีมาก','#2B86E5'],['ดี','#5B6FD8'],['พอใช้','#d98a1f'],['ควรพัฒนา','#c8483d']];
 const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:0;
 function summaryData(){
- const done=state.list.filter(r=>r.evaluation&&(state.sumType==='all'||r.supervision_type===state.sumType));
+ const done=state.list.filter(r=>r.evaluation&&(state.sumType==='all'||r.type_label===state.sumType));
  const levels=Object.fromEntries(LEVELS.map(([l])=>[l,0]));done.forEach(r=>{if(levels[r.evaluation.level]!=null)levels[r.evaluation.level]++;});
  // ค่าเฉลี่ยรายข้อ แยกตามประเภทการนิเทศ (ข้อประเมินแต่ละประเภทไม่เหมือนกัน)
  const groups=new Map();
- done.forEach(r=>{let g=groups.get(r.supervision_type);if(!g){g={label:r.type_label,count:0,items:new Map()};groups.set(r.supervision_type,g);}g.count++;
+ done.forEach(r=>{let g=groups.get(r.type_label);if(!g){g={label:r.type_label,count:0,items:new Map()};groups.set(r.type_label,g);}g.count++;
   r.evaluation.items.forEach(it=>{const k=it.label;if(!g.items.has(k))g.items.set(k,[]);g.items.get(k).push(Number(it.score));});});
  const teachers=new Map();
  [...done].sort((a,b)=>String(a.evaluation.evaluated_at).localeCompare(String(b.evaluation.evaluated_at))).forEach(r=>{
@@ -158,12 +158,12 @@ function summaryData(){
  const rows=[...teachers.values()].map(t=>{const p=t.list.map(r=>Number(r.evaluation.percent)),last=t.list[t.list.length-1];
   return {name:t.name,position:t.position,count:t.list.length,avg:avg(p),last:p[p.length-1],lastLevel:last.evaluation.level,lastDate:last.visit_date,trend:p.length>1?p[p.length-1]-p[0]:null};})
   .sort((a,b)=>a.avg-b.avg||a.name.localeCompare(b.name,'th'));
- const requested=new Set(state.list.filter(r=>state.sumType==='all'||r.supervision_type===state.sumType).map(r=>r.teacher_user_id));
+ const requested=new Set(state.list.filter(r=>state.sumType==='all'||r.type_label===state.sumType).map(r=>r.teacher_user_id));
  return {done,levels,groups,rows,requested,mean:avg(done.map(r=>Number(r.evaluation.percent)))};
 }
 function viewSummary(){
- const d=summaryData(),types=[...new Map(state.list.map(r=>[r.supervision_type,r.type_label])).entries()];
- const chip=(k,l)=>`<button type="button" class="sv-chip" data-sumtype="${k}" aria-pressed="${state.sumType===k}">${esc(l)}</button>`;
+ const d=summaryData(),types=[...new Set(state.list.filter(r=>r.evaluation).map(r=>r.type_label))].map(l=>[l,l]);
+ const chip=(k,l)=>`<button type="button" class="sv-chip" data-sumtype="${esc(k)}" aria-pressed="${state.sumType===k}">${esc(l)}</button>`;
  const card=(l,v,c)=>`<div class="sv-stat"><span><i style="background:${c}"></i>${l}</span><b>${v}</b></div>`;
  const top=`<div class="sv-toolbar"><div class="sv-chips" role="group" aria-label="ประเภทการนิเทศ">${chip('all','ทุกประเภท')}${types.map(([k,l])=>chip(k,l)).join('')}</div>
   <button type="button" class="sv-btn sm" data-export style="margin-left:auto"${d.done.length?'':' disabled'}>ส่งออก Excel (CSV)</button></div>`;
@@ -242,13 +242,13 @@ document.addEventListener('click',e=>{
  else if(el.dataset.filter){state.filter=el.dataset.filter;render(false);}
  else if(el.dataset.accept){el.disabled=true;act(el.dataset.accept,'accept','รับนิเทศเรียบร้อย ระบบแจ้งครูแล้ว');}
  else if(el.dataset.release){el.disabled=true;act(el.dataset.release,'release','ถอนการรับแล้ว คำขอกลับไปรอผู้บริหารรับนิเทศ');}
- else if(el.dataset.eval){state.draft={id:Number(el.dataset.eval),scores:[null,null,null,null,null],suggestion:''};state.view='evaluate';render(false);}
+ else if(el.dataset.eval){state.draft={id:Number(el.dataset.eval),scores:Array(state.perm.form.sections.reduce((a,x)=>a+x.items.length,0)).fill(null),suggestion:''};state.view='evaluate';render(false);}
  else if(el.dataset.result){state.view='results';state.focus=Number(el.dataset.result);render(false);}
  else if(el.dataset.revoke)revoke(Number(el.dataset.revoke),el.dataset.name);
 });
 document.addEventListener('change',e=>{
  const t=e.target;
- if(t.id==='evalSel'){state.draft=t.value?{id:Number(t.value),scores:[null,null,null,null,null],suggestion:''}:null;render(false);}
+ if(t.id==='evalSel'){state.draft=t.value?{id:Number(t.value),scores:Array(state.perm.form.sections.reduce((a,x)=>a+x.items.length,0)).fill(null),suggestion:''}:null;render(false);}
  else if(t.id==='teacherSel'){state.teacher=t.value;state.focus=null;render(false);}
  else{const m=/^s(\d)$/.exec(t.name||'');if(m&&state.draft){state.draft.scores[Number(m[1])]=Number(t.value);summary();}}
 });

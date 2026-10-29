@@ -1,4 +1,4 @@
-// ระบบลงทะเบียนนิเทศ (นิเทศการสอน / นิเทศห้องเรียน)
+// ระบบลงทะเบียนนิเทศ (นิเทศการสอนและห้องเรียนพร้อมกัน)
 // ครูลงทะเบียนคาบของตนเอง → ผู้มีสิทธิ์ประเมิน (ผอ. รอง ผอ. และผู้ที่ฝ่ายวิชาการแต่งตั้ง) รับนิเทศ → ผู้รับนิเทศบันทึกคะแนน
 // ผลประเมิน: ครูเห็นเฉพาะของตนเอง ฝ่ายบริหารและฝ่ายวิชาการเห็นทั้งหมด
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
@@ -6,15 +6,18 @@ import {ensurePersonnelData} from '../lib/personnel-data.js';
 import {ensureDepartmentStaff,belongsToDepartment} from './department-staff.js';
 import {loadStructure,DEFAULT_STRUCTURE} from '../lib/timetable-structure.js';
 
-export const SUPERVISION_TYPES={
- teaching:{label:'นิเทศการสอน',items:['การออกแบบแผนการจัดการเรียนรู้','การจัดกิจกรรมที่เน้นผู้เรียนเป็นสำคัญ','การใช้สื่อและแหล่งเรียนรู้','การวัดและประเมินผลการเรียนรู้','การบริหารชั้นเรียนและการมีส่วนร่วม']},
- classroom:{label:'นิเทศห้องเรียน',items:['ความสะอาดและความเป็นระเบียบ','ความปลอดภัยในห้องเรียน','การจัดมุมเรียนรู้และสื่อการสอน','บรรยากาศที่ส่งเสริมการเรียนรู้','การแสดงผลงานและข้อมูลผู้เรียน']}
-};
-export const MAX_SCORE=25;
+// ผู้ประเมินนิเทศการสอนและห้องเรียนพร้อมกันในคาบเดียว ใช้แบบประเมินเดียว 10 ข้อ (การสอน 5 + ห้องเรียน 5)
+export const FORM_SECTIONS=[{label:'ด้านการสอน',items:['การออกแบบแผนการจัดการเรียนรู้','การจัดกิจกรรมที่เน้นผู้เรียนเป็นสำคัญ','การใช้สื่อและแหล่งเรียนรู้','การวัดและประเมินผลการเรียนรู้','การบริหารชั้นเรียนและการมีส่วนร่วม']},{label:'ด้านห้องเรียน',items:['ความสะอาดและความเป็นระเบียบ','ความปลอดภัยในห้องเรียน','การจัดมุมเรียนรู้และสื่อการสอน','บรรยากาศที่ส่งเสริมการเรียนรู้','การแสดงผลงานและข้อมูลผู้เรียน']}];
+export const FORM_ITEMS=FORM_SECTIONS.flatMap(s=>s.items);
+export const COMBINED_LABEL='นิเทศการสอนและห้องเรียน';
+// ค่า supervision_type ในฐานข้อมูล: คำขอใหม่ทั้งหมดเก็บเป็น teaching (= นิเทศการสอนและห้องเรียน); classroom คงไว้สำหรับข้อมูลเดิม
+export const SUPERVISION_TYPES={teaching:{label:COMBINED_LABEL},classroom:{label:'นิเทศห้องเรียน'}};
+const LEGACY_LABELS={teaching:'นิเทศการสอน',classroom:'นิเทศห้องเรียน'};
+export const MAX_SCORE=FORM_ITEMS.length*5;
 export const QUALITY_LEVELS=[[90,'ดีเยี่ยม'],[80,'ดีมาก'],[70,'ดี'],[60,'พอใช้'],[0,'ควรพัฒนา']];
 export function qualityLevel(percent){return QUALITY_LEVELS.find(([min])=>percent>=min)[1];}
 export function summarizeScores(scores){
- if(!Array.isArray(scores)||scores.length!==5||!scores.every(s=>Number.isInteger(s)&&s>=1&&s<=5))return null;
+ if(!Array.isArray(scores)||scores.length!==FORM_ITEMS.length||!scores.every(s=>Number.isInteger(s)&&s>=1&&s<=5))return null;
  const total=scores.reduce((a,b)=>a+b,0),percent=Math.round(total/MAX_SCORE*10000)/100;
  return {total,percent,level:qualityLevel(percent)};
 }
@@ -160,10 +163,15 @@ const SELECT=`SELECT r.*,tu.full_name teacher_name,su.full_name supervisor_name,
  (SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=e.evaluator_user_id LIMIT 1) evaluator_position
  FROM supervision_requests r JOIN users tu ON tu.id=r.teacher_user_id LEFT JOIN users su ON su.id=r.supervisor_user_id
  LEFT JOIN supervision_evaluations e ON e.request_id=r.id LEFT JOIN users eu ON eu.id=e.evaluator_user_id`;
+// ผลเดิมที่ประเมินแบบแยก (5 ข้อ) แสดงชื่อประเภทเดิม
+function typeLabel(row){
+ if(row.status==='evaluated'&&row.items_json){try{if(JSON.parse(row.items_json).length<FORM_ITEMS.length)return LEGACY_LABELS[row.supervision_type]||COMBINED_LABEL;}catch{}}
+ return COMBINED_LABEL;
+}
 function shape(row,{withResult}){
  const out={id:row.id,teacher_user_id:row.teacher_user_id,teacher_name:row.teacher_name,teacher_position:row.teacher_position||null,
   academic_term_id:row.academic_term_id,visit_date:row.visit_date,weekday:row.weekday,period:row.period,source:row.source,subject:row.subject,grade_level:row.grade_level,classroom:row.classroom,room_name:row.room_name,
-  supervision_type:row.supervision_type,type_label:SUPERVISION_TYPES[row.supervision_type]?.label,topic:row.topic,status:row.status,
+  supervision_type:row.supervision_type,type_label:typeLabel(row),topic:row.topic,status:row.status,
   supervisor_user_id:row.supervisor_user_id,supervisor_name:row.supervisor_name,supervisor_position:row.supervisor_position||null,
   accepted_at:row.accepted_at,created_at:row.created_at,cancelled_at:row.cancelled_at,
   // เลยวันนิเทศแล้วแต่ยังไม่มีผล: pending = ไม่มีผู้รับนิเทศ, confirmed = ค้างบันทึกคะแนน
@@ -220,10 +228,9 @@ async function week(env,user,url){
 
 async function createRequest(request,env,user){
  const body=await request.json().catch(()=>null);
- const date=body?.visit_date,period=Number(body?.period),type=body?.supervision_type;
+ const date=body?.visit_date,period=Number(body?.period),type='teaching';
  if(!validDate(date)||!weekdayOf(date))return fail('เลือกวันจันทร์ถึงศุกร์ให้ถูกต้อง');
  if(!Number.isInteger(period)||period<1||period>6)return fail('เลือกคาบเรียนให้ถูกต้อง');
- if(!SUPERVISION_TYPES[type])return fail('เลือกประเภทการนิเทศ');
  const topic=longText(body.topic,500);
  const term=await termFor(env,date);if(!term)return fail('วันที่เลือกไม่อยู่ในภาคเรียน');
  const structure=await periodTimes(env,term.id);
@@ -255,7 +262,7 @@ async function createRequest(request,env,user){
   id=Number(result.meta.last_row_id);
  }catch(e){if(/UNIQUE/i.test(String(e.message)))return fail('คุณลงทะเบียนคาบนี้ไว้แล้ว',409);throw e;}
  const room=[lesson.grade_level,lesson.classroom].filter(Boolean).join('/');
- const notes=notifyStatements(env,await evaluatorIds(env),id,`${user.full_name} ขอรับ${SUPERVISION_TYPES[type].label} ${slotLabel({visit_date:date,period})} · ${lesson.subject}${room?' '+room:''}`,user.id);
+ const notes=notifyStatements(env,await evaluatorIds(env),id,`${user.full_name} ขอรับ${COMBINED_LABEL} ${slotLabel({visit_date:date,period})} · ${lesson.subject}${room?' '+room:''}`,user.id);
  if(notes.length)await env.DB.batch(notes);
  return reply({ok:true,request:shape(await loadRequest(env,id),{withResult:true})},201);
 }
@@ -282,7 +289,7 @@ async function act(request,env,user,id,action,perms){
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='cancelled',cancelled_at=datetime('now'),cancelled_by=?,updated_at=datetime('now') WHERE id=? AND status IN ('pending','confirmed')").bind(user.id,id).run();
   if(!r.meta.changes)return fail('สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
   const to=row.supervisor_user_id?[row.supervisor_user_id]:await evaluatorIds(env);
-  const notes=notifyStatements(env,to,id,`${row.teacher_name} ยกเลิกคำขอ${SUPERVISION_TYPES[row.supervision_type].label} ${slotLabel(row)}`,user.id);
+  const notes=notifyStatements(env,to,id,`${row.teacher_name} ยกเลิกคำขอ${COMBINED_LABEL} ${slotLabel(row)}`,user.id);
   if(notes.length)await env.DB.batch(notes);
   return reply({ok:true});
  }
@@ -300,7 +307,7 @@ async function act(request,env,user,id,action,perms){
   if(!r.meta.changes)return fail('มีผู้บริหารท่านอื่นรับนิเทศรายการนี้แล้ว กรุณาโหลดใหม่',409);
   const others=(await evaluatorIds(env)).filter(x=>x!==row.teacher_user_id);
   await env.DB.batch([
-   ...notifyStatements(env,[row.teacher_user_id],id,`${user.full_name} รับนิเทศของคุณแล้ว: ${slotLabel(row)} (${SUPERVISION_TYPES[row.supervision_type].label})`,user.id),
+   ...notifyStatements(env,[row.teacher_user_id],id,`${user.full_name} รับนิเทศของคุณแล้ว: ${slotLabel(row)} (${COMBINED_LABEL})`,user.id),
    ...notifyStatements(env,others,id,`${user.full_name} รับนิเทศ ${row.teacher_name} ${slotLabel(row)}`,user.id)
   ]);
   return reply({ok:true});
@@ -321,7 +328,7 @@ async function act(request,env,user,id,action,perms){
   const body=await request.json().catch(()=>null);
   const scores=Array.isArray(body?.scores)?body.scores.map(Number):null,summary=summarizeScores(scores);
   if(!summary)return fail('กรุณาให้คะแนนครบทุกข้อ ข้อละ 1–5 คะแนน');
-  const items=SUPERVISION_TYPES[row.supervision_type].items.map((label,i)=>({label,score:scores[i]}));
+  const items=FORM_SECTIONS.flatMap(sec=>sec.items.map(label=>({section:sec.label,label}))).map((it,i)=>({...it,score:scores[i]}));
   const suggestion=longText(body.suggestion,3000);
   let results;
   try{
@@ -417,7 +424,7 @@ export async function handleSupervisionRoute(request,env,pathname,method){
  const perms=await supervisionPermissions(env,user);
  const url=new URL(request.url);
  if(pathname==='/api/supervision/permissions'&&method==='GET')return reply({...perms,user:{id:user.id,full_name:user.full_name,role:user.role},
-  types:Object.fromEntries(Object.entries(SUPERVISION_TYPES).map(([k,v])=>[k,{label:v.label,items:v.items}])),max_score:MAX_SCORE,levels:QUALITY_LEVELS});
+  form:{label:COMBINED_LABEL,sections:FORM_SECTIONS},max_score:MAX_SCORE,levels:QUALITY_LEVELS});
  if(pathname==='/api/supervision/week'&&method==='GET')return week(env,user,url);
  if(pathname==='/api/supervision/requests'&&method==='GET')return listRequests(env,user,url,perms);
  if(pathname==='/api/supervision/requests'&&method==='POST')return createRequest(request,env,user);

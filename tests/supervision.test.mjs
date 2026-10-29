@@ -43,10 +43,11 @@ async function school(){
 }
 const manual={visit_date:'2030-01-07',period:2,supervision_type:'teaching',topic:'การใช้คำถาม',subject:'ภาษาไทย',grade_level:'ป.4',classroom:'1'};
 
-test('scores: total, percent out of 25 and quality bands',()=>{
- assert.deepEqual(summarizeScores([5,4,5,4,5]),{total:23,percent:92,level:'ดีเยี่ยม'});
- assert.equal(summarizeScores([3,3,3,3,3]).level,'พอใช้');assert.equal(qualityLevel(80),'ดีมาก');assert.equal(qualityLevel(59.99),'ควรพัฒนา');
- assert.equal(summarizeScores([5,5,5,5]),null);assert.equal(summarizeScores([5,5,5,5,6]),null);assert.equal(summarizeScores([5,5,5,5,4.5]),null);
+test('scores: combined 10-item form, percent out of 50 and quality bands',()=>{
+ assert.deepEqual(summarizeScores([5,4,5,4,5,5,4,5,4,5]),{total:46,percent:92,level:'ดีเยี่ยม'});
+ assert.equal(summarizeScores([5,4,5,4,5]),null,'old 5-item form rejected');
+ assert.equal(summarizeScores([3,3,3,3,3,3,3,3,3,3]).level,'พอใช้');assert.equal(qualityLevel(80),'ดีมาก');assert.equal(qualityLevel(59.99),'ควรพัฒนา');
+ assert.equal(summarizeScores([5,5,5,5]),null);assert.equal(summarizeScores([5,5,5,5,5,5,5,5,5,6]),null);assert.equal(summarizeScores([5,5,5,5,5,5,5,5,5,4.5]),null);
  assert.equal(slotStarted('2030-01-07','09:30',{date:'2030-01-07',minutes:9*60+29}),false);
  assert.equal(slotStarted('2030-01-07','09:30',{date:'2030-01-07',minutes:9*60+30}),true);
  assert.equal(slotStarted('2030-01-06','09:30',{date:'2030-01-07',minutes:0}),true);
@@ -83,12 +84,12 @@ test('full flow: register → executives notified → accept → score → teach
  const clash=await json(env,`/api/supervision/requests/${other}/accept`,'POST',{},5);assert.equal(clash.status,409);assert.match(clash.body.error,/วันและคาบเดียวกัน/);
  await ok(env,`/api/supervision/requests/${other}/accept`,'POST',{},6);
 
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5]},6)).status,403,'only the accepting executive scores');
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4]},5)).status,400,'all five items required');
- const saved=await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5],suggestion:'ใช้คำถามปลายเปิดดีมาก'},5);
- assert.equal(saved.request.status,'evaluated');assert.equal(saved.request.evaluation.total,23);assert.equal(saved.request.evaluation.percent,92);assert.equal(saved.request.evaluation.level,'ดีเยี่ยม');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5,5,4,5,4,5]},6)).status,403,'only the accepting executive scores');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5]},5)).status,400,'all ten items required');
+ const saved=await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[5,4,5,4,5,5,4,5,4,5],suggestion:'ใช้คำถามปลายเปิดดีมาก'},5);
+ assert.equal(saved.request.status,'evaluated');assert.equal(saved.request.evaluation.total,46);assert.equal(saved.request.evaluation.percent,92);assert.equal(saved.request.evaluation.level,'ดีเยี่ยม'); assert.equal(saved.request.type_label,'นิเทศการสอนและห้องเรียน');assert.equal(saved.request.evaluation.items.length,10);assert.equal(saved.request.evaluation.items[5].section,'ด้านห้องเรียน');
  assert.equal(saved.request.evaluation.items[0].label,'การออกแบบแผนการจัดการเรียนรู้');
- assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[1,1,1,1,1]},5)).status,409,'cannot overwrite');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[1,1,1,1,1,1,1,1,1,1]},5)).status,409,'cannot overwrite');
  assert.equal((await json(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2)).status,409,'evaluated cannot be cancelled');
 
  const mine2=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests;
@@ -96,13 +97,13 @@ test('full flow: register → executives notified → accept → score → teach
  const mine3=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,3)).requests;
  assert.deepEqual(mine3.map(r=>r.id),[other],'teacher sees only own requests');
  assert((await ok(env,'/api/notifications','GET',undefined,2)).notifications.some(n=>/ผลการนิเทศของคุณพร้อมแล้ว/.test(n.message)));
- for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,23,'executives, academic and admin see results: '+u);}
+ for(const u of [5,6,7,1]){const r=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,u)).requests.find(x=>x.id===id);assert.equal(r.evaluation.total,46,'executives, academic and admin see results: '+u);}
 });
 
 test('academic head appoints evaluators; appointed evaluators see only the results they scored',async()=>{
  const {env}=await school();
  const first=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
- await ok(env,`/api/supervision/requests/${first}/accept`,'POST',{},5);await ok(env,`/api/supervision/requests/${first}/evaluate`,'POST',{scores:[3,3,3,3,3]},5);
+ await ok(env,`/api/supervision/requests/${first}/accept`,'POST',{},5);await ok(env,`/api/supervision/requests/${first}/evaluate`,'POST',{scores:[3,3,3,3,3,3,3,3,3,3]},5);
  assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},2)).status,403,'teachers cannot appoint');
  assert.equal((await json(env,'/api/supervision/evaluators','POST',{user_id:3},5)).status,403,'executives cannot appoint unless academic head/admin');
  await ok(env,'/api/supervision/evaluators','POST',{user_id:3},7);
@@ -117,7 +118,7 @@ test('academic head appoints evaluators; appointed evaluators see only the resul
  await ok(env,`/api/supervision/requests/${second}/release`,'POST',{},3);
  assert.equal((await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,7)).requests.find(r=>r.id===second).status,'pending');
  await ok(env,`/api/supervision/requests/${second}/accept`,'POST',{},3);
- await ok(env,`/api/supervision/requests/${second}/evaluate`,'POST',{scores:[4,4,4,4,4]},3);
+ await ok(env,`/api/supervision/requests/${second}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},3);
  const all=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests;
  assert.equal(all.find(r=>r.id===second).evaluation.percent,80);
  assert.equal(all.find(r=>r.id===first).evaluation,undefined,'not shown: scored by someone else');
@@ -152,11 +153,11 @@ test('menus: teacher registration under support, executive pages under administr
  const n=nav.SchoolNavigation,html=fs.readFileSync('public/dashboard.html','utf8');
  const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];assert(support.includes('data-page="supervision"'));
  assert(n.groups.administration.some(i=>i.url==='/supervision-admin.html'&&i.supervisionOnly==='evaluate'));
- assert(n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=results'&&i.supervisionOnly==='view_all'));
+ assert(n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=results'&&i.label==='งานนิเทศภายใน'&&i.supervisionOnly==='view_all|manage_evaluators'));
  assert(n.groups.administration.some(i=>i.url==='/supervision-admin.html?view=summary'&&i.label==='ประเมินผลการนิเทศ'&&i.supervisionOnly==='view_all'));
  assert(!n.groups.personnel.some(i=>String(i.url).includes('supervision')),'no supervision menus left under personnel');
  assert.equal(n.parentFor('','/supervision-admin.html?view=results'),'academic');assert.equal(n.parentFor('','/supervision-admin.html?view=summary'),'administration');
- assert(n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=evaluators'&&i.supervisionOnly==='manage_evaluators'));
+ assert(!n.groups.academic.some(i=>i.url==='/supervision-admin.html?view=evaluators'),'evaluators folded into งานนิเทศภายใน');
  assert.equal(n.parentFor('supervision','/supervision.html'),'supervision');assert.equal(n.parentFor('','/supervision-admin.html?request=1'),'administration');
  assert.match(html,/data-supervision-only/);
 });
