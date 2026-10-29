@@ -81,7 +81,7 @@ async function renderRegister(){
   <div class="sv-legend"><span><i style="border-color:#2B86E5"></i>เลือกได้</span><span><i style="background:#fff1dc"></i>รอผู้บริหารรับ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินแล้ว</span><span><i style="background:#f6f9fc"></i>ผ่านมาแล้ว / ไม่มีสอน</span></div>
   <div class="sv-scroll"><table class="sv-grid"><thead><tr><th class="pcol">วัน</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
-function openBook(date,period){
+function openBook(date,period,activityOk){
  const w=state.week,d=w.days.find(x=>x.date===date),term=w.terms.find(t=>t.id===d.term_id),t=term.times[period-1];
  const lesson=term.mode==='timetable'?term.lessons.find(l=>l.weekday===d.weekday&&l.period===period):null;
  const fixed=lesson?`<dl class="sv-dl"><dt>วันที่</dt><dd>${U.date(date,true)}</dd><dt>คาบ</dt><dd>คาบ ${period} (${t.start}–${t.end} น.)</dd><dt>วิชา</dt><dd>${esc(lesson.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(U.classLabel(lesson))}</dd></dl>`
@@ -90,11 +90,18 @@ function openBook(date,period){
    <div class="sv-grid2"><label class="sv-field">ชั้น<select id="bGrade"><option value="">เลือกชั้น</option>${GRADES.map(g=>`<option>${g}</option>`).join('')}</select></label>
    <label class="sv-field">ห้อง (ถ้ามี)<input id="bClass" maxlength="30" placeholder="เช่น 1"></label></div>`;
  const act=d.holiday?.kind==='activity'?d.holiday:null;
- const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${act?`<div class="sv-notice warn"><b>วันนี้ตรงกับวันกิจกรรม${act.name?' ('+esc(act.name)+')':''}</b><br>ยืนยันจะจองคาบนี้วันนี้ใช่ไหม</div>`:''}${fixed}
+ // ชนวันกิจกรรม: ถามยืนยันด้วย pop up ก่อนเปิดฟอร์มลงทะเบียน
+ if(act&&!activityOk){
+  const c=U.modal(`<header><h2>ตรงกับวันกิจกรรม</h2></header><div class="body"><div class="sv-notice warn"><b>วันนี้ตรงกับวันกิจกรรม${act.name?' ('+esc(act.name)+')':''}</b><br>${U.date(date,true)} · คาบ ${period}</div><p style="margin:12px 0 0">ยืนยันจะจองคาบนี้วันนี้ใช่ไหม</p></div>
+   <footer><button type="button" class="sv-btn" data-close data-autofocus>ไม่จอง</button><button type="button" class="sv-btn primary" id="aOk">ยืนยัน จองคาบนี้</button></footer>`);
+  c.querySelector('#aOk').onclick=()=>openBook(date,period,true);
+  return;
+ }
+ const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${act?`<p class="sv-hint sv-act">วันกิจกรรม${act.name?' · '+esc(act.name):''}</p>`:''}${fixed}
   <p class="sv-hint">ผู้ประเมินจะนิเทศทั้งการสอนและห้องเรียนในคาบเดียวกัน</p>
   <label class="sv-field">หัวข้อที่ต้องการรับข้อเสนอแนะ (ไม่บังคับ)<textarea id="bTopic" maxlength="500" placeholder="เช่น การใช้คำถามกระตุ้นการคิด การจัดกลุ่มผู้เรียน"></textarea></label>
   <div class="sv-notice error" id="bError" hidden></div></div>
-  <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>${act?'ยืนยันจองวันกิจกรรม':'ยืนยันลงทะเบียน'}</button></footer>`);
+  <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>ยืนยันลงทะเบียน</button></footer>`);
  m.querySelector('#bOk').onclick=async()=>{
   const btn=m.querySelector('#bOk'),err=m.querySelector('#bError');err.hidden=true;
   const body={visit_date:date,period,topic:m.querySelector('#bTopic').value};
