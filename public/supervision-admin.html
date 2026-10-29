@@ -16,9 +16,11 @@ const TABS=[['requests','คำขอนิเทศ',p=>p.evaluate],['evaluate'
 const allowed=()=>TABS.filter(t=>t[2](state.perm));
 const sortAsc=(a,b)=>a.visit_date===b.visit_date?a.period-b.period:a.visit_date<b.visit_date?-1:1;
 const me=()=>state.perm.user.id;
+// รายการที่ตนเองถอนการรับแล้ว (ยังรอผู้รับใหม่) ไม่แสดงค้างในแท็บคำขอของผู้ที่ถอน
+const visible=()=>state.list.filter(r=>!r.released_by_me);
 
 function renderTabs(){
- const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=state.list.filter(r=>r.status==='pending').length;
+ const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=visible().filter(r=>r.status==='pending').length;
  $('tabs').innerHTML=allowed().map(([k,l])=>`<button type="button" role="tab" data-tab="${k}" aria-selected="${state.view===k}">${l}${k==='requests'&&pend?`<span class="count">${pend}</span>`:''}${k==='evaluate'&&mineOpen?`<span class="count">${mineOpen}</span>`:''}</button>`).join('');
 }
 async function load(){if(state.perm.evaluate||state.perm.view_all)state.list=(await apiRequest('/api/supervision/requests?scope=all')).requests;}
@@ -38,7 +40,7 @@ function reqRow(r){
   else if(clash){acts=`<button type="button" class="sv-btn sm primary" disabled>รับนิเทศ</button>`;owner=`<span class="sv-conflict">คุณรับนิเทศ ${esc(clash.teacher_name)} ในวันและคาบเดียวกันไว้แล้ว</span>`;}
   else{acts=`<button type="button" class="sv-btn sm primary" data-accept="${r.id}">รับนิเทศ</button>`;owner='<span class="owner">ยังไม่มีผู้รับผิดชอบ</span>';}
  }else if(r.status==='confirmed'){
-  if(r.supervisor_user_id===me()){acts=`<button type="button" class="sv-btn sm" data-release="${r.id}">ถอนการรับ</button><button type="button" class="sv-btn sm primary" data-eval="${r.id}">บันทึกคะแนน</button>`;owner=`<span class="owner">ผู้รับผิดชอบ: <b>คุณ</b></span>`;}
+  if(r.supervisor_user_id===me()){acts=`<button type="button" class="sv-btn sm" data-release="${r.id}">ถอนการรับ</button>${r.evidence?'':`<button type="button" class="sv-btn sm" data-away-eval="${r.id}">แจ้งไม่ว่างไปนิเทศ</button>`}<button type="button" class="sv-btn sm primary" data-eval="${r.id}">บันทึกคะแนน</button>`;owner=`<span class="owner">ผู้รับผิดชอบ: <b>คุณ</b></span>`;}
   else owner=`<span class="owner">ผู้รับผิดชอบ: <b>${esc(r.supervisor_name)}</b></span>`;
  }else{
   owner=`<span class="owner">นิเทศโดย <b>${esc(r.supervisor_name)}</b>${r.evaluation?` · ${U.pct(r.evaluation.percent)}% ${esc(r.evaluation.level)}`:''}</span>`;
@@ -46,16 +48,27 @@ function reqRow(r){
  }
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small><div style="margin-top:4px;font-weight:600">${esc(r.teacher_name)}</div></div>
   <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
-  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${owner}</div></div><div class="acts">${acts}</div></div>`;
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${U.evidenceTag(r)}${owner}</div></div><div class="acts">${acts}</div></div>`;
 }
 function viewRequests(){
- const all=[...state.list].sort(sortAsc),f=state.filter;
+ const all=visible().sort(sortAsc),f=state.filter;
  const list=f==='all'?all:f==='mine'?all.filter(r=>r.supervisor_user_id===me()):all.filter(r=>r.status===f);
  const chip=(k,l)=>`<button type="button" class="sv-chip" data-filter="${k}" aria-pressed="${f===k}">${l}</button>`;
  $('view').innerHTML=U.stats(all)+`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
   <div class="sv-chips" role="group" aria-label="กรองสถานะ">${chip('all','ทั้งหมด')}${chip('pending','รอผู้บริหารรับนิเทศ')}${chip('confirmed','ยืนยันนัดหมายแล้ว')}${chip('evaluated','ประเมินแล้ว')}${chip('mine','ที่ฉันรับผิดชอบ')}</div>
   <div class="sv-list">${list.length?list.map(reqRow).join(''):`<div class="sv-empty"><b>${all.length?'ไม่มีรายการในสถานะนี้':'ยังไม่มีคำขอนิเทศ'}</b>${all.length?'ลองเลือกตัวกรองอื่น':'เมื่อครูลงทะเบียนรับการนิเทศ รายการจะแสดงที่นี่และมีแจ้งเตือน'}</div>`}</div></section>`;
  if(state.focus)document.getElementById('q-'+state.focus)?.scrollIntoView({block:'center'});
+}
+function askAway(id){
+ const r=state.list.find(x=>x.id===id);if(!r)return;
+ const m=U.modal(`<header><h2>แจ้งไม่ว่างไปนิเทศ</h2></header><div class="body">${U.details(r)}
+  <p class="sv-hint">ระบบจะแจ้งเตือนครู (กระดิ่งในระบบและ LINE) ให้ส่งลิงก์คลิปการสอน 1 ลิงก์ และภาพการสอนหรือสื่อการสอนไม่เกิน 10 ภาพแทน คุณยังเป็นผู้รับผิดชอบและบันทึกคะแนนจากหลักฐานนั้น</p>
+  <label class="sv-field">หมายเหตุถึงครู (ไม่บังคับ)<textarea id="awNote" maxlength="500" placeholder="เช่น ติดประชุมนอกสถานที่ ขอคลิปทั้งคาบ"></textarea></label></div>
+  <footer><button type="button" class="sv-btn" data-close data-autofocus>ยกเลิก</button><button type="button" class="sv-btn primary" id="awOk">แจ้งครูให้ส่งคลิปและภาพ</button></footer>`);
+ m.querySelector('#awOk').onclick=async()=>{const b=m.querySelector('#awOk');b.disabled=true;
+  try{await apiRequest(`/api/supervision/requests/${id}/unavailable`,{method:'POST',body:{note:m.querySelector('#awNote').value}});U.close();U.toast('แจ้งครูแล้ว รอครูส่งคลิปและภาพการสอน');}
+  catch(e){U.close();U.toast(e.message,true);}
+  await render();};
 }
 async function act(id,action,okMessage){
  try{await apiRequest(`/api/supervision/requests/${id}/${action}`,{method:'POST',body:{}});U.toast(okMessage);}catch(e){U.toast(e.message,true);}
@@ -73,7 +86,8 @@ function viewEvaluate(){
  const r=state.list.find(x=>x.id===d.id),secs=state.perm.form.sections;let n=0;
  $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">${sel}
   <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
-  ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div></section>
+  ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div>
+  ${r.evidence?(r.evidence.submitted_at?U.evidence(r):`<div class="sv-notice warn">คุณแจ้งไม่ว่างไปนิเทศแล้ว รอครูส่งลิงก์คลิปและภาพการสอน ระบบจะแจ้งเตือนเมื่อครูส่ง</div>${U.evidence(r)}`):''}</section>
   <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">1 = ต้องปรับปรุง · 3 = ดี · 5 = ดีเยี่ยม</span></div>
   <div>${secs.map(sec=>`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`+sec.items.map(q=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${i+1}</span><span>${esc(q)}</span></div><div class="sv-scale" role="radiogroup" aria-label="${esc(q)}">${[1,2,3,4,5].map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}">${v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>
   <label class="sv-field" style="margin-top:8px">ข้อเสนอแนะเพื่อพัฒนา<textarea id="sugg" maxlength="3000" placeholder="จุดเด่นที่พบ และสิ่งที่ควรพัฒนาต่อ">${esc(d.suggestion)}</textarea></label></section>
@@ -232,7 +246,8 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot]');if(!el)return;
+ const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot],[data-away-eval]');if(!el)return;
+ if(el.dataset.awayEval){askAway(Number(el.dataset.awayEval));return;}
  if(el.dataset.calweek!=null){const n=Number(el.dataset.calweek);state.calStart=n===0?null:addD(state.calStart,n);viewResults().catch(err=>U.toast(err.message,true));return;}
  if(el.dataset.calslot){openCalSlot(el.dataset.calslot);return;}
  if(el.dataset.awayDel){el.disabled=true;delAway(Number(el.dataset.awayDel));return;}
@@ -241,7 +256,7 @@ document.addEventListener('click',e=>{
  if(el.dataset.tab){state.view=el.dataset.tab;state.focus=null;render(false);}
  else if(el.dataset.filter){state.filter=el.dataset.filter;render(false);}
  else if(el.dataset.accept){el.disabled=true;act(el.dataset.accept,'accept','รับนิเทศเรียบร้อย ระบบแจ้งครูแล้ว');}
- else if(el.dataset.release){el.disabled=true;act(el.dataset.release,'release','ถอนการรับแล้ว คำขอกลับไปรอผู้บริหารรับนิเทศ');}
+ else if(el.dataset.release){el.disabled=true;act(el.dataset.release,'release','ถอนการรับแล้ว รายการนี้ส่งต่อให้ผู้ประเมินท่านอื่นรับนิเทศ');}
  else if(el.dataset.eval){state.draft={id:Number(el.dataset.eval),scores:Array(state.perm.form.sections.reduce((a,x)=>a+x.items.length,0)).fill(null),suggestion:''};state.view='evaluate';render(false);}
  else if(el.dataset.result){state.view='results';state.focus=Number(el.dataset.result);render(false);}
  else if(el.dataset.revoke)revoke(Number(el.dataset.revoke),el.dataset.name);

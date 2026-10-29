@@ -136,3 +136,15 @@ button.sv-slot{cursor:pointer}
 @media(prefers-reduced-motion:reduce){.sv-bar i{transition:none}}
 .sv-pill.sv-overdue{background:#fdecea;color:#b23b30}
 .sv-act{color:#187E6B;font-weight:600}
+
+/* หลักฐานแทนการนิเทศ (คลิป + ภาพ) */
+.sv-pill.sv-ev{background:#f3ecfd;color:#6a3fb5}
+.sv-pill.sv-ev.done{background:#e3f4ec;color:#187E6B}
+.sv-evidence{margin-top:12px;padding:12px 14px;border:1px solid #e0d4f5;background:#faf7ff;border-radius:12px;display:flex;flex-direction:column;gap:8px;overflow-wrap:anywhere}
+.sv-ev-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;color:#4b2a86}
+.sv-ev-head small{color:#7d6a9e}
+.sv-thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;margin-top:6px}
+.sv-thumb{position:relative;margin:0;aspect-ratio:1;border-radius:10px;overflow:hidden;border:1px solid #d5e2ed;background:#f3f6f9}
+.sv-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.sv-thumb-del{position:absolute;top:4px;right:4px;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:99px;background:rgba(20,30,45,.7);color:#fff;font-size:18px;line-height:28px;cursor:pointer}
+.sv-thumb.loading{display:flex;align-items:center;justify-content:center;font-size:12px;color:#607991}

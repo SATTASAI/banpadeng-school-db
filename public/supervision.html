@@ -118,8 +118,9 @@ function row(r){
  const owner=r.supervisor_name?`<span class="owner">ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b></span>`:'<span class="owner">รอ ผอ. หรือรอง ผอ. รับนิเทศ</span>';
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small></div>
   <div class="meta"><div class="line"><span>${esc(r.subject)}</span>${U.classLabel(r)?`<span class="sv-tag">${esc(U.classLabel(r))}</span>`:''}<span class="sv-tag">${esc(r.type_label)}</span></div>
-  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${owner}</div></div>
-  <div class="acts"><button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:r.can_cancel?`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`:''}</div></div>`;
+  <div class="topic">${r.topic?'หัวข้อที่ต้องการข้อเสนอแนะ: '+esc(r.topic):'ไม่ได้ระบุหัวข้อเพิ่มเติม'}</div><div class="line">${U.pill(r.status)}${U.overdue(r)}${U.evidenceTag(r)}${owner}</div>
+  ${r.evidence&&r.status==='confirmed'&&!r.evidence.submitted_at?`<div class="sv-notice warn" style="margin-top:8px">${esc(r.supervisor_name||'ผู้ประเมิน')} ไม่สะดวกไปนิเทศในคาบนี้ กรุณาส่งลิงก์คลิปการสอน และภาพการสอนหรือสื่อการสอน (ไม่เกิน 10 ภาพ) แทน${r.evidence.note?`<br><small>หมายเหตุ: ${esc(r.evidence.note)}</small>`:''}</div>`:''}</div>
+  <div class="acts">${r.evidence&&r.status==='confirmed'?`<button type="button" class="sv-btn sm primary" data-evidence="${r.id}">${r.evidence.submitted_at?'แก้ไขคลิปและภาพ':'ส่งคลิปและภาพ'}</button>`:''}<button type="button" class="sv-btn sm" data-detail="${r.id}">รายละเอียด</button>${r.status==='evaluated'?`<button type="button" class="sv-btn sm primary" data-result="${r.id}">ดูผล</button>`:r.can_cancel?`<button type="button" class="sv-btn sm danger" data-cancel="${r.id}">ยกเลิก</button>`:''}</div></div>`;
 }
 async function renderMine(view){
  await loadMine();const list=state.mine;
@@ -136,9 +137,61 @@ function findRequest(id){return (state.mine||[]).find(r=>r.id===id)||(state.week
 async function openDetail(id){
  if(!findRequest(id))await loadMine();const r=findRequest(id);if(!r)return U.toast('ไม่พบรายการ',true);
  const m=U.modal(`<header><h2>รายละเอียดนัดหมาย</h2></header><div class="body">${U.details(r)}</div><footer>
+  ${r.evidence&&r.status==='confirmed'?`<button type="button" class="sv-btn primary" data-evidence="${r.id}">${r.evidence.submitted_at?'แก้ไขคลิปและภาพ':'ส่งคลิปและภาพ'}</button>`:''}
   ${r.status==='evaluated'?`<button type="button" class="sv-btn primary" data-result="${r.id}">ดูผลการนิเทศ</button>`:r.can_cancel?`<button type="button" class="sv-btn danger" data-cancel="${r.id}">ยกเลิกนัดหมาย</button>`:'<span class="sv-hint" style="margin-right:auto">ยกเลิกหรือเลื่อนนัดได้ก่อนวันนิเทศอย่างน้อย 1 วันเท่านั้น</span>'}
   <button type="button" class="sv-btn" data-close data-autofocus>ปิด</button></footer>`);
 }
+/* ---------- ส่งหลักฐานแทนการนิเทศ: ลิงก์คลิป 1 ลิงก์ + ภาพไม่เกิน 10 ภาพ (เก็บใน Google Drive) ---------- */
+const MAX_IMAGES=10;
+// ย่อภาพจากกล้องมือถือให้ไม่เกิน 1600 px และบีบอัด JPEG (ระบบรับภาพละไม่เกิน 2 MB)
+async function shrink(file){
+ if(!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type)&&!/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name))throw new Error(`${file.name}: แนบได้เฉพาะไฟล์ภาพ`);
+ const bmp=await createImageBitmap(file).catch(()=>{throw new Error(`${file.name}: เปิดภาพไม่ได้ กรุณาเลือกภาพ JPG หรือ PNG`);});
+ const scale=Math.min(1,1600/Math.max(bmp.width,bmp.height)),c=document.createElement('canvas');
+ c.width=Math.round(bmp.width*scale);c.height=Math.round(bmp.height*scale);c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);bmp.close?.();
+ for(const q of [0.82,0.7,0.55]){const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',q));if(blob&&blob.size<=1.9*1024*1024)return new File([blob],file.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'});}
+ throw new Error(`${file.name}: ภาพใหญ่เกินไป`);
+}
+async function openEvidence(id){
+ await loadMine();const r=findRequest(id);if(!r?.evidence)return U.toast('ไม่พบรายการ',true);
+ const e=r.evidence;
+ const m=U.modal(`<header><h2>ส่งคลิปและภาพการสอนแทนการนิเทศ</h2></header><div class="body">
+  <p class="sv-hint" style="margin-top:0">${U.date(r.visit_date,true)} · คาบ ${r.period} · ${esc(r.subject)} ${esc(U.classLabel(r))}<br>${esc(r.supervisor_name||'ผู้ประเมิน')} ไม่สะดวกไปนิเทศ จะประเมินจากคลิปและภาพที่คุณส่ง</p>
+  ${e.note?`<div class="sv-notice">หมายเหตุจากผู้ประเมิน: ${esc(e.note)}</div>`:''}
+  <label class="sv-field">ลิงก์คลิปการสอน (YouTube, Google Drive ฯลฯ — ตั้งค่าให้ผู้มีลิงก์เปิดดูได้)<input id="evUrl" type="url" inputmode="url" maxlength="500" placeholder="https://" value="${esc(e.video_url||'')}"></label>
+  <div class="sv-field">ภาพการสอนหรือสื่อการสอน (<span id="evCount">${e.files.length}</span>/${MAX_IMAGES} ภาพ)
+   <div class="sv-thumbs" id="evThumbs">${e.files.map(f=>thumb(f)).join('')}</div>
+   <label class="sv-btn sm" style="width:auto;align-self:flex-start;margin-top:8px" id="evPick">+ เพิ่มภาพ<input type="file" id="evFiles" accept="image/*" multiple hidden></label></div>
+  <div class="sv-notice error" id="evError" hidden></div></div>
+  <footer><button type="button" class="sv-btn" data-close>ปิด</button><button type="button" class="sv-btn primary" id="evOk" data-autofocus>${e.submitted_at?'บันทึกการแก้ไข':'ส่งให้ผู้ประเมิน'}</button></footer>`);
+ const err=t=>{const box=m.querySelector('#evError');box.textContent=t||'';box.hidden=!t;};
+ const count=()=>m.querySelectorAll('#evThumbs .sv-thumb:not(.loading)').length;
+ const sync=()=>{m.querySelector('#evCount').textContent=count();m.querySelector('#evPick').hidden=count()>=MAX_IMAGES;};sync();
+ m.querySelector('#evFiles').onchange=async ev=>{
+  err('');const files=[...ev.target.files];ev.target.value='';
+  const room=MAX_IMAGES-count();if(files.length>room)err(`แนบได้อีก ${room} ภาพ (สูงสุด ${MAX_IMAGES} ภาพ) ระบบเลือกเฉพาะ ${room} ภาพแรก`);
+  for(const f of files.slice(0,Math.max(0,room))){
+   const box=document.createElement('figure');box.className='sv-thumb loading';box.textContent='กำลังอัปโหลด…';m.querySelector('#evThumbs').appendChild(box);
+   try{const fd=new FormData();fd.append('file',await shrink(f));const res=await apiRequest(`/api/supervision/evidence/${id}/images`,{method:'POST',body:fd});box.outerHTML=thumb(res.file);}
+   catch(x){box.remove();err(x.message);}
+   sync();
+  }
+ };
+ m.addEventListener('click',async ev=>{
+  const del=ev.target.closest('[data-ev-del]');if(!del)return;del.disabled=true;
+  try{await apiRequest(`/api/supervision/evidence/files/${del.dataset.evDel}`,{method:'DELETE'});del.closest('.sv-thumb').remove();sync();}catch(x){del.disabled=false;err(x.message);}
+ });
+ m.querySelector('#evOk').onclick=async()=>{
+  err('');const url=m.querySelector('#evUrl').value.trim();
+  if(!/^https?:\/\/\S+\.\S+/i.test(url))return err('กรุณาใส่ลิงก์คลิปการสอน (ขึ้นต้นด้วย https://)');
+  if(!count())return err('กรุณาแนบภาพการสอนหรือสื่อการสอนอย่างน้อย 1 ภาพ');
+  if(m.querySelector('.sv-thumb.loading'))return err('รอให้อัปโหลดภาพเสร็จก่อน');
+  const b=m.querySelector('#evOk');b.disabled=true;
+  try{await apiRequest(`/api/supervision/requests/${id}/evidence`,{method:'POST',body:{video_url:url}});U.close();U.toast('ส่งคลิปและภาพแล้ว ระบบแจ้งผู้ประเมินแล้ว');render();}
+  catch(x){err(x.message);b.disabled=false;}
+ };
+}
+function thumb(f){return `<figure class="sv-thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="${esc(f.file_name)}" loading="lazy"></a><button type="button" class="sv-thumb-del" data-ev-del="${f.id}" aria-label="ลบภาพ">×</button></figure>`;}
 function askCancel(id){
  const r=findRequest(id);if(!r)return;
  const m=U.modal(`<header><h2>ยกเลิกนัดหมายนี้?</h2></header><div class="body">${U.details(r)}${r.supervisor_name?`<p class="sv-hint">ระบบจะแจ้ง ${esc(r.supervisor_name)} ซึ่งรับนิเทศไว้แล้วให้ทราบ</p>`:''}</div>
@@ -146,7 +199,8 @@ function askCancel(id){
  m.querySelector('#cOk').onclick=async()=>{m.querySelector('#cOk').disabled=true;try{await apiRequest(`/api/supervision/requests/${id}/cancel`,{method:'POST',body:{}});U.close();U.toast('ยกเลิกนัดหมายแล้ว');render();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const el=e.target.closest('[data-view],[data-week],[data-book],[data-detail],[data-cancel],[data-result]');if(!el)return;
+ const el=e.target.closest('[data-view],[data-week],[data-book],[data-detail],[data-cancel],[data-result],[data-evidence]');if(!el)return;
+ if(el.dataset.evidence){U.close();openEvidence(Number(el.dataset.evidence));return;}
  if(el.dataset.view){state.view=el.dataset.view;state.focus=null;render();}
  else if(el.dataset.week!=null){const d=Number(el.dataset.week);state.start=d===0?null:addDays(state.start,d);render();}
  else if(el.dataset.book){const [d,p]=el.dataset.book.split('|');openBook(d,Number(p));}

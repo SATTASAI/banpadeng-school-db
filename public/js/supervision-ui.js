@@ -26,7 +26,22 @@
   <dt>คาบ</dt><dd>คาบ ${r.period}${t?` (${t.start}–${t.end} น.)`:''}</dd><dt>วิชา</dt><dd>${esc(r.subject)}</dd><dt>ชั้น/ห้อง</dt><dd>${esc(classLabel(r))||'—'}</dd>
   <dt>ประเภท</dt><dd>${esc(r.type_label)}</dd><dt>สถานะ</dt><dd>${pill(r.status)} ${overdue(r)}</dd>
   ${r.supervisor_name?`<dt>ผู้นิเทศ</dt><dd>${esc(r.supervisor_name)}${r.supervisor_position?` (${esc(r.supervisor_position)})`:''}</dd>`:''}
-  <dt>หัวข้อ</dt><dd>${r.topic?esc(r.topic):'<span style="color:#8aa0b4">ไม่ได้ระบุ</span>'}</dd></dl>`;
+  <dt>หัวข้อ</dt><dd>${r.topic?esc(r.topic):'<span style="color:#8aa0b4">ไม่ได้ระบุ</span>'}</dd></dl>${evidence(r)}`;
+ }
+ // ผู้ประเมินแจ้งไม่ว่างไปนิเทศ → ครูส่งลิงก์คลิปและภาพแทน
+ const safeUrl=u=>/^https?:\/\//i.test(String(u||''))?esc(u):'#';
+ function evidenceTag(r){
+  if(!r?.evidence||r.status==='evaluated')return '';
+  return r.evidence.submitted_at?'<span class="sv-pill sv-ev done">ส่งคลิปและภาพแล้ว</span>':'<span class="sv-pill sv-ev">ผู้ประเมินไม่ว่าง · รอครูส่งคลิปและภาพ</span>';
+ }
+ function evidence(r,{deletable}={}){
+  const e=r?.evidence;if(!e)return '';
+  const imgs=e.files.map(f=>`<figure class="sv-thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="${esc(f.file_name)}" loading="lazy"></a>${deletable?`<button type="button" class="sv-thumb-del" data-ev-del="${f.id}" aria-label="ลบภาพ">×</button>`:''}</figure>`).join('');
+  return `<div class="sv-evidence"><div class="sv-ev-head"><b>หลักฐานแทนการนิเทศในห้องเรียน</b><small>ผู้ประเมินแจ้งไม่ว่างไปนิเทศ ${stamp(e.requested_at)}</small></div>
+   ${e.note?`<div class="sv-hint">หมายเหตุจากผู้ประเมิน: ${esc(e.note)}</div>`:''}
+   <div><span class="sv-hint">คลิปการสอน:</span> ${e.video_url?`<a href="${safeUrl(e.video_url)}" target="_blank" rel="noopener noreferrer">${esc(e.video_url)}</a>`:'<span style="color:#8aa0b4">ยังไม่ได้ส่ง</span>'}</div>
+   <div><span class="sv-hint">ภาพการสอน/สื่อการสอน (${e.files.length}/10)</span>${imgs?`<div class="sv-thumbs">${imgs}</div>`:' <span style="color:#8aa0b4">ยังไม่มีภาพ</span>'}</div>
+   ${e.submitted_at?`<small class="sv-hint">ครูส่งหลักฐานเมื่อ ${stamp(e.submitted_at)}</small>`:''}</div>`;
  }
  function result(r,focus){
   const e=r.evaluation;if(!e)return '';
@@ -52,5 +67,5 @@
   const t=document.createElement('div');t.className='sv-toast'+(error?' err':'');t.textContent=message;box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();setTimeout(()=>t.remove(),error?5500:3800);
  }
- root.SupervisionUI={STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
+ root.SupervisionUI={evidence,evidenceTag,STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
 })(typeof window==='undefined'?globalThis:window);

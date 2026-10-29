@@ -242,3 +242,49 @@ test('cancel only until the day before; overdue flag; revoking an evaluator free
  assert((await ok(env,'/api/notifications','GET',undefined,6)).notifications.some(n=>/ถูกถอนสิทธิ์/.test(n.message)));
  assert.equal(late>0,true);
 });
+
+test('release: request leaves the releaser’s request list but stays pending for other evaluators',async()=>{
+ const {env}=await school();
+ const id=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},6);
+ await ok(env,`/api/supervision/requests/${id}/release`,'POST',{},6);
+ const mine=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).requests.find(r=>r.id===id);
+ assert.equal(mine.status,'pending');assert.equal(mine.released_by_me,true,'hidden from the evaluator who released it');
+ assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,5)).requests.find(r=>r.id===id).released_by_me,false,'others can still accept');
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).requests.find(r=>r.id===id).released_by_me,false);
+});
+
+test('evaluator unavailable → teacher sends video link + images → evaluator notified and scores',async()=>{
+ const {env}=await school();
+ const id=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+ assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{},5)).status,403,'must accept first');
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{},6)).status,403,'only the accepting evaluator');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},2)).status,409,'not requested yet');
+ await ok(env,`/api/supervision/requests/${id}/unavailable`,'POST',{note:'ติดประชุม'},5);
+ assert.equal((await json(env,`/api/supervision/requests/${id}/unavailable`,'POST',{note:'อีกครั้ง'},5)).status,409);
+ const note=env.raw.prepare('SELECT message FROM supervision_notifications WHERE user_id=2 ORDER BY id DESC').get().message;
+ assert.match(note,/ส่งลิงก์คลิปการสอน/);
+ const r=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id);
+ assert.equal(r.evidence.note,'ติดประชุม');assert.equal(r.evidence.submitted_at,null);
+ // ภาพต้องอยู่ใน Drive: ยังไม่ได้ตั้งค่าจึงอัปโหลดไม่ได้
+ const fd=new FormData();fd.append('file',new File([new Uint8Array([0xff,0xd8,0xff,0xe0,0,0,0,0,0,0,0,0,0,0,0,0])],'a.jpg',{type:'image/jpeg'}));
+ const token=await signJWT({sub:2},env.JWT_SECRET);
+ const up=await worker.fetch(new Request(`https://school.test/api/supervision/evidence/${id}/images`,{method:'POST',headers:{Cookie:`bpd_session=${token}`},body:fd}),env,{});
+ assert.equal(up.status,502);assert.match((await up.json()).error,/Google Drive/);
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},3)).status,403,'only the owner');
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'javascript:alert(1)'},2)).status,400);
+ assert.equal((await json(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/x'},2)).status,400,'needs at least one image');
+ env.raw.prepare("INSERT INTO supervision_evidence_files(request_id,drive_file_id,file_name,mime_type,file_size,uploaded_by) VALUES(?,?,?,?,?,?)").run(id,'drv1','a.jpg','image/jpeg',10,2);
+ await ok(env,`/api/supervision/requests/${id}/evidence`,'POST',{video_url:'https://youtu.be/abc'},2);
+ assert.match(env.raw.prepare('SELECT message FROM supervision_notifications WHERE user_id=5 ORDER BY id DESC').get().message,/ส่งลิงก์คลิปการสอนและภาพ 1 ภาพ/);
+ const seen=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,5)).requests.find(x=>x.id===id);
+ assert.equal(seen.evidence.video_url,'https://youtu.be/abc');assert.equal(seen.evidence.files.length,1);
+ const fid=seen.evidence.files[0].id;
+ assert.equal((await call(env,`/api/supervision/evidence/files/${fid}`,'GET',undefined,3)).status,404,'other teachers cannot view');
+ await ok(env,'/api/supervision/evaluators','POST',{user_id:3},1);
+ assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,3)).requests.find(x=>x.id===id).evidence,undefined,'appointed evaluator not responsible sees no evidence');
+ await ok(env,`/api/supervision/requests/${id}/evaluate`,'POST',{scores:[4,4,4,4,4,4,4,4,4,4]},5);
+ assert.equal((await json(env,`/api/supervision/evidence/files/${fid}`,'DELETE',undefined,2)).status,409,'locked after evaluation');
+});

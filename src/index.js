@@ -3644,6 +3644,11 @@ async function getDriveFolderSegments(env, entityType, entityId) {
     return ["งบประมาณ", String(row?.fiscal_year || "ไม่ระบุปีงบประมาณ"), row?.name || "ไม่ระบุโครงการ"];
   }
   if (entityType.startsWith("maintenance_")) return ["อาคารสถานที่และแจ้งซ่อม", entityType.replace("maintenance_", "")];
+  if (entityType === "supervision_evidence") {
+    const row = await env.DB.prepare(`SELECT y.year_be,t.term_number FROM supervision_requests r LEFT JOIN academic_terms t ON t.id=r.academic_term_id
+      LEFT JOIN academic_years y ON y.id=t.academic_year_id WHERE r.id=?`).bind(entityId).first();
+    return ["ภาพการนิเทศ", row?.year_be ? `ปีการศึกษา ${row.year_be}` : "ไม่ระบุปีการศึกษา", row?.term_number ? `ภาคเรียนที่ ${row.term_number}` : "ไม่ระบุภาคเรียน"];
+  }
   if (entityType === "work_record") {
     const row = await env.DB.prepare("SELECT area,topic_label FROM work_records WHERE id=?").bind(entityId).first();
     return ["ศูนย์ปฏิบัติงาน", departmentDriveLabel(row?.area), row?.topic_label || "ไม่ระบุหัวข้องาน"];
@@ -3683,6 +3688,21 @@ async function deleteGoogleDriveFile(env, fileId) {
   const accessToken = await getGoogleDriveAccessToken(env);
   await googleDriveRequest(accessToken, `/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
 }
+
+// ภาพหลักฐานแทนการนิเทศ (ครูส่งเมื่อผู้ประเมินแจ้งไม่ว่างไปนิเทศ) — เก็บใน Google Drive โฟลเดอร์ "ภาพการนิเทศ"
+const SUPERVISION_FILE_SERVICES = {
+  validate: (file, entityType) => validateManagedFile(file, entityType),
+  async upload(env, file, requestId, name, mimeType) {
+    const driveError = requireDriveConfig(env);
+    if (driveError) throw new Error(driveError);
+    return uploadToGoogleDrive(env, file, "supervision_evidence", requestId, name, mimeType);
+  },
+  async read(env, driveFileId) {
+    const accessToken = await getGoogleDriveAccessToken(env);
+    return (await googleDriveRequest(accessToken, `/files/${encodeURIComponent(driveFileId)}?alt=media`)).body;
+  },
+  remove: (env, driveFileId) => deleteGoogleDriveFile(env, driveFileId),
+};
 
 async function hashManagedFile(file) {
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
@@ -4747,7 +4767,7 @@ const app = {
 
       const leaveResponse=await handleLeaveRoute(request,env,pathname,method);
       if(leaveResponse)return leaveResponse;
-      const supervisionResponse=await handleSupervisionRoute(request,env,pathname,method);
+      const supervisionResponse=await handleSupervisionRoute(request,env,pathname,method,SUPERVISION_FILE_SERVICES);
       if(supervisionResponse)return supervisionResponse;
 
       if (pathname === "/api/student-support" && method === "GET") return await handleListSupportCases(request, env);
