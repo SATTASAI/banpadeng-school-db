@@ -590,7 +590,7 @@
     });
   }
   buildSidebarSubmenus();
-  apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=!!p[link.dataset.supervisionOnly];link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
+  apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
   apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
 
   function showOverview() {
@@ -697,7 +697,7 @@
     {title:"ลงทะเบียนนิเทศ",subtitle:"ขอรับการนิเทศการสอนและนิเทศห้องเรียน",page_key:"supervision",url:"/supervision.html",keywords:"นิเทศ นิเทศการสอน นิเทศห้องเรียน ลงทะเบียน ผลนิเทศ"},
     {title:"นิเทศการสอน (ฝ่ายบริหาร)",subtitle:"รับนิเทศ บันทึกคะแนน และผลการนิเทศ",page_key:"administration",url:"/supervision-admin.html",keywords:"นิเทศ รับนิเทศ บันทึกคะแนน ผลนิเทศ ผู้บริหาร"},
     {title:"ประเมินผลการนิเทศ (ฝ่ายบริหาร)",subtitle:"สรุปภาพรวม ระดับคุณภาพ จุดเด่นจุดที่ควรพัฒนา รายครู",page_key:"administration",url:"/supervision-admin.html?view=summary",keywords:"ประเมินผลการนิเทศ สรุปผลนิเทศ รายงานนิเทศ ผู้บริหาร"},
-    {title:"ผลการนิเทศ (ฝ่ายวิชาการ)",subtitle:"ผลการนิเทศของครูทุกคน และผู้มีสิทธิ์ประเมินนิเทศ",page_key:"academic",url:"/supervision-admin.html?view=results",keywords:"นิเทศ ผลนิเทศ ผู้ประเมินนิเทศ วิชาการ"},
+    {title:"งานนิเทศภายใน (ฝ่ายวิชาการ)",subtitle:"ปฏิทินการจอง ผลการนิเทศของครูทุกคน และผู้มีสิทธิ์ประเมินนิเทศ",page_key:"academic",url:"/supervision-admin.html?view=results",keywords:"งานนิเทศภายใน นิเทศ ผลนิเทศ ผู้ประเมินนิเทศ วิชาการ"},
     {title:"ผู้ใช้งานและสิทธิ์",subtitle:"กำหนดบทบาทผู้ใช้",page_key:"users",url:"/admin-users.html",keywords:"user role ผู้ใช้ สิทธิ์",admin_only:true},
     {title:"สำรองข้อมูลและความปลอดภัย",subtitle:"Audit log และการสำรองข้อมูล",page_key:"security",url:"/security.html",keywords:"backup log ความปลอดภัย",admin_only:true},
     {title:"สถานะระบบ",subtitle:"Cloudflare D1, Drive, R2 และ LINE",page_key:"system-status",url:"/system-status.html",keywords:"quota usage โควตา cloudflare drive r2 line",admin_only:true},
