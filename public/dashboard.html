@@ -45,6 +45,8 @@
   .nav-group { position:relative; }
   .nav-group > a { padding-right:32px; }
   .nav-chevron { position:absolute; right:10px; top:50%; color:#71869A; font-size:11px; transform:translateY(-50%) rotate(0deg); transition:transform .18s ease; pointer-events:none; }
+  .sidebar nav a { position:relative; }
+  .nav-new-dot { position:absolute; top:5px; right:4px; width:8px; height:8px; border-radius:50%; background:#e5383b; box-shadow:0 0 0 2px #fff; pointer-events:none; }
   .nav-group.open .nav-chevron { transform:translateY(-50%) rotate(90deg); }
   .nav-children { display:grid; grid-template-rows:0fr; opacity:.35; transition:grid-template-rows .2s ease,opacity .18s ease; }
   .nav-group.open .nav-children { grid-template-rows:1fr; opacity:1; }
@@ -626,6 +628,7 @@
     const frame = document.getElementById("contentFrame");
     frame.src = url;
     frame.classList.add("active");
+    clearMenuNotices(url);
     document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
     const matchingChild = [...document.querySelectorAll(".nav-child")].find((item) => SchoolNavigation.destinationKey(item.dataset.url) === SchoolNavigation.destinationKey(url));
     const parentKey = matchingChild?.dataset.parentPage || SchoolNavigation.parentFor(key, url);
@@ -653,6 +656,43 @@
     }
     const count=Number(event.data.pendingCount),badge=document.getElementById('budgetRequestBadge');
     if(badge && Number.isSafeInteger(count) && count>=0){badge.textContent=String(count);badge.hidden=!count;}
+  });
+
+  // จุดแดงที่เมนู: มีแจ้งเตือนที่ยังไม่อ่านของหน้านั้น (เมนูย่อย + เมนูหลัก) หายเมื่อเปิดหน้านั้น
+  let menuNotices=[],menuLoaded=false,pendingClear=null;
+  const pathOf=url=>{try{return new URL(SchoolNavigation.canonicalUrl(url),location.origin).pathname;}catch{return '';}};
+  function menuTargets(url){
+    const key=SchoolNavigation.destinationKey(url),path=pathOf(url),children=[...document.querySelectorAll('.nav-child:not([data-external])')];
+    let hit=children.filter(c=>SchoolNavigation.destinationKey(c.dataset.url)===key);
+    if(!hit.length){const same=children.filter(c=>pathOf(c.dataset.url)===path);hit=same.filter(c=>!c.dataset.url.includes('?'));if(!hit.length)hit=same.slice(0,1);}
+    const out=new Set(hit);
+    hit.forEach(c=>{const p=document.querySelector(`.sidebar nav a[data-page="${c.dataset.parentPage}"]`);if(p)out.add(p);});
+    if(!hit.length){
+      const top=[...document.querySelectorAll('.sidebar nav > a[data-page], .sidebar nav > .nav-group > a[data-page]')].find(a=>pathOf(a.getAttribute('href'))===path)
+        ||document.querySelector(`.sidebar nav a[data-page="${SchoolNavigation.parentFor('',url)}"]`);
+      if(top)out.add(top);
+    }
+    return out;
+  }
+  function paintMenuDots(){
+    const on=new Set();menuNotices.forEach(n=>{if(n.url&&n.url!=='/dashboard.html')menuTargets(n.url).forEach(el=>on.add(el));});
+    document.querySelectorAll('.sidebar nav a').forEach(a=>{
+      const dot=a.querySelector(':scope > .nav-new-dot');
+      if(on.has(a)&&!dot){const d=document.createElement('span');d.className='nav-new-dot';d.setAttribute('aria-hidden','true');a.appendChild(d);a.dataset.hasNew='true';}
+      else if(!on.has(a)&&dot){dot.remove();delete a.dataset.hasNew;}
+    });
+  }
+  async function clearMenuNotices(url){
+    if(!menuLoaded){pendingClear=url;return;}
+    const path=pathOf(url),keys=menuNotices.filter(n=>n.url&&pathOf(n.url)===path).map(n=>n.message_key);
+    if(!keys.length)return;
+    menuNotices=menuNotices.filter(n=>!keys.includes(n.message_key));paintMenuDots();
+    await Promise.all(keys.map(k=>apiRequest('/api/notifications/read',{method:'POST',body:{message_key:k}}).catch(()=>{})));
+    window.SchoolNotifications?.refresh?.();
+  }
+  window.addEventListener('school-notifications',e=>{
+    menuNotices=e.detail||[];paintMenuDots();
+    if(!menuLoaded){menuLoaded=true;if(pendingClear){const u=pendingClear;pendingClear=null;clearMenuNotices(u);}}
   });
 
   window.openNotificationPage = (url) => {
