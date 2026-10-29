@@ -148,3 +148,23 @@ function workingFiscalYear(){
   };
   if (document.body) start(); else document.addEventListener("DOMContentLoaded", start);
 })();
+
+// ตรวจสอบการเข้าใช้งาน: ส่งสัญญาณทุก 60 วินาทีเฉพาะตอนหน้าจอเปิดอยู่ (หน้าต่างบนสุดเท่านั้น ไม่นับซ้ำจาก iframe)
+(() => {
+  if (typeof window === "undefined" || typeof document === "undefined" || typeof location === "undefined" || typeof navigator === "undefined" || window.parent !== window) return;
+  if (/^\/(index|login|register|forgot-password|reset-password|privacy|terms|pending)?(\.html)?$/.test(location.pathname)) return;
+  const URL_PING = "/api/activity/ping";
+  let timer = null, stopped = false;
+  const ping = (end) => {
+    if (stopped) return;
+    const body = JSON.stringify({ end: !!end });
+    if (end && navigator.sendBeacon) { navigator.sendBeacon(URL_PING, new Blob([body], { type: "application/json" })); return; }
+    fetch(URL_PING, { method: "POST", headers: { "Content-Type": "application/json" }, body, credentials: "same-origin", keepalive: true, cache: "no-store" })
+      .then((r) => { if (r.status === 401) { stopped = true; clearInterval(timer); timer = null; } }).catch(() => {});
+  };
+  const start = () => { if (timer || stopped) return; ping(false); timer = setInterval(() => ping(false), 60000); };
+  const stop = () => { if (!timer) return; clearInterval(timer); timer = null; ping(true); };
+  document.addEventListener("visibilitychange", () => (document.visibilityState === "visible" ? start() : stop()));
+  window.addEventListener("pagehide", stop);
+  if (document.visibilityState === "visible") start();
+})();

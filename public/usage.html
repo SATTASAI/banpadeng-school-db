@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>การเข้าใช้งาน — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.us-page{max-width:1240px;margin:auto;padding:24px}
+.us-head h1{margin:0;color:var(--color-forest-900)}.us-head p{margin:5px 0 14px;color:var(--color-text-muted);font-size:14px}
+.us-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px;padding:12px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.75)}
+.us-filters label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.us-filters select,.us-filters input{width:100%}
+.us-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.us-card{padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88)}.us-card span{display:block;font-size:12px;color:var(--color-text-muted)}.us-card strong{display:block;margin-top:4px;font-size:22px;color:var(--color-forest-900);font-variant-numeric:tabular-nums}
+.us-table{overflow:auto;border:1px solid var(--color-border);border-radius:16px;background:#fff}.us-table table{width:100%;border-collapse:collapse;min-width:960px;font-size:14px}
+.us-table th,.us-table td{padding:9px 10px;border-bottom:1px solid #e3ecf3;text-align:center;font-variant-numeric:tabular-nums}.us-table th{background:#f3f8fc;color:#244e72;font-weight:600;position:sticky;top:0;white-space:nowrap}
+.us-table td:first-child,.us-table th:first-child{text-align:left}.us-table td small{display:block;color:var(--color-text-muted)}
+.us-table tr.u{cursor:pointer}.us-table tr.u:hover td{background:#f7fbff}.us-table tr.off td{color:#9aabba}.us-table tr.detail td{background:#f8fbfe;text-align:left}
+.app{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;margin:1px}.app.sys{background:#DCEBFF;color:#1458A8}.app.gr{background:#FFE3EE;color:#A3285B}
+.days{width:100%;border-collapse:collapse;font-size:13px;min-width:0!important}.days th,.days td{padding:5px 8px!important;border-bottom:1px solid #e8eff5!important;text-align:center!important;background:transparent!important}.days td:first-child,.days th:first-child{text-align:left!important}
+.empty{padding:28px;text-align:center;color:var(--color-text-muted)}.us-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}.us-note{font-size:13px;color:var(--color-text-muted);margin:8px 2px}
+@media(max-width:820px){.us-page{padding:14px}}
+</style></head>
+<body>
+<main class="us-page">
+  <div class="us-head"><a href="/dashboard.html">← กลับแดชบอร์ด</a><h1 style="margin-top:8px">การเข้าใช้งาน</h1><p>ใครเข้าใช้ระบบบริหารโรงเรียน (system) และระบบรายงานผลการเรียน (grades) บ้าง และใช้งานนานแค่ไหนต่อวัน/ต่อเดือน</p></div>
+  <div class="us-error" id="err"></div>
+  <div class="us-filters">
+    <label>เดือน<select id="month"></select></label>
+    <label>วันที่ (คอลัมน์รายวัน)<select id="day"></select></label>
+    <label>ระบบ<select id="app"><option value="">ทั้ง 2 ระบบ</option><option value="system">system</option><option value="grades">grades</option></select></label>
+    <label>ค้นหา<input id="q" placeholder="ชื่อหรืออีเมล"></label>
+    <label>แสดง<select id="show"><option value="used">เฉพาะผู้ที่เข้าใช้ในเดือนนี้</option><option value="all">ผู้ใช้ทั้งหมด</option><option value="none">ผู้ที่ยังไม่เข้าใช้ในเดือนนี้</option></select></label>
+  </div>
+  <div class="us-cards" id="cards"></div>
+  <div class="us-table"><table><thead><tr><th>ผู้ใช้</th><th>วันที่เลือก<br><small id="dayLabel"></small></th><th>รวมทั้งเดือน</th><th>จำนวนวันที่ใช้</th><th>เฉลี่ยต่อวันที่ใช้</th><th>ระบบที่ใช้ (เดือนนี้)</th><th>ใช้งานล่าสุด</th></tr></thead><tbody id="rows"><tr><td colspan="7" class="empty">กำลังโหลด...</td></tr></tbody></table></div>
+  <p class="us-note">นับเวลาเฉพาะตอนเปิดหน้าจอระบบอยู่ (แท็บที่มองเห็น) · ส่งสัญญาณทุก 1 นาที · แตะชื่อเพื่อดูรายวัน · ดูได้เฉพาะผู้ดูแลระบบ</p>
+</main>
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const MON=["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน","กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+const MON_S=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+const WD=["อา.","จ.","อ.","พ.","พฤ.","ศ.","ส."];
+const thMonth=k=>{const [y,m]=k.split("-").map(Number);return `${MON[m-1]} ${y+543}`};
+const thDay=iso=>{const [y,m,d]=iso.split("-").map(Number);return `${WD[new Date(Date.UTC(y,m-1,d)).getUTCDay()]} ${d} ${MON_S[m-1]} ${String(y+543).slice(-2)}`};
+const dur=s=>{s=Number(s)||0;if(!s)return "-";const h=Math.floor(s/3600),m=Math.round((s%3600)/60);return h?`${h} ชม. ${m} น.`:`${Math.max(1,m)} น.`};
+const tsText=ts=>{if(!ts)return "ยังไม่เคยเข้าใช้";const d=new Date(ts*1000+7*3600e3).toISOString();return `${thDay(d.slice(0,10))} ${d.slice(11,16)} น.`};
+const ROLE={teacher:"ครู",executive:"ผู้บริหาร",staff:"เจ้าหน้าที่",superadmin:"ผู้ดูแลระบบ",viewer:"ผู้ชมภายนอก"};
+let data=null,open=null;
+function monthDays(k){const [y,m]=k.split("-").map(Number),n=new Date(Date.UTC(y,m,0)).getUTCDate();return Array.from({length:n},(_,i)=>`${k}-${String(i+1).padStart(2,"0")}`)}
+function render(){
+  const app=$("app").value,day=$("day").value,q=$("q").value.trim().toLowerCase(),show=$("show").value;
+  const rows=data.rows.filter(r=>!app||r.app===app);
+  const last=new Map(data.last_seen.map(r=>[r.user_id,r.last_ts]));
+  const per=new Map();
+  for(const r of rows){if(!per.has(r.user_id))per.set(r.user_id,{total:0,day:0,days:new Set(),apps:new Set(),byDay:new Map()});const p=per.get(r.user_id);
+    p.total+=r.seconds;p.days.add(r.day);p.apps.add(r.app);if(r.day===day)p.day+=r.seconds;
+    if(!p.byDay.has(r.day))p.byDay.set(r.day,{system:0,grades:0});p.byDay.get(r.day)[r.app]+=r.seconds}
+  const known=new Map(data.users.map(u=>[u.id,u]));
+  for(const id of per.keys())if(!known.has(id))known.set(id,{id,full_name:`ผู้ใช้ #${id}`,email:"",role:null});
+  let list=[...known.values()].filter(u=>(!q||`${u.full_name} ${u.email}`.toLowerCase().includes(q))
+    &&(show==="all"||(show==="used"?per.has(u.id):!per.has(u.id))));
+  list.sort((a,b)=>(per.get(b.id)?.total||0)-(per.get(a.id)?.total||0)||String(a.full_name).localeCompare(String(b.full_name),"th"));
+  const dayUsers=[...per.values()].filter(p=>p.day>0).length,dayTotal=[...per.values()].reduce((s,p)=>s+p.day,0),monthTotal=[...per.values()].reduce((s,p)=>s+p.total,0);
+  $("cards").innerHTML=[["ผู้ใช้งานในวันที่เลือก",`${dayUsers} คน`],["เวลารวมในวันที่เลือก",dur(dayTotal)],["ผู้ใช้งานในเดือนนี้",`${per.size} คน`],["เวลารวมทั้งเดือน",dur(monthTotal)],["ยังไม่เข้าใช้ในเดือนนี้",`${data.users.filter(u=>!per.has(u.id)).length} คน`]]
+    .map(([l,v])=>`<div class="us-card"><span>${l}</span><strong>${v}</strong></div>`).join("");
+  $("dayLabel").textContent=day?thDay(day):"";
+  $("rows").innerHTML=list.map(u=>{const p=per.get(u.id),avg=p?p.total/p.days.size:0;
+    let html=`<tr class="u${p?"":" off"}" data-u="${u.id}"><td>${esc(u.full_name)}<small>${esc(ROLE[u.role]||"ยังไม่กำหนดสิทธิ์")}${u.email?" · "+esc(u.email):""}</small></td><td>${dur(p?.day)}</td><td><strong>${dur(p?.total)}</strong></td><td>${p?p.days.size+" วัน":"-"}</td><td>${p?dur(avg):"-"}</td><td>${p?[...p.apps].sort().map(a=>`<span class="app ${a==="system"?"sys":"gr"}">${a}</span>`).join(""):"-"}</td><td>${esc(tsText(last.get(u.id)))}</td></tr>`;
+    if(open===u.id&&p)html+=`<tr class="detail"><td colspan="7"><table class="days"><thead><tr><th>วันที่</th><th>system</th><th>grades</th><th>รวม</th></tr></thead><tbody>${[...p.byDay.entries()].sort((a,b)=>b[0].localeCompare(a[0])).map(([d,v])=>`<tr><td>${thDay(d)}</td><td>${dur(v.system)}</td><td>${dur(v.grades)}</td><td><strong>${dur(v.system+v.grades)}</strong></td></tr>`).join("")}</tbody></table></td></tr>`;
+    return html}).join("")||'<tr><td colspan="7" class="empty">ไม่มีข้อมูลการเข้าใช้งานตามตัวกรอง</td></tr>';
+}
+async function load(month){
+  try{
+    data=await apiRequest(`/api/admin/usage${month?`?month=${month}`:""}`);
+    const months=[...new Set([data.today.slice(0,7),data.month,...data.months])].sort().reverse();
+    $("month").innerHTML=months.map(k=>`<option value="${k}">${thMonth(k)}</option>`).join("");$("month").value=data.month;
+    const days=monthDays(data.month).filter(d=>d<=data.today).reverse();
+    $("day").innerHTML=days.map(d=>`<option value="${d}">${thDay(d)}</option>`).join("")||'<option value="">-</option>';
+    render();
+  }catch(e){$("err").textContent=e.message||"โหลดข้อมูลไม่สำเร็จ";$("err").style.display="block"}
+}
+$("month").onchange=()=>{open=null;load($("month").value)};
+["day","app","show"].forEach(id=>$(id).onchange=render);$("q").oninput=render;
+$("rows").onclick=e=>{const tr=e.target.closest("tr.u");if(!tr)return;const id=Number(tr.dataset.u);open=open===id?null:id;render()};
+load();
+</script>
+</body></html>

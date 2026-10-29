@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>อาคารสถานที่ — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.fc-page{max-width:1240px;margin:auto;padding:24px}
+.fc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}.fc-head h1{margin:0;color:var(--color-forest-900)}.fc-head p{margin:5px 0 0;color:var(--color-text-muted);font-size:14px}
+.fc-head .btn{width:auto}
+.fc-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}.fc-tabs button{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;color:#315C86;cursor:pointer}.fc-tabs button.on{background:#183153;color:#fff;border-color:#183153}
+.fc-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.fc-card{padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88);text-align:left;font:inherit;cursor:default}.fc-card span{display:block;font-size:12px;color:var(--color-text-muted)}.fc-card strong{display:block;margin-top:4px;font-size:24px;color:var(--color-forest-900);font-variant-numeric:tabular-nums}
+button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
+.fc-card.wait{border-left:5px solid #F2A922}.fc-card.work{border-left:5px solid #2B86E5}.fc-card.done{border-left:5px solid #1AA36F}.fc-card.cancel{border-left:5px solid #A3B0BD}
+.fc-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px;padding:12px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.75)}
+.fc-filters label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.fc-filters select,.fc-filters input{width:100%}
+.fc-table{overflow:auto;border:1px solid var(--color-border);border-radius:16px;background:#fff}.fc-table table{width:100%;border-collapse:collapse;min-width:980px;font-size:14px}
+.fc-table th,.fc-table td{padding:9px 10px;border-bottom:1px solid #e3ecf3;text-align:left;vertical-align:top;font-variant-numeric:tabular-nums}.fc-table th{background:#f3f8fc;color:#244e72;font-weight:600;position:sticky;top:0;white-space:nowrap}
+.fc-table td.n,.fc-table th.n{text-align:center}.fc-table tbody tr[data-id]{cursor:pointer}.fc-table tbody tr[data-id]:hover td{background:#f7fbff}.fc-table td small{display:block;color:var(--color-text-muted)}
+.st{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap}
+.st.wait{background:#FFF1D2;color:#9A5B00}.st.work{background:#DCEBFF;color:#1458A8}.st.done{background:#DDF5E9;color:#137A50}.st.cancel{background:#EEF1F4;color:#6B7C8E}
+.fc-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}.fc-panel{padding:16px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88);min-width:0}.fc-panel h2{font-size:16px;margin:0 0 10px}.fc-panel.wide{grid-column:1/-1}
+.bar-row{display:grid;grid-template-columns:120px 1fr 64px;gap:8px;align-items:center;font-size:13px;margin:7px 0}.bar-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar-row em{font-style:normal;text-align:right;color:var(--color-text-muted);font-variant-numeric:tabular-nums}
+.bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#EEF3F8}.bar i{display:block;height:100%}.bar .wait{background:#F2A922}.bar .work{background:#2B86E5}.bar .done{background:#1AA36F}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--color-text-muted);margin-bottom:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.mini{width:100%;border-collapse:collapse;font-size:13.5px}.mini th,.mini td{padding:7px 6px;border-bottom:1px solid #e3ecf3;text-align:center;font-variant-numeric:tabular-nums}.mini th:first-child,.mini td:first-child{text-align:left}.mini th{color:#244e72;font-weight:600}
+.empty{padding:28px;text-align:center;color:var(--color-text-muted)}.fc-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}.fc-note{font-size:13px;color:var(--color-text-muted);margin:8px 2px}
+.bld{margin-bottom:14px}.bld h3{font-size:15px;margin:0 0 8px;color:#183153}
+@media(max-width:820px){.fc-page{padding:14px}.fc-grid{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr 56px}}
+</style></head>
+<body>
+<main class="fc-page">
+  <div class="fc-head">
+    <div><h1>อาคารสถานที่</h1><p>รายงานการแจ้งซ่อม สถานะงานซ่อมแซม สถิติ และทะเบียนอาคาร/ห้อง</p></div>
+    <a class="btn btn-primary" href="/maintenance.html">+ แจ้งซ่อม</a>
+  </div>
+  <div class="fc-error" id="err"></div>
+  <nav class="fc-tabs" id="tabs">
+    <button type="button" data-tab="report" class="on">รายงานแจ้งซ่อม</button>
+    <button type="button" data-tab="stats">สถิติ</button>
+    <button type="button" data-tab="registry">ทะเบียนอาคาร/ห้อง</button>
+  </nav>
+
+  <section id="tab-report">
+    <div class="fc-cards" id="statusCards"></div>
+    <div class="fc-filters">
+      <label>ค้นหา<input id="q" placeholder="เลขที่ เรื่อง สถานที่ ผู้แจ้ง"></label>
+      <label>เดือนที่แจ้ง<select id="month"></select></label>
+      <label>อาคาร/สถานที่<select id="place"></select></label>
+      <label>ประเภทงาน<select id="cat"></select></label>
+    </div>
+    <div class="fc-table"><table><thead><tr><th>เลขที่</th><th>วันที่แจ้ง</th><th>เรื่อง</th><th>อาคาร/สถานที่</th><th>ประเภท</th><th>ผู้แจ้ง</th><th>ช่าง/ผู้รับผิดชอบ</th><th class="n">สถานะ</th><th>ซ่อมเสร็จ</th><th class="n">ใช้เวลา</th></tr></thead><tbody id="rows"><tr><td colspan="10" class="empty">กำลังโหลด...</td></tr></tbody></table></div>
+    <p class="fc-note">แตะแถวเพื่อเปิดใบแจ้งซ่อม · <span class="st wait">รอซ่อมแซม</span> = รับแจ้งแล้ว ยังไม่มีผู้รับงาน · <span class="st work">กำลังซ่อม</span> = ช่างรับงาน/กำลังซ่อม/รออะไหล่ · <span class="st done">ซ่อมแล้ว</span> = ซ่อมเสร็จ/ตรวจรับแล้ว</p>
+  </section>
+
+  <section id="tab-stats" hidden>
+    <div class="fc-filters"><label>ช่วงเวลา (ตามวันที่แจ้ง)<select id="statYear"></select></label></div>
+    <div class="fc-cards" id="statCards"></div>
+    <div class="fc-grid">
+      <div class="fc-panel wide"><h2>รายเดือน</h2><div class="legend"><span><i style="background:#F2A922"></i>รอซ่อมแซม</span><span><i style="background:#2B86E5"></i>กำลังซ่อม</span><span><i style="background:#1AA36F"></i>ซ่อมแล้ว</span></div><div id="byMonth"></div></div>
+      <div class="fc-panel"><h2>ตามอาคาร/สถานที่</h2><div id="byPlace"></div></div>
+      <div class="fc-panel"><h2>ตามประเภทงาน</h2><div id="byCat"></div></div>
+      <div class="fc-panel wide"><h2>ตามช่าง/ผู้รับผิดชอบ</h2><div id="byTech"></div></div>
+    </div>
+    <p class="fc-note">ไม่นับใบแจ้งซ่อมที่ยกเลิก · ระยะเวลาซ่อมเสร็จ = จากวันที่แจ้งถึงวันที่ซ่อมเสร็จ</p>
+  </section>
+
+  <section id="tab-registry" hidden>
+    <div class="fc-head" style="margin-bottom:10px"><p id="regNote" style="margin:0"></p><a class="btn btn-ghost" id="regImport" href="/import-center.html?template=facilities" hidden>เพิ่มอาคาร/ห้อง (นำเข้าข้อมูล)</a></div>
+    <div id="registry"></div>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const GROUP={reported:"wait",assigned:"work",in_progress:"work",waiting_parts:"work",completed:"done",verified:"done",cancelled:"cancel"};
+const GROUP_LABEL={wait:"รอซ่อมแซม",work:"กำลังซ่อม",done:"ซ่อมแล้ว",cancel:"ยกเลิก"};
+const STATUS={reported:"รับแจ้ง",assigned:"ช่างรับงาน",in_progress:"กำลังซ่อม",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ (รอตรวจรับ)",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
+const CATEGORY={electrical:"ไฟฟ้า",plumbing:"ประปา",building:"อาคาร",equipment:"อุปกรณ์",it:"คอมพิวเตอร์/เครือข่าย",sanitation:"สุขาภิบาล",grounds:"พื้นที่ภายนอก",other:"อื่น ๆ"};
+const FACILITY_TYPE={building:"อาคาร",classroom:"ห้องเรียน",office:"สำนักงาน",restroom:"ห้องน้ำ",utility:"สาธารณูปโภค",grounds:"พื้นที่ภายนอก",other:"อื่น ๆ"};
+const FACILITY_STATUS={active:"ใช้งาน",maintenance:"ปิดซ่อม",closed:"ปิดใช้งาน"};
+const MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+// เวลาในฐานข้อมูลเป็น UTC → แปลงเป็นเวลาไทย
+const thIso=v=>v?new Date(Date.parse(String(v).replace(" ","T")+(String(v).includes("Z")?"":"Z"))+7*3600e3).toISOString():"";
+const dayOf=v=>thIso(v).slice(0,10), monthOf=v=>thIso(v).slice(0,7);
+const thDate=iso=>{if(!iso)return "-";const [y,m,d]=iso.split("-").map(Number);return `${d} ${MON[m-1]} ${String(y+543).slice(-2)}`};
+const thMonth=k=>{const [y,m]=k.split("-").map(Number);return `${MON[m-1]} ${y+543}`};
+const daysBetween=(a,b)=>(Date.parse(String(b).replace(" ","T")+"Z")-Date.parse(String(a).replace(" ","T")+"Z"))/864e5;
+const fmtDays=d=>d==null||!Number.isFinite(d)?"-":d<1?`${Math.max(1,Math.round(d*24))} ชม.`:`${d.toFixed(1).replace(/\.0$/,"")} วัน`;
+const placeOf=r=>r.building_name||r.facility_name||r.custom_location||r.inventory_name||"ไม่ระบุ";
+let requests=[],facilities=[],canManage=false,statusFilter="";
+const showErr=m=>{$("err").textContent=m;$("err").style.display="block"};
+
+function option(sel,items,all){const cur=sel.value;sel.innerHTML=`<option value="">${all}</option>`+items.map(([v,l])=>`<option value="${esc(v)}">${esc(l)}</option>`).join("");if([...sel.options].some(o=>o.value===cur))sel.value=cur}
+function filters(){
+  const months=[...new Set(requests.map(r=>monthOf(r.created_at)))].sort().reverse();
+  option($("month"),months.map(k=>[k,thMonth(k)]),"ทุกเดือน");
+  option($("place"),[...new Set(requests.map(placeOf))].sort((a,b)=>a.localeCompare(b,"th")).map(p=>[p,p]),"ทุกอาคาร/สถานที่");
+  option($("cat"),Object.entries(CATEGORY),"ทุกประเภท");
+  const years=[...new Set(requests.map(r=>dayOf(r.created_at).slice(0,4)))].sort().reverse();
+  option($("statYear"),years.map(y=>[y,`ปี พ.ศ. ${Number(y)+543}`]),"ทั้งหมด");
+}
+function renderReport(){
+  const q=$("q").value.trim().toLowerCase(),month=$("month").value,place=$("place").value,cat=$("cat").value;
+  const base=requests.filter(r=>(!month||monthOf(r.created_at)===month)&&(!place||placeOf(r)===place)&&(!cat||r.category===cat)
+    &&(!q||[r.request_no,r.title,r.facility_name,r.custom_location,r.building_name,r.reporter_name,r.assignee_name].join(" ").toLowerCase().includes(q)));
+  const count=g=>base.filter(r=>GROUP[r.status]===g).length;
+  $("statusCards").innerHTML=`<button type="button" class="fc-card${statusFilter===""?" on":""}" data-g=""><span>ทั้งหมด</span><strong>${base.length}</strong></button>`
+    +["wait","work","done","cancel"].map(g=>`<button type="button" class="fc-card ${g}${statusFilter===g?" on":""}" data-g="${g}"><span>${GROUP_LABEL[g]}</span><strong>${count(g)}</strong></button>`).join("");
+  const list=base.filter(r=>!statusFilter||GROUP[r.status]===statusFilter).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  $("rows").innerHTML=list.map(r=>{const g=GROUP[r.status]||"cancel",done=g==="done"&&r.completed_at;
+    return `<tr data-id="${r.id}"><td>${esc(r.request_no)}</td><td>${thDate(dayOf(r.created_at))}</td><td>${esc(r.title)}</td><td>${esc(r.facility_name||r.custom_location||r.inventory_name||"-")}${r.building_name&&r.building_name!==r.facility_name?`<small>${esc(r.building_name)}${r.floor?" ชั้น "+esc(r.floor):""}</small>`:""}</td><td>${esc(CATEGORY[r.category]||r.category)}</td><td>${esc(r.reporter_name||"-")}</td><td>${esc(r.assignee_name||"-")}</td><td class="n"><span class="st ${g}">${GROUP_LABEL[g]}</span><small>${esc(STATUS[r.status]||r.status)}</small></td><td>${done?thDate(dayOf(r.completed_at)):"-"}</td><td class="n">${done?fmtDays(daysBetween(r.created_at,r.completed_at)):"-"}</td></tr>`}).join("")
+    ||'<tr><td colspan="10" class="empty">ไม่มีใบแจ้งซ่อมที่ตรงกับตัวกรอง</td></tr>';
+}
+function groupTable(items,keyFn,labelFn=k=>k){
+  const m=new Map();for(const r of items){const k=keyFn(r);if(!m.has(k))m.set(k,[]);m.get(k).push(r)}
+  const rows=[...m.entries()].map(([k,rs])=>{const done=rs.filter(r=>GROUP[r.status]==="done"&&r.completed_at);return {k,n:rs.length,wait:rs.filter(r=>GROUP[r.status]==="wait").length,work:rs.filter(r=>GROUP[r.status]==="work").length,done:rs.filter(r=>GROUP[r.status]==="done").length,avg:done.length?done.reduce((s,r)=>s+daysBetween(r.created_at,r.completed_at),0)/done.length:null}}).sort((a,b)=>b.n-a.n);
+  if(!rows.length)return '<p class="empty">ยังไม่มีข้อมูล</p>';
+  return `<div style="overflow:auto"><table class="mini"><thead><tr><th></th><th>รวม</th><th style="color:#9A5B00">รอซ่อม</th><th style="color:#1458A8">กำลังซ่อม</th><th style="color:#137A50">ซ่อมแล้ว</th><th>เฉลี่ยซ่อมเสร็จ</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(labelFn(r.k))}</td><td>${r.n}</td><td>${r.wait}</td><td>${r.work}</td><td>${r.done}</td><td>${fmtDays(r.avg)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function renderStats(){
+  const y=$("statYear").value,items=requests.filter(r=>r.status!=="cancelled"&&(!y||dayOf(r.created_at).startsWith(y)));
+  const done=items.filter(r=>GROUP[r.status]==="done"&&r.completed_at),avg=done.length?done.reduce((s,r)=>s+daysBetween(r.created_at,r.completed_at),0)/done.length:null;
+  const c=g=>items.filter(r=>GROUP[r.status]===g).length;
+  $("statCards").innerHTML=`<div class="fc-card"><span>แจ้งซ่อมทั้งหมด</span><strong>${items.length}</strong></div>`+["wait","work","done"].map(g=>`<div class="fc-card ${g}"><span>${GROUP_LABEL[g]}</span><strong>${c(g)}</strong></div>`).join("")+`<div class="fc-card"><span>เวลาเฉลี่ยที่ซ่อมเสร็จ</span><strong>${fmtDays(avg)}</strong></div>`;
+  const months=new Map();for(const r of items){const k=monthOf(r.created_at);if(!months.has(k))months.set(k,{wait:0,work:0,done:0});months.get(k)[GROUP[r.status]]++}
+  const keys=[...months.keys()].sort(),max=Math.max(1,...[...months.values()].map(v=>v.wait+v.work+v.done));
+  $("byMonth").innerHTML=keys.map(k=>{const v=months.get(k),n=v.wait+v.work+v.done;return `<div class="bar-row"><span>${thMonth(k)}</span><div class="bar" style="width:${Math.max(4,n/max*100)}%">${["wait","work","done"].map(g=>v[g]?`<i class="${g}" style="width:${v[g]/n*100}%" title="${GROUP_LABEL[g]} ${v[g]}"></i>`:"").join("")}</div><em>${n} รายการ</em></div>`}).join("")||'<p class="empty">ยังไม่มีข้อมูล</p>';
+  $("byPlace").innerHTML=groupTable(items,placeOf);
+  $("byCat").innerHTML=groupTable(items,r=>r.category,k=>CATEGORY[k]||k);
+  $("byTech").innerHTML=groupTable(items,r=>r.assignee_name||"ยังไม่มีผู้รับงาน");
+}
+function renderRegistry(){
+  $("regImport").hidden=!canManage;
+  $("regNote").textContent=`${facilities.length} รายการ · งานซ่อมที่ยังไม่ปิดนับรวมทุกสถานะที่ยังไม่ตรวจรับ`;
+  if(!facilities.length){$("registry").innerHTML='<div class="fc-panel empty">ยังไม่มีทะเบียนอาคาร/ห้อง</div>';return}
+  const m=new Map();for(const f of facilities){const k=f.building_name||"ไม่ระบุอาคาร";if(!m.has(k))m.set(k,[]);m.get(k).push(f)}
+  $("registry").innerHTML=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],"th")).map(([b,fs])=>`<div class="bld"><h3>${esc(b)} <small style="color:var(--color-text-muted);font-weight:400">· ${fs.length} ห้อง/จุด</small></h3><div class="fc-table"><table style="min-width:760px"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>ชั้น/ตำแหน่ง</th><th>ผู้ดูแล</th><th class="n">สถานะ</th><th class="n">งานซ่อมค้าง</th><th class="n">แจ้งซ่อมทั้งหมด</th></tr></thead><tbody>${fs.map(f=>`<tr><td>${esc(f.facility_code)}</td><td>${esc(f.name)}</td><td>${esc(FACILITY_TYPE[f.facility_type]||f.facility_type)}</td><td>${esc([f.floor?"ชั้น "+f.floor:"",f.location_detail].filter(Boolean).join(" · ")||"-")}</td><td>${esc(f.responsible_person||"-")}</td><td class="n">${esc(FACILITY_STATUS[f.status]||f.status)}</td><td class="n">${f.open_request_count?`<span class="st wait">${f.open_request_count}</span>`:"0"}</td><td class="n">${f.request_count}</td></tr>`).join("")}</tbody></table></div></div>`).join("");
+}
+$("tabs").onclick=e=>{const b=e.target.closest("[data-tab]");if(!b)return;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));["report","stats","registry"].forEach(t=>$("tab-"+t).hidden=t!==b.dataset.tab)};
+$("statusCards").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;statusFilter=b.dataset.g;renderReport()};
+["q","month","place","cat"].forEach(id=>$(id).addEventListener(id==="q"?"input":"change",renderReport));
+$("statYear").onchange=renderStats;
+$("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)location.href=`/maintenance.html?request=${tr.dataset.id}`};
+async function load(){
+  try{
+    const [r,f]=await Promise.all([apiRequest("/api/maintenance/requests"),apiRequest("/api/facilities")]);
+    requests=r.requests||[];facilities=f.facilities||[];canManage=!!f.can_manage;
+    if(!r.can_manage)$("rows").closest("section").insertAdjacentHTML("afterbegin",'<p class="fc-note">แสดงเฉพาะใบแจ้งซ่อมที่คุณแจ้งหรือได้รับมอบหมาย</p>');
+    filters();renderReport();renderStats();renderRegistry();
+  }catch(e){showErr(e.message||"โหลดข้อมูลไม่สำเร็จ")}
+}
+load();
+</script>
+</body></html>

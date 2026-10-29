@@ -10,6 +10,7 @@ import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
+import { handleUsageRoute } from './routes/usage.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
@@ -4494,6 +4495,16 @@ const app = {
     const method = request.method;
 
     try {
+      // ตรวจสอบการเข้าใช้งาน: สัญญาณเวลาใช้งาน (ก่อนตัวกันโหมดมุมมองบุคคลอื่น) และรายงานของผู้ดูแลระบบ
+      if (pathname === "/api/activity/ping" || pathname === "/api/admin/usage") {
+        const usageResponse = await handleUsageRoute(request, env, pathname, method);
+        if (usageResponse) return usageResponse;
+      }
+      if ((pathname === "/usage.html" || pathname === "/usage") && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
+        if (user.role !== "superadmin") return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+      }
       // โหมดมุมมองบุคคลอื่น (ผู้ดูแลระบบทดสอบการมองเห็น): ดูได้อย่างเดียว ห้ามบันทึกในนามบัญชีอื่น
       // ออกจากระบบระหว่างโหมดนี้ = จบโหมดก่อน แล้วออกจากระบบบัญชีผู้ดูแลตามปกติ
       const writeMethod = !["GET", "HEAD", "OPTIONS"].includes(method);
