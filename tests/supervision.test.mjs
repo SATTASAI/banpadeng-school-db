@@ -160,3 +160,17 @@ test('menus: teacher registration under support, executive pages under administr
  assert.equal(n.parentFor('supervision','/supervision.html'),'supervision');assert.equal(n.parentFor('','/supervision-admin.html?request=1'),'administration');
  assert.match(html,/data-supervision-only/);
 });
+
+test('a date + period accepts at most 3 registrations (3 evaluators); 4th is told the slot is full',async()=>{
+ const {env}=await school();
+ for(const u of [2,3,7])await ok(env,'/api/supervision/requests','POST',manual,u);
+ const full=await json(env,'/api/supervision/requests','POST',manual,6);
+ assert.equal(full.status,409);assert.equal(full.body.error,'ลงทะเบียนไม่ได้เนื่องจากคาบเต็ม กรุณาเลือกคาบอื่น');
+ await ok(env,'/api/supervision/requests','POST',{...manual,period:3},6); // other period still open
+ await ok(env,'/api/supervision/requests','POST',{...manual,visit_date:'2030-01-14'},6); // same period, other date still open
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,6);
+ assert.equal(week.capacity,3);assert.deepEqual(week.full,['2030-01-07|2']);
+ const id=env.raw.prepare("SELECT id FROM supervision_requests WHERE teacher_user_id=2").get().id;
+ await ok(env,`/api/supervision/requests/${id}/cancel`,'POST',{},2); // a cancellation frees a seat
+ await ok(env,'/api/supervision/requests','POST',manual,6);
+});

@@ -51,6 +51,7 @@ async function renderRegister(){
   const label=lesson?`<b>${esc(lesson.subject)}</b><small>${esc(U.classLabel(lesson))}</small>`:'';
   if(req){booked++;return `<td><button type="button" class="sv-slot booked ${req.status}" data-detail="${req.id}"><b>${esc(req.subject)}</b><small>${esc(U.classLabel(req))}</small><span class="state">${esc(req.type_label)} · ${U.STATUS[req.status]}</span></button></td>`;}
   if(past(d.date,t.start))return `<td><div class="sv-slot past">${label}<small style="margin-top:auto">ผ่านมาแล้ว</small></div></td>`;
+  if((w.full||[]).includes(`${d.date}|${p}`))return `<td><div class="sv-slot full" title="ผู้ประเมินรับครบ ${w.capacity||3} คนแล้ว">${label}<small style="margin-top:auto">คาบเต็ม</small></div></td>`;
   return `<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
  };
  let rows='';
@@ -98,7 +99,7 @@ function openBook(date,period){
    if(!body.subject.trim()||!body.grade_level){err.textContent='กรอกวิชาและเลือกชั้นก่อน';err.hidden=false;return;}}
   btn.disabled=true;
   try{await apiRequest('/api/supervision/requests',{method:'POST',body});U.close();U.toast('ลงทะเบียนเรียบร้อย ส่งคำขอถึง ผอ. และรอง ผอ. แล้ว');render();}
-  catch(e){err.textContent=e.message;err.hidden=false;btn.disabled=false;}
+  catch(e){err.textContent=e.message;err.hidden=false;btn.disabled=false;if(/คาบเต็ม/.test(e.message)){btn.disabled=true;loadWeek().then(render).catch(()=>{});}}
  };
 }
 async function loadMine(){state.mine=(await apiRequest('/api/supervision/requests?scope=mine')).requests;}
