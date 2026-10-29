@@ -91,15 +91,13 @@ function openBook(date,period){
    <label class="sv-field">ห้อง (ถ้ามี)<input id="bClass" maxlength="30" placeholder="เช่น 1"></label></div>`;
  const act=d.holiday?.kind==='activity'?d.holiday:null;
  const m=U.modal(`<header><h2>ยืนยันการลงทะเบียนรับการนิเทศ</h2></header><div class="body">${act?`<div class="sv-notice warn"><b>วันนี้ตรงกับวันกิจกรรม${act.name?' ('+esc(act.name)+')':''}</b><br>ยืนยันจะจองคาบนี้วันนี้ใช่ไหม</div>`:''}${fixed}
-  <div><div class="sv-field" style="margin-bottom:6px">ประเภทการนิเทศ</div><div class="sv-types">
-   <div><input type="radio" name="bType" id="bt1" value="teaching" checked><label for="bt1"><b>นิเทศการสอน</b><small>สังเกตการจัดการเรียนรู้ในคาบ</small></label></div>
-   <div><input type="radio" name="bType" id="bt2" value="classroom"><label for="bt2"><b>นิเทศห้องเรียน</b><small>สภาพแวดล้อมและการจัดห้องเรียน</small></label></div></div></div>
+  <p class="sv-hint">ผู้ประเมินจะนิเทศทั้งการสอนและห้องเรียนในคาบเดียวกัน</p>
   <label class="sv-field">หัวข้อที่ต้องการรับข้อเสนอแนะ (ไม่บังคับ)<textarea id="bTopic" maxlength="500" placeholder="เช่น การใช้คำถามกระตุ้นการคิด การจัดกลุ่มผู้เรียน"></textarea></label>
   <div class="sv-notice error" id="bError" hidden></div></div>
   <footer><button type="button" class="sv-btn" data-close>ยกเลิก</button><button type="button" class="sv-btn primary" id="bOk" data-autofocus>${act?'ยืนยันจองวันกิจกรรม':'ยืนยันลงทะเบียน'}</button></footer>`);
  m.querySelector('#bOk').onclick=async()=>{
   const btn=m.querySelector('#bOk'),err=m.querySelector('#bError');err.hidden=true;
-  const body={visit_date:date,period,supervision_type:m.querySelector('input[name=bType]:checked').value,topic:m.querySelector('#bTopic').value};
+  const body={visit_date:date,period,topic:m.querySelector('#bTopic').value};
   if(act)body.confirm_activity=true;
   if(!lesson){body.subject=m.querySelector('#bSubject').value;body.grade_level=m.querySelector('#bGrade').value;body.classroom=m.querySelector('#bClass').value;
    if(!body.subject.trim()||!body.grade_level){err.textContent='กรอกวิชาและเลือกชั้นก่อน';err.hidden=false;return;}}
