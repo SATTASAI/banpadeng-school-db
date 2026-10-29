@@ -134,7 +134,7 @@ async function periodTimes(env,termId){
  try{return (await loadStructure(env,termId)).structure;}catch{return DEFAULT_STRUCTURE;}
 }
 
-// วันหยุด/วันกิจกรรมจากปฏิทินระบบผลการเรียน (gr_holidays ใน D1 เดียวกัน) — วันกิจกรรมไม่มีการสอนปกติ จึงไม่เปิดให้ลงทะเบียน
+// วันหยุด/วันกิจกรรมจากปฏิทินระบบผลการเรียน (gr_holidays ใน D1 เดียวกัน) — วันหยุดจองไม่ได้ วันกิจกรรมจองได้เมื่อครูยืนยัน (confirm_activity)
 async function holidaysOn(env,dates){
  const out=new Map();
  if(!dates.length||!await tableExists(env,'gr_holidays'))return out;
@@ -144,7 +144,8 @@ async function holidaysOn(env,dates){
  for(const r of results)if(!out.has(r.d)||r.kind==='holiday')out.set(r.d,{name:r.name||'',kind:r.kind==='activity'?'activity':'holiday'});
  return out;
 }
-const holidayMsg=h=>h.kind==='activity'?`วันที่เลือกเป็นวันกิจกรรม${h.name?' ('+h.name+')':''} ไม่มีการสอนปกติ กรุณาเลือกวันอื่น`:`วันที่เลือกเป็นวันหยุด${h.name?' ('+h.name+')':''} กรุณาเลือกวันอื่น`;
+const holidayMsg=h=>`วันที่เลือกเป็นวันหยุด${h.name?' ('+h.name+')':''} กรุณาเลือกวันอื่น`;
+const activityMsg=h=>`วันนี้ตรงกับวันกิจกรรม${h.name?' ('+h.name+')':''} ยืนยันจะจองคาบนี้วันนี้ใช่ไหม`;
 // จำนวนที่รับลงทะเบียนได้ของวันที่+คาบ = 3 − ผู้ประเมินที่แจ้งไม่ว่าง (ไม่ติดลบ)
 const CAPACITY_SQL=`MAX(0,?-(SELECT COUNT(DISTINCT user_id) FROM supervision_unavailability WHERE unavailable_date=? AND (period IS NULL OR period=?)))`;
 async function termRequestOf(env,userId,termId){
@@ -227,7 +228,9 @@ async function createRequest(request,env,user){
  const term=await termFor(env,date);if(!term)return fail('วันที่เลือกไม่อยู่ในภาคเรียน');
  const structure=await periodTimes(env,term.id);
  if(slotStarted(date,structure.times[period-1].start))return fail('ไม่สามารถเลือกวันหรือคาบที่ผ่านมาแล้ว');
- const holiday=(await holidaysOn(env,[date])).get(date);if(holiday)return fail(holidayMsg(holiday));
+ const holiday=(await holidaysOn(env,[date])).get(date);
+ if(holiday?.kind==='holiday')return fail(holidayMsg(holiday));
+ if(holiday?.kind==='activity'&&body.confirm_activity!==true)return reply({error:activityMsg(holiday),code:'activity_day',activity:holiday.name||''},409);
  if(await termRequestOf(env,user.id,term.id))return fail(TERM_LIMIT_MSG,409);
  const plan=await publishedPlan(env,term.id),personnelIds=await personnelIdsOf(env,user.id);
  let lesson;
