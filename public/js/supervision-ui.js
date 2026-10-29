@@ -71,7 +71,7 @@
  }
  // พิมพ์แบบนิเทศการสอนตามแบบฟอร์มโรงเรียน (ช่องลงชื่อผู้รับการนิเทศ/ผู้นิเทศ)
  const TH=n=>String(n).replace(/\d/g,d=>'๐๑๒๓๔๕๖๗๘๙'[d]);
- function printForm(r,{round}={}){
+ function printForm(r,{round,director}={}){
   const e=r.evaluation;if(!e)return;
   const it=e.items,rate=it.filter(x=>!x.group),env=it.filter(x=>x.group);
   const tick=(x,v)=>Number(x.score)===v?'✓':'';
@@ -90,7 +90,7 @@
 h1{text-align:center;font-size:20px;margin:0 0 4px}.c{text-align:center}.info{line-height:1.9}.u{border-bottom:1px dotted #000;padding:0 6px}
 table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #000;padding:1px 6px;vertical-align:top}th{background:#f2f2f2}
 td.sec{font-weight:700;background:#fafafa}.w{width:44px}.wn{width:70px}.note{width:70px}.brk{break-before:page}
-.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:18px;break-inside:avoid;text-align:center}.sign div{line-height:1.8}
+.sign{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:18px;break-inside:avoid;text-align:center}.sign div{line-height:1.8}.sign.three{grid-template-columns:repeat(3,1fr);gap:10px;font-size:13px}
 .crit td{border:0;padding:0 8px 0 0;font-size:13px}.crit{width:auto;margin:2px 0}.sugg{border:1px solid #000;min-height:56px;padding:6px;white-space:pre-wrap}
 @media screen{body{padding:20px;max-width:820px;margin:auto}}</style></head><body>
 <h1>แบบนิเทศการสอน${round?` ครั้งที่ ${TH(round)}`:''}</h1>
@@ -107,8 +107,9 @@ td.sec{font-weight:700;background:#fafafa}.w{width:44px}.wn{width:70px}.note{wid
 <p style="margin:8px 0 2px"><b>สรุปผลการนิเทศ</b> คะแนนรวม <b>${TH(e.total)}</b> คะแนน จาก ${TH(max3+max4)} คะแนน ระดับคุณภาพ <b>${esc(e.level)}</b></p>
 <table class="crit"><tr><td><b>เกณฑ์</b></td>${levels.map(([a,b])=>`<td>${TH(a)} = ${b}${b===e.level?' ✓':''}</td>`).join('')}</tr></table>
 <p style="margin:8px 0 2px"><b>ข้อเสนอแนะของผู้นิเทศ</b></p><div class="sugg">${e.suggestion?esc(e.suggestion):''}</div>
-<div class="sign"><div>ลงชื่อ ......................................... ผู้รับการนิเทศ<br>(${esc(r.teacher_name)})${r.teacher_position?`<br>${esc(r.teacher_position)}`:''}</div>
-<div>ลงชื่อ ......................................... ผู้นิเทศ<br>(${esc(e.evaluator_name)})${e.evaluator_position?`<br>${esc(e.evaluator_position)}`:''}</div></div>
+<div class="sign${director&&director.name===e.evaluator_name?'':' three'}"><div>ลงชื่อ .................................<br>(${esc(r.teacher_name)})<br>ผู้รับการนิเทศ${r.teacher_position?` · ${esc(r.teacher_position)}`:''}</div>
+<div>ลงชื่อ .................................<br>(${esc(e.evaluator_name)})<br>ผู้นิเทศ${e.evaluator_position?` · ${esc(e.evaluator_position)}`:''}</div>
+${director&&director.name===e.evaluator_name?'':`<div>ลงชื่อ .................................<br>(${director?esc(director.name):'.................................'})<br>${esc(director?.position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง')}</div>`}</div>
 <script>document.fonts&&document.fonts.ready.then(()=>setTimeout(()=>print(),200));<\/script></body></html>`;
   const w=window.open('','_blank');if(!w){toast('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป',true);return;}
   w.document.open();w.document.write(html);w.document.close();

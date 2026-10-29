@@ -341,11 +341,18 @@ async function createRequest(request,env,user){
  return reply({ok:true,request:(await withEvidence(env,[shape(await loadRequest(env,id),{withResult:true})]))[0]},201);
 }
 
+// ผอ. สำหรับช่องลงชื่อในแบบนิเทศ (ตำแหน่งมีคำว่า ผู้อำนวยการ แต่ไม่ใช่รอง/ผู้ช่วย)
+async function directorOf(env){
+ const r=await env.DB.prepare(`SELECT p.full_name name,p.position FROM personnel_records p WHERE p.status='active'
+  AND instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้อำนวยการ')>0 AND instr(REPLACE(COALESCE(p.position,''),' ',''),'รองผู้อำนวยการ')=0
+  AND instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้ช่วยผู้อำนวยการ')=0 ORDER BY p.id LIMIT 1`).first().catch(()=>null);
+ return r?{name:r.name,position:r.position}:null;
+}
 async function listRequests(env,user,url,perms){
  const scope=url.searchParams.get('scope')==='all'?'all':'mine';
  if(scope==='mine'){
   const {results}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' ORDER BY r.visit_date DESC,r.period`).bind(user.id).all();
-  return reply({scope,requests:await withEvidence(env,results.map(r=>shape(r,{withResult:true})))});
+  return reply({scope,director:await directorOf(env),requests:await withEvidence(env,results.map(r=>shape(r,{withResult:true})))});
  }
  if(!perms.evaluate&&!perms.view_all)return fail('เฉพาะฝ่ายบริหาร ฝ่ายวิชาการ หรือผู้มีสิทธิ์ประเมิน',403);
  const {results}=await env.DB.prepare(`${SELECT} WHERE r.status<>'cancelled' ORDER BY r.visit_date,r.period,r.id`).all();
@@ -363,7 +370,7 @@ async function listRequests(env,user,url,perms){
   // รายการที่ตนเองถอนการรับแล้วและยังรอผู้รับใหม่ — ไม่ค้างในแท็บคำขอของผู้ที่ถอน
   out.released_by_me=out.status==='pending'&&released.has(out.id);
   out.hidden_for_me=out.released_by_me&&!out.overdue&&someoneElse(r);return out;});
- return reply({scope,requests:await withEvidence(env,list)});
+ return reply({scope,director:await directorOf(env),requests:await withEvidence(env,list)});
 }
 
 async function act(request,env,user,id,action,perms,services){

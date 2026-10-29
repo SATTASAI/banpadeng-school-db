@@ -24,7 +24,7 @@ function renderTabs(){
  const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=visible().filter(r=>r.status==='pending').length;
  $('tabs').innerHTML=allowed().map(([k,l])=>`<button type="button" role="tab" data-tab="${k}" aria-selected="${state.view===k}">${l}${k==='requests'&&pend?`<span class="count">${pend}</span>`:''}${k==='evaluate'&&mineOpen?`<span class="count">${mineOpen}</span>`:''}</button>`).join('');
 }
-async function load(){if(state.perm.evaluate||state.perm.view_all)state.list=(await apiRequest('/api/supervision/requests?scope=all')).requests;}
+async function load(){if(state.perm.evaluate||state.perm.view_all){const d=await apiRequest('/api/supervision/requests?scope=all');state.list=d.requests;state.director=d.director||null;}}
 async function render(reload=true){
  try{
   if(reload)await load();renderTabs();
@@ -250,7 +250,7 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const pr=e.target.closest('[data-print]');if(pr){const r=state.list.find(x=>x.id===Number(pr.dataset.print));if(r)U.printForm(r,{round:roundOf(r,state.list)});return;}
+ const pr=e.target.closest('[data-print]');if(pr){const r=state.list.find(x=>x.id===Number(pr.dataset.print));if(r)U.printForm(r,{director:state.director,round:roundOf(r,state.list)});return;}
  const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot],[data-away-eval]');if(!el)return;
  if(el.dataset.awayEval){askAway(Number(el.dataset.awayEval));return;}
  if(el.dataset.calweek!=null){const n=Number(el.dataset.calweek);state.calStart=n===0?null:addD(state.calStart,n);viewResults().catch(err=>U.toast(err.message,true));return;}

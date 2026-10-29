@@ -365,3 +365,10 @@ test('switching to the school form clears old-form results; requests go back to 
  const again={...env,DB:{...env.DB}};
  assert.equal((await ok(again,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id).evaluation.total,100,'new-form results are kept');
 });
+
+test('request lists include the director (not deputy) for the print form signature',async()=>{
+ const {env}=await school();
+ const mine=await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2);
+ assert.deepEqual(mine.director,{name:'ผอ. ทดสอบ',position:'ผู้อำนวยการโรงเรียน'});
+ assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).director.name,'ผอ. ทดสอบ');
+});
