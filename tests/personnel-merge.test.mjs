@@ -63,8 +63,11 @@ test('merge confirmed identities (incl. Sattawat and the misspelled Phakakaew) p
  const functionSource=source.slice(source.indexOf('async function handleUpdateStaff('),source.indexOf('// ---------- รายงาน ----------',source.indexOf('async function handleUpdateStaff(')));
  const update=new AsyncFunction('getCurrentUser','jsonResponse','ensurePersonnelData','isAdmin','writeAuditLog',`${functionSource}; return handleUpdateStaff;`);
  const response=(data,status=200)=>new Response(JSON.stringify(data),{status});
+ // ทะเบียนบุคลากรแก้ได้เฉพาะผู้ดูแลระบบ/ผู้บริหาร — ครู (แม้บัญชีผูกกับรายชื่อนี้) แก้ของตัวเองที่ /api/me/personnel
  const linkedUpdate=await update(async()=>({id:90,role:'teacher'}),response,async()=>{},()=>false,async()=>{});
- assert.equal((await linkedUpdate(new Request('https://school.example/api/staff/'+person.id,{method:'PATCH',body:JSON.stringify({phone:'0888888888'})}),env,person.id)).status,200);
+ assert.equal((await linkedUpdate(new Request('https://school.example/api/staff/'+person.id,{method:'PATCH',body:JSON.stringify({phone:'0888888888'})}),env,person.id)).status,403);
+ const adminUpdate=await update(async()=>({id:1,role:'superadmin'}),response,async()=>{},()=>true,async()=>{});
+ assert.equal((await adminUpdate(new Request('https://school.example/api/staff/'+person.id,{method:'PATCH',body:JSON.stringify({phone:'0888888888'})}),env,person.id)).status,200);
  const unrelatedUpdate=await update(async()=>({id:1,role:'teacher'}),response,async()=>{},()=>false,async()=>{});
  assert.equal((await unrelatedUpdate(new Request('https://school.example/api/staff/'+person.id,{method:'PATCH',body:'{}'}),env,person.id)).status,403);
 

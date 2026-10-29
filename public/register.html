@@ -39,9 +39,9 @@
         <label for="email">อีเมล</label>
         <input type="email" id="email" required autocomplete="email" />
       </div>
-      <div class="field">
-        <label for="position">ตำแหน่ง</label>
-        <input type="text" id="position" required maxlength="200" placeholder="เช่น ครูชำนาญการ, เจ้าหน้าที่ธุรการ" />
+      <div class="field span-2">
+        <label>ตำแหน่ง / วิทยฐานะ</label>
+        <div id="rankChoice"></div>
       </div>
       <div class="field">
         <label for="phone">เบอร์โทรศัพท์</label>
@@ -88,7 +88,9 @@
 
 <script src="/js/turnstile.js"></script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onSchoolTurnstile" async defer></script>
 <script src="/js/api.js"></script>
+<script src="/js/rank-choice.js"></script>
 <script>
+  const rankPicker = RankChoice.mount(document.getElementById("rankChoice"));
   const form = document.getElementById("registerForm");
   const errorBox = document.getElementById("errorBox");
   const submitBtn = document.getElementById("submitBtn");
@@ -112,6 +114,14 @@
       return;
     }
 
+    const rank = rankPicker.value();
+    if (!rank.rank_choice || (rank.rank_choice === "อื่น ๆ" && !rank.rank_other)) {
+      errorBox.textContent = rank.rank_choice ? "กรุณาระบุตำแหน่ง" : "กรุณาเลือกตำแหน่ง / วิทยฐานะ";
+      errorBox.classList.add("visible");
+      document.getElementById("rankChoice").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+
     submitBtn.disabled = true;
     submitBtn.textContent = "กำลังสมัครสมาชิก...";
 
@@ -121,7 +131,7 @@
         body: {
           full_name: document.getElementById("fullName").value,
           email: document.getElementById("email").value,
-          position: document.getElementById("position").value,
+          ...rankPicker.value(),
           phone: document.getElementById("phone").value,
           departments,
           homeroom_classroom: document.getElementById("homeroomClassroom").value,

@@ -1,3 +1,4 @@
+import { RANK_CHOICES, rankChoiceToRecord, recordToRankChoice } from "./lib/rank-choice.js";
 import {handleEvaluationRead} from './evaluation/read.js';
 import {handleEvaluationLink} from './evaluation/link.js';
 import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
@@ -433,7 +434,14 @@ export async function handleRegister(request, env) {
   const email = (body.email || "").trim().toLowerCase();
   const password = body.password || "";
   const fullName = (body.full_name || "").trim();
-  const position = String(body.position || "").trim().slice(0, 200);
+  // ตำแหน่ง/วิทยฐานะ: ปุ่มบังคับเลือก (rank_choice) — position แบบพิมพ์เองรองรับไว้สำหรับไคลเอนต์เดิม
+  let position = String(body.position || "").trim().slice(0, 200), rankFields = {};
+  if (body.rank_choice !== undefined) {
+    const picked = rankChoiceToRecord(body.rank_choice, body.rank_other);
+    if (picked.error) return jsonResponse({ error: picked.error }, 400);
+    position = picked.position;
+    if (body.rank_choice !== "อื่น ๆ") rankFields = { academic_rank: picked.academic_rank };
+  }
   const phone = String(body.phone || "").trim().slice(0, 50);
   const allowedDepartments = new Set(["academic", "early_childhood", "budget", "personnel", "general"]);
   const departments = [...new Set(Array.isArray(body.departments) ? body.departments : [])]
@@ -509,6 +517,7 @@ export async function handleRegister(request, env) {
       homeroom_classroom: homeroomClassroom,
       responsible_projects: responsibleProjects,
       teaching_periods: teachingPeriods,
+      ...rankFields,
     });
   } catch (error) {
     await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run().catch(() => null);
@@ -1606,6 +1615,48 @@ async function activeTeachingMaster(env) {
 }
 
 // ---------- /api/staff/:id (PATCH) — แก้ไขข้อมูลตำแหน่ง/วิชา/ติดต่อ ----------
+// ข้อมูลบุคลากรของตัวเอง — ครูแก้ที่หน้า "บัญชีของฉัน" (account.html) เท่านั้น ไม่แก้ชื่อ–สกุล
+async function ownPersonnelId(env, user) {
+  const own = await env.DB.prepare(`SELECT a.personnel_id FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active' WHERE a.user_id=? LIMIT 1`).bind(user.id).first();
+  if (own) return own.personnel_id;
+  const byUser = await env.DB.prepare("SELECT id FROM personnel_records WHERE user_id = ? AND status = 'active' LIMIT 1").bind(user.id).first();
+  return byUser?.id ?? null;
+}
+async function handleOwnPersonnel(request, env, method) {
+  const user = await getCurrentUser(request, env);
+  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+  await ensurePersonnelData(env);
+  const id = await ownPersonnelId(env, user);
+  if (!id) return jsonResponse({ error: "บัญชีนี้ยังไม่ได้ผูกกับทะเบียนบุคลากร กรุณาติดต่อผู้ดูแลระบบ" }, 404);
+  if (method === "PATCH") {
+    let body;
+    try { body = await request.json(); } catch { return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400); }
+    const current = await env.DB.prepare("SELECT academic_rank FROM personnel_records WHERE id = ?").bind(id).first();
+    const picked = rankChoiceToRecord(body.rank_choice, body.rank_other, current?.academic_rank);
+    if (picked.error) return jsonResponse({ error: picked.error }, 400);
+    return updateStaffRecord(env, id, { ...body, position: picked.position, academic_rank: picked.academic_rank }, user, request);
+  }
+  const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
+  const homeroomSql = hasGrade
+    ? `COALESCE((SELECT group_concat(h.grade_level || '/' || h.classroom, ', ') FROM gr_homerooms h JOIN academic_years y ON y.id = h.academic_year_id
+         WHERE y.status = 'active' AND h.user_id = p.user_id), p.homeroom_classroom)`
+    : "p.homeroom_classroom";
+  const person = await env.DB.prepare(
+    `SELECT p.id, p.full_name, p.personnel_type, p.position_number, p.position, p.academic_rank, p.subjects, p.phone,
+            ${homeroomSql} AS homeroom_classroom, p.departments, p.responsible_projects, p.teaching_periods,
+            p.appointment_date, p.service_start_date, p.education_level, p.major, p.institution,
+            p.employment_status, p.retirement_date, p.license_issue_date, p.license_expiry_date
+     FROM personnel_records p WHERE p.id = ?`).bind(id).first();
+  const master = await activeTeachingMaster(env);
+  if (master.available) {
+    const l = loadByPersonnel(master).get(Number(id));
+    person.teaching_source = "grade-system";
+    person.subjects = l ? l.subjects.join(", ") : null;
+    person.teaching_periods = l ? l.periods_per_week : null;
+  }
+  return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank) }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
+}
+
 async function handleUpdateStaff(request, env, targetId) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) {
@@ -1617,10 +1668,9 @@ async function handleUpdateStaff(request, env, targetId) {
     .bind(targetId)
     .first();
   if (!target) return jsonResponse({ error: "ไม่พบบุคลากรนี้" }, 404);
-  const linked = await env.DB.prepare("SELECT user_id FROM personnel_accounts WHERE user_id=? AND personnel_id=?")
-    .bind(user.id,targetId).first();
-  if (!isAdmin(user) && user.id !== target.user_id && !linked) {
-    return jsonResponse({ error: "แก้ไขได้เฉพาะข้อมูลของตัวเอง หรือต้องเป็นผู้ดูแลระบบ/ผู้บริหาร" }, 403);
+  // หน้าทะเบียนบุคลากร: แก้ได้เฉพาะผู้ดูแลระบบ/ผู้บริหาร · ครูแก้ข้อมูลของตัวเองที่หน้าบัญชีของฉัน
+  if (!isAdmin(user)) {
+    return jsonResponse({ error: "แก้ข้อมูลของตัวเองได้ที่หน้า บัญชีของฉัน — หน้านี้แก้ได้เฉพาะผู้ดูแลระบบ/ผู้บริหาร" }, 403);
   }
 
   let body;
@@ -1629,6 +1679,10 @@ async function handleUpdateStaff(request, env, targetId) {
   } catch {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
+  return updateStaffRecord(env, targetId, body, user, request);
+}
+
+async function updateStaffRecord(env, targetId, body, user, request) {
 
   const position = body.position || null;
   const personnel_type = body.personnel_type || null;
@@ -4651,6 +4705,7 @@ const app = {
       if (pathname === "/api/projects/import" && method === "POST") return await handleImportProjects(request, env);
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
+      if (pathname === "/api/me/personnel" && (method === "GET" || method === "PATCH")) return await handleOwnPersonnel(request, env, method);
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
 
       if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
