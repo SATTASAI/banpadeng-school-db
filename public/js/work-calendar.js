@@ -48,6 +48,14 @@
       while (y < ey || (y === ey && m <= em - 1)) { months.push(`${y}-${String(m + 1).padStart(2, "0")}`); if (++m > 11) { m = 0; y++; } }
     }
     const today = todayIso();
+    // แสดงเฉพาะ 3 รายการที่ใกล้ถึง ที่เหลือพับไว้ กดเพื่อเปิดดู
+    const foldList = (items, empty) => {
+      if (!items.length) return `<div class="cal-list">${empty}</div>`;
+      const shown = new Set(items.map((x, i) => (x.end >= today ? i : -1)).filter((i) => i >= 0).slice(0, 3));
+      const top = items.filter((_, i) => shown.has(i)), rest = items.filter((_, i) => !shown.has(i));
+      return `<div class="cal-list">${top.map((x) => x.html).join("") || '<p class="cal-empty">ไม่มีรายการที่ใกล้ถึง</p>'}</div>`
+        + (rest.length ? `<details class="cal-more"><summary>ดูทั้งหมด (อีก ${rest.length} รายการ)</summary><div class="cal-list">${rest.map((x) => x.html).join("")}</div></details>` : "");
+    };
     if (!/^\d{4}-\d{2}$/.test(calMonth)) calMonth = months.includes(today.slice(0, 7)) || !months.length ? today.slice(0, 7) : months[0];
 
     view.innerHTML = `<div class="work-cal">
@@ -74,14 +82,14 @@
       </div>
       <div class="cal-panel">
         <div class="cal-head"><h3>วันหยุดและวันกิจกรรมทั้งปี</h3><span>${groups.length} รายการ · แตะเพื่อไปที่เดือนนั้น</span></div>
-        <div class="cal-list">${groups.map((g, i) => `<button type="button" class="cal-item${g.gov ? " gov" : ""}${g.kind === "activity" ? " act" : ""}" data-go="${i}"><span class="cal-item-date">${thRange(g.from, g.to)}</span><span class="cal-item-name">${esc(g.name)}${g.gov ? ' <em class="gov-tag">ราชการ</em>' : ""}${g.kind === "activity" ? ' <em class="act-tag">กิจกรรม</em>' : ""}</span><span class="cal-item-n">${g.dates.length} วัน</span></button>`).join("") || '<p class="cal-empty">ฝ่ายวัดผลยังไม่ได้ตั้งวันหยุด</p>'}</div>
+        ${foldList(groups.map((g, i) => ({ end: g.to, html: `<button type="button" class="cal-item${g.gov ? " gov" : ""}${g.kind === "activity" ? " act" : ""}" data-go="${i}"><span class="cal-item-date">${thRange(g.from, g.to)}</span><span class="cal-item-name">${esc(g.name)}${g.gov ? ' <em class="gov-tag">ราชการ</em>' : ""}${g.kind === "activity" ? ' <em class="act-tag">กิจกรรม</em>' : ""}</span><span class="cal-item-n">${g.dates.length} วัน</span></button>` })), '<p class="cal-empty">ฝ่ายวัดผลยังไม่ได้ตั้งวันหยุด</p>')}
       </div>
       <div class="cal-panel">
         <div class="cal-head"><h3>วันสำคัญในปีการศึกษา</h3><span>แสดงประกอบปฏิทิน · ไม่เพิ่มวันหยุด</span></div>
-        <div class="cal-list">${importantDays.map((d) => {
+        ${foldList(importantDays.map((d) => {
           const isOff = hol.has(d.date) || [0, 6].includes(wdOf(d.date));
-          return `<button type="button" class="cal-item${isOff ? "" : " important"}" data-important-date="${d.date}"><span class="cal-item-date">${thDate(d.date)}</span><span class="cal-item-name">${esc(d.name)}</span><span class="cal-item-n">${isOff ? "ตรงวันหยุด" : "วันสำคัญ"}</span></button>`;
-        }).join("") || '<p class="cal-empty">ไม่มีวันสำคัญในช่วงปีการศึกษานี้</p>'}</div>
+          return { end: d.date, html: `<button type="button" class="cal-item${isOff ? "" : " important"}" data-important-date="${d.date}"><span class="cal-item-date">${thDate(d.date)}</span><span class="cal-item-name">${esc(d.name)}</span><span class="cal-item-n">${isOff ? "ตรงวันหยุด" : "วันสำคัญ"}</span></button>` };
+        }), '<p class="cal-empty">ไม่มีวันสำคัญในช่วงปีการศึกษานี้</p>')}
       </div>
     </div>`;
 

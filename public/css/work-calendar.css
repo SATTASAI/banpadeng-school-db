@@ -91,3 +91,7 @@
 .work-cal .act-tag { font-style: normal; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: #dcf3e1; color: #1b7a34; }
 @media (max-width: 400px) { .work-cal .cal-day .aname { display: none; } .work-cal .cal-day.act::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2e9e4f; margin-top: auto; } }
 @media (max-width: 400px) { .work-cal .cal-day .hname { display: none; } .work-cal .cal-day.hol::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); margin-top: auto; } }
+.work-cal .cal-more { margin-top: 8px; }
+.work-cal .cal-more > summary { cursor: pointer; list-style: none; text-align: center; padding: 8px 12px; border-radius: 10px; color: var(--primary, #3b5bdb); font-weight: 600; font-size: 14px; background: rgba(59, 91, 219, .06); }
+.work-cal .cal-more > summary::-webkit-details-marker { display: none; }
+.work-cal .cal-more[open] > summary { margin-bottom: 6px; }
