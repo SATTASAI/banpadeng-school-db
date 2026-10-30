@@ -50,7 +50,11 @@ async function renderRegister(){
   if(term.mode==='timetable'&&!lesson&&!req)return '<td><div class="sv-slot none" aria-hidden="true">·</div></td>';
   if(lesson)teach++;
   const label=lesson?`<b>${esc(lesson.subject)}</b><small>${esc(U.classLabel(lesson))}</small>`:'';
-  if(req){booked++;return `<td><button type="button" class="sv-slot booked ${req.status} band-${U.bandKey(req)}" data-detail="${req.id}"><b>${esc(req.subject)}</b><small>${esc(U.classLabel(req))}</small><span class="state">${esc(req.type_label)} · ${U.STATUS[req.status]}</span></button></td>`;}
+  if(req){booked++;
+   // คาบเดียวกันมีช่วงชั้นอื่นลงทับด้วย → แสดงจุดสีครบทุกช่วงชั้น (ของตัวเองก่อน)
+   const own=U.bandKey(req),bands=[...new Set([own,...((w.taken||{})[`${d.date}|${p}`]||[])])].filter(b=>U.BANDS[b]);
+   const cdots=bands.length>1?`<span class="sv-cdots" title="ช่วงชั้นที่ลงคาบนี้: ${bands.map(b=>U.BANDS[b]).join(', ')}">${bands.map(b=>`<i class="sv-bdot b-${b}"></i>`).join('')}</span>`:'';
+   return `<td><button type="button" class="sv-slot booked ${req.status} band-${own}${cdots?' multi-band':''}" data-detail="${req.id}">${cdots}<b>${esc(req.subject)}</b><small>${esc(U.classLabel(req))}</small><span class="state">${esc(req.type_label)} · ${U.STATUS[req.status]}</span></button></td>`;}
   if(past(d.date,t.start))return `<td><div class="sv-slot past">${label}<small style="margin-top:auto">ผ่านมาแล้ว</small></div></td>`;
   if(term.registered)return `<td><div class="sv-slot past" title="ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง">${label}<small style="margin-top:auto">ลงทะเบียนภาคนี้แล้ว</small></div></td>`;
   const took=(w.taken||{})[`${d.date}|${p}`]||[],myBand=lesson?U.bandOf(lesson.grade_level):null;

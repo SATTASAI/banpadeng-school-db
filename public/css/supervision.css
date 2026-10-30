@@ -167,3 +167,7 @@ button.sv-slot{cursor:pointer}
 .sv-done{font-size:12.5px;font-weight:700;color:#a8333c;white-space:nowrap}.sv-done.on{color:#187E6B}
 .sv-scale.two label{width:auto;padding:0 12px}
 .sv-res-foot .sv-btn{margin-left:auto}
+/* คาบที่มีหลายช่วงชั้นลงทับกัน: จุดสีครบทุกช่วงชั้นที่มุมขวาบน */
+.sv-slot.multi-band::after{display:none}
+.sv-slot .sv-cdots{position:absolute;top:8px;right:8px;display:flex;gap:3px}
+.sv-slot.multi-band{padding-right:calc(14px + 13px * 2)}
