@@ -12,21 +12,38 @@
   .topic-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:14px; }
   .topic-btn { background:var(--color-forest-700); color:#fff; border:none; border-radius:var(--radius-lg); padding:22px 18px; font-family:var(--font-body); font-size:15px; font-weight:600; cursor:pointer; text-align:left; }
   .topic-btn:hover { background:var(--color-forest-900); }
-  .project-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:12px; }
-  .project-card.search-target { border-color:#72afe1; background:#f1f8fe; box-shadow:inset 4px 0 #2585d8,0 10px 28px rgba(37,133,216,.13); }
-  .project-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
-  .project-actions { display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
-  .project-actions .btn { width:auto; padding:6px 10px; font-size:12px; }
-  .viewer-mode .project-actions, .viewer-mode #newTopicBtn, .viewer-mode .topic-actions { display:none !important; }
-  .project-name { font-weight:600; font-size:16px; }
-  .project-budget { display:flex; flex-wrap:wrap; gap:8px 14px; color:var(--color-text-muted); font-weight:600; font-size:13px; margin-top:7px; }
-  .project-budget strong { color:var(--color-forest-900); }
-  .project-budget .spent strong { color:var(--color-ocean-700); }
-  .project-budget .remaining strong { color:var(--color-success); }
-  .project-budget .over strong { color:var(--color-danger); }
-  .progress-track { background:var(--color-bg); border-radius:999px; height:10px; margin-top:10px; overflow:hidden; }
-  .progress-fill { background:var(--color-forest-500); height:100%; border-radius:999px; }
-  .project-meta { display:flex; gap:10px; margin-top:8px; font-size:12px; color:var(--color-text-muted); flex-wrap:wrap; align-items:center; }
+  .project-card { position:relative; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:16px 18px 14px 20px; margin-bottom:12px; overflow:hidden; }
+  .project-card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:#3f63d6; }
+  .project-card.st-completed::before { background:var(--color-success,#23754a); }
+  .project-card.st-cancelled::before { background:#a3adb8; }
+  .project-card.st-cancelled { opacity:.75; }
+  .project-card.search-target { border-color:#72afe1; background:#f1f8fe; box-shadow:0 10px 28px rgba(37,133,216,.13); }
+  .pc-top { display:grid; grid-template-columns:1fr auto; gap:14px; align-items:start; }
+  .project-name { font-weight:700; font-size:17px; line-height:1.35; color:var(--color-forest-900); }
+  .pc-alert { display:inline-block; margin-left:6px; padding:1px 8px; border-radius:999px; background:#fbe7ea; color:#bd3544; font-size:11px; font-weight:600; vertical-align:middle; }
+  .pc-sub { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+  .pc-chip { padding:2px 9px; border-radius:999px; background:#eef2f8; color:#4f5d6e; font-size:12px; font-weight:600; }
+  .pc-chip.st-ongoing { background:#e7edfd; color:#3456c8; }
+  .pc-chip.st-completed { background:#e3f5eb; color:#23754a; }
+  .pc-chip.st-cancelled { background:#eef0f2; color:#6f7a86; }
+  .pc-desc { margin-top:6px; font-size:13px; color:var(--color-text-muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .pc-owner { margin-top:4px; font-size:12px; color:var(--color-text-muted); }
+  .pc-focus { text-align:right; min-width:150px; }
+  .pc-focus span { display:block; font-size:12px; color:var(--color-text-muted); font-weight:600; }
+  .pc-focus strong { display:block; font-size:26px; line-height:1.15; color:var(--color-success,#23754a); font-variant-numeric:tabular-nums; }
+  .pc-focus.over strong { color:var(--color-danger); }
+  .pc-focus small { font-size:12px; color:var(--color-text-muted); }
+  .pc-bar { display:flex; height:8px; margin-top:12px; border-radius:999px; background:#e9eef4; overflow:hidden; }
+  .pc-bar i { display:block; height:100%; }
+  .pc-bar .paid { background:#3f63d6; }
+  .pc-bar .reserved { background:#f0b440; }
+  .pc-legend { display:flex; flex-wrap:wrap; gap:4px 14px; margin-top:7px; font-size:12px; color:var(--color-text-muted); }
+  .pc-legend b { font-weight:600; color:var(--color-forest-900); font-variant-numeric:tabular-nums; }
+  .pc-legend .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+  .project-actions { display:flex; gap:7px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px dashed var(--color-border); }
+  .project-actions .btn { width:auto; padding:6px 11px; font-size:12px; }
+  .project-actions .btn-files { background:#eef2fd; color:#3456c8; border:1px solid #cfdaf7; font-weight:700; }
+  .viewer-mode .project-actions .btn:not(.btn-files), .viewer-mode #newTopicBtn, .viewer-mode .topic-actions { display:none !important; }
   .modal-backdrop { position:fixed; inset:0; background:rgba(28,38,32,0.4); display:flex; align-items:center; justify-content:center; padding:20px; z-index:50; }
   .modal { background:var(--color-surface); border-radius:var(--radius-lg); padding:28px; width:100%; max-width:480px; max-height:88vh; overflow-y:auto; }
   .modal-actions { display:flex; gap:10px; margin-top:20px; }
@@ -66,11 +83,11 @@
     .expense-summary,.expense-form-grid { grid-template-columns:1fr 1fr; }
     .expense-form-grid .span-2,.expense-form-grid .span-3 { grid-column:1/-1; }
     .expense-modal-head,.expense-modal-body { padding-left:16px; padding-right:16px; }
-    .project-head { flex-direction:column; }
-    .project-actions { justify-content:flex-start; }
+    .pc-top { grid-template-columns:1fr; }
+    .pc-focus { text-align:left; }
   }
 </style>
-<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"></head>
+<link rel="stylesheet" href="/css/project-balance.css"><link rel="stylesheet" href="/css/project-allocation-chart.css"><link rel="stylesheet" href="/css/project-files.css"></head>
 <body>
 <div class="app-shell">
   <div class="app-topbar">
@@ -161,7 +178,7 @@
   </div>
 </div>
 
-<script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
+<script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script><script src="/js/project-files.js"></script>
 <script>
   const DEPT_LABELS = {
     academic: "ฝ่ายบริหารงานวิชาการ",
@@ -289,34 +306,44 @@
       .map((p) => {
         const canManage = currentUser.is_admin || p.owners.some((o) => o.user_id === currentUser.id);
         const remaining = p.remaining_amount;
+        const budget = Number(p.budget_amount || 0);
+        const pct = (v) => budget > 0 ? Math.max(0, Math.min(100, (Number(v || 0) / budget) * 100)) : 0;
+        const num = (n) => Number(n || 0).toLocaleString("th-TH", { maximumFractionDigits: 2 });
+        const funding = ({subsidy:"งบอุดหนุน",free_education:"งบเรียนฟรี 15 ปี",school_income:"งบรายได้สถานศึกษา"})[p.funding_type] || "ยังไม่ระบุประเภทเงิน";
+        const alerts = p.unread_count ? `<span class="pc-alert">แจ้งเตือน ${p.unread_count}</span>` : "";
         return `
-        <div class="project-card" data-project-id="${p.id}">
-          <div class="project-head">
+        <div class="project-card st-${p.status}" data-project-id="${p.id}">
+          <div class="pc-top">
             <div>
-              <div class="project-name">${escapeHtml(p.name)} ${p.unread_count ? `<small style="color:#bd3544;font-size:12px;">● แจ้งเตือน ${p.unread_count}</small>` : ""}</div>
-              ${p.description ? `<div style="font-size:13px; color:var(--color-text-muted); margin-top:2px;">${escapeHtml(p.description)}</div>` : ""}
-              <div class="project-budget">
-                <span>งบทั้งหมด <strong>${money(p.budget_amount)}</strong></span>
-                <span class="spent">จ่ายแล้ว <strong>${money(p.spent_amount)}</strong></span>
-                <span class="${remaining < 0 ? "over" : "remaining"}">${remaining < 0 ? "เกินงบ" : "คงเหลือ"} <strong>${money(Math.abs(remaining))}</strong></span>
-                <span>รอดำเนินการ <strong>${money(p.reserved_amount)}</strong></span>
-                <span>วงเงินที่ขอได้ <strong>${money(p.available_amount)}</strong></span>
+              <div class="project-name">${escapeHtml(p.name)}${alerts}</div>
+              <div class="pc-sub">
+                <span class="pc-chip st-${p.status}">${STATUS_LABEL[p.status] || p.status}</span>
+                <span class="pc-chip">ปีงบ ${p.fiscal_year || "-"}</span>
+                <span class="pc-chip">${funding}</span>
+                <span class="pc-chip">งาน ${p.progress_percent}%</span>
               </div>
-              ${ProjectBalance.field(p,currentUser.is_admin)}
-              ${p.notification_message ? `<div class="wf-notice" style="margin-top:8px;">${escapeHtml(p.notification_message)}</div>` : ""}
+              ${p.description ? `<div class="pc-desc">${escapeHtml(p.description)}</div>` : ""}
+              <div class="pc-owner">ผู้ดูแล: ${p.owners.map((o) => escapeHtml(o.full_name)).join(", ") || "-"}</div>
             </div>
-            <div class="project-actions">
-              <a class="btn btn-ghost" href="/project-documents.html?dept=${dept}&project=${p.id}">เอกสาร / ความคืบหน้า</a>
-              ${canManage ? `<a class="btn btn-primary" href="/project-documents.html?dept=${dept}&project=${p.id}&new=1">แจ้งขอเบิกจ่าย</a>` : ""}
-              ${canManage ? `<button class="btn btn-ghost" data-edit="${p.id}">แก้ไขโครงการ</button>` : ""}
+            <div class="pc-focus ${remaining < 0 ? "over" : ""}">
+              <span>${remaining < 0 ? "เกินงบ" : "คงเหลือ"}</span>
+              <strong>${num(Math.abs(remaining))}</strong>
+              <small>จากงบ ${num(budget)} บาท</small>
             </div>
           </div>
-          <div class="progress-track"><div class="progress-fill" style="width:${p.progress_percent}%;"></div></div>
-          <div class="project-meta">
-            <span>${p.progress_percent}%</span>
-            <span>${({subsidy:"งบอุดหนุน",free_education:"งบเรียนฟรี 15 ปี",school_income:"งบรายได้สถานศึกษา"})[p.funding_type] || "ยังไม่ระบุประเภทเงิน"}</span>
-            <span class="badge ${p.status === "ongoing" ? "badge-normal" : p.status === "completed" ? "badge-low" : "badge-high"}" style="padding:2px 10px; border-radius:999px;">${STATUS_LABEL[p.status]}</span>
-            <span>ผู้ดูแล: ${p.owners.map((o) => escapeHtml(o.full_name)).join(", ") || "-"}</span>
+          <div class="pc-bar" title="จ่ายแล้ว / รอดำเนินการ"><i class="paid" style="width:${pct(p.spent_amount)}%"></i><i class="reserved" style="width:${Math.min(pct(p.reserved_amount), 100 - pct(p.spent_amount))}%"></i></div>
+          <div class="pc-legend">
+            <span><i class="dot" style="background:#3f63d6"></i>จ่ายแล้ว <b>${num(p.spent_amount)}</b></span>
+            <span><i class="dot" style="background:#f0b440"></i>รอดำเนินการ <b>${num(p.reserved_amount)}</b></span>
+            <span>ขอได้อีก <b>${num(p.available_amount)}</b></span>
+          </div>
+          ${ProjectBalance.field(p,currentUser.is_admin)}
+          ${p.notification_message ? `<div class="wf-notice" style="margin-top:8px;">${escapeHtml(p.notification_message)}</div>` : ""}
+          <div class="project-actions">
+            <button class="btn btn-files" data-project-files="${p.id}">📁 เอกสารโครงการ</button>
+            <a class="btn btn-ghost btn-docs" href="/project-documents.html?dept=${dept}&project=${p.id}">เบิกจ่าย / ความคืบหน้า</a>
+            ${canManage ? `<a class="btn btn-primary" href="/project-documents.html?dept=${dept}&project=${p.id}&new=1">แจ้งขอเบิกจ่าย</a>` : ""}
+            ${canManage ? `<button class="btn btn-ghost" data-edit="${p.id}">แก้ไขโครงการ</button>` : ""}
           </div>
         </div>`;
       })
