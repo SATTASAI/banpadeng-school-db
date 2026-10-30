@@ -211,11 +211,11 @@ export function maintenancePersonalRecipients(item, eventType, actorId = null) {
 }
 
 export function maintenancePersonalHeadline(eventType, role) {
-  if (role === "assignee") return eventType === "verified" ? "ผู้แจ้งตรวจรับงานที่คุณซ่อมแล้ว" : "คุณได้รับมอบหมายงานซ่อม";
+  if (role === "assignee") return eventType === "verified" ? "หัวหน้าฝ่ายตรวจรับงานที่คุณซ่อมแล้ว" : "คุณได้รับมอบหมายงานซ่อม";
   return {
     in_progress: "งานที่คุณแจ้งเริ่มซ่อมแล้ว",
     waiting_parts: "งานที่คุณแจ้งกำลังรออะไหล่",
-    completed: "ซ่อมเสร็จแล้ว กรุณาตรวจรับ",
+    completed: "งานที่คุณแจ้งซ่อมเสร็จแล้ว",
     cancelled: "งานที่คุณแจ้งถูกยกเลิก",
   }[eventType] || "อัปเดตงานที่คุณแจ้ง";
 }

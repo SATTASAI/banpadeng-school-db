@@ -29,6 +29,8 @@ function fixture() {
   } } };
 }
 
+// แนบภาพหลังซ่อม (จำลอง) — ต้องมีก่อนกดซ่อมเสร็จ
+const addAfterPhoto = (env, id) => env.raw.prepare("INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by) VALUES('maintenance_after',?,?,'after.png','image/png',10,3)").run(id, `test/after-${id}`);
 const lineCalls = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (input, init = {}) => {
@@ -123,15 +125,18 @@ test("teacher links LINE with a one-time code and receives repair assignments pe
   assert.equal(personal.body.messages[0].contents.body.contents[0].text, "คุณได้รับมอบหมายงานซ่อม");
   assert.ok(assigned.body.line_notification.results.some((r) => r.recipient_type === "user" && r.delivery_status === "sent" && r.recipient_label === "ช่างสมชาย"));
 
-  // ช่างเริ่มซ่อม → ผู้แจ้งยังไม่เชื่อม LINE จึงบันทึกเป็น not_linked และไม่ส่งเข้ากลุ่มเอง
+  // ซ่อมเสร็จต้องแนบภาพหลังซ่อมก่อน
+  const noPhoto = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed" }, 3);
+  assert.equal(noPhoto.status, 400); assert.equal(noPhoto.body.code, "after_photo_required");
+  // ช่างกดซ่อมเสร็จ → แจ้งกลุ่ม (ยังไม่ได้ตั้งหัวหน้าฝ่าย) · ผู้แจ้งยังไม่เชื่อม LINE จึงบันทึกเป็น not_linked
+  addAfterPhoto(env, created.body.id);
   lineCalls.length = 0;
-  const started = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "in_progress" }, 3);
+  const started = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed" }, 3);
   assert.equal(started.status, 200, JSON.stringify(started.body));
-  assert.equal(lineCalls.filter((c) => c.path === "/v2/bot/message/push").length, 0);
-  assert.equal(started.body.line_notification.delivery_status, "not_linked");
+  assert.deepEqual(lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body.to), ["Cgroup000000001"]);
   const log = env.raw.prepare("SELECT recipient_type,recipient_user_id,delivery_status FROM maintenance_notifications WHERE request_id=? ORDER BY id").all(created.body.id);
-  assert.deepEqual(log.map((row) => `${row.recipient_type}:${row.recipient_user_id ?? "-"}:${row.delivery_status}`),
-    ["user:3:sent", "group:-:sent", "user:2:not_linked"]);
+  assert.deepEqual(log.map((row) => `${row.recipient_type}:${row.recipient_user_id ?? "-"}:${row.delivery_status}`).sort(),
+    ["group:-:sent", "group:-:sent", "user:2:not_linked", "user:3:sent"]);
 
   // ช่างบล็อก OA → หยุดส่งรายบุคคล
   await webhook(env, [{ type: "unfollow", webhookEventId: "unfollow-1", source: { type: "user", userId: "Utech0000000001" } }]);
@@ -209,7 +214,9 @@ test("repair requests go to the general-administration head instead of the schoo
   pushes = lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body.to);
   assert.deepEqual(pushes, ["Utech0000000002"]);
   // ช่างซ่อมเสร็จ → หัวหน้าฝ่ายและผู้แจ้งได้รับ (ผู้แจ้งยังไม่เชื่อม LINE)
-  await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "in_progress" }, 3);
+  // หัวหน้าฝ่ายเห็นงานใหม่ในกระดิ่งก่อนมอบหมาย? (มอบหมายไปแล้ว) → ช่างเห็นงานที่ได้รับมอบหมาย
+  assert.ok((await call(env, "/api/notifications", "GET", null, 3)).body.notifications.some((n) => n.message_key.startsWith(`maintenance:${created.body.id}:assignee`)));
+  addAfterPhoto(env, created.body.id);
   lineCalls.length = 0;
   const done = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed", resolution: "เปลี่ยนก๊อก" }, 3);
   assert.equal(done.status, 200, JSON.stringify(done.body));
@@ -217,12 +224,15 @@ test("repair requests go to the general-administration head instead of the schoo
   assert.equal((await call(env, "/api/maintenance/summary", "GET", null, 2)).body.can_manage, false, "ordinary teachers still cannot manage");
   // ผู้แจ้งเห็นในกระดิ่งแจ้งเตือนของ system ด้วย (แม้ไม่ได้เชื่อม LINE) และหายไปเมื่อตรวจรับ
   const bell = (await call(env, "/api/notifications", "GET", null, 2)).body.notifications;
-  const repairNote = bell.find((n) => n.message_key.startsWith(`maintenance:${created.body.id}:completed`));
+  const repairNote = bell.find((n) => n.message_key.startsWith(`maintenance:${created.body.id}:reporter`));
   assert.ok(repairNote, JSON.stringify(bell));
   assert.equal(repairNote.url, `/maintenance.html?request=${created.body.id}`);
-  assert.ok(!(await call(env, "/api/notifications", "GET", null, 3)).body.notifications.some((n) => n.message_key.startsWith("maintenance:")), "technician gets no bell item");
-  assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "verified" }, 2)).status, 200);
-  assert.ok(!(await call(env, "/api/notifications", "GET", null, 2)).body.notifications.some((n) => n.message_key.startsWith("maintenance:")));
+  assert.ok(!(await call(env, "/api/notifications", "GET", null, 3)).body.notifications.some((n) => n.message_key.startsWith("maintenance:")), "technician gets no bell item after completing");
+  // หัวหน้าฝ่ายเห็น "ซ่อมเสร็จแล้ว รอตรวจรับ" และเป็นผู้ตรวจรับ (ผู้แจ้งตรวจรับไม่ได้แล้ว)
+  assert.ok((await call(env, "/api/notifications", "GET", null, 4)).body.notifications.some((n) => n.message_key.startsWith(`maintenance:${created.body.id}:head-done`)));
+  assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "verified" }, 2)).status, 403);
+  assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "verified" }, 4)).status, 200);
+  assert.ok(!(await call(env, "/api/notifications", "GET", null, 4)).body.notifications.some((n) => n.message_key.startsWith(`maintenance:${created.body.id}:head`)));
 });
 
 test("repair photos are stored in Google Drive like other new files", async () => {
@@ -271,7 +281,8 @@ test("technician can mark an assigned repair as completed directly", async () =>
   const env = fixture();
   const created = await call(env, "/api/maintenance/requests", "POST", { title: "ไฟดับ", description: "ห้อง 1", category: "electrical", custom_location: "ห้อง 1", defer_notification: true }, 2);
   assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "assigned", assigned_to: 3 }, 1)).status, 200);
-  const done = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed", resolution: "เปลี่ยนฟิวส์" }, 3);
+  addAfterPhoto(env, created.body.id);
+  const done = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed" }, 3);
   assert.equal(done.status, 200, JSON.stringify(done.body));
   const row = env.raw.prepare("SELECT status, started_at, completed_at FROM maintenance_requests WHERE id=?").get(created.body.id);
   assert.equal(row.status, "completed"); assert.ok(row.started_at); assert.ok(row.completed_at);

@@ -3037,12 +3037,14 @@ const FACILITY_STATUSES = ["active", "maintenance", "closed"];
 const MAINTENANCE_CATEGORIES = ["electrical", "plumbing", "building", "equipment", "it", "sanitation", "grounds", "other"];
 const MAINTENANCE_PRIORITIES = ["low", "normal", "high", "urgent"];
 const MAINTENANCE_STATUSES = ["reported", "assigned", "in_progress", "waiting_parts", "completed", "verified", "cancelled"];
+// ขั้นตอน: แจ้ง → หัวหน้าฝ่ายมอบหมาย → ผู้รับมอบหมายแนบภาพหลังซ่อม + กดซ่อมเสร็จ → หัวหน้าฝ่ายตรวจรับ (หรือส่งกลับให้ซ่อมใหม่)
+// in_progress / waiting_parts เป็นสถานะเดิม เก็บไว้ให้ใบเก่าไปต่อได้เท่านั้น
 const MAINTENANCE_TRANSITIONS = {
   reported: ["assigned", "cancelled"],
-  assigned: ["reported", "in_progress", "completed", "cancelled"], // ช่างกด "ซ่อมเสร็จ" ได้ทันทีโดยไม่ต้องผ่าน "กำลังซ่อม"
-  in_progress: ["waiting_parts", "completed", "cancelled"],
-  waiting_parts: ["in_progress", "completed", "cancelled"],
-  completed: ["in_progress", "verified"],
+  assigned: ["reported", "completed", "cancelled"],
+  in_progress: ["assigned", "completed", "cancelled"],
+  waiting_parts: ["assigned", "completed", "cancelled"],
+  completed: ["assigned", "verified"],
   verified: [],
   cancelled: ["reported"],
 };
@@ -3263,7 +3265,7 @@ async function handleGetMaintenanceRequest(request, env, requestId) {
       after_url:item.after_attachment_id?`/api/attachments/${item.after_attachment_id}`:null},
     updates:updates.map((row)=>({...row,cost_amount:Number(row.cost_amount||0)})), notifications,
     permissions:{ can_manage:canManageMaintenance(user), can_operate:canManageMaintenance(user)||item.assigned_to===user.id,
-      can_verify:canManageMaintenance(user)||item.reported_by===user.id, can_upload:item.reported_by===user.id||item.assigned_to===user.id||canManageMaintenance(user) },
+      can_verify:canManageMaintenance(user), can_upload:item.reported_by===user.id||item.assigned_to===user.id||canManageMaintenance(user) },
   });
 }
 
@@ -3308,7 +3310,9 @@ async function handleUpdateMaintenanceRequest(request, env, requestId) {
   if (statusChanged) {
     if (["assigned","cancelled","reported"].includes(nextStatus) && !manager) return jsonResponse({ error: "เฉพาะผู้บริหารหรือเจ้าหน้าที่เท่านั้นที่เปลี่ยนสถานะนี้ได้" },403);
     if (["in_progress","waiting_parts","completed"].includes(nextStatus) && !manager && !assigned) return jsonResponse({ error: "เฉพาะผู้รับผิดชอบหรือเจ้าหน้าที่เท่านั้นที่อัปเดตงานซ่อมได้" },403);
-    if (nextStatus === "verified" && !manager && !reporter) return jsonResponse({ error: "เฉพาะผู้แจ้งหรือเจ้าหน้าที่เท่านั้นที่ตรวจรับงานได้" },403);
+    if (nextStatus === "verified" && !manager) return jsonResponse({ error: "เฉพาะหัวหน้าฝ่ายหรือเจ้าหน้าที่เท่านั้นที่ตรวจรับงานซ่อมได้" },403);
+    if (nextStatus === "completed" && !(await env.DB.prepare("SELECT 1 FROM file_attachments WHERE entity_type='maintenance_after' AND entity_id=?").bind(requestId).first()))
+      return jsonResponse({ error: "กรุณาแนบภาพหลังซ่อมก่อนกดซ่อมเสร็จ", code: "after_photo_required" },400);
   }
   if (!statusChanged && !manager && !assigned) return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขใบแจ้งซ่อมนี้" },403);
   let assignedTo = item.assigned_to;
@@ -3324,9 +3328,9 @@ async function handleUpdateMaintenanceRequest(request, env, requestId) {
   if (body.due_date && !isIsoDate(body.due_date)) return jsonResponse({ error: "กำหนดเสร็จไม่ถูกต้อง" },400);
   if (nextStatus === "assigned" && !assignedTo) return jsonResponse({ error: "กรุณาเลือกผู้รับผิดชอบก่อนมอบหมายงาน" },400);
   const resolution = body.resolution===undefined ? item.resolution : cleanText(body.resolution,2000);
-  if (nextStatus === "completed" && !resolution) return jsonResponse({ error: "กรุณาระบุวิธีแก้ไขก่อนปิดงานซ่อม" },400);
+
   const comment = cleanText(body.comment,1500);
-  if (statusChanged && !comment && ["cancelled","waiting_parts"].includes(nextStatus)) return jsonResponse({ error: "กรุณาระบุเหตุผลประกอบการเปลี่ยนสถานะ" },400);
+  if (statusChanged && !comment && (["cancelled","waiting_parts"].includes(nextStatus) || (item.status === "completed" && nextStatus === "assigned"))) return jsonResponse({ error: "กรุณาระบุเหตุผลประกอบการเปลี่ยนสถานะ" },400);
   await env.DB.prepare(`UPDATE maintenance_requests SET assigned_to=?,due_date=?,estimated_cost=?,actual_cost=?,resolution=?,status=?,
       started_at=CASE WHEN ? IN ('in_progress','completed') AND started_at IS NULL THEN datetime('now') ELSE started_at END,
       completed_at=CASE WHEN ?='completed' THEN datetime('now') WHEN ?='in_progress' THEN NULL ELSE completed_at END,
@@ -3392,7 +3396,7 @@ function buildMaintenanceFlex(item, eventType, origin, requestId, headline) {
 }
 
 function maintenanceHeadHeadline(eventType) {
-  return { reported:"มีแจ้งซ่อมใหม่ รอมอบหมายช่าง", assigned:"มอบหมายช่างแล้ว", completed:"ซ่อมเสร็จแล้ว รอผู้แจ้งตรวจรับ",
+  return { reported:"มีแจ้งซ่อมใหม่ รอมอบหมายช่าง", assigned:"มอบหมายช่างแล้ว", completed:"ซ่อมเสร็จแล้ว รอหัวหน้าฝ่ายตรวจรับ",
     verified:"ผู้แจ้งตรวจรับงานซ่อมแล้ว", cancelled:"งานซ่อมถูกยกเลิก", waiting_parts:"งานซ่อมรออะไหล่", in_progress:"เริ่มซ่อมแล้ว" }[eventType] || "อัปเดตงานแจ้งซ่อม";
 }
 

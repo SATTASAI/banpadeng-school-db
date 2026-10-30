@@ -9,7 +9,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -42,11 +42,20 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  FROM supervision_notifications n JOIN supervision_requests r ON r.id=n.request_id WHERE n.user_id=?`);tertiaryValues.push(user.id);}
  if(tables.has('security_notifications')){tertiaryTerms.push(`SELECT 'security:'||n.id,'ความปลอดภัยบัญชี',n.message,n.created_at,'/account.html#devices',n.read_at,NULL,1
  FROM security_notifications n WHERE n.user_id=?`);tertiaryValues.push(user.id);}
- // แจ้งซ่อม: ซ่อมเสร็จแล้ว รอผู้แจ้งตรวจรับ (หายไปเมื่อตรวจรับ) — LINE ส่งแยกอยู่แล้ว จึงไม่รวมใน feed ของ LINE
- if(!forLine&&tables.has('maintenance_requests')&&tables.has('maintenance_updates')){tertiaryTerms.push(`SELECT 'maintenance:'||m.id||':completed:'||COALESCE(m.completed_at,''),'แจ้งซ่อม: ซ่อมเสร็จแล้ว กรุณาตรวจรับ',
- m.title||COALESCE(' · '||NULLIF(m.resolution,''),''),COALESCE(m.completed_at,m.updated_at),'/maintenance.html?request='||m.id,NULL,NULL,1
- FROM maintenance_requests m WHERE m.reported_by=? AND m.status='completed'
- AND COALESCE((SELECT u.created_by FROM maintenance_updates u WHERE u.request_id=m.id AND u.new_status='completed' ORDER BY u.id DESC LIMIT 1),0)<>m.reported_by`);tertiaryValues.push(user.id);}
+ // แจ้งซ่อม (LINE ส่งแยกอยู่แล้ว จึงไม่รวมใน feed ของ LINE)
+ // หัวหน้าฝ่ายบริหารทั่วไป: แจ้งใหม่รอมอบหมาย / ซ่อมเสร็จรอตรวจรับ · ผู้รับมอบหมาย: งานที่ได้รับ · ผู้แจ้ง: ซ่อมเสร็จแล้ว
+ if(!forLine&&['maintenance_requests','maintenance_updates','department_staff','personnel_records','personnel_accounts'].every(t=>tables.has(t))){tertiaryTerms.push(`SELECT 'maintenance:'||x.id||':'||x.role||':'||x.stamp,x.title,x.request_no||' · '||x.mtitle,x.stamp,'/maintenance.html?request='||x.id,NULL,NULL,1 FROM (
+ SELECT m.id,m.request_no,m.title mtitle,
+  CASE WHEN me.head=1 AND m.status='reported' THEN 'head-new' WHEN me.head=1 AND m.status='completed' THEN 'head-done' WHEN m.status='assigned' AND m.assigned_to=me.uid THEN 'assignee' ELSE 'reporter' END role,
+  CASE WHEN me.head=1 AND m.status='reported' THEN 'แจ้งซ่อมใหม่ รอมอบหมาย' WHEN me.head=1 AND m.status='completed' THEN 'ซ่อมเสร็จแล้ว รอตรวจรับ' WHEN m.status='assigned' AND m.assigned_to=me.uid THEN 'ได้รับมอบหมายงานซ่อม' ELSE 'งานที่คุณแจ้งซ่อมเสร็จแล้ว' END title,
+  CASE WHEN m.status IN ('completed','verified') THEN COALESCE(m.completed_at,m.updated_at) ELSE m.updated_at END stamp
+ FROM maintenance_requests m JOIN (SELECT ? uid,EXISTS(SELECT 1 FROM department_staff d JOIN personnel_records p ON p.id=d.personnel_id AND p.status='active'
+  JOIN personnel_accounts a ON a.personnel_id=p.id WHERE d.department='general' AND d.is_head=1 AND a.user_id=?) head) me
+ WHERE (me.head=1 AND m.status IN ('reported','completed'))
+  OR (m.status='assigned' AND m.assigned_to=me.uid AND COALESCE((SELECT u.created_by FROM maintenance_updates u WHERE u.request_id=m.id ORDER BY u.id DESC LIMIT 1),0)<>me.uid)
+  OR (m.reported_by=me.uid AND m.status IN ('completed','verified') AND m.completed_at>=datetime('now','-30 days')
+   AND COALESCE((SELECT u.created_by FROM maintenance_updates u WHERE u.request_id=m.id AND u.new_status='completed' ORDER BY u.id DESC LIMIT 1),0)<>me.uid)
+ ) x`);tertiaryValues.push(user.id,user.id);}
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}

@@ -59,13 +59,13 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
   </section>
 
   <section id="tab-stats" hidden>
-    <div class="fc-filters"><label>ช่วงเวลา (ตามวันที่แจ้ง)<select id="statYear"></select></label></div>
+    <div class="fc-filters"><label>ช่วงเวลา (ตามวันที่แจ้ง)<select id="statYear"></select></label><label>ส่งออก<button type="button" class="btn btn-primary" id="statExport">ส่งออก Excel (.xlsx)</button></label></div>
     <div class="fc-cards" id="statCards"></div>
     <div class="fc-grid">
-      <div class="fc-panel wide"><h2>รายเดือน</h2><div class="legend"><span><i style="background:#F2A922"></i>รอซ่อมแซม</span><span><i style="background:#2B86E5"></i>กำลังซ่อม</span><span><i style="background:#1AA36F"></i>ซ่อมแล้ว</span></div><div id="byMonth"></div></div>
+      <div class="fc-panel wide"><h2>รายเดือน</h2><div class="legend"><span><i style="background:#F2A922"></i>รอซ่อมแซม</span><span><i style="background:#2B86E5"></i>กำลังซ่อม</span><span><i style="background:#1AA36F"></i>ซ่อมแล้ว</span></div><div id="byMonth"></div><div id="byMonthTable" style="margin-top:12px"></div></div>
       <div class="fc-panel"><h2>ตามอาคาร/สถานที่</h2><div id="byPlace"></div></div>
       <div class="fc-panel"><h2>ตามประเภทงาน</h2><div id="byCat"></div></div>
-      <div class="fc-panel wide"><h2>ตามช่าง/ผู้รับผิดชอบ</h2><div id="byTech"></div></div>
+      <div class="fc-panel wide"><h2>รายผู้ได้รับมอบหมาย</h2><div id="byTech"></div></div>
     </div>
     <p class="fc-note">ไม่นับใบแจ้งซ่อมที่ยกเลิก · ระยะเวลาซ่อมเสร็จ = จากวันที่แจ้งถึงวันที่ซ่อมเสร็จ</p>
   </section>
@@ -96,7 +96,7 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const GROUP={reported:"wait",assigned:"work",in_progress:"work",waiting_parts:"work",completed:"done",verified:"done",cancelled:"cancel"};
-const GROUP_LABEL={wait:"รอซ่อมแซม",work:"กำลังซ่อม",done:"ซ่อมแล้ว",cancel:"ยกเลิก"};
+const GROUP_LABEL={wait:"รอมอบหมาย",work:"มอบหมายแล้ว/กำลังซ่อม",done:"ซ่อมแล้ว",cancel:"ยกเลิก"};
 const STATUS={reported:"รับแจ้ง",assigned:"ช่างรับงาน",in_progress:"กำลังซ่อม",waiting_parts:"รออะไหล่",completed:"ซ่อมเสร็จ (รอตรวจรับ)",verified:"ตรวจรับแล้ว",cancelled:"ยกเลิก"};
 const CATEGORY={electrical:"ไฟฟ้า",plumbing:"ประปา",building:"อาคาร",equipment:"อุปกรณ์",it:"คอมพิวเตอร์/เครือข่าย",sanitation:"สุขาภิบาล",grounds:"พื้นที่ภายนอก",other:"อื่น ๆ"};
 const FACILITY_TYPE={building:"อาคาร",classroom:"ห้องเรียน",office:"สำนักงาน",restroom:"ห้องน้ำ",utility:"สาธารณูปโภค",grounds:"พื้นที่ภายนอก",other:"อื่น ๆ"};
@@ -151,6 +151,35 @@ function renderStats(){
   $("byPlace").innerHTML=groupTable(items,placeOf);
   $("byCat").innerHTML=groupTable(items,r=>r.category,k=>CATEGORY[k]||k);
   $("byTech").innerHTML=groupTable(items,r=>r.assignee_name||"ยังไม่มีผู้รับงาน");
+  const mt=monthlyRows(items);
+  $("byMonthTable").innerHTML=mt.length?`<div style="overflow:auto"><table class="mini"><thead><tr><th>เดือน</th><th>แจ้งซ่อม</th><th style="color:#137A50">ซ่อมเสร็จในเดือน</th><th style="color:#9A5B00">ยังไม่เสร็จ (จากที่แจ้ง)</th><th>เฉลี่ยซ่อมเสร็จ</th></tr></thead><tbody>${mt.map(r=>`<tr><td>${thMonth(r.k)}</td><td>${r.reported}</td><td>${r.done}</td><td>${r.open}</td><td>${fmtDays(r.avg)}</td></tr>`).join("")}</tbody></table></div>`:"";
+}
+// สถิติรายเดือน: แจ้ง (ตามวันที่แจ้ง) / ซ่อมเสร็จ (ตามวันที่ซ่อมเสร็จ) / ยังไม่เสร็จ / เวลาเฉลี่ยของงานที่เสร็จในเดือน
+function monthlyRows(items){
+  const m=new Map(),get=k=>{if(!m.has(k))m.set(k,{k,reported:0,done:0,open:0,sum:0});return m.get(k)};
+  for(const r of items){const a=get(monthOf(r.created_at));a.reported++;if(GROUP[r.status]!=="done")a.open++;
+    if(GROUP[r.status]==="done"&&r.completed_at){const b=get(monthOf(r.completed_at));b.done++;b.sum+=daysBetween(r.created_at,r.completed_at)}}
+  return [...m.values()].sort((a,b)=>b.k.localeCompare(a.k)).map(r=>({...r,avg:r.done?r.sum/r.done:null}));
+}
+function statRows(items,keyFn,labelFn=k=>k){
+  const m=new Map();for(const r of items){const k=keyFn(r);if(!m.has(k))m.set(k,[]);m.get(k).push(r)}
+  return [...m.entries()].map(([k,rs])=>{const done=rs.filter(r=>GROUP[r.status]==="done"&&r.completed_at);const avg=done.length?done.reduce((s,r)=>s+daysBetween(r.created_at,r.completed_at),0)/done.length:null;
+    return {[""]:labelFn(k),"รวม":rs.length,"รอมอบหมาย":rs.filter(r=>GROUP[r.status]==="wait").length,"มอบหมายแล้ว/กำลังซ่อม":rs.filter(r=>GROUP[r.status]==="work").length,"ซ่อมแล้ว":rs.filter(r=>GROUP[r.status]==="done").length,"เฉลี่ยซ่อมเสร็จ (วัน)":avg==null?"":Math.round(avg*10)/10}}).sort((a,b)=>b["รวม"]-a["รวม"]);
+}
+let xlsxLoading=null;
+function loadXlsx(){if(window.XLSX)return Promise.resolve(window.XLSX);return xlsxLoading||=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=()=>window.XLSX?ok(window.XLSX):no(new Error("โหลดเครื่องมือไม่สำเร็จ"));s.onerror=()=>{xlsxLoading=null;no(new Error("โหลดเครื่องมือส่งออกไม่สำเร็จ กรุณาลองใหม่"))};document.head.append(s)})}
+async function exportStats(){
+  const btn=$("statExport");btn.disabled=true;
+  try{
+    const X=await loadXlsx(),y=$("statYear").value,all=requests.filter(r=>!y||dayOf(r.created_at).startsWith(y)),items=all.filter(r=>r.status!=="cancelled");
+    const book=X.utils.book_new(),add=(rows,name,widths)=>{const ws=X.utils.json_to_sheet(rows.length?rows:[{"":"ยังไม่มีข้อมูล"}]);if(widths)ws["!cols"]=widths.map(w=>({wch:w}));X.utils.book_append_sheet(book,ws,name)};
+    add(all.sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(r=>({"เลขที่":r.request_no,"วันที่แจ้ง":dayOf(r.created_at),"เรื่อง":r.title,"อาคาร/สถานที่":placeOf(r),"จุด/ห้อง":r.facility_name||r.custom_location||r.inventory_name||"","ประเภท":CATEGORY[r.category]||r.category,"ผู้แจ้ง":r.reporter_name||"","ผู้ได้รับมอบหมาย":r.assignee_name||"","สถานะ":STATUS[r.status]||r.status,"วันที่ซ่อมเสร็จ":r.completed_at?dayOf(r.completed_at):"","ใช้เวลา (วัน)":r.completed_at?Math.round(daysBetween(r.created_at,r.completed_at)*10)/10:"","ค่าใช้จ่ายจริง (บาท)":Number(r.actual_cost||0)})),"รายการแจ้งซ่อม",[14,12,30,22,22,16,22,22,22,14,12,16]);
+    add(monthlyRows(items).map(r=>({"เดือน":thMonth(r.k),"แจ้งซ่อม":r.reported,"ซ่อมเสร็จในเดือน":r.done,"ยังไม่เสร็จ (จากที่แจ้ง)":r.open,"เฉลี่ยซ่อมเสร็จ (วัน)":r.avg==null?"":Math.round(r.avg*10)/10})),"รายเดือน",[14,10,16,20,18]);
+    add(statRows(items,r=>r.assignee_name||"ยังไม่มีผู้รับงาน"),"รายผู้ได้รับมอบหมาย",[26,8,12,22,10,18]);
+    add(statRows(items,placeOf),"ตามอาคาร",[26,8,12,22,10,18]);
+    add(statRows(items,r=>r.category,k=>CATEGORY[k]||k),"ตามประเภท",[22,8,12,22,10,18]);
+    X.writeFile(book,`สถิติแจ้งซ่อม${y?` ${Number(y)+543}`:""}.xlsx`);
+  }catch(e){showErr(e.message)}finally{btn.disabled=false}
 }
 function renderRegistry(){
   $("regTools").hidden=!canManage;
@@ -162,7 +191,7 @@ function renderRegistry(){
 $("tabs").onclick=e=>{const b=e.target.closest("[data-tab]");if(!b)return;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));["report","stats","registry"].forEach(t=>$("tab-"+t).hidden=t!==b.dataset.tab)};
 $("statusCards").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;statusFilter=b.dataset.g;renderReport()};
 ["q","month","place","cat"].forEach(id=>$(id).addEventListener(id==="q"?"input":"change",renderReport));
-$("statYear").onchange=renderStats;
+$("statYear").onchange=renderStats;$("statExport").onclick=exportStats;
 $("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)location.href=`/maintenance.html?request=${tr.dataset.id}`};
 let editId=null;
 function openForm(f){
