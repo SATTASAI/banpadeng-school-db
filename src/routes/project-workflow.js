@@ -27,10 +27,13 @@ export async function ensureProjectWorkflowSchema(env) {
   if (ready.has(env.DB)) return;
   try { await env.DB.prepare("ALTER TABLE projects ADD COLUMN funding_type TEXT").run(); }
   catch (e) { if (!String(e.message).toLowerCase().includes("duplicate column")) throw e; }
-  for (const [name, type] of [["workflow_version", "INTEGER NOT NULL DEFAULT 1"], ["priority", "TEXT NOT NULL DEFAULT 'normal'"], ["finance_received_by", "INTEGER"], ["finance_received_at", "TEXT"]]) {
+  for (const [name, type] of [["workflow_version", "INTEGER NOT NULL DEFAULT 1"], ["priority", "TEXT NOT NULL DEFAULT 'normal'"], ["finance_received_by", "INTEGER"], ["finance_received_at", "TEXT"], ["procurement_kind", "TEXT"]]) {
     try { await env.DB.prepare(`ALTER TABLE project_expenses ADD COLUMN ${name} ${type}`).run(); }
     catch (e) { if (!String(e.message).toLowerCase().includes("duplicate column")) throw e; }
   }
+  // หมายเหตุรายรายการ ตามช่อง "หมายเหตุ" ในรายละเอียดของพัสดุที่ต้องการใช้
+  try { await env.DB.prepare("ALTER TABLE budget_request_items ADD COLUMN note TEXT").run(); }
+  catch (e) { const m = String(e.message).toLowerCase(); if (!m.includes("duplicate column") && !m.includes("no such table")) throw e; }
   await env.DB.batch([
     env.DB.prepare("CREATE TABLE IF NOT EXISTS admin_cleanup_expense_guard(expense_id INTEGER PRIMARY KEY)"),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS project_workflow_events (
@@ -232,6 +235,7 @@ async function overview(request, env, user) {
     can_attach: finance || projects.find(p => p.id === e.project_id)?.can_request || Number(e.created_by) === Number(user.id) })) });
 }
 
+export const PROCUREMENT_KINDS = ["purchase", "hire", "both"];
 function parseBody(body) {
   if (!body || !validDate(body.expense_date) || !clean(body.request_purpose) || !clean(body.necessity)) return { error: "กรุณาระบุวันที่ วัตถุประสงค์ และเหตุผลความจำเป็น" };
   if (body.needed_date && !validDate(body.needed_date)) return { error: "วันที่ต้องการใช้เงินไม่ถูกต้อง" };
@@ -240,7 +244,7 @@ function parseBody(body) {
   for (const [index, r] of body.items.entries()) {
     const quantity = Number(r.quantity), price = Number(r.unit_price), amount = multiplyMoney(quantity,price);
     if (!clean(r.description,500) || !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(price) || price < 0 || !Number.isSafeInteger(Math.round(amount * 100))) return { error: `รายการที่ ${index+1} ไม่ถูกต้อง` };
-    items.push({ description: clean(r.description,500), category: categories.includes(r.category) ? r.category : "other", quantity, unit: clean(r.unit,100), price, amount });
+    items.push({ description: clean(r.description,500), category: categories.includes(r.category) ? r.category : "other", quantity, unit: clean(r.unit,100), price, amount, note: clean(r.note,300) });
   }
   const total = sumMoney(items.map(r=>r.amount));
   if (!(total > 0)) return { error: "ยอดเบิกต้องมากกว่า 0 บาท" };
@@ -260,20 +264,21 @@ async function saveDraft(request, env, user, id = null) {
   const source = project.funding_type;
   const method = ["transfer","cash","cheque","other"].includes(body.payment_preference) ? body.payment_preference : "transfer";
   const priority = ["normal","high","urgent"].includes(body.priority) ? body.priority : "normal";
-  const values = [body.expense_date,clean(body.request_purpose),clean(body.payee,250),parsed.total,clean(body.notes),clean(body.request_purpose),clean(body.necessity),source,method,body.needed_date || null,priority];
+  const kind = PROCUREMENT_KINDS.includes(body.procurement_kind) ? body.procurement_kind : null;
+  const values = [body.expense_date,clean(body.request_purpose),clean(body.payee,250),parsed.total,clean(body.notes),clean(body.request_purpose),clean(body.necessity),source,method,body.needed_date || null,priority,kind];
   let requestId = id;
   if (!id) {
     const counter = await env.DB.prepare(`INSERT INTO budget_counters(fiscal_year,last_number) VALUES(?,1) ON CONFLICT(fiscal_year) DO UPDATE SET last_number=last_number+1 RETURNING last_number`).bind(project.fiscal_year).first();
     const number = `BUD-${project.fiscal_year}-${String(counter.last_number).padStart(4,"0")}`;
-    const result = await env.DB.prepare(`INSERT INTO project_expenses(project_id,expense_date,description,payee,amount,notes,request_purpose,necessity,source_type,payment_preference,needed_date,priority,
-      status,category,current_step,created_by,request_no,fiscal_year,workflow_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'draft','other','draft',?,?,?,2)`)
+    const result = await env.DB.prepare(`INSERT INTO project_expenses(project_id,expense_date,description,payee,amount,notes,request_purpose,necessity,source_type,payment_preference,needed_date,priority,procurement_kind,
+      status,category,current_step,created_by,request_no,fiscal_year,workflow_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'draft','other','draft',?,?,?,2)`)
       .bind(projectId,...values,user.id,number,project.fiscal_year).run();
     requestId = result.meta.last_row_id;
   }
   const statements = [];
-  if (id) statements.push(env.DB.prepare(`UPDATE project_expenses SET expense_date=?,description=?,payee=?,amount=?,notes=?,request_purpose=?,necessity=?,source_type=?,payment_preference=?,needed_date=?,priority=?,updated_at=datetime('now') WHERE id=? AND status='draft'`).bind(...values,id));
+  if (id) statements.push(env.DB.prepare(`UPDATE project_expenses SET expense_date=?,description=?,payee=?,amount=?,notes=?,request_purpose=?,necessity=?,source_type=?,payment_preference=?,needed_date=?,priority=?,procurement_kind=?,updated_at=datetime('now') WHERE id=? AND status='draft'`).bind(...values,id));
   statements.push(env.DB.prepare("DELETE FROM budget_request_items WHERE expense_id=?").bind(requestId));
-  parsed.items.forEach((r,i) => statements.push(env.DB.prepare(`INSERT INTO budget_request_items(expense_id,line_no,category,description,quantity,unit,unit_price,amount) VALUES(?,?,?,?,?,?,?,?)`).bind(requestId,i+1,r.category,r.description,r.quantity,r.unit,r.price,r.amount)));
+  parsed.items.forEach((r,i) => statements.push(env.DB.prepare(`INSERT INTO budget_request_items(expense_id,line_no,category,description,quantity,unit,unit_price,amount,note) VALUES(?,?,?,?,?,?,?,?,?)`).bind(requestId,i+1,r.category,r.description,r.quantity,r.unit,r.price,r.amount,r.note || null)));
   await env.DB.batch(statements);
   return jsonResponse({ id: requestId, saved_as_draft: true }, id ? 200 : 201);
 }

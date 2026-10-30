@@ -4277,10 +4277,38 @@ async function handleFindDocumentDuplicates(request, env) {
   return jsonResponse({ duplicates });
 }
 
+// แบบฟอร์มกลางที่ระบบนำขึ้น "เอกสารและคลังไฟล์" ให้บุคลากรดาวน์โหลด (ทำครั้งเดียว ถ้ามีแล้วข้าม)
+const SEEDED_FORMS = [{ path: "/forms/memo-procurement-request.pdf", file: "แบบบันทึกขออนุมัติดำเนินโครงการและขออนุมัติใช้เงินโรงเรียน.pdf",
+  title: "แบบบันทึกข้อความ ขออนุมัติดำเนินโครงการและขออนุมัติใช้เงินโรงเรียน (จัดซื้อ/จัดจ้าง)", department: "budget", type: "แบบฟอร์ม",
+  keywords: "แบบฟอร์ม จัดซื้อ จัดจ้าง ขออนุมัติ ใช้เงิน บันทึกข้อความ พัสดุ" }];
+const seededFormsDone = new WeakSet();
+async function seedFormDocuments(env) {
+  if (seededFormsDone.has(env.DB) || !env.ASSETS) return;
+  for (const form of SEEDED_FORMS) {
+    const exists = await env.DB.prepare("SELECT d.id,a.id attachment_id FROM documents d LEFT JOIN file_attachments a ON a.entity_type='document' AND a.entity_id=d.id WHERE d.title=? AND d.document_type=? AND COALESCE(d.record_status,'active')<>'archived' LIMIT 1").bind(form.title, form.type).first();
+    if (exists?.attachment_id) continue;
+    const owner = await env.DB.prepare("SELECT id FROM users WHERE role='superadmin' AND status='active' AND deleted_at IS NULL ORDER BY id LIMIT 1").first();
+    if (!owner || requireDriveConfig(env)) return;
+    const asset = await env.ASSETS.fetch(new Request("https://assets.local" + form.path));
+    if (!asset.ok) continue;
+    const bytes = await asset.arrayBuffer();
+    let id = exists?.id;
+    if (!id) id = (await env.DB.prepare(`INSERT INTO documents(title,department,management_area,document_type,keywords,access_level,uploaded_by,record_status,upload_status)
+      VALUES(?,?,?,?,?,'staff',?,'active','uploading')`).bind(form.title, storedDepartment(form.department), managementArea(form.department), form.type, form.keywords, owner.id).run()).meta.last_row_id;
+    const file = new File([bytes], form.file, { type: "application/pdf" });
+    const drive = await uploadToGoogleDrive(env, file, "document", id, form.file, "application/pdf");
+    const attachmentId = (await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url,file_hash)
+      VALUES('document',?,?,?,?,?,?,'drive',?,?,?)`).bind(id, `drive/${crypto.randomUUID()}`, form.file, "application/pdf", bytes.byteLength, owner.id, drive?.id || null, drive?.webViewLink || null, await hashManagedFile(file)).run()).meta.last_row_id;
+    await env.DB.prepare("UPDATE documents SET upload_status='success',upload_error=NULL,file_name=?,mime_type='application/pdf',file_size=?,file_url=?,attachment_updated_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(form.file, bytes.byteLength, `/api/attachments/${attachmentId}`, id).run();
+  }
+  seededFormsDone.add(env.DB);
+}
+
 async function handleListDocuments(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureExtendedSchema(env);
+  await seedFormDocuments(env).catch((error) => console.error("seed forms", error));
   const params = new URL(request.url).searchParams;
   const q = cleanText(params.get("q"),100) || "";
   const view = params.get("view") === "archive" ? "archive" : "active";

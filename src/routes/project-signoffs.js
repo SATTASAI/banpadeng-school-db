@@ -147,8 +147,10 @@ export async function memoDocument(env, id) {
   const sufficient = remaining >= 0;
   const financeDone = Boolean(financeRow?.status === "approved" || ["director_approval", "budget_head_review", "budget_deputy_review", "finance_ready", "completed"].includes(row.current_step) || row.status === "paid");
   const decided = (key) => so[key]?.status === "approved" ? "approve" : so[key]?.status === "rejected" ? "reject" : null;
-  const kind = items.some((i) => i.category === "services") && !items.some((i) => ["materials", "equipment"].includes(i.category)) ? "จัดจ้าง" : "จัดซื้อ";
-  const itemRows = items.map((i) => `<tr><td class="c">${i.line_no}</td><td>${esc(i.description)}</td><td class="c">${Number(i.quantity).toLocaleString("th-TH")} ${esc(i.unit || "")}</td><td class="r">${baht(i.unit_price)}</td><td class="r">${baht(i.amount)}</td><td></td></tr>`).join("");
+  const kind = { purchase: "จัดซื้อ", hire: "จัดจ้าง", both: "จัดซื้อ/จัดจ้าง" }[row.procurement_kind]
+    || (items.some((i) => i.category === "services") && !items.some((i) => ["materials", "equipment"].includes(i.category)) ? "จัดจ้าง" : "จัดซื้อ");
+  const position = (await env.DB.prepare(`SELECT p.position FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id WHERE a.user_id=? LIMIT 1`).bind(row.created_by).first().catch(() => null))?.position || "";
+  const itemRows = items.map((i) => `<tr><td class="c">${i.line_no}</td><td>${esc(i.description)}</td><td class="c">${Number(i.quantity).toLocaleString("th-TH")} ${esc(i.unit || "")}</td><td class="r">${baht(i.unit_price)}</td><td class="r">${baht(i.amount)}</td><td>${esc(i.note || "")}</td></tr>`).join("");
   const blank = Math.max(0, 12 - items.length);
   const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>บันทึกขออนุมัติ ${esc(row.request_no)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
@@ -164,7 +166,7 @@ table{width:100%;border-collapse:collapse;margin-top:8px;font-size:11pt}th,td{bo
 <div class="toolbar"><button onclick="print()">พิมพ์ / บันทึก PDF</button></div>
 <section class="page">
 <div class="reg">ที่ ${fill("", 4)}<br>ลว. ${fill("", 4)}<br>เลขที่ (ซ./จ.) ${fill("", 3)}<br>${fill("", 6)}</div>
-<div style="min-height:24mm;padding-top:5mm"><h1 style="margin:0">บันทึกข้อความ</h1></div>
+<div style="min-height:24mm;padding-top:5mm;position:relative"><img src="/img/garuda.jpg" alt="ตราครุฑ" style="position:absolute;left:0;top:0;width:15mm;height:auto"><h1 style="margin:0">บันทึกข้อความ</h1></div>
 <p><b>ส่วนราชการ</b> โรงเรียนบ้านป่าเด็ง ตำบลป่าเด็ง อำเภอแก่งกระจาน จังหวัดเพชรบุรี</p>
 <div class="row"><p><b>ที่</b> ${fill("", 8)}</p><p><b>วันที่</b> ${fill(fullDate(row.expense_date), 8)}</p></div>
 <p><b>เรื่อง</b> ขออนุมัติดำเนินโครงการและขออนุมัติใช้เงินโรงเรียน</p>
@@ -189,7 +191,7 @@ ${signBlock(names.deputy, "", at("dept_deputy"), signed("dept_deputy"))}</div></
 <p>เบิกครั้งนี้แล้วคงเหลือ ${fill(financeDone ? baht(remaining) : "", 4)} บาท (${fill(financeDone ? bahtText(Math.max(0, remaining)) : "", 18)})</p></div>
 <div class="grid2">
 <div><p>${box(financeDone && sufficient)} มีงบประมาณเพียงพอต่อการขอเบิก</p><p>${box(financeDone && !sufficient)} มีงบประมาณไม่เพียงพอต่อการขอเบิก</p>
-<p>&nbsp;&nbsp;&nbsp;&nbsp;ใช้งบประมาณจาก ${fill("", 6)}</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;ใช้งบประมาณจาก ${fill(financeDone && !sufficient ? financeRow?.note || "" : "", 6)}</p>
 ${signBlock(financeName, "เจ้าหน้าที่การเงิน", financeRow?.acted_at, financeDone && Boolean(financeRow?.acted_at))}</div>
 <div><p class="b" style="text-align:center">ความเห็นของหัวหน้าฝ่ายบริหารงานงบประมาณ</p>
 <p style="text-align:center">${box(signed("budget_head"))} รับทราบ</p><p>${so.budget_head?.note ? esc(so.budget_head.note) : "&nbsp;"}</p>
@@ -213,7 +215,7 @@ ${signBlock(names.budgetDeputy, "", at("budget_deputy"), signed("budget_deputy")
 <table><thead><tr><th style="width:8%">ที่</th><th>รายการ</th><th style="width:14%">จำนวน</th><th style="width:15%">ราคาต่อหน่วย</th><th style="width:15%">ราคารวม</th><th style="width:12%">หมายเหตุ</th></tr></thead>
 <tbody>${itemRows}${"<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>".repeat(blank)}
 <tr><td colspan="4" class="c b">รวมเงินทั้งสิ้น (${esc(bahtText(row.amount))})</td><td class="r b">${baht(row.amount)}</td><td></td></tr></tbody></table>
-<div style="margin-left:45%;margin-top:18px">${signBlock(row.requester_name, "ผู้รับผิดชอบงาน/โครงการ", row.submitted_at, Boolean(row.submitted_at))}<div class="sign">ตำแหน่ง ${fill("", 7)}</div></div>
+<div style="margin-left:45%;margin-top:18px">${signBlock(row.requester_name, "ผู้รับผิดชอบงาน/โครงการ", row.submitted_at, Boolean(row.submitted_at))}<div class="sign">ตำแหน่ง ${fill(position, 7)}</div></div>
 <div class="ref">อ้างอิงคำขอ ${esc(row.request_no)}</div>
 </section></body></html>`;
   return { row, html };
