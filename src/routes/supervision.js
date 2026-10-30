@@ -52,6 +52,10 @@ const validDate=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&new Date(
 const weekdayOf=s=>{const d=new Date(s+'T00:00:00Z').getUTCDay();return d>=1&&d<=5?d:0;};
 const addDays=(s,n)=>{const d=new Date(s+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);};
 // เวลาปัจจุบันตามเวลาประเทศไทย
+// ปิดรับลงทะเบียนนิเทศจนถึงวันนี้ (เวลาไทย 00:00) — superadmin ยังลงได้
+export const SUPERVISION_OPEN_DATE='2026-11-02';
+const openDateOf=env=>env?.SUPERVISION_OPEN_DATE??SUPERVISION_OPEN_DATE;
+export function registrationClosed(env,user,now=bangkokNow()){return user?.role!=='superadmin'&&now.date<openDateOf(env);}
 export function bangkokNow(now=new Date()){const t=new Date(now.getTime()+7*3600000);return {date:t.toISOString().slice(0,10),minutes:t.getUTCHours()*60+t.getUTCMinutes()};}
 const minutesOf=hhmm=>{const [h,m]=String(hhmm).split(':').map(Number);return h*60+m;};
 export function slotStarted(date,startTime,now=bangkokNow()){return date<now.date||(date===now.date&&now.minutes>=minutesOf(startTime));}
@@ -285,7 +289,7 @@ async function week(env,user,url){
  days.forEach(d=>{d.holiday=holidays.get(d.date)||null;});
  const registered=new Map();
  for(const id of terms.keys()){const r=await termRequestOf(env,user.id,id);registered.set(id,r?{id:r.id,visit_date:r.visit_date,period:r.period}:null);}
- return reply({start,end:dates[4],now,linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,taken,
+ return reply({start,end:dates[4],now,closed:registrationClosed(env,user,now),open_date:openDateOf(env),linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,taken,
   terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,registered:registered.get(t.term.id),
    mode:t.plan?'timetable':'manual',times:t.structure.times,lunch:t.structure.lunch,
    lessons:t.lessons.map(l=>({entry_id:l.id,weekday:l.weekday,period:l.period,subject:l.subject,grade_level:l.grade_level,classroom:l.classroom,room_name:l.room_name}))})),
@@ -293,6 +297,7 @@ async function week(env,user,url){
 }
 
 async function createRequest(request,env,user){
+ if(registrationClosed(env,user))return fail('ยังไม่เปิดให้ลงทะเบียนนิเทศ เปิดวันที่ 2 พฤศจิกายน 2569',403);
  const body=await request.json().catch(()=>null);
  const date=body?.visit_date,period=Number(body?.period),type='teaching';
  if(!validDate(date)||!weekdayOf(date))return fail('เลือกวันจันทร์ถึงศุกร์ให้ถูกต้อง');

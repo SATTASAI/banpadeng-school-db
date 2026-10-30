@@ -62,6 +62,7 @@ async function renderRegister(){
   if(myBand&&took.includes(myBand))return `<td><div class="sv-slot full band-${myBand}" title="ลงคาบเดียวกันได้เฉพาะคนละช่วงชั้น">${label}${dots}<small style="margin-top:auto">ช่วงชั้น${U.BANDS[myBand]}ลงแล้ว</small></div></td>`;
   if((w.full||[]).includes(`${d.date}|${p}`))return `<td><div class="sv-slot full" title="ผู้ประเมินที่ว่างรับครบแล้ว">${label}<small style="margin-top:auto">คาบเต็ม</small></div></td>`;
   const act=d.holiday?.kind==='activity'?`<small class="sv-act">วันกิจกรรม${d.holiday.name?' · '+esc(d.holiday.name):''}</small>`:'';
+  if(w.closed)return `<td><div class="sv-slot open locked" aria-disabled="true">${label||'<small>คาบว่าง</small>'}${dots}${act}<span class="cta">ยังไม่เปิดลงทะเบียน</span></div></td>`;
   return `<td><button type="button" class="sv-slot open" data-book="${d.date}|${p}">${label||'<small>คาบว่างให้เลือก</small>'}${dots}${act}<span class="cta">+ เลือกคาบนี้</span></button></td>`;
  };
  let rows='';
@@ -76,6 +77,7 @@ async function renderRegister(){
  });
  const manual=w.terms.some(t=>t.mode==='manual'),timetable=w.terms.some(t=>t.mode==='timetable');
  const notices=[];
+ if(w.closed)notices.push(`<div class="sv-notice warn"><b>ยังไม่เปิดให้ลงทะเบียนนิเทศ</b> ดูคาบได้ แต่ยังเลือกคาบไม่ได้ เปิดให้ลงทะเบียนวันที่ ${U.date(w.open_date)} เวลา 00:00 น.</div>`);
  if(manual)notices.push('<div class="sv-notice warn">ภาคเรียนนี้ยังไม่มีตารางสอนที่เผยแพร่ เลือกคาบที่คุณสอนจริง แล้วกรอกวิชาและชั้นเรียนในหน้าต่างยืนยัน เมื่อฝ่ายวิชาการเผยแพร่ตารางสอนแล้ว ระบบจะแสดงเฉพาะคาบสอนของคุณให้อัตโนมัติ</div>');
  if(timetable&&!w.linked)notices.push('<div class="sv-notice error">บัญชีของคุณยังไม่ผูกกับทะเบียนบุคลากร ระบบจึงหาคาบสอนของคุณไม่ได้ กรุณาติดต่อผู้ดูแลระบบ</div>');
  w.terms.filter(t=>t.registered).forEach(t=>notices.push(`<div class="sv-notice">คุณลงทะเบียน${esc(t.name)}แล้ว (${U.date(t.registered.visit_date)} คาบ ${t.registered.period}) ลงทะเบียนได้ภาคเรียนละ 1 ครั้ง หากต้องการเปลี่ยนวันหรือคาบ ให้ยกเลิกนัดเดิมก่อนวันนิเทศอย่างน้อย 1 วัน</div>`));
@@ -87,7 +89,7 @@ async function renderRegister(){
   ${notices.join('')}
   ${U.bandLegend()}<p class="sv-hint" style="margin:-6px 0 0">คาบเดียวกันวันเดียวกันลงได้ช่วงชั้นละ 1 คน (จุดสีในช่อง = ช่วงชั้นที่ลงแล้ว)</p>
   <div class="sv-legend"><span><i style="border-color:#2B86E5"></i>เลือกได้</span><span><i style="background:#fff1dc"></i>รอผู้บริหารรับ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินแล้ว</span><span><i style="background:#f6f9fc"></i>ผ่านมาแล้ว / ไม่มีสอน</span></div>
-  <div class="sv-scroll"><table class="sv-grid"><thead><tr><th class="pcol">วัน</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  <div class="sv-scroll${w.closed?' sv-closed':''}"><table class="sv-grid"><thead><tr><th class="pcol">วัน</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 function openBook(date,period,activityOk){
  const w=state.week,d=w.days.find(x=>x.date===date),term=w.terms.find(t=>t.id===d.term_id),t=term.times[period-1];

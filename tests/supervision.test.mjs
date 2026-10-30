@@ -16,7 +16,7 @@ async function fixture(){
  raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
  (1,'admin@test','x','x','ผู้ดูแล','superadmin'),(2,'owner@test','x','x','ครู ก','teacher'),(3,'co@test','x','x','ครู ข','teacher');`);
  function prepare(sql){let values=[];return{bind(...v){values=v;return this},async first(){return raw.prepare(sql).get(...values)||null},async all(){return{results:raw.prepare(sql).all(...values)}},async run(){const r=raw.prepare(sql).run(...values);return{meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}}}
- let tail=Promise.resolve();const env={raw,JWT_SECRET:'supervision-test',DB:{prepare,batch(statements){const next=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out}catch(e){raw.exec('ROLLBACK');throw e}});tail=next.catch(()=>{});return next}}};await ensureBudgetSchema(env);return env;
+ let tail=Promise.resolve();const env={raw,JWT_SECRET:'supervision-test',SUPERVISION_OPEN_DATE:'2000-01-01',DB:{prepare,batch(statements){const next=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out}catch(e){raw.exec('ROLLBACK');throw e}});tail=next.catch(()=>{});return next}}};await ensureBudgetSchema(env);return env;
 }
 async function call(env,path,method='GET',body,user=1){const token=await signJWT({sub:user},env.JWT_SECRET);return worker.fetch(new Request('https://school.test'+path,{method,headers:{Cookie:`bpd_session=${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),env,{})}
 const json=async(env,path,method='GET',body,user=1)=>{const r=await call(env,path,method,body,user);return {status:r.status,body:await r.json()};};
@@ -371,4 +371,13 @@ test('request lists include the director (not deputy) for the print form signatu
  const mine=await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2);
  assert.deepEqual(mine.director,{name:'ผอ. ทดสอบ',position:'ผู้อำนวยการโรงเรียน'});
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).director.name,'ผอ. ทดสอบ');
+});
+
+test('registration stays closed before the open date for teachers, superadmin may still book',async()=>{
+ const {registrationClosed}=await import('../src/routes/supervision.js');
+ const env={SUPERVISION_OPEN_DATE:'2026-11-02'};
+ assert.equal(registrationClosed(env,{role:'teacher'},{date:'2026-11-01',minutes:1439}),true);
+ assert.equal(registrationClosed(env,{role:'teacher'},{date:'2026-11-02',minutes:0}),false);
+ assert.equal(registrationClosed(env,{role:'superadmin'},{date:'2026-10-30',minutes:0}),false);
+ assert.equal(registrationClosed({},{role:'teacher'},{date:'2026-10-30',minutes:0}),true);
 });
