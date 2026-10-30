@@ -89,7 +89,7 @@ async function renderRegister(){
   ${notices.join('')}
   ${U.bandLegend()}<p class="sv-hint" style="margin:-6px 0 0">คาบเดียวกันวันเดียวกันลงได้ช่วงชั้นละ 1 คน (จุดสีในช่อง = ช่วงชั้นที่ลงแล้ว)</p>
   <div class="sv-legend"><span><i style="border-color:#2B86E5"></i>เลือกได้</span><span><i style="background:#fff1dc"></i>รอผู้บริหารรับ</span><span><i style="background:#e6f0fb"></i>ยืนยันแล้ว</span><span><i style="background:#e3f4ec"></i>ประเมินแล้ว</span><span><i style="background:#f6f9fc"></i>ผ่านมาแล้ว / ไม่มีสอน</span></div>
-  <div class="sv-scroll${w.closed?' sv-closed':''}"><table class="sv-grid"><thead><tr><th class="pcol">วัน</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></section>`;
+  <div class="sv-scroll"><div class="sv-wrap${w.closed?' sv-closed':''}"><table class="sv-grid"><thead><tr><th class="pcol">วัน</th>${head}</tr></thead><tbody>${rows}</tbody></table></div></div></section>`;
 }
 function openBook(date,period,activityOk){
  const w=state.week,d=w.days.find(x=>x.date===date),term=w.terms.find(t=>t.id===d.term_id),t=term.times[period-1];

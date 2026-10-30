@@ -172,7 +172,7 @@ button.sv-slot{cursor:pointer}
 .sv-slot .sv-cdots{position:absolute;top:8px;right:8px;display:flex;gap:3px}
 .sv-slot.multi-band{padding-right:calc(14px + 13px * 2)}
 /* ปิดรับลงทะเบียนชั่วคราว: ชั้นสีเทาโปร่ง 20% ทับตาราง */
-.sv-scroll.sv-closed{position:relative}
-.sv-scroll.sv-closed::after{content:"";position:absolute;inset:0;background:rgba(110,120,132,.2);border-radius:inherit;pointer-events:none}
+.sv-wrap{position:relative;display:inline-block;min-width:100%;vertical-align:top}
+.sv-wrap.sv-closed::after{content:"";position:absolute;inset:0;z-index:5;background:rgba(110,120,132,.2);pointer-events:none}
 .sv-slot.locked{cursor:not-allowed;border-style:dashed}
 .sv-slot.locked .cta{color:#607991}
