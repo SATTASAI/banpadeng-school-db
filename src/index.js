@@ -4304,6 +4304,9 @@ async function seedFormDocuments(env) {
   seededFormsDone.add(env.DB);
 }
 
+const FORM_DOCUMENT_TYPE = "แบบฟอร์ม";
+const canManageForms = (user) => isAdmin(user) || user?.role === "staff";
+
 async function handleListDocuments(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
@@ -4312,6 +4315,7 @@ async function handleListDocuments(request, env) {
   const params = new URL(request.url).searchParams;
   const q = cleanText(params.get("q"),100) || "";
   const view = params.get("view") === "archive" ? "archive" : "active";
+  const formsOnly = params.get("forms") === "1";
   const { results } = await env.DB.prepare(`SELECT d.*,COALESCE(d.management_area,d.department) AS effective_department,u.full_name AS uploader_name,
       a.id AS attachment_id,a.storage_provider,a.created_at AS attachment_created_at,a.storage_error,a.file_hash,
       (SELECT d2.id FROM documents d2
@@ -4326,7 +4330,8 @@ async function handleListDocuments(request, env) {
       AND (d.access_level='staff' OR d.uploaded_by=? OR (?=1 AND d.access_level IN ('private','admin')))
       AND ((?='active' AND COALESCE(d.record_status,'active')='active')
         OR (?='archive' AND COALESCE(d.record_status,'active') IN ('archived','duplicate')))
-    ORDER BY d.updated_at DESC`).bind(q,q,q,user.id,isAdmin(user) ? 1 : 0,view,view).all();
+      AND (?=0 OR d.document_type=?)
+    ORDER BY ${formsOnly ? "d.title" : "d.updated_at DESC"}`).bind(q,q,q,user.id,isAdmin(user) ? 1 : 0,view,view,formsOnly ? 1 : 0,FORM_DOCUMENT_TYPE).all();
   const canArchive = isAdmin(user) || user.role === "staff";
   const documents = results.map((row) => ({
     ...row, department: row.effective_department,
@@ -4340,13 +4345,14 @@ async function handleListDocuments(request, env) {
       SUM(CASE WHEN COALESCE(record_status,'active') IN ('archived','duplicate') THEN 1 ELSE 0 END) AS archive
     FROM documents WHERE access_level='staff' OR uploaded_by=? OR (?=1 AND access_level IN ('private','admin'))`)
     .bind(user.id,isAdmin(user) ? 1 : 0).first();
-  return jsonResponse({ documents, counts, view });
+  return jsonResponse({ documents, counts, view, can_manage_forms: canManageForms(user) });
 }
 async function handleCreateDocument(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureExtendedSchema(env);
   const body = await request.json().catch(() => null);
+  if (!canManageForms(user)) return jsonResponse({ error: "เพิ่มแบบฟอร์มได้เฉพาะผู้ดูแลระบบและเจ้าหน้าที่" }, 403);
   const documentDepartments = [...DEPARTMENTS, "student-support", "admin"];
   if (!body || !cleanText(body.title, 200) || !documentDepartments.includes(body.department)) return jsonResponse({ error: "กรุณาระบุชื่อเอกสารและฝ่ายงานให้ถูกต้อง" }, 400);
   const accessLevel = ["private", "staff", "admin"].includes(body.access_level) ? body.access_level : "staff";
@@ -4377,6 +4383,11 @@ async function handleUpdateDocumentWorkflow(request, env, documentId) {
   } else if (action === "archive") {
     await env.DB.prepare(`UPDATE documents SET record_status='archived',duplicate_of_id=NULL,archived_at=datetime('now'),archive_reason=?,updated_at=datetime('now') WHERE id=?`)
       .bind(cleanText(body.reason,300) || "จัดเก็บจากหน้าคลังเอกสาร",documentId).run();
+  } else if (action === "edit") {
+    const departments = [...DEPARTMENTS, "student-support", "admin"];
+    if (!cleanText(body.title, 200) || !departments.includes(body.department)) return jsonResponse({ error:"กรุณาระบุชื่อแบบฟอร์มและฝ่ายงานให้ถูกต้อง" },400);
+    await env.DB.prepare("UPDATE documents SET title=?,department=?,management_area=?,keywords=?,updated_at=datetime('now') WHERE id=?")
+      .bind(cleanText(body.title,200),storedDepartment(body.department),managementArea(body.department),cleanText(body.keywords,500),documentId).run();
   } else if (action === "mark_duplicate") {
     const duplicateOfId = Number(body.duplicate_of_id);
     if (!Number.isInteger(duplicateOfId) || duplicateOfId <= 0 || duplicateOfId === documentId) return jsonResponse({ error:"กรุณาระบุรายการต้นฉบับให้ถูกต้อง" },400);
