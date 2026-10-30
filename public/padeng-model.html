@@ -31,6 +31,18 @@
     <label class="tw-field">1. เรื่องที่สอน *<input name="topic" maxlength="300" required></label>
     <label class="tw-field">2. ผลการจัดกิจกรรมการสอน (รายงานตามจุดประสงค์การเรียนรู้) *<textarea name="result" rows="8" maxlength="6000" required></textarea></label>
     <p class="tw-muted">3. รูปประกอบการจัดกิจกรรม — แนบในการ์ดวิชา (ไม่เกิน 4 ภาพ) ระบบจัดเรียงในเอกสารให้อัตโนมัติ</p>
+    <div class="tw-sign">
+      <div><b>ลายเซ็นครูผู้สอน *</b><small>ถ่ายรูปลายเซ็นบนกระดาษขาว ระบบตัดพื้นหลังและทำเส้นให้เข้มอัตโนมัติ · อัปครั้งเดียวใช้กับแบบรายงานทุกฉบับ</small></div>
+      <div class="tw-sign-row">
+        <div class="tw-sign-box" id="sigCurrent"></div>
+        <label class="btn btn-ghost tw-sm" id="sigPick">อัปโหลดลายเซ็น<input type="file" accept="image/*" hidden id="sigFile"></label>
+      </div>
+      <div class="tw-sign-preview" id="sigPreview" hidden>
+        <div><small>ภาพเดิม</small><img id="sigBefore" alt="ภาพลายเซ็นเดิม"></div>
+        <div><small>หลังตัดพื้นหลัง</small><div class="tw-sign-box"><img id="sigAfter" alt="ลายเซ็นหลังประมวลผล"></div></div>
+        <div class="tw-sign-acts"><button type="button" class="btn btn-primary tw-sm" id="sigUse">ใช้ลายเซ็นนี้</button><button type="button" class="btn btn-ghost tw-sm" id="sigCancel">ยกเลิก</button></div>
+      </div>
+    </div>
     <div class="tw-error" id="rfError" role="alert"></div>
     <footer><button type="button" class="btn btn-ghost" id="rfCancel">ยกเลิก</button><button type="submit" class="btn btn-primary" id="rfSave">บันทึกแบบรายงาน</button></footer>
   </form>
@@ -62,6 +74,7 @@ function renderMine(){
   if(!data.courses.length){$('body').innerHTML='<div class="tw-empty"><b>ยังไม่พบวิชาที่คุณสอนในภาคเรียนนี้</b><p>รายวิชาดึงจากข้อมูลครูผู้สอนที่ฝ่ายวัดผลกำหนดในระบบรายงานผลการเรียน หากไม่ถูกต้องให้แจ้งฝ่ายวัดผล</p></div>';$('cards').innerHTML='';return;}
   const done=data.courses.filter(c=>c.complete).length;
   $('cards').innerHTML=`<div class="tw-card"><span>ส่งครบแล้ว</span><strong>${done} / ${data.courses.length} วิชา</strong>${progressBar(done,data.courses.length)}</div>
+    <div class="tw-card"><span>ลายเซ็น</span><strong class="sm">${data.signature?'✅ อัปโหลดแล้ว':'⚠️ ยังไม่อัปโหลด — อัปได้ในหน้ากรอกแบบรายงาน'}</strong></div>
     <div class="tw-card"><span>เกณฑ์</span><strong class="sm">แบบรายงาน 1 ฉบับ + รูปประกอบ 1–${data.max_images} ภาพ ต่อวิชา·ห้อง</strong></div>`;
   $('body').innerHTML=`<div class="tw-grid">${data.courses.map(c=>{
     const left=data.max_images-c.images.length;
@@ -99,7 +112,7 @@ function renderProgress(){
       const st=x.complete===x.total?'<span class="tw-badge ok">ครบ</span>':x.images||x.reports?'<span class="tw-badge mid">ส่งบางส่วน</span>':'<span class="tw-badge">ยังไม่ส่ง</span>';
       return `<tr class="tw-row" data-u="${x.user_id}"><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td><td>${x.complete}/${x.total}${progressBar(x.complete,x.total)}</td><td>${x.images}</td><td>${x.reports}/${x.total}</td><td>${st}</td>
         <td><button class="btn btn-ghost tw-sm" data-toggle="${x.user_id}">รายละเอียด</button></td></tr>
-        <tr class="tw-detail" id="d-${x.user_id}" hidden><td colspan="7"><div class="tw-detail-head"><b>${esc(x.full_name)}</b>${x.images?`<a class="btn btn-ghost tw-sm" href="/api/teaching-works/padeng/zip?term_id=${data.term.id}&user_id=${x.user_id}">ภาพของครูคนนี้ (.zip)</a>`:''}</div>
+        <tr class="tw-detail" id="d-${x.user_id}" hidden><td colspan="7"><div class="tw-detail-head"><b>${esc(x.full_name)}</b>${x.signed?'':'<span class="tw-badge">ยังไม่อัปโหลดลายเซ็น</span>'}${x.images?`<a class="btn btn-ghost tw-sm" href="/api/teaching-works/padeng/zip?term_id=${data.term.id}&user_id=${x.user_id}">ภาพของครูคนนี้ (.zip)</a>`:''}</div>
           ${x.courses.map(c=>`<div class="tw-detail-course"><div><b>${esc(c.subject)}</b> <small>${room(c)}</small></div>
             <div class="tw-thumbs sm">${c.images.map(i=>`<figure><img src="${fileUrl('padeng',i.id)}" alt="" loading="lazy" data-open="${i.id}"><a class="tw-dl" href="${fileUrl('padeng',i.id,true)}" title="ดาวน์โหลด">⬇</a></figure>`).join('')||'<span class="tw-muted">ไม่มีภาพ</span>'}</div>
             <div>${c.reported?`<span class="tw-muted">📝 ${esc(c.report.topic)}</span><div class="tw-doc-btns"><button type="button" class="btn btn-primary tw-sm" data-doc="pdf" data-u="${x.user_id}" data-c="${c.course_id}">PDF</button><button type="button" class="btn btn-ghost tw-sm" data-doc="docx" data-u="${x.user_id}" data-c="${c.course_id}">Word</button></div>`:'<span class="tw-muted">ยังไม่กรอกแบบรายงาน</span>'}</div></div>`).join('')}</td></tr>`;}).join('')||'<tr><td colspan="7">ไม่พบข้อมูล</td></tr>';
@@ -121,11 +134,33 @@ function openReport(courseId){
   for(const k of FIELDS){f.elements[k].value=c.report[k]||'';f.elements[k].readOnly=closed;}
   $('rfCourse').textContent=`${c.subject} · ชั้น ${c.grade_level}${c.classroom?'/'+c.classroom:''}`;
   $('rfGradeLabel').textContent=c.report.kindergarten?'ชั้นอนุบาลปีที่':'ชั้นประถมศึกษาปีที่';
-  $('rfSave').hidden=closed;$('rfError').style.display='none';$('reportDialog').showModal();
+  $('rfSave').hidden=closed;$('rfError').style.display='none';$('sigPick').hidden=closed;resetSig();paintSig();$('reportDialog').showModal();
 }
-$('rfClose').onclick=$('rfCancel').onclick=()=>$('reportDialog').close();
+$('rfClose').onclick=$('rfCancel').onclick=()=>{$('reportDialog').close();load();};
+// ลายเซ็น
+let sigDraft=null;
+function paintSig(){
+  $('sigCurrent').innerHTML=data.signature?`<img src="${data.signature.data_url}" alt="ลายเซ็นปัจจุบัน">`:'<span class="tw-muted">ยังไม่มีลายเซ็น</span>';
+  $('sigPick').firstChild.textContent=data.signature?'เปลี่ยนลายเซ็น':'อัปโหลดลายเซ็น';
+}
+function resetSig(){sigDraft=null;$('sigPreview').hidden=true;$('sigBefore').removeAttribute('src');$('sigAfter').removeAttribute('src');}
+$('sigFile').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;$('rfError').style.display='none';
+  try{
+    sigDraft=await PadengReportExport.processSignature(f);
+    $('sigBefore').src=URL.createObjectURL(f);$('sigAfter').src=sigDraft;$('sigPreview').hidden=false;
+  }catch(x){resetSig();$('rfError').textContent=x.message;$('rfError').style.display='block';}
+};
+$('sigCancel').onclick=resetSig;
+$('sigUse').onclick=async()=>{
+  if(!sigDraft)return;
+  try{await apiRequest('/api/teaching-works/padeng/signature',{method:'PUT',body:JSON.stringify({data_url:sigDraft})});
+    data.signature={data_url:sigDraft};resetSig();paintSig();}
+  catch(x){$('rfError').textContent=x.message;$('rfError').style.display='block';}
+};
 $('reportForm').onsubmit=async e=>{
   e.preventDefault();if(!editing)return;
+  if(!data.signature){$('rfError').textContent='กรุณาอัปโหลดลายเซ็นก่อนบันทึกแบบรายงาน';$('rfError').style.display='block';return;}
   const f=e.target,body={term_id:data.term.id,course_id:editing.course_id};for(const k of FIELDS)body[k]=f.elements[k].value;
   $('rfSave').disabled=true;
   try{await apiRequest('/api/teaching-works/padeng/report',{method:'PUT',body:JSON.stringify(body)});$('reportDialog').close();
@@ -142,7 +177,7 @@ async function exportDocs(format,params,fileName){
   const st=$('exportStatus'),say=t=>{st.textContent=t;st.hidden=!t;};
   try{
     const d=await apiRequest(`/api/teaching-works/padeng/documents?${new URLSearchParams({term_id:data.term.id,...params})}`);
-    await PadengReportExport.exportDocs(d.items,format,fileName(d.items),{fileUrl:id=>fileUrl('padeng',id),onProgress:say});
+    await PadengReportExport.exportDocs(d.items,format,fileName(d.items),{fileUrl:id=>fileUrl('padeng',id),onProgress:say,signatures:d.signatures});
   }catch(x){showError(x.message);}
   finally{say('');exporting=false;}
 }

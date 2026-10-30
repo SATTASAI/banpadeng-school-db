@@ -57,19 +57,24 @@ test('ป่าเด็งโมเดล: ครูกรอกแบบรา
  const body={term_id:71,course_id:11,topic:'การบวกเลข',result:'นักเรียนบวกเลขได้\nร้อยละ 80',teach_date:'2026-11-05',learning_area:'คณิตศาสตร์',subject:'คณิตศาสตร์',grade:'4/1',term_no:'2',academic_year:'2569',teacher_name:'ครู ก'};
  assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',{...body,topic:''},2)).status,400);
  assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',body,3)).status,403); // ครู 3 ไม่ได้สอนห้อง 1
+ // ต้องมีลายเซ็นก่อน
+ assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',body,2)).status,400);
+ assert.equal((await call(env,'/api/teaching-works/padeng/signature','PUT',{data_url:'data:image/jpeg;base64,AAAA'},2)).status,400);
+ const png='data:image/png;base64,'+Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,0,0,0,0]).toString('base64');
+ assert.equal((await call(env,'/api/teaching-works/padeng/signature','PUT',{data_url:png},2)).status,200);
  assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',body,2)).status,200);
  assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',{...body,topic:'การบวกเลขสองหลัก'},2)).status,200); // แก้ไขฉบับเดิม
  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM padeng_model_reports').get().n,1);
  const mine2=await (await call(env,'/api/teaching-works/padeng/mine','GET',undefined,2)).json();
- const c11=mine2.courses.find(c=>c.course_id===11);assert.equal(c11.complete,true);assert.equal(c11.images.length,4);assert.equal(c11.report.result,'นักเรียนบวกเลขได้\nร้อยละ 80');
+ const c11=mine2.courses.find(c=>c.course_id===11);assert.equal(c11.complete,true);assert.equal(mine2.signature.data_url,png);assert.equal(c11.images.length,4);assert.equal(c11.report.result,'นักเรียนบวกเลขได้\nร้อยละ 80');
  // ความคืบหน้า: เฉพาะฝ่ายวิชาการ/ผู้ดูแล
  assert.equal((await call(env,'/api/teaching-works/padeng/progress','GET',undefined,3)).status,403);
  const prog=await (await call(env,'/api/teaching-works/padeng/progress')).json();
- const t2=prog.teachers.find(t=>t.user_id===2);assert.equal(t2.total,2);assert.equal(t2.complete,1);assert.equal(t2.images,4);assert.equal(t2.reports,1);
+ const t2=prog.teachers.find(t=>t.user_id===2);assert.equal(t2.total,2);assert.equal(t2.complete,1);assert.equal(t2.images,4);assert.equal(t2.reports,1);assert.equal(t2.signed,true);
  assert.deepEqual(prog.grades,['ป.4']);
  // ข้อมูลเอกสาร: ฝ่ายวิชาการได้ทั้งหมด ครูได้เฉพาะของตนเอง
  const docs=await (await call(env,'/api/teaching-works/padeng/documents?term_id=71')).json();
- assert.equal(docs.items.length,1);assert.equal(docs.items[0].topic,'การบวกเลขสองหลัก');assert.equal(docs.items[0].images.length,4);
+ assert.equal(docs.items.length,1);assert.equal(docs.signatures[2],png);assert.equal(docs.items[0].topic,'การบวกเลขสองหลัก');assert.equal(docs.items[0].images.length,4);
  assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71','GET',undefined,3)).status,403);
  assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71&user_id=2&course_id=11','GET',undefined,2)).status,200);
  assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71&grade_level=ป.5')).status,404);

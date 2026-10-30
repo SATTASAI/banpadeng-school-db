@@ -58,8 +58,62 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
     return out;
   }
 
+  // ---------- ลายเซ็น: ตัดพื้นหลัง (เทียบความสว่างกับพื้นรอบข้าง) + ทำเส้นเข้ม → PNG พื้นใส ----------
+  async function processSignature(file) {
+    let src;
+    try { src = await decode(file); } catch { throw Error('เปิดภาพนี้ไม่ได้ กรุณาใช้ไฟล์ JPG หรือ PNG'); }
+    const s0 = Math.min(1, 1400 / Math.max(src.width, src.height)), W = Math.max(1, Math.round(src.width * s0)), H = Math.max(1, Math.round(src.height * s0));
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(src, 0, 0, W, H); src.close?.();
+    const img = g.getImageData(0, 0, W, H), px = img.data, n = W * H;
+    const L = new Float32Array(n);
+    for (let i = 0; i < n; i++) L[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
+    // พื้นหลังเฉพาะจุด = ค่าเฉลี่ยความสว่างรอบ ๆ (integral image) → ลดผลของเงา/แสงไม่เท่ากันจากการถ่ายรูป
+    const I = new Float64Array((W + 1) * (H + 1));
+    for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += L[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row; } }
+    const r = Math.max(8, Math.round(Math.max(W, H) / 18)), D = new Float32Array(n), hist = new Uint32Array(256);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1), y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
+      const mean = (I[y1 * (W + 1) + x1] - I[y0 * (W + 1) + x1] - I[y1 * (W + 1) + x0] + I[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+      const d = Math.max(0, Math.max(mean, 140) - L[y * W + x]); D[y * W + x] = d; hist[Math.min(255, Math.round(d))]++;
+    }
+    // Otsu: หาเกณฑ์แยก "หมึก" กับ "พื้น"
+    let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
+    let wB = 0, sB = 0, best = 0, t = 30;
+    for (let i = 0; i < 256; i++) { wB += hist[i]; if (!wB) continue; const wF = n - wB; if (!wF) break; sB += i * hist[i];
+      const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; t = i; } }
+    t = Math.max(22, t);
+    const lo = t * 0.55, hi = t * 1.15;
+    let minX = W, minY = H, maxX = -1, maxY = -1;
+    for (let i = 0; i < n; i++) {
+      const a = Math.min(1, Math.max(0, (D[i] - lo) / (hi - lo))), o = i * 4;
+      // ทำเส้นเข้ม: คงโทนสีหมึก (น้ำเงิน/ดำ) แต่กดความสว่างลง
+      px[o] = Math.round(px[o] * 0.28); px[o + 1] = Math.round(px[o + 1] * 0.28); px[o + 2] = Math.round(px[o + 2] * 0.35);
+      px[o + 3] = Math.round(255 * Math.min(1, a * 1.25));
+      if (a > 0.5) { const x = i % W, y = (i / W) | 0; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+    }
+    if (maxX < 0) throw Error('ไม่พบเส้นลายเซ็นในภาพ กรุณาถ่ายลายเซ็นบนกระดาษขาวให้ชัดขึ้น');
+    g.clearRect(0, 0, W, H); g.putImageData(img, 0, 0);
+    const pad = 10; minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad); maxX = Math.min(W - 1, maxX + pad); maxY = Math.min(H - 1, maxY + pad);
+    const cw = maxX - minX + 1, ch = maxY - minY + 1;
+    for (let max = 700; max >= 200; max -= 100) {
+      const k = Math.min(1, max / cw, (max * 0.4) / ch), out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(cw * k)); out.height = Math.max(1, Math.round(ch * k));
+      out.getContext('2d').drawImage(c, minX, minY, cw, ch, 0, 0, out.width, out.height);
+      const dataUrl = out.toDataURL('image/png');
+      if (dataUrl.length < 380 * 1024) return dataUrl;
+    }
+    throw Error('ภาพลายเซ็นมีรายละเอียดมากเกินไป กรุณาครอปให้เหลือเฉพาะลายเซ็น');
+  }
+  function dataUrlImage(dataUrl) {
+    return new Promise((ok) => { if (!dataUrl) return ok(null); const im = new Image(); im.onload = () => {
+      const bin = atob(dataUrl.split(',')[1]), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      ok({ dataUrl, bytes, w: im.naturalWidth, h: im.naturalHeight, png: true }); }; im.onerror = () => ok(null); im.src = dataUrl; });
+  }
+  const SIGN_BOX = { w: 120, h: 42 };
+
   // ---------- PDF (pdfmake) ----------
-  function pdfItem(it, imgs, logo, first) {
+  function pdfItem(it, imgs, logo, first, sig) {
     const m = model(it), content = [];
     content.push(logo ? { image: logo.dataUrl, fit: [60, 76], alignment: 'center', ...(first ? {} : { pageBreak: 'before' }) } : { text: '', ...(first ? {} : { pageBreak: 'before' }) });
     content.push({ text: m.title1, bold: true, alignment: 'center', margin: [0, 4, 0, 0] }, { text: m.title2, bold: true, alignment: 'center' });
@@ -73,18 +127,21 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
       content.push({ columns: [{ width: '*', text: '' }, ...row.flatMap((img, i) => [...(i ? [{ width: 14, text: '' }] : []), { width: box.w, stack: [{ image: img.dataUrl, width: fit(img, box).w, height: fit(img, box).h, alignment: 'center' }] }]), { width: '*', text: '' }], margin: [0, 0, 0, 10], unbreakable: true });
     }
     if (imgs.length > ok.length) content.push({ text: `(มีภาพ ${imgs.length - ok.length} ภาพที่เปิดไม่ได้ในเบราว์เซอร์นี้)`, fontSize: 12, color: '#777', alignment: 'center' });
-    content.push({ columns: [{ width: '*', text: '' }, { width: 240, stack: m.sign.map((t) => ({ text: t, alignment: 'center' })) }], margin: [0, 18, 0, 0], unbreakable: true });
+    const signStack = [...(sig ? [{ image: sig.dataUrl, width: fit(sig, SIGN_BOX).w, height: fit(sig, SIGN_BOX).h, alignment: 'center', margin: [0, 0, 0, -16] }] : []),
+      ...m.sign.map((t) => ({ text: t, alignment: 'center' }))];
+    content.push({ columns: [{ width: '*', text: '' }, { width: 240, stack: signStack }], margin: [0, sig ? 4 : 18, 0, 0], unbreakable: true });
     return content;
   }
 
   // ---------- Word (.docx) ----------
   const EMU = 12700;
-  function docxDocument(items, imgMap, logo) {
+  function docxDocument(items, imgMap, logo, sigs = {}) {
     const media = []; let pic = 0;
-    const embed = (img) => { media.push(img.bytes); return `rIdImg${media.length}`; };
+    const ext = (img) => img.png ? 'png' : 'jpeg';
+    const embed = (img) => { media.push(img); return `rIdImg${media.length}`; };
     const drawing = (img, w, h) => {
       const rid = embed(img), id = ++pic;
-      return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w * EMU}" cy="${h * EMU}"/><wp:docPr id="${id}" name="ภาพ ${id}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="image${id}.jpeg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w * EMU}" cy="${h * EMU}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+      return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w * EMU}" cy="${h * EMU}"/><wp:docPr id="${id}" name="ภาพ ${id}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="${id}" name="image${id}.${ext(img)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w * EMU}" cy="${h * EMU}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
     };
     const run = (t, bold) => `<w:r><w:rPr>${bold ? '<w:b/><w:bCs/>' : ''}</w:rPr><w:t xml:space="preserve">${xml(t)}</w:t></w:r>`;
     const p = (inner, { align = 'left', ind = 0, before = 0, after = 0, pageBreak = false, keep = false } = {}) =>
@@ -105,19 +162,21 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
         body += p(row.map((img) => { const s = fit(img, box); return drawing(img, s.w, s.h); }).join(run('    ')), { align: 'center', after: 100 });
       }
       if (imgs.length > ok.length) body += p(run(`(มีภาพ ${imgs.length - ok.length} ภาพที่เปิดไม่ได้ในเบราว์เซอร์นี้)`), { align: 'center' });
-      body += p(run(m.sign[0]), { align: 'center', ind: 4500, before: 200, keep: true }) + p(run(m.sign[1]), { align: 'center', ind: 4500 });
+      const sig = sigs[it.user_id];
+      if (sig) { const s = fit(sig, SIGN_BOX); body += p(drawing(sig, s.w, s.h), { align: 'center', ind: 4500, before: 160, keep: true }); }
+      body += p(run(m.sign[0]), { align: 'center', ind: 4500, before: sig ? 0 : 200, keep: true }) + p(run(m.sign[1]), { align: 'center', ind: 4500 });
     });
     const ns = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
     const font = '<w:rFonts w:ascii="TH Sarabun PSK" w:hAnsi="TH Sarabun PSK" w:eastAsia="TH Sarabun PSK" w:cs="TH Sarabun PSK"/><w:sz w:val="32"/><w:szCs w:val="32"/>';
     const files = {
-      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
+      '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>',
       '_rels/.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
       'word/styles.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr>${font}<w:lang w:val="th-TH" w:bidi="th-TH"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults></w:styles>`,
       'word/_rels/document.xml.rels': '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-        + media.map((_, i) => `<Relationship Id="rIdImg${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${i + 1}.jpeg"/>`).join('') + '</Relationships>',
+        + media.map((img, i) => `<Relationship Id="rIdImg${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image${i + 1}.${ext(img)}"/>`).join('') + '</Relationships>',
       'word/document.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${ns}><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1134" w:bottom="850" w:left="1247" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`,
     };
-    media.forEach((bytes, i) => { files[`word/media/image${i + 1}.jpeg`] = bytes; });
+    media.forEach((img, i) => { files[`word/media/image${i + 1}.${ext(img)}`] = img.bytes; });
     return files;
   }
 
@@ -137,25 +196,26 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
     })));
   }
 
-  async function exportDocs(items, format, fileName, { fileUrl, onProgress } = {}) {
+  async function exportDocs(items, format, fileName, { fileUrl, onProgress, signatures = {} } = {}) {
     if (!items?.length) throw Error('ไม่มีแบบรายงานให้ดาวน์โหลด');
     onProgress?.('กำลังเตรียมเอกสาร…');
     const [imgMap, logo] = await Promise.all([loadAll(items, fileUrl, onProgress), loadImage('/img/padeng-logo.jpg', 300)]);
+    const sigs = Object.fromEntries(await Promise.all(Object.entries(signatures || {}).map(async ([u, d]) => [u, await dataUrlImage(d)])));
     onProgress?.(`กำลังสร้างไฟล์ ${format === 'docx' ? 'Word' : 'PDF'}…`);
     if (format === 'docx') {
       const Zip = await library('JSZip', 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'), zip = new Zip();
-      for (const [path, data] of Object.entries(docxDocument(items, imgMap, logo))) zip.file(path, data);
+      for (const [path, data] of Object.entries(docxDocument(items, imgMap, logo, sigs))) zip.file(path, data);
       download(await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), fileName + '.docx');
     } else {
       const pdf = await library('pdfMake', '/js/pdfmake.min.js');
       pdf.vfs = { ...(pdf.vfs || {}), ...(await thaiFonts()) };
       pdf.fonts = { ...(pdf.fonts || {}), Sarabun: { normal: 'THSarabunPSK-Regular.ttf', bold: 'THSarabunPSK-Bold.ttf' } };
-      const content = items.flatMap((it, i) => pdfItem(it, it.images.map((id) => imgMap.get(id)), logo, i === 0));
+      const content = items.flatMap((it, i) => pdfItem(it, it.images.map((id) => imgMap.get(id)), logo, i === 0, sigs[it.user_id]));
       const def = { pageSize: 'A4', pageMargins: [62, 36, 56, 36], defaultStyle: { font: 'Sarabun', fontSize: 16, lineHeight: 0.92 }, content,
         info: { title: fileName } };
       download(await new Promise((ok, no) => { try { pdf.createPdf(def).getBlob(ok); } catch (e) { no(e); } }), fileName + '.pdf');
     }
     onProgress?.('');
   }
-  root.PadengReportExport = { model, rowsOf, boxOf, fit, docxDocument, pdfItem, exportDocs, thaiDate };
+  root.PadengReportExport = { model, rowsOf, boxOf, fit, docxDocument, pdfItem, exportDocs, thaiDate, processSignature };
 })(typeof window === 'undefined' ? globalThis : window);
