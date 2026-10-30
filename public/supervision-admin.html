@@ -154,11 +154,64 @@ async function viewResults(){
  let done=all.filter(r=>r.evaluation);if(state.teacher!=='all')done=done.filter(r=>String(r.teacher_user_id)===state.teacher);
  done.sort((a,b)=>String(b.evaluation.evaluated_at).localeCompare(String(a.evaluation.evaluated_at)));
  const scope=state.perm.view_all?'ผลการนิเทศของครูทุกคน':'ผลการนิเทศที่คุณเป็นผู้ประเมิน';
- const cal=await calendarHtml();
- $('view').innerHTML=cal+'<div style="height:16px"></div>'+U.stats(state.teacher==='all'?all:all.filter(r=>String(r.teacher_user_id)===state.teacher))+
+ const cal=await calendarHtml(),acad=!!state.perm.view_all;
+ $('view').innerHTML=(acad?printCard(done.length):'')+cal+'<div style="height:16px"></div>'+U.stats(state.teacher==='all'?all:all.filter(r=>String(r.teacher_user_id)===state.teacher))+
   `<div class="sv-toolbar" style="margin-top:16px"><span style="color:#607991">${scope}</span><label class="sv-field" style="flex-direction:row;align-items:center;display:flex;gap:8px;margin-left:auto">ครู<select id="teacherSel"><option value="all">ครูทุกคน</option>${teachers.map(([id,n])=>`<option value="${id}"${state.teacher===String(id)?' selected':''}>${esc(n)}</option>`).join('')}</select></label></div>
-  <div class="sv-list" style="margin-top:12px">${done.length?done.map(r=>U.result(r,state.focus===r.id)).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงเมื่อผู้นิเทศบันทึกคะแนนครบและกดบันทึกผล</div></section>'}</div>`;
+  <div class="sv-list" style="margin-top:12px">${done.length?done.map(r=>U.result(r,state.focus===r.id,{word:acad})).join(''):'<section class="sv-card"><div class="sv-empty"><b>ยังไม่มีผลการนิเทศ</b>ผลจะแสดงเมื่อผู้นิเทศบันทึกคะแนนครบและกดบันทึกผล</div></section>'}</div>`;
  if(state.focus)document.getElementById('r-'+state.focus)?.scrollIntoView({block:'center'});
+}
+/* ---------- พิมพ์เอกสาร (ฝ่ายวิชาการ): PDF / Word ---------- */
+function printCard(n){
+ const who=state.teacher==='all'?'ครูทุกคน':esc(state.list.find(r=>String(r.teacher_user_id)===state.teacher)?.teacher_name||'');
+ const row=(doc,label,hint,dis)=>`<div class="sv-row" style="grid-template-columns:1fr auto"><div class="meta"><div class="line"><b>${label}</b></div><div class="topic">${hint}</div></div>
+  <div class="acts"><button type="button" class="sv-btn sm primary" data-doc="${doc}" data-kind="pdf"${dis?' disabled':''}>PDF</button><button type="button" class="sv-btn sm" data-doc="${doc}" data-kind="word"${dis?' disabled':''}>Word</button></div></div>`;
+ return `<section class="sv-card" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px"><div><h2 style="margin:0 0 4px;color:#163e67;font-size:19px">พิมพ์เอกสารนิเทศ</h2><p class="sv-hint" style="margin:0">PDF เปิดหน้าต่างพิมพ์ (เลือก “บันทึกเป็น PDF” ได้) · Word ดาวน์โหลดไฟล์ .doc แก้ไขต่อได้ · ใช้ตัวกรองครูด้านล่าง (ตอนนี้: ${who})</p></div>
+  <div class="sv-list">${row('forms','แบบนิเทศรายคน / รวมแบบนิเทศทั้งหมด',`รวมแบบนิเทศที่ประเมินแล้ว ${n} ฉบับในไฟล์เดียว ขึ้นหน้าใหม่ทุกฉบับ — เลือกครูคนเดียวในตัวกรองเพื่อพิมพ์รายคน หรือกดพิมพ์ที่การ์ดผลแต่ละครั้ง`,!n)}
+  ${row('summary','ตารางสรุปผลนิเทศ',`ผลการนิเทศทุกครั้ง คะแนน ร้อยละ ระดับคุณภาพ และสรุปจำนวนแต่ละระดับ (${n} รายการ)`,!n)}
+  ${row('week','ตารางนัดนิเทศรายสัปดาห์','ตามสัปดาห์ที่แสดงในปฏิทินการจองนิเทศ (เลื่อนสัปดาห์ในปฏิทินก่อนพิมพ์) แนวนอน A4',false)}</div></section>`;
+}
+function filteredDone(){
+ const done=state.list.filter(r=>r.evaluation&&(state.teacher==='all'||String(r.teacher_user_id)===state.teacher));
+ return done.sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th')||a.visit_date.localeCompare(b.visit_date)||a.period-b.period);
+}
+function termLine(list){
+ const t=[...new Set(list.filter(r=>r.term_number&&r.year_be).map(r=>`${r.term_number}/${r.year_be}`))];
+ return t.length===1?`<div class="c">ภาคเรียนที่ ${U.TH(t[0].split('/')[0])} ปีการศึกษา ${U.TH(t[0].split('/')[1])}</div>`:'';
+}
+const thDate=s=>U.parse(s).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'});
+function printDoc(doc,kind){
+ const who=state.teacher==='all'?'':' '+(state.list.find(r=>String(r.teacher_user_id)===state.teacher)?.teacher_name||'');
+ const stamp=new Date().toISOString().slice(0,10);
+ if(doc==='forms'){const list=filteredDone();return U.printForms(list,{director:state.director,roundOf:r=>roundOf(r,state.list),title:`แบบนิเทศการสอน${who||' รวมทั้งหมด'} ${stamp}`},kind);}
+ if(doc==='summary'){
+  const list=filteredDone();if(!list.length)return U.toast('ยังไม่มีผลการนิเทศให้พิมพ์',true);
+  const lv=Object.fromEntries(LEVELS.map(([l])=>[l,0]));list.forEach(r=>{if(lv[r.evaluation.level]!=null)lv[r.evaluation.level]++;});
+  const teachers=new Set(list.map(r=>r.teacher_user_id)).size,requested=new Set(state.list.filter(r=>state.teacher==='all'||String(r.teacher_user_id)===state.teacher).map(r=>r.teacher_user_id)).size;
+  const mean=avg(list.map(r=>Number(r.evaluation.percent)));
+  const body=`<h1>สรุปผลการนิเทศการสอน${esc(who)}</h1>${termLine(list)}<div class="c">โรงเรียนบ้านป่าเด็ง</div>
+<table class="list"><thead><tr><th>ที่</th><th>ชื่อ–สกุล</th><th>ตำแหน่ง</th><th>วันที่นิเทศ</th><th>คาบ</th><th>วิชา</th><th>ชั้น</th><th>ประเภท</th><th>ผู้นิเทศ</th><th>คะแนน</th><th>ร้อยละ</th><th>ระดับ</th></tr></thead><tbody>
+${list.map((r,i)=>{const e=r.evaluation,mx=e.items.reduce((a,it)=>a+(Number(it.max)||0),0);return `<tr><td class="c">${i+1}</td><td>${esc(r.teacher_name)}</td><td>${esc(r.teacher_position||'')}</td><td>${thDate(r.visit_date)}</td><td class="c">${r.period}</td><td>${esc(r.subject)}</td><td>${esc(U.classLabel(r))}</td><td>${esc(r.type_label)}</td><td>${esc(e.evaluator_name)}</td><td class="c">${e.total}/${mx}</td><td class="r">${U.pct(e.percent)}</td><td class="c">${esc(e.level)}</td></tr>`;}).join('')}</tbody></table>
+<p style="margin:10px 0 2px"><b>สรุป</b> ครูที่ได้รับการนิเทศ ${teachers} คน จากที่ลงทะเบียน ${requested} คน · ประเมินแล้ว ${list.length} ครั้ง · คะแนนเฉลี่ยร้อยละ ${U.pct(mean)} ระดับ${U.level(mean)}</p>
+<table class="list" style="width:60%"><thead><tr><th>ระดับคุณภาพ</th><th>จำนวน (ครั้ง)</th><th>ร้อยละ</th></tr></thead><tbody>${LEVELS.map(([l])=>`<tr><td>${l}</td><td class="c">${lv[l]}</td><td class="r">${U.pct(lv[l]/list.length*100)}</td></tr>`).join('')}</tbody></table>
+<p class="sm">เกณฑ์: 90–100 ดีเยี่ยม · 80–89 ดีมาก · 70–79 ดี · 60–69 พอใช้ · ต่ำกว่า 60 ปรับปรุง · พิมพ์เมื่อ ${new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}</p>`;
+  return U.output(kind,`สรุปผลการนิเทศการสอน${who} ${stamp}`,body,{landscape:true});
+ }
+ if(doc==='week'){
+  const w=state.calWeek;if(!w)return U.toast('ยังโหลดปฏิทินไม่เสร็จ',true);
+  const times=(w.terms[0]?.times)||w.default_times,dates=w.days.map(d=>d.date);
+  const lbl=`${U.parse(dates[0]).toLocaleDateString('th-TH',{day:'numeric',month:'long'})} – ${U.parse(dates[dates.length-1]).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}`;
+  let head='<th style="width:90px">วัน</th>';for(let p=1;p<=6;p++)head+=`<th>คาบ ${p}<br><span class="sm">${times[p-1].start}–${times[p-1].end}</span></th>`;
+  const rows=w.days.map(d=>{let tr=`<tr><td><b>${U.DAYS[d.weekday]}</b><br>${U.parse(d.date).toLocaleDateString('th-TH',{day:'numeric',month:'short'})}${d.holiday?`<br><span class="sm">${d.holiday.kind==='activity'?'วันกิจกรรม':'วันหยุด'}</span>`:''}</td>`;
+   for(let p=1;p<=6;p++){
+    if(!d.term_id){tr+='<td class="off">นอกภาคเรียน</td>';continue;}
+    if(d.holiday?.kind==='holiday'){tr+='<td class="off">วันหยุด</td>';continue;}
+    const list=state.list.filter(r=>r.visit_date===d.date&&r.period===p).sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th'));
+    tr+=`<td>${list.map(r=>`<div class="it"><b>${esc(r.teacher_name)}</b><br><span class="sm">${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}<br>ผู้นิเทศ: ${r.supervisor_name?esc(r.supervisor_name):'ยังไม่มีผู้รับ'}</span></div>`).join('')}</td>`;}
+   return tr+'</tr>';}).join('');
+  const n=state.list.filter(r=>dates.includes(r.visit_date)).length;
+  const body=`<h1>ตารางนัดนิเทศการสอน</h1><div class="c">ระหว่างวันที่ ${lbl} · ลงทะเบียน ${n} คาบ</div><table class="wk"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  return U.output(kind,`ตารางนัดนิเทศ ${dates[0]}`,body,{landscape:true});
+ }
 }
 /* ---------- ประเมินผลการนิเทศ (สรุปสำหรับผู้บริหาร) ---------- */
 const LEVELS=[['ดีเยี่ยม','#187E6B'],['ดีมาก','#2B86E5'],['ดี','#5B6FD8'],['พอใช้','#d98a1f'],['ปรับปรุง','#c8483d']];
@@ -250,7 +303,8 @@ function revoke(id,name){
  m.querySelector('#rOk').onclick=async()=>{try{const r=await apiRequest(`/api/supervision/evaluators/${id}`,{method:'DELETE'});U.close();U.toast(r.released?`ถอนสิทธิ์แล้ว นัดที่ยังไม่ประเมิน ${r.released} รายการกลับไปรอผู้รับนิเทศใหม่`:'ถอนสิทธิ์แล้ว');viewEvaluators();}catch(e){U.close();U.toast(e.message,true);}};
 }
 document.addEventListener('click',e=>{
- const pr=e.target.closest('[data-print]');if(pr){const r=state.list.find(x=>x.id===Number(pr.dataset.print));if(r)U.printForm(r,{director:state.director,round:roundOf(r,state.list)});return;}
+ const pr=e.target.closest('[data-print],[data-print-word]');if(pr){const word=pr.dataset.printWord!=null,r=state.list.find(x=>x.id===Number(word?pr.dataset.printWord:pr.dataset.print));if(r)U.printForm(r,{director:state.director,round:roundOf(r,state.list)},word?'word':'pdf');return;}
+ const dc=e.target.closest('[data-doc]');if(dc){printDoc(dc.dataset.doc,dc.dataset.kind);return;}
  const el=e.target.closest('[data-sumtype],[data-export],[data-tab],[data-filter],[data-accept],[data-release],[data-eval],[data-result],[data-revoke],[data-away-del],[data-calweek],[data-calslot],[data-away-eval]');if(!el)return;
  if(el.dataset.awayEval){askAway(Number(el.dataset.awayEval));return;}
  if(el.dataset.calweek!=null){const n=Number(el.dataset.calweek);state.calStart=n===0?null:addD(state.calStart,n);viewResults().catch(err=>U.toast(err.message,true));return;}
