@@ -2,7 +2,7 @@ import { workScopeSummary } from "../lib/work-scopes.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
-import { leaveStatistics, substituteLoad, canViewPersonnelStats } from "../lib/personnel-stats.js";
+import { leaveStatistics, substituteLoad, canViewPersonnelStats, canViewAllLeaveStats } from "../lib/personnel-stats.js";
 
 const PROFILE_FIELDS = [
   ["personnel_type", "ประเภทบุคลากร"],
@@ -33,6 +33,7 @@ async function overview(request, env) {
   // วันที่ตามเวลาไทย และต้นปีงบประมาณ (1 ต.ค.)
   const bkToday = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
   const fyStart = `${Number(bkToday.slice(5, 7)) >= 10 ? bkToday.slice(0, 4) : Number(bkToday.slice(0, 4)) - 1}-10-01`;
+  const canViewLeaves = await canViewAllLeaveStats(env, user);
   const [staff, leaveSummary, recentLeaves, tasks, workSummary, positions, projects] = await Promise.all([
     env.DB.prepare(`SELECT id,user_id,full_name,email,personnel_type,position_number,position,academic_rank,phone,
       departments,service_start_date,education_level,major,institution,employment_status,retirement_date,
@@ -102,7 +103,8 @@ async function overview(request, env) {
     },
     people,
     positions: positions.results.map((row) => ({ label: row.label, count: number(row.count) })),
-    recent_leaves: recentLeaves.results,
+    recent_leaves: canViewLeaves ? recentLeaves.results : [],
+    can_view_leaves: canViewLeaves,
     work_by_topic: workByTopic,
     work_by_scope: workScopeSummary(workSummary.results),
     permissions: { can_manage: isAdmin(user) },
@@ -123,7 +125,7 @@ async function leaveStatsRoute(request, env) {
   if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensurePersonnelData(env);
   await ensureLeaveData(env);
-  const q = new URL(request.url).searchParams, all = await canViewPersonnelStats(env, user);
+  const q = new URL(request.url).searchParams, all = await canViewAllLeaveStats(env, user);
   const data = await leaveStatistics(env, { fiscalYear: q.get("fiscal_year"), period: q.get("period") || "year", onlyUserId: all ? null : user.id });
   if (data.error) return jsonResponse({ error: data.error }, 400);
   return jsonResponse({ ...data, scope: all ? "all" : "self" }, 200, { "Cache-Control": "private, no-store" });

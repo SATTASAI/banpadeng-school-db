@@ -37,7 +37,7 @@ body{background:inherit}.page{max-width:1240px;margin:auto;padding:24px}.hero{di
       </section>
     </div>
     <aside>
-      <section class="panel">
+      <section class="panel" id="leavePanel">
         <div class="panel-head"><h2>คำขอลาล่าสุด</h2><a href="/leave.html">ดูทั้งหมด</a></div>
         <div class="list" id="leaveList"></div>
       </section>
@@ -62,6 +62,7 @@ const date=v=>v?new Date(v+"T00:00:00").toLocaleDateString("th-TH",{day:"numeric
 function render(data){const s=data.summary;for(const [id,key] of [["staffCount","staff_count"],["incompleteCount","incomplete_profiles"],["pendingLeave","pending_leave"],["absentToday","absent_today"],["overdueTasks","overdue_tasks"],["licenseAttention","license_attention"]])$(id).textContent=Number(s[key]||0).toLocaleString("th-TH");
   $("workGrid").innerHTML=WORK.map(item=>{const x=(item.scope?data.work_by_scope?.[item.scope]:data.work_by_topic[item.key])||{total:0,completed:0,overdue:0};return `<a class="work-card" href="${item.url}"><h3>${item.title}</h3><div class="work-stat"><span>ทั้งหมด <strong>${x.total}</strong></span><span>เสร็จ <strong>${x.completed}</strong></span><span>เกินกำหนด <strong>${x.overdue}</strong></span></div></a>`}).join("");
   $("profileTable").innerHTML=data.people.length?`<table><thead><tr><th>บุคลากร</th><th>ตำแหน่ง/วิทยฐานะ</th><th>สถานะข้อมูล</th><th>ข้อมูลที่ควรเพิ่ม</th></tr></thead><tbody>${data.people.map(p=>`<tr><td><a href="/staff.html?staff=${p.id}"><strong>${esc(p.full_name)}</strong></a><br><small>${esc(p.homeroom_classroom?`ประจำชั้น ${p.homeroom_classroom}`:"")}</small></td><td>${esc([p.position,p.academic_rank].filter(Boolean).join(" · "))}</td><td><strong>${p.completeness.percent}%</strong><div class="progress"><i class="${p.completeness.percent===100?"complete":""}" style="width:${p.completeness.percent}%"></i></div></td><td class="missing">${esc(p.completeness.missing.join(", "))}</td></tr>`).join("")}</tbody></table>`:'<div class="empty">ยังไม่มีทะเบียนบุคลากร</div>';
+  $("leavePanel").hidden=data.can_view_leaves===false;
   $("leaveList").innerHTML=data.recent_leaves.length?data.recent_leaves.map(r=>`<div class="leave"><div><strong>${esc(r.full_name)}</strong><br><small>${esc(LEAVE[r.leave_type]||r.leave_type)} · ${date(r.start_date)}${r.end_date!==r.start_date?` ถึง ${date(r.end_date)}`:""}</small></div><span class="pill ${esc(r.status)}">${esc(STATUS[r.status]||r.status)}</span></div>`).join(""):'<div class="empty">ยังไม่มีคำขอลา</div>';
   $("positionList").innerHTML=data.positions.map(r=>`<div class="position-row"><span>${esc(r.label)}</span><strong>${r.count} คน</strong></div>`).join("")||'<div class="empty">ยังไม่มีข้อมูลตำแหน่ง</div>';
 }

@@ -39,6 +39,13 @@ export function leavePeriod(fiscalYear, period = 'year') {
 }
 
 // ผู้ดูสถิติของทุกคน: ผู้ดูแลระบบ ผู้บริหาร หัวหน้า/เจ้าหน้าที่ฝ่ายบุคลากร — ครูทั่วไปเห็นเฉพาะของตนเอง
+// สถิติวันลารายบุคคลของทุกคน: เฉพาะหัวหน้าฝ่ายบุคคล ผอ./รอง ผอ. (บัญชีผู้บริหาร) และ superadmin — คนอื่นเห็นเฉพาะของตนเอง
+export async function canViewAllLeaveStats(env, user) {
+  if (!user?.role) return false;
+  if (['superadmin', 'executive'].includes(user.role)) return true;
+  return isPersonnelHead(env, user).catch(() => false);
+}
+
 export async function canViewPersonnelStats(env, user) {
   if (!user?.role) return false;
   if (['superadmin', 'executive'].includes(user.role)) return true;
