@@ -217,28 +217,34 @@ test("repair requests go to the general-administration head instead of the schoo
   assert.equal((await call(env, "/api/maintenance/summary", "GET", null, 2)).body.can_manage, false, "ordinary teachers still cannot manage");
 });
 
-test("repair photos are stored in R2 even when the main file store is Google Drive", async () => {
+test("repair photos are stored in Google Drive like other new files", async () => {
   const env = fixture();
-  const objects = new Map();
-  env.FILE_STORAGE_PROVIDER = "drive";
-  env.FILES = {
-    async put(key, body) { objects.set(key, new Uint8Array(await new Response(body).arrayBuffer())); },
-    async get(key) { const data = objects.get(key); return data ? { body: new Blob([data]).stream(), httpMetadata: { contentType: "image/png" }, size: data.length } : null; },
-    async delete(key) { objects.delete(key); },
-  };
-  const created = await call(env, "/api/maintenance/requests", "POST",
-    { title: "กระจกแตก", description: "หน้าต่างห้องสมุด", category: "building", custom_location: "ห้องสมุด", defer_notification: true }, 2);
-  assert.equal(created.status, 201, JSON.stringify(created.body));
+  Object.assign(env, { FILE_STORAGE_PROVIDER: "drive", GOOGLE_DRIVE_CLIENT_ID: "test-only", GOOGLE_DRIVE_CLIENT_SECRET: "test-only", GOOGLE_DRIVE_REFRESH_TOKEN: "test-only", GOOGLE_DRIVE_FOLDER_ID: "test-folder" });
   const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
-  const form = new FormData();
-  form.set("file", new File([png], "before.png", { type: "image/png" }));
-  const token = await signJWT({ sub: 2 }, SECRET);
-  const response = await worker.fetch(new Request(`https://school.test/api/attachments/maintenance_before/${created.body.id}`, { method: "POST", headers: { Cookie: `bpd_session=${token}` }, body: form }), env, {});
-  const body = await response.json();
-  assert.equal(response.status, 201, JSON.stringify(body));
-  assert.equal(body.storage_provider, "r2");
-  assert.equal(objects.size, 1);
-  const download = await worker.fetch(new Request(`https://school.test/api/attachments/${body.id}`, { headers: { Cookie: `bpd_session=${token}` } }), env, {});
-  assert.equal(download.status, 200);
-  assert.equal((await download.arrayBuffer()).byteLength, png.length);
+  const original = globalThis.fetch;
+  const uploads = [];
+  globalThis.fetch = async (input, init = {}) => {
+    const url = String(input?.url || input);
+    if (url.includes("oauth2")) return Response.json({ access_token: "test-only", expires_in: 3600 });
+    if (url.includes("/upload/")) { uploads.push(url); return Response.json({ id: "drive-repair-1", webViewLink: "https://drive.example/file" }); }
+    if (url.includes("alt=media")) return new Response(png, { headers: { "Content-Type": "image/png" } });
+    if (url.includes("googleapis.com")) return Response.json({ files: [{ id: "test-folder" }], id: "test-folder" });
+    return original(input, init);
+  };
+  try {
+    const created = await call(env, "/api/maintenance/requests", "POST",
+      { title: "กระจกแตก", description: "หน้าต่างห้องสมุด", category: "building", custom_location: "ห้องสมุด", defer_notification: true }, 2);
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const form = new FormData();
+    form.set("file", new File([png], "before.png", { type: "image/png" }));
+    const token = await signJWT({ sub: 2 }, SECRET);
+    const response = await worker.fetch(new Request(`https://school.test/api/attachments/maintenance_before/${created.body.id}`, { method: "POST", headers: { Cookie: `bpd_session=${token}` }, body: form }), env, {});
+    const body = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(body));
+    assert.equal(body.storage_provider, "drive");
+    assert.equal(uploads.length, 1);
+    const download = await worker.fetch(new Request(`https://school.test/api/attachments/${body.id}`, { headers: { Cookie: `bpd_session=${token}` } }), env, {});
+    assert.equal(download.status, 200);
+    assert.equal((await download.arrayBuffer()).byteLength, png.length);
+  } finally { globalThis.fetch = original; }
 });
