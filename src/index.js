@@ -31,6 +31,7 @@ import { VIEW_AS_BLOCKED, endViewAs, viewAsMayWrite } from "./lib/view-as.js";
 import { handleViewAsRoute, viewAsState } from "./routes/view-as.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
+import { mergeConfirmedPersonnel } from "./lib/personnel-merge.js";
 import { importStaffRows } from "./lib/staff-import.js";
 import { importProjectRows, upsertProjectRow, findDuplicateProject } from "./lib/project-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
@@ -896,6 +897,8 @@ export async function handleAdminUpdateUser(request, env, targetId) {
         `UPDATE personnel_records SET full_name = ?
          WHERE full_name = ? AND id IN (SELECT personnel_id FROM personnel_accounts WHERE user_id = ?)`
       ).bind(newName, target.full_name, targetId).run();
+      // ชื่อใหม่อาจตรงกับข้อมูลบุคลากรเดิมที่ยังไม่มีบัญชี → รวมเป็นคนเดียวอัตโนมัติ
+      await mergeConfirmedPersonnel(env).catch((error) => console.error("personnel auto-merge", error));
     } catch (error) {
       if (!/no such table/i.test(String(error))) throw error;
     }

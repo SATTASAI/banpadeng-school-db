@@ -34,8 +34,24 @@ export async function mergeConfirmedPersonnel(env) {
   const { results: people } = await env.DB.prepare("SELECT * FROM personnel_records WHERE status='active'").all();
   const { results: tables } = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   const hasDepartments = tables.some(row => row.name === 'department_staff');
+  const { results: linked } = await env.DB.prepare('SELECT DISTINCT personnel_id FROM personnel_accounts').all();
+  const linkedIds = new Set(linked.map(row => Number(row.personnel_id)));
+  const hasAccount = row => Boolean(row.user_id) || linkedIds.has(Number(row.id));
+  // จับคู่อัตโนมัติ: ข้อมูลเดิม (ยังไม่มีบัญชี) ชื่อตรงกับบัญชีที่สมัครเอง 1 บัญชี → รวมเป็นคนเดียว
+  // (เช่น สมัครด้วยชื่อสั้นแล้วแก้ชื่อเต็มภายหลัง จึงไม่ถูกจับคู่ตอนสมัคร) ถ้ามีหลายบัญชีชื่อเดียวกันจะไม่รวมเอง
+  const groups = new Map();
+  for (const row of people) {
+    const key = personnelIdentity(row.full_name);
+    if (key) groups.set(key, [...(groups.get(key) || []), row]);
+  }
+  const autoNames = [];
+  for (const rows of groups.values()) {
+    if (rows.length !== 2 || CONFIRMED_NAMES.some(name => personnelIdentity(name) === personnelIdentity(rows[0].full_name))) continue;
+    const withAccount = rows.filter(hasAccount);
+    if (withAccount.length === 1) autoNames.push(String(withAccount[0].full_name).trim().replace(/\s+/g, ' '));
+  }
   let merged = 0;
-  for (const name of CONFIRMED_NAMES) {
+  for (const name of [...CONFIRMED_NAMES, ...autoNames]) {
     const matches = people.filter(row => personnelIdentity(row.full_name) === personnelIdentity(name));
     if (matches.length < 2) continue;
     // Keep the imported identity (and its stable ID/license fields); keep all accounts linked.

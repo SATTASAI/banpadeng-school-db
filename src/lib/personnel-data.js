@@ -291,5 +291,8 @@ export async function upsertSelfRegisteredPersonnel(env, profile) {
   ).run();
   await env.DB.prepare("INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)")
     .bind(profile.user_id,result.meta.last_row_id).run();
-  return result.meta.last_row_id;
+  // ชื่อที่สมัครอาจตรงกับข้อมูลเดิมที่ยังไม่มีบัญชี (หลังแก้ชื่อ) → รวมให้อัตโนมัติ
+  await mergeConfirmedPersonnel(env);
+  const linked = await env.DB.prepare("SELECT personnel_id FROM personnel_accounts WHERE user_id=?").bind(profile.user_id).first();
+  return Number(linked?.personnel_id || result.meta.last_row_id);
 }
