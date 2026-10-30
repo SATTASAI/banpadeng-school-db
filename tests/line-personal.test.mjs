@@ -215,6 +215,14 @@ test("repair requests go to the general-administration head instead of the schoo
   assert.equal(done.status, 200, JSON.stringify(done.body));
   assert.deepEqual(lineCalls.filter((c) => c.path === "/v2/bot/message/push").map((c) => c.body.to), ["Uhead0000000001"]);
   assert.equal((await call(env, "/api/maintenance/summary", "GET", null, 2)).body.can_manage, false, "ordinary teachers still cannot manage");
+  // ผู้แจ้งเห็นในกระดิ่งแจ้งเตือนของ system ด้วย (แม้ไม่ได้เชื่อม LINE) และหายไปเมื่อตรวจรับ
+  const bell = (await call(env, "/api/notifications", "GET", null, 2)).body.notifications;
+  const repairNote = bell.find((n) => n.message_key.startsWith(`maintenance:${created.body.id}:completed`));
+  assert.ok(repairNote, JSON.stringify(bell));
+  assert.equal(repairNote.url, `/maintenance.html?request=${created.body.id}`);
+  assert.ok(!(await call(env, "/api/notifications", "GET", null, 3)).body.notifications.some((n) => n.message_key.startsWith("maintenance:")), "technician gets no bell item");
+  assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "verified" }, 2)).status, 200);
+  assert.ok(!(await call(env, "/api/notifications", "GET", null, 2)).body.notifications.some((n) => n.message_key.startsWith("maintenance:")));
 });
 
 test("repair photos are stored in Google Drive like other new files", async () => {

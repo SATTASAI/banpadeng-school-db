@@ -9,7 +9,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -42,6 +42,11 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  FROM supervision_notifications n JOIN supervision_requests r ON r.id=n.request_id WHERE n.user_id=?`);tertiaryValues.push(user.id);}
  if(tables.has('security_notifications')){tertiaryTerms.push(`SELECT 'security:'||n.id,'ความปลอดภัยบัญชี',n.message,n.created_at,'/account.html#devices',n.read_at,NULL,1
  FROM security_notifications n WHERE n.user_id=?`);tertiaryValues.push(user.id);}
+ // แจ้งซ่อม: ซ่อมเสร็จแล้ว รอผู้แจ้งตรวจรับ (หายไปเมื่อตรวจรับ) — LINE ส่งแยกอยู่แล้ว จึงไม่รวมใน feed ของ LINE
+ if(!forLine&&tables.has('maintenance_requests')&&tables.has('maintenance_updates')){tertiaryTerms.push(`SELECT 'maintenance:'||m.id||':completed:'||COALESCE(m.completed_at,''),'แจ้งซ่อม: ซ่อมเสร็จแล้ว กรุณาตรวจรับ',
+ m.title||COALESCE(' · '||NULLIF(m.resolution,''),''),COALESCE(m.completed_at,m.updated_at),'/maintenance.html?request='||m.id,NULL,NULL,1
+ FROM maintenance_requests m WHERE m.reported_by=? AND m.status='completed'
+ AND COALESCE((SELECT u.created_by FROM maintenance_updates u WHERE u.request_id=m.id AND u.new_status='completed' ORDER BY u.id DESC LIMIT 1),0)<>m.reported_by`);tertiaryValues.push(user.id);}
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}
