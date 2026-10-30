@@ -6,6 +6,7 @@ import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
+import {handleTeachingWorksRoute} from './routes/teaching-works.js';
 import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -3692,6 +3693,13 @@ async function deleteGoogleDriveFile(env, fileId) {
   await googleDriveRequest(accessToken, `/files/${encodeURIComponent(fileId)}`, { method: "DELETE" });
 }
 
+// ป่าเด็งโมเดล / วิจัยในชั้นเรียน (src/routes/teaching-works.js) ใช้บัญชี Google Drive เดียวกัน
+const TEACHING_WORKS_DRIVE = {
+  ready: (env) => requireDriveConfig(env),
+  token: (env) => getGoogleDriveAccessToken(env),
+  request: (token, path, options) => googleDriveRequest(token, path, options),
+};
+
 // ภาพหลักฐานแทนการนิเทศ (ครูส่งเมื่อผู้ประเมินแจ้งไม่ว่างไปนิเทศ) — เก็บใน Google Drive โฟลเดอร์ "ภาพการนิเทศ"
 const SUPERVISION_FILE_SERVICES = {
   validate: (file, entityType) => validateManagedFile(file, entityType),
@@ -4771,6 +4779,8 @@ const app = {
 
       const leaveResponse=await handleLeaveRoute(request,env,pathname,method);
       if(leaveResponse)return leaveResponse;
+      const teachingWorksResponse=await handleTeachingWorksRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
+      if(teachingWorksResponse)return teachingWorksResponse;
       const supervisionResponse=await handleSupervisionRoute(request,env,pathname,method,SUPERVISION_FILE_SERVICES);
       if(supervisionResponse)return supervisionResponse;
 

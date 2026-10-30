@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>วิจัยในชั้นเรียน — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1 id="title">วิจัยในชั้นเรียน</h1><p id="lead">ส่งไฟล์วิจัยในชั้นเรียน (PDF) ภาคเรียนละ 1 เรื่อง</p></div>
+    <div class="tw-actions"><label class="tw-term">ภาคเรียน<select id="term"></select></label><span id="headActions"></span></div>
+  </header>
+  <div class="tw-error" id="error" role="alert"></div>
+  <section id="cards" class="tw-cards"></section>
+  <section id="body"><p class="tw-note">กำลังโหลด…</p></section>
+</main>
+<script src="/js/api.js"></script>
+<script src="/js/teaching-works.js"></script>
+<script>
+(()=>{
+const {$,esc,fileUrl,uploadFiles,showError,fillTerms,progressBar}=TeachingWorks;
+const progressView=new URLSearchParams(location.search).get('view')==='progress';
+let data=null,version=0;
+const when=s=>s?new Date(s.replace(' ','T')+'Z').toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
+
+async function load(){
+  const v=++version;showError();
+  try{
+    const term=$('term').value;
+    const d=await apiRequest(`/api/teaching-works/research/${progressView?'progress':'mine'}${term?`?term_id=${term}`:''}`);
+    if(v!==version)return;data=d;fillTerms(d);render();
+  }catch(e){if(v===version){showError(e.message);$('body').innerHTML='';}}
+}
+
+function renderMine(){
+  if(!data.term){$('body').innerHTML='<p class="tw-note">ยังไม่มีภาคเรียนในระบบ</p>';return;}
+  const f=data.file,closed=data.term.status==='closed';
+  $('body').innerHTML=`<div class="tw-research">
+    ${f?`<div class="tw-current">✓ ส่งแล้ว: <b>${esc(f.title)}</b><br><small>${when(f.created_at)}</small> · <a href="${fileUrl('research',f.id)}" target="_blank" rel="noopener">เปิดไฟล์</a> · <a href="${fileUrl('research',f.id,true)}">ดาวน์โหลด</a></div>`
+      :'<p class="tw-note" style="margin-top:0">ยังไม่ได้ส่งงานวิจัยของภาคเรียนนี้</p>'}
+    ${closed?'<p class="tw-note">ภาคเรียนนี้ปิดแล้ว ดูงานได้อย่างเดียว</p>':`<form id="form">
+      <label class="f">ชื่อเรื่องวิจัย<input name="title" maxlength="150" required value="${esc(f?.title||'')}" placeholder="เช่น การพัฒนาทักษะการอ่านออกเสียงของนักเรียนชั้น ป.2"></label>
+      <label class="f">ไฟล์วิจัย (PDF ไม่เกิน 30 MB)<input name="file" type="file" accept="application/pdf,.pdf" required></label>
+      <button class="btn btn-primary" style="width:auto">${f?'ส่งไฟล์ใหม่แทนไฟล์เดิม':'ส่งงานวิจัย'}</button><div class="tw-progress" id="up"></div></form>`}
+  </div>`;
+  if(closed)return;
+  $('form').onsubmit=async e=>{
+    e.preventDefault();const fd=new FormData(e.target),file=fd.get('file');
+    if(f&&!confirm('ไฟล์ใหม่จะแทนไฟล์เดิม (ไฟล์เดิมย้ายไปถังขยะ Drive) ยืนยัน?'))return;
+    e.target.querySelector('button').disabled=true;
+    await uploadFiles('/api/teaching-works/research/upload',[file],x=>({title:fd.get('title'),term_id:data.term.id,file:x}),$('up'));
+    load();
+  };
+}
+
+function renderProgress(){
+  if(!data.term){$('body').innerHTML='<p class="tw-note">ยังไม่มีภาคเรียนในระบบ</p>';return;}
+  const t=data.teachers,done=t.filter(x=>x.file).length;
+  $('headActions').innerHTML=done?`<a class="btn btn-primary" href="/api/teaching-works/research/zip?term_id=${data.term.id}">ดาวน์โหลดทั้งหมด (.zip)</a>`:'';
+  $('cards').innerHTML=`<div class="tw-card"><span>ส่งแล้ว</span><strong>${done} / ${t.length} คน</strong>${progressBar(done,t.length)}</div>
+    <div class="tw-card"><span>ยังไม่ส่ง</span><strong>${t.length-done} คน</strong></div>`;
+  $('body').innerHTML=t.length?`<div class="tw-filter"><input id="search" type="search" placeholder="ค้นหาชื่อครู / ชื่อเรื่อง"><label><input type="checkbox" id="pending"> แสดงเฉพาะที่ยังไม่ส่ง</label></div>
+    <div class="tw-table"><table><thead><tr><th>ที่</th><th>ครู</th><th>ชื่อเรื่อง</th><th>ส่งเมื่อ</th><th>สถานะ</th><th>ไฟล์</th></tr></thead><tbody id="rows"></tbody></table></div>`
+    :'<div class="tw-empty"><b>ยังไม่มีข้อมูลครูผู้สอนของภาคเรียนนี้</b></div>';
+  if(!t.length)return;
+  const rows=()=>{
+    const q=$('search').value.trim(),pending=$('pending').checked;
+    $('rows').innerHTML=t.filter(x=>(!q||(x.full_name+' '+(x.file?.title||'')).includes(q))&&(!pending||!x.file)).map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td>
+      <td>${x.file?esc(x.file.title):'—'}</td><td>${x.file?when(x.file.created_at):''}</td>
+      <td>${x.file?'<span class="tw-badge ok">ส่งแล้ว</span>':'<span class="tw-badge">ยังไม่ส่ง</span>'}</td>
+      <td>${x.file?`<a href="${fileUrl('research',x.file.id)}" target="_blank" rel="noopener">เปิด</a> · <a href="${fileUrl('research',x.file.id,true)}">ดาวน์โหลด</a>`:''}</td></tr>`).join('')||'<tr><td colspan="6">ไม่พบข้อมูล</td></tr>';
+  };
+  $('search').oninput=rows;$('pending').onchange=rows;rows();
+}
+function render(){$('headActions').innerHTML='';$('cards').innerHTML='';progressView?renderProgress():renderMine();}
+$('term').onchange=load;
+TeachingWorks.boot(p=>{
+  if(progressView){
+    if(!p.academic){$('body').innerHTML='<div class="tw-empty"><b>เฉพาะบุคลากรฝ่ายวิชาการ</b><p>หน้านี้ใช้ติดตามการส่งวิจัยในชั้นเรียนของครูทั้งโรงเรียน</p></div>';return;}
+    $('title').textContent='วิจัยในชั้นเรียน — ความคืบหน้าการส่งงาน';$('lead').textContent='ฝ่ายวิชาการ · ติดตามการส่งไฟล์วิจัยในชั้นเรียนของครูแต่ละคน ดาวน์โหลดไฟล์ได้';
+  }
+  load();
+});
+})();
+</script></body></html>

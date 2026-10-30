@@ -357,6 +357,8 @@
       <a href="/support.html" data-page="student-support"><span class="nav-number">08</span>ดูแลนักเรียน</a>
       <a href="/leave.html" data-page="leave"><span class="nav-number">ลา</span>การลา</a>
       <a href="/supervision.html" data-page="supervision"><span class="nav-number">นิเทศ</span>ลงทะเบียนนิเทศ</a>
+      <a href="/padeng-model.html" data-page="padeng-model"><span class="nav-number">PDM</span>ป่าเด็งโมเดล</a>
+      <a href="/classroom-research.html" data-page="classroom-research"><span class="nav-number">วจ.</span>วิจัยในชั้นเรียน</a>
       <a href="/maintenance.html" data-page="maintenance"><span class="nav-number">ซ่อม</span>แจ้งซ่อม</a>
       <a href="/finance-requests.html" data-page="finance-requests"><span class="nav-number">เบิก</span>ขอเบิกจ่ายและจัดซื้อจัดจ้าง</a>
       <a href="/documents.html" data-page="documents"><span class="nav-number">09</span>เอกสาร</a>
@@ -577,6 +579,7 @@
         link.textContent = item.label;
         if (item.evaluationOnly) { link.dataset.evaluationOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.supervisionOnly) { link.dataset.supervisionOnly=item.supervisionOnly; link.hidden=true; link.style.display='none'; }
+        if (item.academicOnly) { link.dataset.academicOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.substituteOnly) { link.classList.add('personnel-only'); link.title='จัดสอนแทนจากข้อมูลการลา'; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
         if (item.url === '/finance-register.html') {
@@ -598,6 +601,7 @@
   }
   buildSidebarSubmenus();
   apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
+  apiRequest('/api/teaching-works/permissions').then(p=>document.querySelectorAll('[data-academic-only]').forEach(link=>{link.hidden=!p.academic;link.style.display=p.academic?'':'none';})).catch(()=>{});
   apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
 
   function showOverview() {
@@ -739,6 +743,8 @@
     {title:"ระบบรายงานผลการเรียน",subtitle:"กรอกคะแนน ปพ.5 ปพ.6 ครูประจำชั้น",page_key:"grades",url:"https://grades.banpadengschool.ac.th/",keywords:"เกรด คะแนน ผลการเรียน ปพ5 ปพ6 ปพ.5 ปพ.6 ครูประจำชั้น เวลาเรียน",external:true},
     {title:"งานมอบหมาย",subtitle:"งานที่ได้รับมอบหมาย",page_key:"tasks",url:"/tasks.html",keywords:"งาน มอบหมาย กำหนดส่ง"},
     {title:"การลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
+    {title:"ป่าเด็งโมเดล",subtitle:"ระบบสนับสนุน · ส่งภาพกิจกรรม (ไม่เกิน 4 ภาพ) และ PDF ต่อวิชา",page_key:"padeng-model",url:"/padeng-model.html",keywords:"ป่าเด็งโมเดล padeng model ส่งงาน ภาพกิจกรรม pdf"},
+    {title:"วิจัยในชั้นเรียน",subtitle:"ระบบสนับสนุน · ส่งไฟล์วิจัยในชั้นเรียน (PDF)",page_key:"classroom-research",url:"/classroom-research.html",keywords:"วิจัย วิจัยในชั้นเรียน ส่งงาน pdf"},
     {title:"ลงทะเบียนนิเทศ",subtitle:"ขอรับการนิเทศการสอนและนิเทศห้องเรียน",page_key:"supervision",url:"/supervision.html",keywords:"นิเทศ นิเทศการสอน นิเทศห้องเรียน ลงทะเบียน ผลนิเทศ"},
     {title:"นิเทศการสอน (ฝ่ายบริหาร)",subtitle:"รับนิเทศ บันทึกคะแนน และผลการนิเทศ",page_key:"administration",url:"/supervision-admin.html",keywords:"นิเทศ รับนิเทศ บันทึกคะแนน ผลนิเทศ ผู้บริหาร"},
     {title:"ประเมินผลการนิเทศ (ฝ่ายบริหาร)",subtitle:"สรุปภาพรวม ระดับคุณภาพ จุดเด่นจุดที่ควรพัฒนา รายครู",page_key:"administration",url:"/supervision-admin.html?view=summary",keywords:"ประเมินผลการนิเทศ สรุปผลนิเทศ รายงานนิเทศ ผู้บริหาร"},
