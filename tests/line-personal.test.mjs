@@ -266,3 +266,13 @@ test("repair photos are stored in Google Drive like other new files", async () =
     assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}/discard`, "POST", null, 2)).status, 409, "has photo → cannot discard");
   } finally { globalThis.fetch = original; }
 });
+
+test("technician can mark an assigned repair as completed directly", async () => {
+  const env = fixture();
+  const created = await call(env, "/api/maintenance/requests", "POST", { title: "ไฟดับ", description: "ห้อง 1", category: "electrical", custom_location: "ห้อง 1", defer_notification: true }, 2);
+  assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "assigned", assigned_to: 3 }, 1)).status, 200);
+  const done = await call(env, `/api/maintenance/requests/${created.body.id}`, "PATCH", { status: "completed", resolution: "เปลี่ยนฟิวส์" }, 3);
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  const row = env.raw.prepare("SELECT status, started_at, completed_at FROM maintenance_requests WHERE id=?").get(created.body.id);
+  assert.equal(row.status, "completed"); assert.ok(row.started_at); assert.ok(row.completed_at);
+});

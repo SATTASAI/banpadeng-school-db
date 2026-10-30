@@ -3039,7 +3039,7 @@ const MAINTENANCE_PRIORITIES = ["low", "normal", "high", "urgent"];
 const MAINTENANCE_STATUSES = ["reported", "assigned", "in_progress", "waiting_parts", "completed", "verified", "cancelled"];
 const MAINTENANCE_TRANSITIONS = {
   reported: ["assigned", "cancelled"],
-  assigned: ["reported", "in_progress", "cancelled"],
+  assigned: ["reported", "in_progress", "completed", "cancelled"], // ช่างกด "ซ่อมเสร็จ" ได้ทันทีโดยไม่ต้องผ่าน "กำลังซ่อม"
   in_progress: ["waiting_parts", "completed", "cancelled"],
   waiting_parts: ["in_progress", "completed", "cancelled"],
   completed: ["in_progress", "verified"],
@@ -3328,7 +3328,7 @@ async function handleUpdateMaintenanceRequest(request, env, requestId) {
   const comment = cleanText(body.comment,1500);
   if (statusChanged && !comment && ["cancelled","waiting_parts"].includes(nextStatus)) return jsonResponse({ error: "กรุณาระบุเหตุผลประกอบการเปลี่ยนสถานะ" },400);
   await env.DB.prepare(`UPDATE maintenance_requests SET assigned_to=?,due_date=?,estimated_cost=?,actual_cost=?,resolution=?,status=?,
-      started_at=CASE WHEN ?='in_progress' AND started_at IS NULL THEN datetime('now') ELSE started_at END,
+      started_at=CASE WHEN ? IN ('in_progress','completed') AND started_at IS NULL THEN datetime('now') ELSE started_at END,
       completed_at=CASE WHEN ?='completed' THEN datetime('now') WHEN ?='in_progress' THEN NULL ELSE completed_at END,
       verified_by=CASE WHEN ?='verified' THEN ? WHEN ?='in_progress' THEN NULL ELSE verified_by END,
       verified_at=CASE WHEN ?='verified' THEN datetime('now') WHEN ?='in_progress' THEN NULL ELSE verified_at END,
