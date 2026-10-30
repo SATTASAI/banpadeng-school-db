@@ -62,31 +62,73 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
   async function processSignature(file) {
     let src;
     try { src = await decode(file); } catch { throw Error('เปิดภาพนี้ไม่ได้ กรุณาใช้ไฟล์ JPG หรือ PNG'); }
-    const s0 = Math.min(1, 1400 / Math.max(src.width, src.height)), W = Math.max(1, Math.round(src.width * s0)), H = Math.max(1, Math.round(src.height * s0));
+    const s0 = Math.min(1, 1200 / Math.max(src.width, src.height)), W = Math.max(1, Math.round(src.width * s0)), H = Math.max(1, Math.round(src.height * s0));
     const c = document.createElement('canvas'); c.width = W; c.height = H;
     const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); g.drawImage(src, 0, 0, W, H); src.close?.();
     const img = g.getImageData(0, 0, W, H), px = img.data, n = W * H;
     const L = new Float32Array(n);
     for (let i = 0; i < n; i++) L[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2];
-    // พื้นหลังเฉพาะจุด = ค่าเฉลี่ยความสว่างรอบ ๆ (integral image) → ลดผลของเงา/แสงไม่เท่ากันจากการถ่ายรูป
-    const I = new Float64Array((W + 1) * (H + 1));
-    for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += L[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row; } }
-    const r = Math.max(8, Math.round(Math.max(W, H) / 18)), D = new Float32Array(n), hist = new Uint32Array(256);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      const x0 = Math.max(0, x - r), x1 = Math.min(W, x + r + 1), y0 = Math.max(0, y - r), y1 = Math.min(H, y + r + 1);
-      const mean = (I[y1 * (W + 1) + x1] - I[y0 * (W + 1) + x1] - I[y1 * (W + 1) + x0] + I[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
-      const d = Math.max(0, Math.max(mean, 140) - L[y * W + x]); D[y * W + x] = d; hist[Math.min(255, Math.round(d))]++;
-    }
-    // Otsu: หาเกณฑ์แยก "หมึก" กับ "พื้น"
+    // พื้นกระดาษเฉพาะจุด = ค่าสว่างสุดรอบ ๆ (max filter กว้างกว่าเส้นปากกา) แล้วเกลี่ยให้เรียบ
+    // → ตามเงา/แสงไม่เท่ากันได้ ไม่ว่ากระดาษในรูปจะสว่างหรือมืด
+    const r = Math.max(6, Math.round(Math.max(W, H) / 70));
+    const maxPass = (src, horiz) => {
+      const out = new Float32Array(n);
+      for (let a = 0; a < (horiz ? H : W); a++) for (let b = 0; b < (horiz ? W : H); b++) {
+        let m = 0; const b0 = Math.max(0, b - r), b1 = Math.min((horiz ? W : H) - 1, b + r);
+        for (let k = b0; k <= b1; k++) { const v = horiz ? src[a * W + k] : src[k * W + a]; if (v > m) m = v; }
+        out[horiz ? a * W + b : b * W + a] = m;
+      }
+      return out;
+    };
+    const boxPass = (src, rad) => {
+      const I = new Float64Array((W + 1) * (H + 1)), out = new Float32Array(n);
+      for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += src[y * W + x]; I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row; } }
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const x0 = Math.max(0, x - rad), x1 = Math.min(W, x + rad + 1), y0 = Math.max(0, y - rad), y1 = Math.min(H, y + rad + 1);
+        out[y * W + x] = (I[y1 * (W + 1) + x1] - I[y0 * (W + 1) + x1] - I[y1 * (W + 1) + x0] + I[y0 * (W + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+      }
+      return out;
+    };
+    const bg = boxPass(maxPass(maxPass(L, true), false), r);
+    // ความเข้มของหมึก = เข้มกว่าพื้นกระดาษตรงนั้นกี่ % (0–255)
+    const D = new Float32Array(n), hist = new Uint32Array(256);
+    for (let i = 0; i < n; i++) { const d = Math.max(0, (bg[i] - L[i]) / Math.max(bg[i], 24) * 255); D[i] = d; hist[Math.min(255, Math.round(d))]++; }
+    // เกณฑ์: Otsu + ไม่ต่ำกว่าระดับสัญญาณรบกวนของกระดาษ (เปอร์เซ็นไทล์ 90 × 2.5)
     let sum = 0; for (let i = 0; i < 256; i++) sum += i * hist[i];
     let wB = 0, sB = 0, best = 0, t = 30;
     for (let i = 0; i < 256; i++) { wB += hist[i]; if (!wB) continue; const wF = n - wB; if (!wF) break; sB += i * hist[i];
       const mB = sB / wB, mF = (sum - sB) / wF, v = wB * wF * (mB - mF) ** 2; if (v > best) { best = v; t = i; } }
-    t = Math.max(22, t);
-    const lo = t * 0.55, hi = t * 1.15;
+    let acc = 0, p90 = 0; for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= n * 0.9) { p90 = i; break; } }
+    t = Math.max(30, t, p90 * 2.5);
+    const lo = t * 0.75, hi = t * 1.3;
+    const A = new Float32Array(n);
+    for (let i = 0; i < n; i++) A[i] = Math.min(1, Math.max(0, (D[i] - lo) / (hi - lo)));
+    // แยกกลุ่มเส้นที่ติดกัน: ตัดจุดรบกวนเล็ก ๆ และขอบเงา/ขอบกระดาษที่แตะขอบภาพ (ถ้ายังมีเส้นอื่นเหลือ)
+    const label = new Int32Array(n), comps = [], stack = [];
+    for (let i = 0; i < n; i++) {
+      if (A[i] < 0.35 || label[i]) continue;
+      const id = comps.length + 1, c = { size: 0, border: false, px: [] }; label[i] = id; stack.push(i);
+      while (stack.length) {
+        const j = stack.pop(), x = j % W, y = (j / W) | 0; c.size++; c.px.push(j);
+        if (x === 0 || y === 0 || x === W - 1 || y === H - 1) c.border = true;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const k = yy * W + xx; if (!label[k] && A[k] >= 0.35) { label[k] = id; stack.push(k); }
+        }
+      }
+      comps.push(c);
+    }
+    const minSize = Math.max(12, Math.round(n * 0.00004));
+    const inner = comps.filter((c) => !c.border && c.size >= minSize).reduce((a, c) => a + c.size, 0);
+    const keep = new Uint8Array(comps.length + 1);
+    comps.forEach((c, k) => { keep[k + 1] = c.size >= minSize && (!c.border || inner < minSize * 4) ? 1 : 0; });
+    // ขยายพื้นที่ที่เก็บ 2 px ให้ขอบเส้นนุ่ม (anti-alias) ไม่ถูกตัด
+    const near = new Uint8Array(n);
+    comps.forEach((c, k) => { if (keep[k + 1]) for (const j of c.px) { const x = j % W, y = (j / W) | 0;
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const xx = x + dx, yy = y + dy; if (xx >= 0 && yy >= 0 && xx < W && yy < H) near[yy * W + xx] = 1; } } });
     let minX = W, minY = H, maxX = -1, maxY = -1;
     for (let i = 0; i < n; i++) {
-      const a = Math.min(1, Math.max(0, (D[i] - lo) / (hi - lo))), o = i * 4;
+      const a = near[i] ? A[i] : 0, o = i * 4;
       // ทำเส้นเข้ม: คงโทนสีหมึก (น้ำเงิน/ดำ) แต่กดความสว่างลง
       px[o] = Math.round(px[o] * 0.28); px[o + 1] = Math.round(px[o + 1] * 0.28); px[o + 2] = Math.round(px[o + 2] * 0.35);
       px[o + 3] = Math.round(255 * Math.min(1, a * 1.25));
