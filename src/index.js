@@ -3208,7 +3208,7 @@ async function handleMaintenanceSummary(request, env) {
     total_count:Number(row?.total_count||0), open_count:Number(row?.open_count||0), in_progress_count:Number(row?.in_progress_count||0),
     waiting_parts_count:Number(row?.waiting_parts_count||0), awaiting_verification_count:Number(row?.awaiting_verification_count||0),
     overdue_count:Number(row?.overdue_count||0), urgent_count:Number(row?.urgent_count||0), month_cost:Number(row?.month_cost||0),
-    can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget), line_to_head:heads.length>0,
+    user_id:user.id, can_manage:canManageMaintenance(user), line_configured:!!(env.LINE_CHANNEL_ACCESS_TOKEN && lineTarget), line_to_head:heads.length>0,
     line_recipient_count:lineMetrics.recipient_count, line_monthly_usage:lineMetrics.monthly_usage,
     line_monthly_limit:lineMetrics.monthly_limit, line_remaining:lineMetrics.remaining,
   });
