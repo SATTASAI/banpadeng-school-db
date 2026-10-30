@@ -25,6 +25,12 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
 .mini{width:100%;border-collapse:collapse;font-size:13.5px}.mini th,.mini td{padding:7px 6px;border-bottom:1px solid #e3ecf3;text-align:center;font-variant-numeric:tabular-nums}.mini th:first-child,.mini td:first-child{text-align:left}.mini th{color:#244e72;font-weight:600}
 .empty{padding:28px;text-align:center;color:var(--color-text-muted)}.fc-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}.fc-note{font-size:13px;color:var(--color-text-muted);margin:8px 2px}
 .bld{margin-bottom:14px}.bld h3{font-size:15px;margin:0 0 8px;color:#183153}
+.fm-bg{position:fixed;inset:0;background:rgba(17,37,60,.38);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}.fm-bg.on{display:flex}
+.fm{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fbfdff;border-radius:18px;box-shadow:0 28px 80px rgba(18,43,70,.24);padding:20px}.fm h2{margin:0 0 14px;font-size:18px}
+.fm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.fm-grid label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.fm-grid input,.fm-grid select,.fm-grid textarea{width:100%}.fm-grid .full{grid-column:1/-1}
+.fm-act{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.fm-act .btn,.rg-act .btn{width:auto}.fm-err{color:#9e3131;font-size:13px;margin-top:10px;display:none}
+.rg-act{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}.rg-act .btn{padding:4px 10px;font-size:12.5px}tr.closed td{color:#8A99A8}
+@media(max-width:620px){.fm-grid{grid-template-columns:1fr}}
 @media(max-width:820px){.fc-page{padding:14px}.fc-grid{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr 56px}}
 </style></head>
 <body>
@@ -65,10 +71,26 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
   </section>
 
   <section id="tab-registry" hidden>
-    <div class="fc-head" style="margin-bottom:10px"><p id="regNote" style="margin:0"></p><a class="btn btn-ghost" id="regImport" href="/import-center.html?template=facilities" hidden>เพิ่มอาคาร/ห้อง (นำเข้าข้อมูล)</a></div>
+    <div class="fc-head" style="margin-bottom:10px"><p id="regNote" style="margin:0"></p><div class="rg-act" id="regTools" hidden><button type="button" class="btn btn-primary" id="regAdd">+ เพิ่มอาคาร/ห้อง</button><a class="btn btn-ghost" href="/import-center.html?template=facilities">นำเข้าจาก Excel</a></div></div>
     <div id="registry"></div>
   </section>
 </main>
+<div class="fm-bg" id="fm"><form class="fm" id="fmForm">
+  <h2 id="fmTitle">เพิ่มอาคาร/ห้อง</h2>
+  <div class="fm-grid">
+    <label>รหัส *<input name="facility_code" maxlength="60" required></label>
+    <label>ชื่อ *<input name="name" maxlength="200" required></label>
+    <label>ประเภท *<select name="facility_type" id="fmType"></select></label>
+    <label>สถานะ<select name="status" id="fmStatus"></select></label>
+    <label>อาคาร<input name="building_name" maxlength="160" list="fmBld"><datalist id="fmBld"></datalist></label>
+    <label>ชั้น<input name="floor" maxlength="40"></label>
+    <label class="full">ตำแหน่ง/รายละเอียด<input name="location_detail" maxlength="300"></label>
+    <label class="full">ผู้ดูแล<input name="responsible_person" maxlength="160"></label>
+    <label class="full">หมายเหตุ<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+  </div>
+  <p class="fm-err" id="fmErr"></p>
+  <div class="fm-act"><button type="button" class="btn btn-ghost" id="fmCancel">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึก</button></div>
+</form></div>
 <script src="/js/api.js"></script>
 <script>
 const $=id=>document.getElementById(id);
@@ -131,17 +153,48 @@ function renderStats(){
   $("byTech").innerHTML=groupTable(items,r=>r.assignee_name||"ยังไม่มีผู้รับงาน");
 }
 function renderRegistry(){
-  $("regImport").hidden=!canManage;
+  $("regTools").hidden=!canManage;
   $("regNote").textContent=`${facilities.length} รายการ · งานซ่อมที่ยังไม่ปิดนับรวมทุกสถานะที่ยังไม่ตรวจรับ`;
   if(!facilities.length){$("registry").innerHTML='<div class="fc-panel empty">ยังไม่มีทะเบียนอาคาร/ห้อง</div>';return}
   const m=new Map();for(const f of facilities){const k=f.building_name||"ไม่ระบุอาคาร";if(!m.has(k))m.set(k,[]);m.get(k).push(f)}
-  $("registry").innerHTML=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],"th")).map(([b,fs])=>`<div class="bld"><h3>${esc(b)} <small style="color:var(--color-text-muted);font-weight:400">· ${fs.length} ห้อง/จุด</small></h3><div class="fc-table"><table style="min-width:760px"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>ชั้น/ตำแหน่ง</th><th>ผู้ดูแล</th><th class="n">สถานะ</th><th class="n">งานซ่อมค้าง</th><th class="n">แจ้งซ่อมทั้งหมด</th></tr></thead><tbody>${fs.map(f=>`<tr><td>${esc(f.facility_code)}</td><td>${esc(f.name)}</td><td>${esc(FACILITY_TYPE[f.facility_type]||f.facility_type)}</td><td>${esc([f.floor?"ชั้น "+f.floor:"",f.location_detail].filter(Boolean).join(" · ")||"-")}</td><td>${esc(f.responsible_person||"-")}</td><td class="n">${esc(FACILITY_STATUS[f.status]||f.status)}</td><td class="n">${f.open_request_count?`<span class="st wait">${f.open_request_count}</span>`:"0"}</td><td class="n">${f.request_count}</td></tr>`).join("")}</tbody></table></div></div>`).join("");
+  $("registry").innerHTML=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],"th")).map(([b,fs])=>`<div class="bld"><h3>${esc(b)} <small style="color:var(--color-text-muted);font-weight:400">· ${fs.length} ห้อง/จุด</small></h3><div class="fc-table"><table style="min-width:760px"><thead><tr><th>รหัส</th><th>ชื่อ</th><th>ประเภท</th><th>ชั้น/ตำแหน่ง</th><th>ผู้ดูแล</th><th class="n">สถานะ</th><th class="n">งานซ่อมค้าง</th><th class="n">แจ้งซ่อมทั้งหมด</th>${canManage?'<th class="n">จัดการ</th>':""}</tr></thead><tbody>${fs.map(f=>`<tr class="${f.status==="closed"?"closed":""}"><td>${esc(f.facility_code)}</td><td>${esc(f.name)}</td><td>${esc(FACILITY_TYPE[f.facility_type]||f.facility_type)}</td><td>${esc([f.floor?"ชั้น "+f.floor:"",f.location_detail].filter(Boolean).join(" · ")||"-")}</td><td>${esc(f.responsible_person||"-")}</td><td class="n">${esc(FACILITY_STATUS[f.status]||f.status)}</td><td class="n">${f.open_request_count?`<span class="st wait">${f.open_request_count}</span>`:"0"}</td><td class="n">${f.request_count}</td>${canManage?`<td class="n"><div class="rg-act"><button type="button" class="btn btn-ghost" data-edit="${f.id}">แก้ไข</button><button type="button" class="btn btn-ghost" data-toggle="${f.id}">${f.status==="closed"?"เปิดใช้งาน":"ปิดใช้งาน"}</button></div></td>`:""}</tr>`).join("")}</tbody></table></div></div>`).join("");
 }
 $("tabs").onclick=e=>{const b=e.target.closest("[data-tab]");if(!b)return;document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===b));["report","stats","registry"].forEach(t=>$("tab-"+t).hidden=t!==b.dataset.tab)};
 $("statusCards").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;statusFilter=b.dataset.g;renderReport()};
 ["q","month","place","cat"].forEach(id=>$(id).addEventListener(id==="q"?"input":"change",renderReport));
 $("statYear").onchange=renderStats;
 $("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)location.href=`/maintenance.html?request=${tr.dataset.id}`};
+let editId=null;
+function openForm(f){
+  editId=f?f.id:null;const fm=$("fmForm");fm.reset();$("fmErr").style.display="none";
+  $("fmTitle").textContent=f?`แก้ไข ${f.name}`:"เพิ่มอาคาร/ห้อง";
+  $("fmType").innerHTML=Object.entries(FACILITY_TYPE).map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  $("fmStatus").innerHTML=Object.entries(FACILITY_STATUS).map(([v,l])=>`<option value="${v}">${l}</option>`).join("");
+  $("fmBld").innerHTML=[...new Set(facilities.map(x=>x.building_name).filter(Boolean))].map(b=>`<option value="${esc(b)}">`).join("");
+  if(f)for(const el of fm.elements)if(el.name&&f[el.name]!=null)el.value=f[el.name];
+  $("fm").classList.add("on");fm.elements.facility_code.focus();
+}
+const closeForm=()=>$("fm").classList.remove("on");
+$("regAdd").onclick=()=>openForm(null);
+$("fmCancel").onclick=closeForm;
+$("fm").onclick=e=>{if(e.target===$("fm"))closeForm()};
+$("fmForm").onsubmit=async e=>{
+  e.preventDefault();const body={};for(const el of e.target.elements)if(el.name)body[el.name]=el.value.trim();
+  try{
+    await apiRequest(editId?`/api/facilities/${editId}`:"/api/facilities",{method:editId?"PATCH":"POST",body});
+    closeForm();await reloadFacilities();
+  }catch(err){$("fmErr").textContent=err.message||"บันทึกไม่สำเร็จ";$("fmErr").style.display="block"}
+};
+$("registry").onclick=async e=>{
+  const ed=e.target.closest("[data-edit]"),tg=e.target.closest("[data-toggle]");
+  if(ed)return openForm(facilities.find(f=>f.id==ed.dataset.edit));
+  if(!tg)return;const f=facilities.find(x=>x.id==tg.dataset.toggle);if(!f)return;
+  const closing=f.status!=="closed";
+  if(closing&&!confirm(`ปิดใช้งาน "${f.name}"?\nจะไม่แสดงให้เลือกตอนแจ้งซ่อม แต่ประวัติแจ้งซ่อมเดิมยังอยู่`))return;
+  try{await apiRequest(`/api/facilities/${f.id}`,{method:"PATCH",body:{status:closing?"closed":"active"}});await reloadFacilities()}
+  catch(err){showErr(err.message||"บันทึกไม่สำเร็จ")}
+};
+async function reloadFacilities(){const f=await apiRequest("/api/facilities");facilities=f.facilities||[];canManage=!!f.can_manage;renderRegistry()}
 async function load(){
   try{
     const [r,f]=await Promise.all([apiRequest("/api/maintenance/requests"),apiRequest("/api/facilities")]);
