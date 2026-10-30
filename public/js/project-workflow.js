@@ -41,7 +41,7 @@ window.ProjectWorkflow = (() => {
           <div class="wf-project-summary">${balances(p)}</div>
           <div class="wf-project-controls">${window.ProjectBalance?ProjectBalance.field(p,data.permissions.can_balance_edit):""}
           ${data.permissions.can_finance&&options.finance?`<div class="wf-allocation" data-allocation-field><label>งบจัดสรรโครงการ (บาท)<input type="number" min="${Math.round((p.spent_amount+p.reserved_amount)*100)/100}" step="0.01" value="${p.budget_amount}" data-allocation-value="${p.id}"></label><button class="btn btn-ghost" data-allocation-save="${p.id}">บันทึกวงเงิน</button></div>`:''}
-          <div class="wf-actions"><button class="btn btn-ghost" data-open="${p.id}">ไปที่เอกสาร / คำขอ</button>
+          <div class="wf-actions">${window.ProjectFiles?`<button class="btn btn-ghost" data-project-files="${p.id}">📁 เอกสารโครงการ</button>`:''}<button class="btn btn-ghost" data-open="${p.id}">ไปที่เอกสาร / คำขอ</button>
           ${p.can_request||data.permissions.can_finance?`<button class="btn btn-ghost" data-edit-project="${p.id}">แก้ไขรายละเอียดโครงการ</button>`:''}
           ${p.can_request&&p.status!=='cancelled'?p.funding_type?`<button class="btn btn-primary" data-new="${p.id}">+ จัดทำคำขอเบิกจ่าย</button>`:`<button class="btn btn-primary" data-edit-project="${p.id}">ระบุประเภทเงินโครงการ</button>`:''}</div></div>
           ${data.requests.some(e=>e.project_id===p.id)?renderProject(p.id,true):'<div class="wf-project-empty wf-muted">ยังไม่มีคำขอเบิกจ่ายที่คุณมีสิทธิ์ดู</div>'}

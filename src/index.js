@@ -7,6 +7,7 @@ import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/depart
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
 import {handleTeachingWorksRoute} from './routes/teaching-works.js';
+import {handleProjectFilesRoute} from './routes/project-files.js';
 import {handleActivitySsoRoute} from './routes/activity-sso.js';
 import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
@@ -4854,6 +4855,8 @@ const app = {
       const activitySsoResponse=await handleActivitySsoRoute(request,env,pathname,method);
       if(activitySsoResponse)return activitySsoResponse;
       const teachingWorksResponse=await handleTeachingWorksRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
+      const projectFilesResponse=await handleProjectFilesRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
+      if(projectFilesResponse)return projectFilesResponse;
       if(teachingWorksResponse)return teachingWorksResponse;
       const supervisionResponse=await handleSupervisionRoute(request,env,pathname,method,SUPERVISION_FILE_SERVICES);
       if(supervisionResponse)return supervisionResponse;
