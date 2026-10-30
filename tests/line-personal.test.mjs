@@ -243,6 +243,14 @@ test("repair photos are stored in Google Drive like other new files", async () =
     const created = await call(env, "/api/maintenance/requests", "POST",
       { title: "กระจกแตก", description: "หน้าต่างห้องสมุด", category: "building", custom_location: "ห้องสมุด", defer_notification: true }, 2);
     assert.equal(created.status, 201, JSON.stringify(created.body));
+    // ต้องมีภาพจุดที่เสียหายก่อนส่งแจ้งซ่อม
+    const early = await call(env, `/api/maintenance/requests/${created.body.id}/notify`, "POST", null, 2);
+    assert.equal(early.status, 400); assert.equal(early.body.code, "before_photo_required");
+    // แนบภาพไม่สำเร็จ → ผู้แจ้งยกเลิกใบที่เพิ่งสร้างได้ (คนอื่นยกเลิกไม่ได้)
+    const spare = await call(env, "/api/maintenance/requests", "POST", { title: "ทดลอง", description: "x", category: "building", custom_location: "ห้อง", defer_notification: true }, 2);
+    assert.equal((await call(env, `/api/maintenance/requests/${spare.body.id}/discard`, "POST", null, 3)).status, 409);
+    assert.equal((await call(env, `/api/maintenance/requests/${spare.body.id}/discard`, "POST", null, 2)).status, 200);
+    assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM maintenance_requests WHERE id=?").get(spare.body.id).n, 0);
     const form = new FormData();
     form.set("file", new File([png], "before.png", { type: "image/png" }));
     const token = await signJWT({ sub: 2 }, SECRET);
@@ -254,5 +262,7 @@ test("repair photos are stored in Google Drive like other new files", async () =
     const download = await worker.fetch(new Request(`https://school.test/api/attachments/${body.id}`, { headers: { Cookie: `bpd_session=${token}` } }), env, {});
     assert.equal(download.status, 200);
     assert.equal((await download.arrayBuffer()).byteLength, png.length);
+    assert.notEqual((await call(env, `/api/maintenance/requests/${created.body.id}/notify`, "POST", null, 2)).status, 400);
+    assert.equal((await call(env, `/api/maintenance/requests/${created.body.id}/discard`, "POST", null, 2)).status, 409, "has photo → cannot discard");
   } finally { globalThis.fetch = original; }
 });

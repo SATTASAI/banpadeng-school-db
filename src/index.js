@@ -3494,6 +3494,24 @@ async function sendMaintenanceLineNotification(request, env, requestId, eventTyp
   };
 }
 
+function maintenanceHasBeforePhoto(env, requestId) {
+  return env.DB.prepare("SELECT 1 FROM file_attachments WHERE entity_type='maintenance_before' AND entity_id=?").bind(requestId).first().then(Boolean);
+}
+
+// ยกเลิกใบแจ้งซ่อมที่เพิ่งสร้างแต่แนบภาพจุดที่เสียหายไม่สำเร็จ (ผู้แจ้งเท่านั้น, ภายใน 30 นาที, ยังไม่มีภาพ)
+async function handleDiscardMaintenanceRequest(request, env, requestId) {
+  const user = await getCurrentUser(request,env);
+  if (!user || !user.role) return jsonResponse({ error:"กรุณาเข้าสู่ระบบ" },401);
+  const item = await env.DB.prepare("SELECT id,reported_by,status,created_at FROM maintenance_requests WHERE id=? AND datetime(created_at)>=datetime('now','-30 minutes')").bind(requestId).first();
+  if (!item || item.reported_by !== user.id || item.status !== "reported" || await maintenanceHasBeforePhoto(env, requestId)) return jsonResponse({ error:"ไม่สามารถยกเลิกใบแจ้งซ่อมนี้ได้" },409);
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM maintenance_notifications WHERE request_id=?").bind(requestId),
+    env.DB.prepare("DELETE FROM maintenance_updates WHERE request_id=?").bind(requestId),
+    env.DB.prepare("DELETE FROM maintenance_requests WHERE id=?").bind(requestId),
+  ]);
+  return jsonResponse({ ok:true });
+}
+
 async function handleNotifyMaintenanceRequest(request, env, requestId) {
   const user = await getCurrentUser(request,env);
   await markMaintenanceHead(env, user);
@@ -3501,6 +3519,8 @@ async function handleNotifyMaintenanceRequest(request, env, requestId) {
   const item = await getMaintenanceRequest(env,requestId);
   if (!item) return jsonResponse({ error:"ไม่พบใบแจ้งซ่อม" },404);
   if (!canManageMaintenance(user) && item.reported_by!==user.id && item.assigned_to!==user.id) return jsonResponse({ error:"ไม่มีสิทธิ์ส่งการแจ้งเตือน" },403);
+  // แจ้งซ่อมต้องมีภาพจุดที่เสียหายก่อนส่งแจ้งเตือน
+  if (item.status === "reported" && !(await maintenanceHasBeforePhoto(env, requestId))) return jsonResponse({ error:"กรุณาแนบภาพจุดที่เสียหายก่อนส่งแจ้งซ่อม", code:"before_photo_required" },400);
   const result = await sendMaintenanceLineNotification(request,env,requestId,item.status,{ personal:false });
   return jsonResponse(result,result.delivery_status==="failed"?502:200);
 }
@@ -4813,6 +4833,8 @@ const app = {
       if (pathname === "/api/maintenance/requests" && method === "POST") return await handleCreateMaintenanceRequest(request,env);
       const maintenanceNotifyMatch = pathname.match(/^\/api\/maintenance\/requests\/(\d+)\/notify$/);
       if (maintenanceNotifyMatch && method === "POST") return await handleNotifyMaintenanceRequest(request,env,Number(maintenanceNotifyMatch[1]));
+      const maintenanceDiscardMatch = pathname.match(/^\/api\/maintenance\/requests\/(\d+)\/discard$/);
+      if (maintenanceDiscardMatch && method === "POST") return await handleDiscardMaintenanceRequest(request,env,Number(maintenanceDiscardMatch[1]));
       const maintenanceRequestMatch = pathname.match(/^\/api\/maintenance\/requests\/(\d+)$/);
       if (maintenanceRequestMatch && method === "GET") return await handleGetMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
       if (maintenanceRequestMatch && method === "PATCH") return await handleUpdateMaintenanceRequest(request,env,Number(maintenanceRequestMatch[1]));
