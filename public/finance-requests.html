@@ -31,7 +31,7 @@
 (async()=>{
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const money=v=>Number(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
-  const states={draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',finance_queue:'รอฝ่ายงบประมาณรับเรื่อง',finance_processing:'ฝ่ายงบประมาณกำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'อนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันการเบิกจ่ายแล้ว',rejected:'ไม่อนุมัติ'};
+  const states={draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',dept_head_review:'รอหัวหน้าฝ่ายพิจารณา',dept_deputy_review:'รอรอง ผอ.ฝ่ายพิจารณา',budget_head_review:'รอหัวหน้าฝ่ายงบฯ รับทราบ',budget_deputy_review:'รอรอง ผอ.ฝ่ายงบฯ พิจารณา',finance_queue:'รอฝ่ายงบประมาณรับเรื่อง',finance_processing:'ฝ่ายงบประมาณกำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'อนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันการเบิกจ่ายแล้ว',rejected:'ไม่อนุมัติ'};
   const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return}
   const data=await apiRequest('/api/project-documents/overview');
   const mine=(data.requests||[]).filter(e=>Number(e.created_by)===Number(me.user.id));
