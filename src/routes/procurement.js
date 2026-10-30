@@ -11,6 +11,7 @@ import { budgetDirectorIds, canManageProjectFinance, PROJECT_FUNDING_TYPES } fro
 const ready = new WeakSet();
 export const PROCUREMENT_ROLES = {
   procurement_officer: "เจ้าหน้าที่พัสดุ",
+  procurement_officer_2: "เจ้าหน้าที่พัสดุ 2",
   procurement_head: "หัวหน้าเจ้าหน้าที่พัสดุ",
 };
 export const PROCUREMENT_METHODS = {
@@ -160,8 +161,9 @@ async function roleUser(env, roleKey) {
 export async function isProcurementOfficer(env, user) {
   if (!user) return false;
   if (isAdmin(user)) return true;
-  const officer = await roleUser(env, "procurement_officer");
-  return Number(officer?.id) === Number(user.id);
+  // เจ้าหน้าที่พัสดุ 1 และ 2 มีสิทธิ์เท่ากัน ทำแทนกันได้
+  const officers = await Promise.all([roleUser(env, "procurement_officer"), roleUser(env, "procurement_officer_2")]);
+  return officers.some((o) => Number(o?.id) === Number(user.id));
 }
 
 async function nextNumber(env, kind, year) {
@@ -330,13 +332,14 @@ async function overview(request, env, user) {
     eligible = results;
   }
   const officerUser = await roleUser(env, "procurement_officer");
+  const officerUser2 = await roleUser(env, "procurement_officer_2");
   const { results: people } = ctx.officer ? await env.DB.prepare(`SELECT id,full_name FROM users WHERE status='active' AND role IS NOT NULL AND deleted_at IS NULL ORDER BY full_name`).all() : { results: [] };
   return jsonResponse({
     cases: cases.map((c) => ({ ...c, total_amount: money(c.total_amount), my_inspection_pending: Boolean(c.my_inspection_pending) && c.status === "ordered" && Boolean(c.delivered_date) })),
     eligible_expenses: eligible.map((e) => ({ ...e, amount: money(e.amount) })),
     users: people,
-    roles: { procurement_officer: officerUser, procurement_head: ctx.head },
-    default_inspectors: [...new Set([officerUser?.id, ...(await deputyDirectorIds(env))].filter(Boolean).map(Number))],
+    roles: { procurement_officer: officerUser || officerUser2, procurement_officer_2: officerUser2, procurement_head: ctx.head },
+    default_inspectors: [...new Set([officerUser?.id, officerUser2?.id, ...(await deputyDirectorIds(env))].filter(Boolean).map(Number))],
     methods: PROCUREMENT_METHODS, statuses: STATUS_LABELS, committee_threshold: COMMITTEE_THRESHOLD,
     permissions: { can_create: ctx.officer, is_officer: ctx.officer, is_director: ctx.director, is_finance: ctx.finance },
   });
