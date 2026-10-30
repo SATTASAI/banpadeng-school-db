@@ -42,6 +42,8 @@ export function ensureTeachingWorksSchema(env) {
       teach_date TEXT, topic TEXT, result TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE (academic_term_id, course_id, user_id))`),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS teacher_signatures (
+      user_id INTEGER PRIMARY KEY, data_url TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]).catch((e) => { ready.delete(env.DB); throw e; });
   ready.set(env.DB, p);
   return p;
@@ -174,13 +176,34 @@ function mergeReport(defaults, saved) {
   return out;
 }
 
-function attachFiles(courses, rows, userId, reports = [], term = null, teacherName = '') {
+// ลายเซ็นครู (PNG พื้นใส ระบบตัดพื้นหลัง/ทำเส้นเข้มในเบราว์เซอร์ก่อนส่ง) — อัปครั้งเดียวใช้ทุกฉบับ
+const SIGNATURE_MAX = 400 * 1024;
+async function signatureOf(env, userId) {
+  return (await env.DB.prepare('SELECT data_url, updated_at FROM teacher_signatures WHERE user_id = ?').bind(userId).first()) || null;
+}
+async function signedUsers(env) {
+  return new Set((await env.DB.prepare('SELECT user_id FROM teacher_signatures').all()).results.map((r) => r.user_id));
+}
+async function saveSignature(request, env, user) {
+  const body = await request.json().catch(() => null);
+  const dataUrl = String(body?.data_url || '');
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(dataUrl);
+  if (!m) return jsonResponse({ error: 'ไฟล์ลายเซ็นไม่ถูกต้อง' }, 400);
+  if (dataUrl.length > SIGNATURE_MAX) return jsonResponse({ error: 'ไฟล์ลายเซ็นใหญ่เกินไป' }, 400);
+  const head = atob(m[1].slice(0, 12));
+  if (!head.startsWith('\x89PNG')) return jsonResponse({ error: 'ไฟล์ลายเซ็นไม่ใช่ภาพ PNG' }, 400);
+  await env.DB.prepare(`INSERT INTO teacher_signatures (user_id, data_url) VALUES (?, ?)
+    ON CONFLICT (user_id) DO UPDATE SET data_url = excluded.data_url, updated_at = datetime('now')`).bind(user.id, dataUrl).run();
+  return jsonResponse({ ok: true });
+}
+
+function attachFiles(courses, rows, userId, reports = [], term = null, teacherName = '', signed = false) {
   return courses.map((c) => {
     const images = rows.filter((r) => r.course_id === c.course_id && r.user_id === userId);
     const saved = reports.find((r) => r.course_id === c.course_id && r.user_id === userId) || null;
     const report = term ? mergeReport(reportDefaults(term, c, teacherName), saved) : null;
     return { course_id: c.course_id, subject: c.subject, subject_code: c.subject_code, grade_level: c.grade_level, classroom: c.classroom,
-      images, report, reported: reportDone(saved), complete: images.length > 0 && reportDone(saved) };
+      images, report, reported: reportDone(saved), complete: images.length > 0 && reportDone(saved) && signed };
   });
 }
 
@@ -188,8 +211,9 @@ async function padengMine(env, user, url) {
   const { term, terms } = await resolveTerm(env, url.searchParams.get('term_id'));
   if (!term) return jsonResponse({ term: null, terms, courses: [] });
   const courses = (await coursesOf(env, term)).filter((c) => c.teachers.some((t) => t.user_id === user.id));
-  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES,
-    courses: attachFiles(courses, await padengRows(env, term.id, user.id), user.id, await reportRows(env, term.id, user.id), term, user.full_name) });
+  const signature = await signatureOf(env, user.id);
+  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES, signature,
+    courses: attachFiles(courses, await padengRows(env, term.id, user.id), user.id, await reportRows(env, term.id, user.id), term, user.full_name, !!signature) });
 }
 
 async function padengUpload(request, env, user, drive) {
@@ -240,6 +264,7 @@ async function padengSaveReport(request, env, user) {
   if (v.teach_date && !/^\d{4}-\d{2}-\d{2}$/.test(v.teach_date)) return jsonResponse({ error: 'วันที่ไม่ถูกต้อง' }, 400);
   if (!v.topic) return jsonResponse({ error: 'กรุณากรอกเรื่องที่สอน' }, 400);
   if (!v.result) return jsonResponse({ error: 'กรุณากรอกผลการจัดกิจกรรมการสอน' }, 400);
+  if (!(await signatureOf(env, user.id))) return jsonResponse({ error: 'กรุณาอัปโหลดลายเซ็นก่อนบันทึกแบบรายงาน' }, 400);
   const keys = Object.keys(REPORT_FIELDS);
   await env.DB.prepare(`INSERT INTO padeng_model_reports (academic_term_id, course_id, user_id, ${keys.join(', ')})
     VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})
@@ -272,22 +297,28 @@ async function padengDocuments(env, user, perms, url) {
     return x[0] - y[0] || x[1].localeCompare(y[1], 'th') || String(a.classroom || '').localeCompare(String(b.classroom || ''), 'th', { numeric: true })
       || String(a.subject_code || '').localeCompare(String(b.subject_code || ''), 'th') || a.teacher_name.localeCompare(b.teacher_name, 'th'); });
   if (!items.length) return jsonResponse({ error: 'ยังไม่มีแบบรายงานที่ส่งแล้ว' }, 404);
-  return jsonResponse({ term, items });
+  const ids = [...new Set(items.map((i) => i.user_id))], signatures = {};
+  for (let i = 0; i < ids.length; i += 50) {
+    const part = ids.slice(i, i + 50);
+    const { results } = await env.DB.prepare(`SELECT user_id, data_url FROM teacher_signatures WHERE user_id IN (${part.map(() => '?').join(',')})`).bind(...part).all();
+    for (const r of results) signatures[r.user_id] = r.data_url;
+  }
+  return jsonResponse({ term, items, signatures });
 }
 
 async function padengProgress(env, url) {
   const { term, terms } = await resolveTerm(env, url.searchParams.get('term_id'));
   if (!term) return jsonResponse({ term: null, terms, teachers: [] });
   const courses = await coursesOf(env, term);
-  const [rows, reports] = await Promise.all([padengRows(env, term.id), reportRows(env, term.id)]);
+  const [rows, reports, signed] = await Promise.all([padengRows(env, term.id), reportRows(env, term.id), signedUsers(env)]);
   const byTeacher = new Map();
   for (const c of courses) for (const t of c.teachers) {
     if (!byTeacher.has(t.user_id)) byTeacher.set(t.user_id, { user_id: t.user_id, full_name: t.full_name, courses: [] });
     byTeacher.get(t.user_id).courses.push(c);
   }
   const teachers = [...byTeacher.values()].map((t) => {
-    const list = attachFiles(t.courses, rows, t.user_id, reports, term, t.full_name);
-    return { user_id: t.user_id, full_name: t.full_name, total: list.length, complete: list.filter((c) => c.complete).length,
+    const list = attachFiles(t.courses, rows, t.user_id, reports, term, t.full_name, signed.has(t.user_id));
+    return { user_id: t.user_id, full_name: t.full_name, signed: signed.has(t.user_id), total: list.length, complete: list.filter((c) => c.complete).length,
       images: list.reduce((s, c) => s + c.images.length, 0), reports: list.filter((c) => c.reported).length, courses: list };
   }).sort((a, b) => a.full_name.localeCompare(b.full_name, 'th'));
   const grades = [...new Set(courses.map((c) => c.grade_level))];
@@ -413,6 +444,7 @@ export async function handleTeachingWorksRoute(request, env, pathname, method, d
   if (sub === 'padeng/mine' && method === 'GET') return padengMine(env, user, url);
   if (sub === 'padeng/upload' && method === 'POST') return padengUpload(request, env, user, drive);
   if (sub === 'padeng/report' && method === 'PUT') return padengSaveReport(request, env, user);
+  if (sub === 'padeng/signature' && method === 'PUT') return saveSignature(request, env, user);
   if (sub === 'padeng/documents' && method === 'GET') return padengDocuments(env, user, perms, url);
   if (sub === 'research/mine' && method === 'GET') return researchMine(env, user, url);
   if (sub === 'research/upload' && method === 'POST') return researchUpload(request, env, user, drive);

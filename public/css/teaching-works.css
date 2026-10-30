@@ -57,3 +57,10 @@ body{background:inherit}
 .tw-dialog textarea{resize:vertical;min-height:150px;line-height:1.6}
 .tw-doc-btns{display:flex;gap:6px;margin-top:4px}
 @media(max-width:640px){.tw-form-grid{grid-template-columns:1fr 1fr}.tw-form-grid .wide{grid-column:1/-1}.tw-dialog form{padding:16px}}
+.tw-sign{display:grid;gap:8px;padding:12px;border:1px dashed #b9cde2;border-radius:12px;background:#f8fbfe}
+.tw-sign b{color:var(--color-forest-700);font-size:14px}.tw-sign small{display:block;color:var(--color-text-muted);font-size:12px}
+.tw-sign-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.tw-sign-box{display:grid;place-items:center;min-width:180px;height:70px;padding:4px 8px;border-radius:8px;background:#fff repeating-conic-gradient(#f1f4f8 0 25%,#fff 0 50%) 0 0/14px 14px;border:1px solid var(--color-border)}
+.tw-sign-box img{max-width:220px;max-height:62px;display:block}
+.tw-sign-preview{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.tw-sign-preview>div>img{max-width:200px;max-height:90px;border-radius:8px;border:1px solid var(--color-border);display:block}
+.tw-sign-acts{display:flex;gap:6px}
