@@ -5,7 +5,7 @@ window.ProjectWorkflow = (() => {
   const today = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Bangkok',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
   const departments = {academic:'วิชาการ',early_childhood:'ปฐมวัย',budget:'งบประมาณ',personnel:'บุคคล',general:'บริหารทั่วไป'};
   const fundingTypes={subsidy:'งบอุดหนุน',free_education:'งบเรียนฟรี 15 ปี',school_income:'งบรายได้สถานศึกษา'};
-  const states = {draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',finance_queue:'รอเจ้าหน้าที่รับเรื่อง',finance_processing:'รับเรื่องแล้ว กำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'ผู้อำนวยการอนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันแล้ว สามารถเบิกจ่ายได้',rejected:'ไม่อนุมัติ'};
+  const states = {draft:'ร่าง',returned:'ส่งกลับให้แก้ไข',dept_head_review:'รอหัวหน้าฝ่ายพิจารณา',dept_deputy_review:'รอรองผู้อำนวยการผู้ดูแลฝ่ายพิจารณา',budget_head_review:'รอหัวหน้าฝ่ายงบประมาณรับทราบ',budget_deputy_review:'รอรองผู้อำนวยการฝ่ายงบประมาณพิจารณา',finance_queue:'รอเจ้าหน้าที่รับเรื่อง',finance_processing:'รับเรื่องแล้ว กำลังดำเนินการ',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'ผู้อำนวยการอนุมัติแล้ว รอยืนยันการจ่าย',completed:'ยืนยันแล้ว สามารถเบิกจ่ายได้',rejected:'ไม่อนุมัติ'};
   const opts = (entries, selected) => Object.entries(entries).map(([v,label])=>`<option value="${esc(v)}" ${String(v)===String(selected)?'selected':''}>${esc(label)}</option>`).join('');
   const field = (label,content,wide=false) => `<label class="field ${wide?'wf-wide':''}"><span>${label}</span>${content}</label>`;
 
@@ -30,7 +30,8 @@ window.ProjectWorkflow = (() => {
       if(options.register)return renderRegister();
       const projects=data.projects.filter(p=>(!options.internal || p.department==='budget') && (!search || (p.name+' '+p.owner_names).toLowerCase().includes(search)));
       const unread=data.notifications.filter(n=>!n.read_at);
-      root.innerHTML=`${unread.slice(0,6).map(n=>`<div class="wf-notice wf-notice--alert"><span><strong>${esc(n.project_name)}</strong><br>${esc(n.message)}</span><button class="btn btn-ghost" data-open="${n.project_id}">ไปที่คำขอ</button></div>`).join('')}
+      const toReview=data.requests.filter(e=>e.can_review);
+      root.innerHTML=`${toReview.map(e=>`<div class="wf-notice wf-notice--alert"><span><strong>รอคุณพิจารณา: ${esc(e.request_no)}</strong><br>${esc(e.project_name)} · ${money(e.amount)} บาท · ${esc(states[e.current_step]||'')}</span><button class="btn btn-ghost" data-open="${e.project_id}">ไปที่คำขอ</button></div>`).join('')}${unread.slice(0,6).map(n=>`<div class="wf-notice wf-notice--alert"><span><strong>${esc(n.project_name)}</strong><br>${esc(n.message)}</span><button class="btn btn-ghost" data-open="${n.project_id}">ไปที่คำขอ</button></div>`).join('')}
         <div class="wf-tools"><input type="search" data-search aria-label="ค้นหาโครงการ" placeholder="ค้นหาชื่อโครงการ / ผู้รับผิดชอบ" value="${esc(search)}"><span class="wf-muted">${projects.length} โครงการ</span></div>
         <div class="wf-projects">${projects.map(p=>`<article class="wf-project ${p.new_request_count?'wf-project--attention':''}" data-project="${p.id}">
           <div class="wf-project-info">${p.unread_count||p.new_request_count?`<small class="wf-alert">${p.new_request_count?`รอรับ ${p.new_request_count}`:`แจ้งเตือน ${p.unread_count}`}</small>`:''}
@@ -49,13 +50,13 @@ window.ProjectWorkflow = (() => {
     }
     // ทะเบียนรับเรื่อง (ฝ่ายงบประมาณ › บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง): คำขอที่ส่งจากระบบสนับสนุนทุกโครงการในรายการเดียว
     // ปุ่มดำเนินการใช้ requestCard/financeButtons/directorButtons เดิม ขั้นอนุมัติ ส่งต่อ ยืนยันเบิกจ่ายจึงเหมือนเดิมทุกประการ
-    const registerGroups={queue:{label:'รอรับเรื่อง',steps:['finance_queue']},processing:{label:'กำลังดำเนินการ',steps:['finance_processing']},director:{label:'รอผู้อำนวยการ',steps:['director_approval']},ready:{label:'รอยืนยันเบิกจ่าย',steps:['finance_ready']},done:{label:'ยืนยันแล้ว',steps:['completed']},back:{label:'ส่งกลับ/ไม่อนุมัติ',steps:['returned','rejected']}};
+    const registerGroups={review:{label:'รอหัวหน้า/รอง ผอ.',steps:['dept_head_review','dept_deputy_review','budget_head_review','budget_deputy_review']},queue:{label:'รอรับเรื่อง',steps:['finance_queue']},processing:{label:'กำลังดำเนินการ',steps:['finance_processing']},director:{label:'รอผู้อำนวยการ',steps:['director_approval']},ready:{label:'รอยืนยันเบิกจ่าย',steps:['finance_ready']},done:{label:'ยืนยันแล้ว',steps:['completed']},back:{label:'ส่งกลับ/ไม่อนุมัติ',steps:['returned','rejected']}};
     let registerFilter='active',openedRequests=new Set();
     const registerGroupOf=e=>Object.entries(registerGroups).find(([,g])=>g.steps.includes(e.current_step))?.[0]||(e.status==='paid'?'done':null);
     function renderRegister(){
       const submitted=data.requests.filter(e=>registerGroupOf(e));
       const count=key=>submitted.filter(e=>registerGroupOf(e)===key).length;
-      const active=e=>['queue','processing','director','ready'].includes(registerGroupOf(e));
+      const active=e=>['review','queue','processing','director','ready'].includes(registerGroupOf(e));
       const rows=submitted.filter(e=>(registerFilter==='all'||(registerFilter==='active'?active(e):registerGroupOf(e)===registerFilter))
         &&(!search||[e.request_no,e.project_name,e.requester_name,e.request_purpose,e.payee,e.procurement?.case_no].join(' ').toLowerCase().includes(search)));
       const chip=(key,label,n)=>`<button type="button" class="wf-reg-chip ${registerFilter===key?'is-active':''}" data-reg-filter="${key}">${esc(label)} <b>${n}</b></button>`;
@@ -86,6 +87,7 @@ window.ProjectWorkflow = (() => {
           <span class="wf-state ${esc(e.current_step)}">${states[e.current_step]||esc(e.status)}</span>
           <p>${esc(e.request_purpose)}</p><div class="wf-muted">ผู้ขอ: ${esc(e.requester_name)} · ความสำคัญ: ${e.priority==='urgent'?'ด่วนมาก':e.priority==='high'?'ด่วน':'ปกติ'}${e.needed_date?' · ต้องการใช้เงิน '+esc(e.needed_date):''}</div>
           <p class="wf-muted">เหตุผล: ${esc(e.necessity)}${e.review_note?'<br>หมายเหตุเจ้าหน้าที่: '+esc(e.review_note):''}</p>
+          ${signoffTrail(e)}
           <details class="wf-line-items"><summary>รายการค่าใช้จ่าย ${(e.items||[]).length} รายการ</summary><div style="overflow:auto"><table class="wf-detail-table"><thead><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th>รวม</th></tr></thead><tbody>${(e.items||[]).map(i=>`<tr><td>${esc(i.description)}</td><td>${i.quantity} ${esc(i.unit)}</td><td>${money(i.unit_price)}</td><td>${money(i.amount)}</td></tr>`).join('')}</tbody></table></div></details>
           ${e.status==='paid'?`<div class="wf-notice">ใบสำคัญ ${esc(e.payment_no)} · วันที่ ${esc(e.payment_date)} · ผู้รับเงิน ${esc(e.payment_recipient)} · ยอดสุทธิ ${money(e.net_paid)} บาท</div>`:''}
           <div class="wf-files">${e.documents.filter(d=>d.attachment_id).map(d=>`<a href="/api/attachments/${d.attachment_id}" target="_blank" rel="noopener">${esc(d.title)} — ${esc(d.file_name)}</a>`).join('')||'<span class="wf-muted">ยังไม่มีไฟล์แนบ</span>'}</div>
@@ -93,7 +95,9 @@ window.ProjectWorkflow = (() => {
           ${e.procurement?`<a class="btn btn-ghost" href="/procurement.html?case=${e.procurement.id}">จัดซื้อจัดจ้าง ${esc(e.procurement.case_no)} · ${e.procurement.status==='accepted'?'ตรวจรับแล้ว '+money(e.procurement.total_amount)+' บาท':'กำลังดำเนินการ'}</a>`:''}
           ${e.can_close_balance?`<button class="btn btn-primary" data-request="${e.id}" data-action="close_balance">ปิดยอดตามจริง ${money(e.procurement.total_amount)} บาท</button>`:''}
           ${e.can_attach?`<button class="btn btn-ghost" data-attach="${e.id}">+ แนบเอกสารเพิ่มเติม</button>`:''}
+          ${e.can_review?reviewButtons(e):''}
           ${e.can_director_approve?directorButtons(e):data.permissions.can_finance&&options.finance?financeButtons(e):''}
+          ${e.status!=='draft'||e.submitted_at?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/project-documents/requests/${e.id}/memo">พิมพ์บันทึกขออนุมัติ</a>`:''}
           ${['approved','paid'].includes(e.status)?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/budget/requests/${e.id}/document">พิมพ์คำขอ</a>`:''}
           ${e.status==='paid'?`<a class="btn btn-ghost" target="_blank" rel="noopener" href="/api/budget/requests/${e.id}/payment-document">ใบสำคัญจ่าย</a>`:''}</div></article>`;}
     function renderProject(id,inline=false){
@@ -102,13 +106,20 @@ window.ProjectWorkflow = (() => {
       return `<section class="wf-document-view" data-details data-project-details="${id}">${inline?'<h4 class="wf-section-label">คำขอเบิกจ่ายและเอกสาร</h4>':`<h2>${esc(project.name)} — เอกสารและความคืบหน้า</h2>`}
         ${requests.map(requestCard).join('')||'<p class="wf-muted">ยังไม่มีคำขอเบิกจ่ายที่คุณมีสิทธิ์ดูในโครงการนี้</p>'}</section>`;
     }
+    function signoffTrail(e){const rows=(e.signoffs||[]).filter(s=>s.status!=='skipped');if(!rows.length)return '';
+      const mark={approved:'✓',pending:'…',waiting:'○',returned:'↩',rejected:'✕'};
+      return `<div class="wf-muted wf-signoffs">ลำดับลงนาม: ${rows.map(s=>`<span title="${esc(s.note||'')}" style="white-space:nowrap;${s.status==='pending'?'font-weight:700;color:#b26b00':s.status==='approved'?'color:#1f7650':''}">${mark[s.status]||''} ${esc(s.label)}${s.acted_name||s.assigned_name?' ('+esc(s.acted_name||s.assigned_name)+')':''}</span>`).join(' → ')}</div>`;}
+    function reviewButtons(e){
+      const button=(action,label,cls='btn-primary')=>`<button class="btn ${cls}" data-request="${e.id}" data-action="${action}">${label}</button>`;
+      return button('review_approve',e.review_step==='budget_head'?'รับทราบ':'เห็นชอบ')+button('review_return','ส่งกลับแก้ไข','btn-ghost')+button('review_reject','ไม่เห็นชอบ','btn-ghost');
+    }
     function directorButtons(e){
       const button=(action,label,cls='btn-primary')=>`<button class="btn ${cls}" data-request="${e.id}" data-action="${action}">${label}</button>`;
       return button('approve','ผู้อำนวยการอนุมัติ')+button('return','ส่งกลับแก้ไข','btn-ghost')+button('reject','ไม่อนุมัติ','btn-ghost');
     }
     function financeButtons(e){
       const button=(action,label)=>`<button class="btn btn-primary" data-request="${e.id}" data-action="${action}">${label}</button>`;
-      const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ตรวจแล้ว เสนอผู้อำนวยการ'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
+      const primary=e.current_step==='finance_queue'?button('receive','รับเรื่อง'):e.current_step==='finance_processing'?button('complete','ตรวจแล้ว เสนอต่อ'):e.current_step==='finance_ready'?button('pay','ยืนยันการเบิกจ่าย') : '';
       const procurement=['finance_queue','finance_processing'].includes(e.current_step)?`<a class="btn btn-ghost" href="/procurement.html?expense=${e.id}">จัดซื้อจัดจ้าง</a>`:'';
       return primary+procurement+(['pending','approved'].includes(e.status)&&e.current_step!=='director_approval'?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
     }
@@ -147,9 +158,10 @@ window.ProjectWorkflow = (() => {
     function requestAction(id,action){const row=data.requests.find(e=>e.id===id);if(!row)return;
       if(action==='pay'){payment(row);return;}
       if(action==='close_balance'){const back=Math.round((row.amount-row.procurement.total_amount)*100)/100;modal(`<h2>ปิดยอดตามจริง</h2><p>${esc(row.request_no)} · ยอดขอเบิก ${money(row.amount)} บาท</p><p class="wf-steps">ยอดตรวจรับพัสดุจริง ${money(row.procurement.total_amount)} บาท · คืนวงเงินให้โครงการ ${money(back)} บาท<br>ยอดเบิกจ่ายจะเปลี่ยนเป็นยอดจริง และแจ้งฝ่ายการเงิน</p><form><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">ยืนยันปิดยอด</button></div></form>`);dialog.querySelector('form').onsubmit=e=>{e.preventDefault();execute(id,{action:'close_balance'});};return;}
-      const label={submit:'ส่งเอกสารให้ฝ่ายงบประมาณ',receive:'รับเรื่อง',complete:'ดำเนินการเสร็จสิ้น',return:'ส่งกลับให้แก้ไข',reject:'ไม่อนุมัติ'}[action];
-      modal(`<h2>${label}</h2><p>${esc(row.request_no)} · ${money(row.amount)} บาท</p><form><label class="field">หมายเหตุ / เหตุผล<textarea name="review_note" maxlength="1500" ${['return','reject'].includes(action)?'required':''}></textarea></label><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">ยืนยัน${label}</button></div></form>`);
-      dialog.querySelector('form').onsubmit=e=>{e.preventDefault();execute(id,{action,review_note:dialog.querySelector('textarea').value});};
+      const label={submit:'ส่งเอกสารเสนอขออนุมัติ',receive:'รับเรื่อง',complete:'ดำเนินการเสร็จสิ้น',return:'ส่งกลับให้แก้ไข',reject:'ไม่อนุมัติ',review_approve:row.review_step==='budget_head'?'รับทราบ':'เห็นชอบ',review_return:'ส่งกลับให้แก้ไข',review_reject:'ไม่เห็นชอบ'}[action];
+      const plan=action==='review_approve'&&row.review_step==='dept_head'?`<div class="field"><span>ความเห็นหัวหน้าฝ่าย</span><label><input type="radio" name="plan_status" value="in_plan" required checked> เป็นไปตามแผน</label> <label><input type="radio" name="plan_status" value="out_of_plan"> นอกแผน</label></div>`:'';
+      modal(`<h2>${label}</h2><p>${esc(row.request_no)} · ${money(row.amount)} บาท</p><form>${plan}<label class="field">หมายเหตุ / เหตุผล<textarea name="review_note" maxlength="1500" ${['return','reject','review_return','review_reject'].includes(action)?'required':''}></textarea></label><div class="wf-actions"><button class="btn btn-ghost" type="button" data-close>ยกเลิก</button><button class="btn btn-primary">ยืนยัน${label}</button></div></form>`);
+      dialog.querySelector('form').onsubmit=e=>{e.preventDefault();execute(id,{action,review_note:dialog.querySelector('textarea').value,plan_status:dialog.querySelector('[name=plan_status]:checked')?.value});};
     }
     async function execute(id,body){if(busy)return;busy=true;dialog.querySelectorAll('button').forEach(b=>b.disabled=true);
       try{await apiRequest(`/api/project-documents/requests/${id}/action`,{method:'POST',body});dialog.close();await refresh();options.onChange?.();}
