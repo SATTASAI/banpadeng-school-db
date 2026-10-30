@@ -4280,7 +4280,14 @@ async function handleFindDocumentDuplicates(request, env) {
 // แบบฟอร์มกลางที่ระบบนำขึ้น "เอกสารและคลังไฟล์" ให้บุคลากรดาวน์โหลด (ทำครั้งเดียว ถ้ามีแล้วข้าม)
 const SEEDED_FORMS = [{ path: "/forms/memo-procurement-request.pdf", file: "แบบบันทึกขออนุมัติดำเนินโครงการและขออนุมัติใช้เงินโรงเรียน.pdf",
   title: "แบบบันทึกข้อความ ขออนุมัติดำเนินโครงการและขออนุมัติใช้เงินโรงเรียน (จัดซื้อ/จัดจ้าง)", department: "budget", type: "แบบฟอร์ม",
-  keywords: "แบบฟอร์ม จัดซื้อ จัดจ้าง ขออนุมัติ ใช้เงิน บันทึกข้อความ พัสดุ" }];
+  keywords: "แบบฟอร์ม จัดซื้อ จัดจ้าง ขออนุมัติ ใช้เงิน บันทึกข้อความ พัสดุ" },
+  { path: "/forms/padeng-model-report.pdf", file: "แบบรายงานผลการจัดกิจกรรม ป่าเด็งโมเดล (PADENG MODEL).pdf",
+    title: "แบบรายงานผลการจัดกิจกรรม ป่าเด็งโมเดล (PADENG MODEL) — PDF", department: "academic", type: "แบบฟอร์ม",
+    keywords: "แบบฟอร์ม ป่าเด็งโมเดล PADENG MODEL รายงานผลการจัดกิจกรรม วิชาการ" },
+  { path: "/forms/padeng-model-report.docx", file: "แบบรายงานผลการจัดกิจกรรม ป่าเด็งโมเดล (PADENG MODEL).docx",
+    mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    title: "แบบรายงานผลการจัดกิจกรรม ป่าเด็งโมเดล (PADENG MODEL) — Word", department: "academic", type: "แบบฟอร์ม",
+    keywords: "แบบฟอร์ม ป่าเด็งโมเดล PADENG MODEL รายงานผลการจัดกิจกรรม วิชาการ docx word" }];
 const seededFormsDone = new WeakSet();
 async function seedFormDocuments(env) {
   if (seededFormsDone.has(env.DB) || !env.ASSETS) return;
@@ -4295,11 +4302,12 @@ async function seedFormDocuments(env) {
     let id = exists?.id;
     if (!id) id = (await env.DB.prepare(`INSERT INTO documents(title,department,management_area,document_type,keywords,access_level,uploaded_by,record_status,upload_status)
       VALUES(?,?,?,?,?,'staff',?,'active','uploading')`).bind(form.title, storedDepartment(form.department), managementArea(form.department), form.type, form.keywords, owner.id).run()).meta.last_row_id;
-    const file = new File([bytes], form.file, { type: "application/pdf" });
-    const drive = await uploadToGoogleDrive(env, file, "document", id, form.file, "application/pdf");
+    const mime = form.mime || "application/pdf";
+    const file = new File([bytes], form.file, { type: mime });
+    const drive = await uploadToGoogleDrive(env, file, "document", id, form.file, mime);
     const attachmentId = (await env.DB.prepare(`INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by,storage_provider,drive_file_id,drive_web_url,file_hash)
-      VALUES('document',?,?,?,?,?,?,'drive',?,?,?)`).bind(id, `drive/${crypto.randomUUID()}`, form.file, "application/pdf", bytes.byteLength, owner.id, drive?.id || null, drive?.webViewLink || null, await hashManagedFile(file)).run()).meta.last_row_id;
-    await env.DB.prepare("UPDATE documents SET upload_status='success',upload_error=NULL,file_name=?,mime_type='application/pdf',file_size=?,file_url=?,attachment_updated_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(form.file, bytes.byteLength, `/api/attachments/${attachmentId}`, id).run();
+      VALUES('document',?,?,?,?,?,?,'drive',?,?,?)`).bind(id, `drive/${crypto.randomUUID()}`, form.file, mime, bytes.byteLength, owner.id, drive?.id || null, drive?.webViewLink || null, await hashManagedFile(file)).run()).meta.last_row_id;
+    await env.DB.prepare("UPDATE documents SET upload_status='success',upload_error=NULL,file_name=?,mime_type=?,file_size=?,file_url=?,attachment_updated_at=datetime('now'),updated_at=datetime('now') WHERE id=?").bind(form.file, mime, bytes.byteLength, `/api/attachments/${attachmentId}`, id).run();
   }
   seededFormsDone.add(env.DB);
 }
