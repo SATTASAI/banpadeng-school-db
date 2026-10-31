@@ -24,6 +24,10 @@
     @media(max-width:700px){.devices-card{grid-column:auto}.device{grid-template-columns:auto 1fr}.device .btn{grid-column:1/-1;justify-self:start}}
     @media(max-width:700px){.account-grid{grid-template-columns:1fr}.danger-card{grid-column:auto}.account-page{padding:18px 14px}.profile-row{grid-template-columns:1fr;gap:2px}}
     .tm-card{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eef4ff,#f6f0ff);border-color:#cfdcf7}.tm-card h2{margin:0 0 4px}.tm-card p{margin:0}.btn-tm{width:auto;display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;background:linear-gradient(135deg,#4F6BED,#7B4FE0);border:0;color:#fff;font-weight:650;text-decoration:none;box-shadow:0 6px 16px rgba(79,107,237,.28)}.btn-tm:hover{filter:brightness(1.06);color:#fff}
+    .tt-card{grid-column:1/-1}.tt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}.tt-head select{width:auto;min-width:170px;padding:7px 10px;border:1px solid var(--color-border);border-radius:10px;background:#fff;font:inherit;font-size:13px}
+    .tt-wrap{overflow-x:auto;margin-top:14px}.tt{width:100%;min-width:560px;border-collapse:collapse;table-layout:fixed;font-size:12.5px}.tt th,.tt td{border:1px solid #dfe8f1;padding:5px 6px;text-align:center;vertical-align:middle}
+    .tt thead th{background:#f1f6fb;color:#36536f;font-weight:600}.tt thead th small{display:block;font-weight:400;color:var(--color-text-muted);font-size:11px}.tt tbody th{width:64px;background:#f7fafc;color:#36536f;font-weight:600}
+    .tt td{height:44px;line-height:1.3}.tt td b{display:block;color:#174977;font-weight:600;word-break:break-word}.tt td span{color:var(--color-text-muted);font-size:11.5px}.tt td.on{background:#f3f8fe}.tt-sum{margin-top:8px;font-size:12.5px;color:var(--color-text-muted)}
   </style>
 </head>
 <body>
@@ -34,6 +38,10 @@
       <section class="account-card tm-card">
         <div><h2>สื่อการสอนของฉัน</h2><p class="muted">อัพโหลด จัดเก็บ และเปิดดูสื่อการสอนของคุณ (เห็นได้เฉพาะเจ้าของบัญชี)</p></div>
         <a class="btn btn-tm" href="/api/teachingmedia-sso" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>อัพโหลดสื่อการสอน</a>
+      </section>
+      <section class="account-card tt-card" id="myTimetable">
+        <div class="tt-head"><div><h2>ตารางสอนของฉัน</h2><p class="muted">คาบสอนของคุณจากตารางสอนที่ฝ่ายวิชาการเผยแพร่</p></div><select id="ttTerm" aria-label="ภาคเรียน"></select></div>
+        <div class="tt-wrap" id="ttBody">กำลังโหลด...</div><div class="tt-sum" id="ttSum"></div>
       </section>
       <section class="account-card">
         <h2>ข้อมูลบัญชี</h2><p class="muted">ข้อมูลที่ใช้เข้าสู่ระบบโรงเรียน</p>
@@ -211,6 +219,22 @@
     loadDevices().then(()=>{if(location.hash==="#devices")document.getElementById("devices").scrollIntoView()}).catch(error=>deviceMessage(error.message,true));
     load().catch(error=>message(error.message,true));
     loadLine().catch(error=>lineMessage(error.message,true));
+    // ---------- ตารางสอนของฉัน (เห็นเฉพาะของตนเอง) ----------
+    async function loadMyTimetable(termId){
+      const body=document.getElementById("ttBody"),sum=document.getElementById("ttSum"),pick=document.getElementById("ttTerm");
+      try{
+        const d=await apiRequest(`/api/timetable/my-schedule${termId?`?term_id=${termId}`:""}`);
+        pick.innerHTML=(d.terms||[]).map(t=>`<option value="${t.id}">${escapeHtml(t.name)} / ${t.year_be}</option>`).join("");pick.hidden=!(d.terms||[]).length;if(d.term)pick.value=d.term.id;
+        if(!d.term){body.textContent="ยังไม่มีภาคเรียนในระบบ";sum.textContent="";return}
+        if(!d.published){body.innerHTML='<p class="muted">ภาคเรียนนี้ยังไม่มีตารางสอนที่เผยแพร่</p>';sum.textContent="";return}
+        if(!d.entries.length){body.innerHTML='<p class="muted">ไม่มีคาบสอนของคุณในตารางที่เผยแพร่</p>';sum.textContent="";return}
+        const DAYS=["จันทร์","อังคาร","พุธ","พฤหัสฯ","ศุกร์"],P=[1,2,3,4,5,6];
+        body.innerHTML=`<table class="tt"><thead><tr><th scope="col">วัน</th>${P.map(p=>`<th scope="col">คาบ ${p}</th>`).join("")}</tr></thead><tbody>${DAYS.map((day,i)=>`<tr><th scope="row">${day}</th>${P.map(p=>{const e=d.entries.find(x=>x.weekday===i+1&&x.period===p);return e?`<td class="on" title="${escapeHtml(e.subject)} ${escapeHtml(e.grade_level)}/${escapeHtml(e.classroom)}${e.room_name?` ห้อง ${escapeHtml(e.room_name)}`:""}"><b>${escapeHtml(e.subject)}</b><span>${escapeHtml(e.grade_level)}/${escapeHtml(e.classroom)}${e.room_name?` · ${escapeHtml(e.room_name)}`:""}</span></td>`:"<td></td>"}).join("")}</tr>`).join("")}</tbody></table>`;
+        sum.textContent=`รวม ${d.entries.length} คาบต่อสัปดาห์`;
+      }catch(e){body.innerHTML=`<p class="muted">${escapeHtml(e.message||"โหลดตารางสอนไม่สำเร็จ")}</p>`;sum.textContent=""}
+    }
+    document.getElementById("ttTerm").onchange=e=>loadMyTimetable(Number(e.target.value));
+    loadMyTimetable();
   </script>
 </body>
 </html>

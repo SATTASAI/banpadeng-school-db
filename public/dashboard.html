@@ -587,6 +587,7 @@
         if (item.supervisionOnly) { link.dataset.supervisionOnly=item.supervisionOnly; link.hidden=true; link.style.display='none'; }
         if (item.academicOnly) { link.dataset.academicOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.lessonPlanOnly) { link.dataset.lessonPlanOnly='true'; link.hidden=true; link.style.display='none'; }
+        if (item.timetableViewOnly) { link.dataset.timetableViewOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.statsOnly) { link.classList.add('substitute-stats-only'); link.hidden=true; link.style.display='none'; }
         if (item.substituteOnly) { link.classList.add('personnel-only'); link.title='จัดสอนแทนจากข้อมูลการลา'; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
@@ -609,6 +610,7 @@
   }
   buildSidebarSubmenus();
   apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
+  apiRequest('/api/timetable/permissions').then(p=>document.querySelectorAll('[data-timetable-view-only]').forEach(link=>{link.hidden=!p.view_all;link.style.display=p.view_all?'':'none';})).catch(()=>{});
   apiRequest('/api/lesson-plans/permissions').then(p=>document.querySelectorAll('[data-lesson-plan-only]').forEach(link=>{link.hidden=!p.view;link.style.display=p.view?'':'none';})).catch(()=>{});
   apiRequest('/api/teaching-works/permissions').then(p=>document.querySelectorAll('[data-academic-only]').forEach(link=>{link.hidden=!p.academic;link.style.display=p.academic?'':'none';})).catch(()=>{});
   // เมนูฝ่ายงาน: เห็นเฉพาะฝ่ายที่ตนสังกัด (ผู้บริหาร/superadmin เห็นทุกฝ่าย, ครูอนุบาลเห็นฝ่ายปฐมวัยเพิ่ม)

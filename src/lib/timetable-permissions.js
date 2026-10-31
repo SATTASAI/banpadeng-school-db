@@ -10,3 +10,13 @@ export async function canManageTimetable(env,user){
  for(const p of results)if(await env.DB.prepare("SELECT personnel_id FROM department_staff WHERE department='academic' AND personnel_id=?").bind(p.id).first())return true;
  return false;
 }
+// เมนู "ตารางสอน" (ดูตารางสอนครูทุกคน/ตารางเรียนทุกห้อง): เฉพาะหัวหน้าฝ่ายวิชาการ ผู้บริหาร และผู้ดูแลระบบ
+export async function canViewAllTimetables(env,user){
+ if(isAdmin(user))return true;
+ if(!user||!['teacher','staff'].includes(user.role))return false;
+ const table=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='department_staff'").first();
+ if(!table)return false;
+ const row=await env.DB.prepare(`SELECT 1 AS ok FROM department_staff d JOIN personnel_accounts a ON a.personnel_id=d.personnel_id
+  WHERE d.department='academic' AND d.is_head=1 AND a.user_id=? LIMIT 1`).bind(user.id).first().catch(()=>null);
+ return !!row;
+}
