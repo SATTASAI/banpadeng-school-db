@@ -71,9 +71,9 @@ test("timetable uses registered classes and teachers, protects draft, and finds 
   assert(!coverage.lessons[0].available_teachers.some(x=>x.id===two));
   const staff=setup.teachers.find(p=>p.full_name==="เจ้าหน้าที่").id;
   assert(coverage.lessons[0].available_teachers.some(x=>x.id===staff));
-  await success(env,3,"substitutes/assignments","POST",{date:"2026-09-21",teacher_id:one,entry_id:coverage.lessons[0].id,substitute_teacher_id:staff});
+  await success(env,3,"substitutes/assignments","POST",{date:"2026-09-21",teacher_id:one,entry_id:coverage.lessons[0].id,substitute_teacher_id:staff,reason:"ไปราชการ"});
   assert.equal((await success(env,3,"substitutes/assignments?date=2026-09-21")).assignments.length,1);
-  assert.equal((await call(env,3,"substitutes/assignments","POST",{date:"2026-09-21",teacher_id:one,entry_id:coverage.lessons[0].id,substitute_teacher_id:staff})).status,409);
+  assert.equal((await call(env,3,"substitutes/assignments","POST",{date:"2026-09-21",teacher_id:one,entry_id:coverage.lessons[0].id,substitute_teacher_id:staff,reason:"ไปราชการ"})).status,409);
   await success(env,1,"timetable/slot","PUT",{...first,period:2,subject:"ภาษาอังกฤษ"});
   assert.equal((await success(env,1,"timetable/entries?term_id=1&view=published")).entries.length,2);
   assert.equal((await success(env,1,"timetable/entries?term_id=1&view=draft")).entries.length,3);

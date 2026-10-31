@@ -80,3 +80,53 @@ test('substitution UI loads leaves when dates change and uses their canonical te
  assert.equal(node('lessons').innerHTML,'');assert(calls.some(url=>url.includes('leaves?date=2026-10-07')));
  assert.match(html,/leave_request_id:leave.leave_request_id/);
 });
+
+test('substitution without a leave request requires a reason and blocks the absent teacher as a substitute',async()=>{
+ const {env,absent,free}=await setup();
+ const teachers=(await (await call(env,path+'teachers?date=2026-10-06','GET',undefined,3)).json()).teachers;
+ assert.deepEqual(teachers.map(t=>[t.id,t.lesson_count]),[[absent,2]]);
+ assert.equal((await call(env,path+'teachers?date=2026-10-06','GET',undefined,2)).status,403);
+ const data={date:'2026-10-06',teacher_id:absent,entry_id:1,substitute_teacher_id:free,leave_request_id:null};
+ assert.equal((await call(env,path+'assignments','POST',data,3)).status,400);
+ assert.equal((await call(env,path+'assignments','POST',{...data,reason:'ไปราชการ'},3)).status,200);
+ const rows=(await (await call(env,path+'assignments?date=2026-10-06','GET',undefined,3)).json()).assignments;
+ assert.equal(rows[0].absence_reason,'ไปราชการ');assert.equal(rows[0].leave_request_id,null);
+ assert.equal((await (await call(env,path+'teachers?date=2026-10-06','GET',undefined,3)).json()).teachers[0].absence_reason,'ไปราชการ');
+});
+
+test('cancel and change keep history, notify the replaced teacher and keep only the new teacher assigned',async()=>{
+ const {env,absent,free}=await setup();
+ env.raw.exec("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(7,'test7','x','x','ครูใหม่','teacher')");
+ env.raw.exec("INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(7,'ครูใหม่','test-person-7','ครู')");
+ const other=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=7').get().id;
+ env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(7,?)').run(other);
+ const today=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
+ // วันที่ในอนาคตที่เป็นวันอังคาร (ตรงกับคาบทดสอบ weekday=2) และอยู่ในภาคเรียนทดสอบ
+ env.raw.exec("UPDATE academic_terms SET end_date='2099-12-31' WHERE id=99");
+ let d=new Date(today+'T12:00:00Z');while(d.getUTCDay()!==2)d=new Date(d.getTime()+864e5);const date=d.toISOString().slice(0,10);
+ const base={date,teacher_id:absent,entry_id:1,substitute_teacher_id:free,leave_request_id:null,reason:'อบรม'};
+ assert.equal((await call(env,path+'assignments','POST',base,3)).status,200);
+ const id=env.raw.prepare('SELECT id FROM substitute_assignments').get().id;
+ const keys=async user=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.map(n=>n.message_key);
+ assert((await keys(4)).includes(`substitute:${id}:${free}`));
+ assert.equal((await call(env,path+`assignments/${id}`,'PATCH',{substitute_teacher_id:free},3)).status,400);
+ assert.equal((await call(env,path+`assignments/${id}`,'PATCH',{substitute_teacher_id:absent},3)).status,409);
+ assert.equal((await call(env,path+`assignments/${id}`,'PATCH',{substitute_teacher_id:other},2)).status,403);
+ assert.equal((await call(env,path+`assignments/${id}`,'PATCH',{substitute_teacher_id:other},3)).status,200);
+ assert.equal(env.raw.prepare('SELECT substitute_teacher_id s FROM substitute_assignments WHERE id=?').get(id).s,other);
+ assert((await keys(7)).includes(`substitute:${id}:${other}`));
+ const k4=await keys(4);assert(!k4.includes(`substitute:${id}:${free}`));assert(k4.some(k=>k.startsWith('substitute-cancel:')));
+ const mine4=await (await call(env,path+'mine','GET',undefined,4)).json();
+ assert.equal(mine4.teaching.length,0);assert.equal(mine4.cancelled[0].action,'replaced');
+ const mine7=await (await call(env,path+'mine','GET',undefined,7)).json();
+ assert.equal(mine7.teaching[0].absence_reason,'อบรม');assert.equal(mine7.teaching[0].period,1);
+ const mineAbsent=await (await call(env,path+'mine','GET',undefined,2)).json();
+ assert.equal(mineAbsent.covered[0].substitute_name,'ครูใหม่');
+ assert.equal((await call(env,path+`assignments/${id}`,'DELETE',undefined,2)).status,403);
+ assert.equal((await call(env,path+`assignments/${id}`,'DELETE',undefined,3)).status,200);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments').get().n,0);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_absences').get().n,0);
+ assert.equal((await (await call(env,path+'mine','GET',undefined,7)).json()).cancelled[0].action,'cancelled');
+ assert((await keys(7)).some(k=>k.startsWith('substitute-cancel:')));
+ assert.equal((await call(env,path+`assignments/${id}`,'DELETE',undefined,3)).status,404);
+});
