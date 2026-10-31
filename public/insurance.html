@@ -9,11 +9,16 @@
 .in-filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}.in-filters input,.in-filters select{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}
 .in-filters input{flex:1;min-width:200px}
 .in-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff}
-.in-table{width:100%;border-collapse:collapse;min-width:760px}.in-table th,.in-table td{padding:8px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}
+.in-table{width:100%;border-collapse:collapse}.in-table th,.in-table td{padding:5px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}
 .in-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0}.in-table tr:last-child td{border-bottom:0}
-.in-table .num{text-align:right;font-variant-numeric:tabular-nums}.in-table .btn{width:auto;padding:5px 12px;font-size:13px}
+.in-table .num{text-align:right;font-variant-numeric:tabular-nums}.in-table .btn{width:auto;padding:4px 12px;font-size:13px;min-height:0;line-height:1.4;box-shadow:none}
 .in-chip{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}.in-chip.yes{background:rgba(46,157,106,.13);color:#1f7a50}.in-chip.no{background:rgba(196,80,95,.12);color:#a33a49}.in-chip.none{background:#eef2f7;color:var(--color-text-muted)}
 .in-muted{color:var(--color-text-muted)}.in-more{text-align:center;padding:10px}
+.in-cols{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;align-items:start}@media(max-width:900px){.in-cols{grid-template-columns:1fr}}
+.in-scroll{max-height:62vh;overflow:auto}
+#rooms tr{cursor:pointer}#rooms tr:hover td{background:#f2f8ff}#rooms tr.sel td{background:#e8f2fd}#rooms tr.sel td:first-child{box-shadow:inset 3px 0 0 #2D7FD3}
+.in-cnt{font-variant-numeric:tabular-nums;white-space:nowrap}.in-cnt b{color:#1f7a50}.in-cnt i{font-style:normal;color:#a33a49}
+.in-name small{display:block;color:var(--color-text-muted);font-size:12px}
 </style>
 </head>
 <body>
@@ -25,11 +30,13 @@
   <p class="in-info" id="info"></p>
   <div class="tw-error" id="error" role="alert"></div>
   <section id="cards" class="tw-cards"></section>
-  <section class="in-section"><h2>สรุปรายห้อง</h2><div class="in-wrap"><table class="in-table"><thead><tr><th>ชั้น / ห้อง</th><th class="num">นักเรียน</th><th class="num">ทำประกัน</th><th class="num">ไม่ทำ</th><th class="num">ยังไม่บันทึก</th><th style="width:140px">ความครบถ้วน</th><th></th></tr></thead><tbody id="rooms"><tr><td colspan="7" class="in-muted">กำลังโหลด…</td></tr></tbody></table></div></section>
-  <section class="in-section"><h2>รายชื่อนักเรียน</h2>
-    <div class="in-filters"><input type="search" id="q" placeholder="ค้นหาชื่อ เลขประจำตัว เลขกรมธรรม์" autocomplete="off"><select id="fRoom"><option value="">ทุกห้อง</option></select><select id="fStatus"><option value="">ทุกสถานะ</option><option value="yes">ทำประกัน</option><option value="no">ไม่ทำประกัน</option><option value="none">ยังไม่บันทึก</option></select></div>
-    <div class="in-wrap"><table class="in-table"><thead><tr><th>เลขประจำตัว</th><th>ชื่อ–นามสกุล</th><th>ชั้น/ห้อง</th><th>สถานะ</th><th>บริษัท / แผน</th><th>เลขกรมธรรม์</th><th class="num">เบี้ย (บาท)</th><th>คุ้มครอง</th><th></th></tr></thead><tbody id="list"></tbody></table></div>
+  <div class="in-cols">
+  <section class="in-section"><h2>สรุปรายห้อง</h2><div class="in-wrap in-scroll"><table class="in-table"><thead><tr><th>ห้อง</th><th>ทำ / ไม่ทำ / ยังไม่บันทึก</th><th style="width:90px">ครบ</th><th></th></tr></thead><tbody id="rooms"><tr><td colspan="4" class="in-muted">กำลังโหลด…</td></tr></tbody></table></div></section>
+  <section class="in-section"><h2 id="listTitle">รายชื่อนักเรียน</h2>
+    <div class="in-filters"><select id="fRoom"></select><select id="fStatus"><option value="">ทุกสถานะ</option><option value="yes">ทำประกัน</option><option value="no">ไม่ทำประกัน</option><option value="none">ยังไม่บันทึก</option></select><input type="search" id="q" placeholder="ค้นหาทั้งโรงเรียน: ชื่อ เลขประจำตัว กรมธรรม์" autocomplete="off"></div>
+    <div class="in-wrap in-scroll"><table class="in-table"><thead><tr><th style="width:36px">#</th><th>ชื่อ–นามสกุล</th><th>สถานะ</th><th></th></tr></thead><tbody id="list"></tbody></table></div>
   </section>
+  </div>
 </main>
 <script src="/js/api.js"></script>
 <script src="/js/student-insurance.js"></script>
@@ -39,7 +46,6 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
 const money=n=>n==null||n===''?'':Number(n).toLocaleString('th-TH',{maximumFractionDigits:2});
-const tdate=d=>{if(!d)return '';const x=new Date(d+'T00:00:00');return Number.isNaN(x.getTime())?d:new Intl.DateTimeFormat('th-TH',{day:'numeric',month:'short',year:'2-digit'}).format(x)};
 const key=s=>`${String(s.grade_level??'').trim()}|${String(s.classroom??'').trim()}`;
 const label=k=>{const [g,r]=k.split('|');return `${g||'ไม่ระบุชั้น'}${r?' / '+r:''}`};
 const bar=(a,b)=>`<span class="tw-bar"><b style="width:${b?Math.round(a/b*100):0}%"></b></span>`;
@@ -71,16 +77,22 @@ function render(){
   const n={yes:0,no:0,none:0};students.forEach(s=>n[stateOf(s)]++);const total=students.length;
   $('cards').innerHTML=`<div class="tw-card"><span>นักเรียนที่กำลังศึกษา</span><strong>${total}</strong></div><div class="tw-card"><span>ทำประกัน</span><strong style="color:#1f7a50">${n.yes}</strong>${bar(n.yes,total)}</div><div class="tw-card"><span>ไม่ทำประกัน</span><strong style="color:#a33a49">${n.no}</strong></div><div class="tw-card"><span>ยังไม่บันทึก</span><strong>${n.none}</strong>${bar(total-n.none,total)}</div>`;
   const rooms=new Map();students.forEach(s=>{const k=key(s);if(!rooms.has(k))rooms.set(k,{yes:0,no:0,none:0,total:0});const r=rooms.get(k);r[stateOf(s)]++;r.total++});
-  $('rooms').innerHTML=rooms.size?[...rooms].map(([k,r])=>`<tr><td><b>${esc(label(k))}</b></td><td class="num">${r.total}</td><td class="num">${r.yes}</td><td class="num">${r.no}</td><td class="num">${r.none||''}</td><td>${bar(r.total-r.none,r.total)}</td><td>${canEditRoom(k)?`<button class="btn btn-primary" data-room="${esc(k)}">กรอกทั้งห้อง</button>`:''}</td></tr>`).join(''):'<tr><td colspan="7" class="in-muted">ไม่มีนักเรียนในทะเบียน</td></tr>';
-  const fr=$('fRoom'),cur=fr.value;fr.innerHTML='<option value="">ทุกห้อง</option>'+[...rooms.keys()].map(k=>`<option value="${esc(k)}">${esc(label(k))}</option>`).join('');fr.value=rooms.has(cur)?cur:'';
+  const fr=$('fRoom'),cur=fr.value||preferredRoom(rooms);
+  $('rooms').innerHTML=rooms.size?[...rooms].map(([k,r])=>`<tr data-pick="${esc(k)}"${k===cur?' class="sel"':''}><td><b>${esc(label(k))}</b> <small class="in-muted">${r.total} คน</small></td><td class="in-cnt"><b>${r.yes}</b> / <i>${r.no}</i> / ${r.none}</td><td>${bar(r.total-r.none,r.total)}</td><td>${canEditRoom(k)?`<button class="btn btn-primary" data-room="${esc(k)}">กรอกทั้งห้อง</button>`:''}</td></tr>`).join(''):'<tr><td colspan="4" class="in-muted">ไม่มีนักเรียนในทะเบียน</td></tr>';
+  fr.innerHTML=[...rooms.keys()].map(k=>`<option value="${esc(k)}">${esc(label(k))}</option>`).join('');fr.value=rooms.has(cur)?cur:([...rooms.keys()][0]||'');
   renderList();
 }
+function preferredRoom(rooms){const p=info.permissions||{};return (p.homerooms||[]).find(k=>rooms.has(k))||[...rooms.keys()][0]||''}
 function renderList(){
   const q=$('q').value.trim().toLowerCase(),room=$('fRoom').value,st=$('fStatus').value;
-  const rows=students.filter(s=>(!room||key(s)===room)&&(!st||stateOf(s)===st)&&(!q||[s.full_name,s.student_code,records.get(s.id)?.policy_no].join(' ').toLowerCase().includes(q)));
-  $('list').innerHTML=rows.length?rows.slice(0,limit).map(s=>{const r=records.get(s.id)||{},st=stateOf(s);
-    return `<tr><td>${esc(s.student_code)}</td><td>${esc(s.full_name)}</td><td>${esc(label(key(s)))}</td><td>${chip(st)}</td><td>${esc([r.company,r.plan_name].filter(Boolean).join(' · '))||'<span class="in-muted">-</span>'}</td><td>${esc(r.policy_no)}</td><td class="num">${money(r.premium)}</td><td>${r.start_date||r.end_date?esc(tdate(r.start_date)+' – '+tdate(r.end_date)):''}${r.coverage_amount!=null?`<br><small class="in-muted">${money(r.coverage_amount)} บาท</small>`:''}</td><td>${canEditRoom(key(s))?`<button class="btn btn-ghost" data-student="${s.id}">${st==='none'?'บันทึก':'แก้ไข'}</button>`:''}</td></tr>`}).join('')+(rows.length>limit?`<tr><td colspan="9" class="in-more"><button class="btn btn-ghost" id="more">แสดงเพิ่ม (${rows.length-limit} คน)</button></td></tr>`:'')
-    :'<tr><td colspan="9" class="in-muted">ไม่พบนักเรียน</td></tr>';
+  // ค้นหา = ทั้งโรงเรียน, ไม่ค้นหา = เฉพาะห้องที่เลือก
+  $('listTitle').textContent=q?'ผลการค้นหา':`รายชื่อนักเรียน ${label(room)}`;
+  document.querySelectorAll('#rooms tr[data-pick]').forEach(tr=>tr.classList.toggle('sel',!q&&tr.dataset.pick===room));
+  const rows=students.filter(s=>(q||key(s)===room)&&(!st||stateOf(s)===st)&&(!q||[s.full_name,s.student_code,records.get(s.id)?.policy_no].join(' ').toLowerCase().includes(q)));
+  $('list').innerHTML=rows.length?rows.slice(0,limit).map((s,i)=>{const r=records.get(s.id)||{},st=stateOf(s);
+    const sub=[s.student_code,q?label(key(s)):'',r.policy_no?'กรมธรรม์ '+r.policy_no:'',r.premium!=null?money(r.premium)+' บาท':''].filter(Boolean).join(' · ');
+    return `<tr><td class="in-muted">${i+1}</td><td class="in-name">${esc(s.full_name)}${sub?`<small>${esc(sub)}</small>`:''}</td><td>${chip(st)}</td><td style="text-align:right">${canEditRoom(key(s))?`<button class="btn btn-ghost" data-student="${s.id}">${st==='none'?'บันทึก':'แก้ไข'}</button>`:''}</td></tr>`}).join('')+(rows.length>limit?`<tr><td colspan="4" class="in-more"><button class="btn btn-ghost" id="more">แสดงเพิ่ม (${rows.length-limit} คน)</button></td></tr>`:'')
+    :'<tr><td colspan="4" class="in-muted">ไม่พบนักเรียน</td></tr>';
 }
 function editStudent(id){
   const s=students.find(x=>x.id===Number(id));if(!s)return;
@@ -90,6 +102,7 @@ document.addEventListener('click',e=>{
   const room=e.target.closest('[data-room]'),stu=e.target.closest('[data-student]');
   if(room){const [grade,classroom]=room.dataset.room.split('|');StudentInsurance.openClassroom(students,{grade,classroom,year:$('year').value,onClose:()=>load($('year').value)})}
   else if(stu)editStudent(stu.dataset.student);
+  else if(e.target.closest('[data-pick]')){$('fRoom').value=e.target.closest('[data-pick]').dataset.pick;$('q').value='';limit=200;renderList()}
   else if(e.target.id==='more'){limit+=200;renderList()}
 });
 $('year').onchange=()=>load($('year').value);
