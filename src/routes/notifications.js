@@ -9,7 +9,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -21,9 +21,9 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  AND EXISTS(SELECT 1 FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id
  WHERE p.id=r.deputy_personnel_id AND p.status='active' AND REPLACE(p.position,' ','') LIKE '%รองผู้อำนวยการ%' AND a.user_id=?))`;
  if(['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records'].every(t=>tables.has(t))){
-  extra.push(`SELECT 'substitute:'||a.id,'สอนแทน',
-  'วันที่ '||a.absence_date||' คาบ '||a.period||' · '||COALESCE(e.classroom,'')||' '||COALESCE(e.subject,'')||COALESCE(' (แทน '||ap.full_name||')',''),
-  a.created_at,'/substitutes.html',NULL,a.created_by,1
+  extra.push(`SELECT 'substitute:'||a.id||':'||a.substitute_teacher_id,'สอนแทน',
+  'วันที่ '||a.absence_date||' คาบ '||a.period||' · '||COALESCE(e.grade_level||'/'||e.classroom,'')||' '||COALESCE(e.subject,'')||COALESCE(' (แทน '||ap.full_name||')',''),
+  a.created_at,'/my-substitutes.html',NULL,a.created_by,1
   FROM substitute_assignments a JOIN personnel_accounts pa ON pa.personnel_id=a.substitute_teacher_id
   LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN substitute_absences ab ON ab.id=a.absence_id
   LEFT JOIN personnel_records ap ON ap.id=ab.teacher_id
@@ -56,6 +56,13 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
   OR (m.reported_by=me.uid AND m.status IN ('completed','verified') AND m.completed_at>=datetime('now','-30 days')
    AND COALESCE((SELECT u.created_by FROM maintenance_updates u WHERE u.request_id=m.id AND u.new_status='completed' ORDER BY u.id DESC LIMIT 1),0)<>me.uid)
  ) x`);tertiaryValues.push(user.id,user.id);}
+ // ยกเลิก/เปลี่ยนครูสอนแทน: แจ้งครูที่ถูกยกเลิก (เฉพาะวันนี้เป็นต้นไป)
+ if(['substitute_cancellations','personnel_accounts'].every(t=>tables.has(t))){tertiaryTerms.push(`SELECT 'substitute-cancel:'||c.id,'ยกเลิกสอนแทน',
+ 'วันที่ '||c.absence_date||' คาบ '||c.period||' · '||COALESCE(c.grade_level||'/'||c.classroom,'')||' '||COALESCE(c.subject,'')||COALESCE(' (แทน '||c.absent_name||')','')||
+ CASE c.action WHEN 'replaced' THEN ' — เปลี่ยนเป็นครูท่านอื่นแล้ว' ELSE ' — ไม่ต้องเข้าสอนแทนคาบนี้' END,
+ c.created_at,'/my-substitutes.html',NULL,c.cancelled_by,1
+ FROM substitute_cancellations c JOIN personnel_accounts pa ON pa.personnel_id=c.substitute_teacher_id
+ WHERE pa.user_id=? AND c.absence_date>=date('now','+7 hours')`);tertiaryValues.push(user.id);}
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}

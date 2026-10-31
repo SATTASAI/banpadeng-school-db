@@ -63,6 +63,16 @@ async function ensureSchema(env){
     try{await env.DB.prepare("ALTER TABLE substitute_assignments ADD COLUMN leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE SET NULL").run();}
     catch(e){if(!/duplicate column name/i.test(String(e)))throw e;}
   }
+  // บันทึกการยกเลิก/เปลี่ยนครูสอนแทน — ใช้แจ้งครูที่ถูกยกเลิก (กระดิ่ง + LINE) และเป็นประวัติ
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS substitute_cancellations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assignment_id INTEGER NOT NULL, substitute_teacher_id INTEGER NOT NULL REFERENCES personnel_records(id),
+    absence_date TEXT NOT NULL, period INTEGER NOT NULL,
+    grade_level TEXT, classroom TEXT, subject TEXT, absent_name TEXT,
+    action TEXT NOT NULL CHECK(action IN ('cancelled','replaced')),
+    cancelled_by INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT(datetime('now'))
+  )`).run();
   ready.add(env.DB);
 }
 
@@ -221,6 +231,8 @@ async function assign(request,env,user){
   const leaveId=body.leave_request_id==null?null:validId(body.leave_request_id);
   if(body.leave_request_id!=null&&(!leaveId||!await sourceLeave(env,leaveId,date,teacherId)))
     return reply({error:"ใบลาไม่ตรงกับครูหรือวันที่ หรือถูกยกเลิก/ไม่อนุมัติแล้ว กรุณาโหลดข้อมูลใหม่"},409);
+  // จัดแทนโดยไม่มีใบลา (ไปราชการ อบรม พานักเรียนไปกิจกรรม ฯลฯ) ต้องระบุเหตุที่ไม่อยู่
+  if(leaveId==null&&!text(body.reason,300))return reply({error:"ระบุเหตุที่ครูไม่อยู่ เช่น ไปราชการ หรืออบรม"},400);
   const result=await coverage(env,date,teacherId);
   if(result.status!==200)return result;
   const data=await result.json(),lesson=data.lessons.find(x=>x.id===entryId);
@@ -246,13 +258,94 @@ async function assign(request,env,user){
 async function assignments(env,date){
   if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
   const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.leave_request_id,r.status AS leave_status,e.subject,e.grade_level,e.classroom,
-    absent.full_name AS absent_name,sub.full_name AS substitute_name
+    absent.full_name AS absent_name,sub.full_name AS substitute_name,ab.teacher_id AS absent_teacher_id,ab.reason AS absence_reason,
+    a.substitute_teacher_id,a.timetable_entry_id AS entry_id
     FROM substitute_assignments a LEFT JOIN leave_requests r ON r.id=a.leave_request_id JOIN substitute_absences ab ON ab.id=a.absence_id
     JOIN timetable_entries e ON e.id=a.timetable_entry_id
     JOIN personnel_records absent ON absent.id=ab.teacher_id
     JOIN personnel_records sub ON sub.id=a.substitute_teacher_id
     WHERE a.absence_date=? ORDER BY a.period,e.grade_level,e.classroom`).bind(date).all();
   return reply({assignments:results});
+}
+// ครูที่มีคาบสอนในวันนั้นตามตารางที่เผยแพร่ — ใช้เลือกครูที่ไม่อยู่โดยไม่มีใบลา
+async function teachersForDay(env,date){
+  if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
+  const day=weekday(date);if(!day)return reply({error:"เลือกวันจันทร์ถึงศุกร์"},400);
+  const term=await env.DB.prepare(`SELECT t.id FROM academic_terms t WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
+  if(!term)return reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404);
+  const published=await plan(env,term.id,"published");if(!published)return reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400);
+  const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,COUNT(e.id) AS lesson_count,
+    (SELECT ab.reason FROM substitute_absences ab WHERE ab.teacher_id=p.id AND ab.absence_date=?) AS absence_reason
+    FROM personnel_records p JOIN timetable_entries e ON e.teacher_id=p.id AND e.plan_id=? AND e.weekday=?
+    WHERE p.status='active' GROUP BY p.id ORDER BY p.full_name`).bind(date,published.id,day).all();
+  return reply({date,teachers:results});
+}
+async function assignmentDetail(env,id){
+  return env.DB.prepare(`SELECT a.id,a.absence_id,a.absence_date,a.period,a.timetable_entry_id,a.substitute_teacher_id,ab.teacher_id AS absent_teacher_id,
+    e.grade_level,e.classroom,e.subject,absent.full_name AS absent_name
+    FROM substitute_assignments a JOIN substitute_absences ab ON ab.id=a.absence_id
+    LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN personnel_records absent ON absent.id=ab.teacher_id WHERE a.id=?`).bind(id).first();
+}
+function cancellationRow(env,a,action,user){
+  return env.DB.prepare(`INSERT INTO substitute_cancellations(assignment_id,substitute_teacher_id,absence_date,period,grade_level,classroom,subject,absent_name,action,cancelled_by)
+    VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(a.id,a.substitute_teacher_id,a.absence_date,a.period,a.grade_level,a.classroom,a.subject,a.absent_name,action,user.id);
+}
+// ยกเลิกครูสอนแทน: เก็บประวัติ + แจ้งครูที่ถูกยกเลิก; ถ้าครูที่ไม่อยู่ไม่เหลือคาบที่จัดแทนในวันนั้น ลบรายการไม่อยู่ออกด้วย
+async function cancelAssignment(env,id,user){
+  const a=await assignmentDetail(env,id);if(!a)return reply({error:"ไม่พบรายการสอนแทน กรุณารีเฟรช"},404);
+  await env.DB.batch([
+    cancellationRow(env,a,'cancelled',user),
+    env.DB.prepare("DELETE FROM substitute_assignments WHERE id=?").bind(id),
+    env.DB.prepare("DELETE FROM substitute_absences WHERE id=? AND NOT EXISTS(SELECT 1 FROM substitute_assignments WHERE absence_id=?)").bind(a.absence_id,a.absence_id)
+  ]);
+  return reply({ok:true});
+}
+// เปลี่ยนครูสอนแทน: ตรวจว่าครูใหม่ว่างในคาบนั้น (เงื่อนไขเดียวกับตอนจัด) แล้วแจ้งทั้งครูเดิม (ยกเลิก) และครูใหม่ (ได้รับมอบหมาย)
+async function changeAssignment(request,env,id,user){
+  const body=await request.json().catch(()=>null),subId=validId(body?.substitute_teacher_id);
+  if(!subId)return reply({error:"เลือกครูสอนแทนคนใหม่"},400);
+  const a=await assignmentDetail(env,id);if(!a)return reply({error:"ไม่พบรายการสอนแทน กรุณารีเฟรช"},404);
+  if(subId===a.substitute_teacher_id)return reply({error:"เป็นครูคนเดิมอยู่แล้ว"},400);
+  const result=await coverage(env,a.absence_date,a.absent_teacher_id);if(result.status!==200)return result;
+  const lesson=(await result.json()).lessons.find(x=>x.id===a.timetable_entry_id);
+  if(!lesson||!lesson.available_teachers.some(t=>t.id===subId))return reply({error:"ครูที่เลือกไม่ว่างในคาบนี้ กรุณาเลือกใหม่"},409);
+  try{
+    // UPDATE ก่อน แล้วบันทึกการยกเลิกของครูเดิมเฉพาะเมื่อเปลี่ยนสำเร็จ (ทั้งหมดอยู่ใน transaction เดียวกัน)
+    const [updated]=await env.DB.batch([
+      env.DB.prepare(`UPDATE substitute_assignments SET substitute_teacher_id=?,created_by=?,created_at=datetime('now')
+        WHERE id=? AND substitute_teacher_id=? AND NOT EXISTS(SELECT 1 FROM leave_requests r JOIN personnel_accounts pa ON pa.user_id=r.user_id
+        WHERE pa.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved'))`)
+        .bind(subId,user.id,id,a.substitute_teacher_id,subId,a.absence_date),
+      env.DB.prepare(`INSERT INTO substitute_cancellations(assignment_id,substitute_teacher_id,absence_date,period,grade_level,classroom,subject,absent_name,action,cancelled_by)
+        SELECT ?,?,?,?,?,?,?,?,'replaced',? WHERE EXISTS(SELECT 1 FROM substitute_assignments WHERE id=? AND substitute_teacher_id=?)`)
+        .bind(a.id,a.substitute_teacher_id,a.absence_date,a.period,a.grade_level,a.classroom,a.subject,a.absent_name,user.id,id,subId)
+    ]);
+    if(!updated.meta.changes)return reply({error:"ข้อมูลเปลี่ยนระหว่างบันทึก กรุณาโหลดข้อมูลใหม่"},409);
+  }catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"ครูที่เลือกถูกจัดสอนแทนในคาบนี้แล้ว กรุณารีเฟรช"},409);throw error;}
+  return reply({ok:true});
+}
+// หน้าคาบสอนแทนของฉัน: ครูทุกคนดูได้เฉพาะของตัวเอง (ผ่านบัญชีที่ผูกกับทะเบียนบุคลากร)
+async function mine(env,user){
+  const {results:people}=await env.DB.prepare("SELECT personnel_id FROM personnel_accounts WHERE user_id=?").bind(user.id).all();
+  const ids=people.map(p=>p.personnel_id);
+  if(!ids.length)return reply({linked:false,today:null,teaching:[],covered:[],cancelled:[]});
+  const marks=ids.map(()=>'?').join(',');
+  const today=(await env.DB.prepare("SELECT date('now','+7 hours') AS d").first()).d;
+  const {results:teaching}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,e.grade_level,e.classroom,e.subject,e.room_name,
+    absent.full_name AS absent_name,ab.reason AS absence_reason,a.created_at
+    FROM substitute_assignments a JOIN substitute_absences ab ON ab.id=a.absence_id
+    LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN personnel_records absent ON absent.id=ab.teacher_id
+    WHERE a.substitute_teacher_id IN (${marks}) AND a.absence_date>=date(?,'-30 days')
+    ORDER BY a.absence_date DESC,a.period`).bind(...ids,today).all();
+  const {results:covered}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,e.grade_level,e.classroom,e.subject,sub.full_name AS substitute_name
+    FROM substitute_assignments a JOIN substitute_absences ab ON ab.id=a.absence_id
+    LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN personnel_records sub ON sub.id=a.substitute_teacher_id
+    WHERE ab.teacher_id IN (${marks}) AND a.absence_date>=date(?,'-30 days')
+    ORDER BY a.absence_date DESC,a.period`).bind(...ids,today).all();
+  const {results:cancelled}=await env.DB.prepare(`SELECT id,absence_date,period,grade_level,classroom,subject,absent_name,action,created_at
+    FROM substitute_cancellations WHERE substitute_teacher_id IN (${marks}) AND absence_date>=?
+    ORDER BY absence_date,period`).bind(...ids,today).all();
+  return reply({linked:true,today,teaching,covered,cancelled});
 }
 
 // Timetable reads must not initialize budget, inventory, documents or personnel backfills.
@@ -290,6 +383,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
   if(isSubstitute){
     const allowed=await canManageSubstitutes(env,user);
     if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
+    if(pathname==='/api/substitutes/mine'&&method==='GET'){await ensurePersonnelData(env);await ensureSchema(env);return mine(env,user);}
     if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรหรือผู้ดูแลระบบเท่านั้น'},403);
   }
   if(pathname==="/api/timetable/periods"&&method==="GET"){await ensureAcademicData(env);return timetablePeriods(env);}
@@ -330,6 +424,10 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
 
     if(pathname==="/api/substitutes/assignments"&&method==="POST")return assign(request,env,user);
+    if(pathname==="/api/substitutes/teachers"&&method==="GET")return teachersForDay(env,url.searchParams.get("date"));
+    const one=pathname.match(/^\/api\/substitutes\/assignments\/(\d+)$/);
+    if(one&&method==="DELETE")return cancelAssignment(env,Number(one[1]),user);
+    if(one&&method==="PATCH")return changeAssignment(request,env,Number(one[1]),user);
   }
   return reply({error:"ไม่พบ endpoint"},404);
 }
