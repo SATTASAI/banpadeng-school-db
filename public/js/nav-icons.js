@@ -6,6 +6,7 @@
     students: '<path d="M22 9 12 4 2 9l10 5 10-5Z"/><path d="M6 11.5V16c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.5"/><path d="M22 9v5"/>',
     staff: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2c2.8.4 5 2.8 5 5.8"/>',
     "academic-periods": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h3M8 17h6"/>',
+    bank: '<path d="M3 10l9-6 9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8"/><path d="M3 20h18"/>',
     activity: '<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/>',
     "padeng-model": '<path d="M12 3 3 8l9 5 9-5Z"/><path d="M7 10.5V16c0 1.7 2.2 3 5 3s5-1.3 5-3v-5.5"/>',
     "classroom-research": '<circle cx="10.5" cy="10.5" r="6"/><path d="m20 20-5-5"/><path d="M8 10.5h5M10.5 8v5"/>',
@@ -39,6 +40,7 @@
     || (link.id === "overviewNav" && "overview")
     || (link.classList.contains("nav-grades") && "grades")
     || (link.classList.contains("nav-activity") && "activity")
+    || (link.classList.contains("nav-bank") && "bank")
     || (/banpadengschool\.ac\.th\/admin/.test(link.getAttribute("href") || "") && "web");
   function apply(root = document) {
     root.querySelectorAll(".sidebar nav a .nav-number").forEach((badge) => {
