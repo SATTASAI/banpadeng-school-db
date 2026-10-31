@@ -602,6 +602,11 @@
   buildSidebarSubmenus();
   apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
   apiRequest('/api/teaching-works/permissions').then(p=>document.querySelectorAll('[data-academic-only]').forEach(link=>{link.hidden=!p.academic;link.style.display=p.academic?'':'none';})).catch(()=>{});
+  // เมนูฝ่ายงาน: เห็นเฉพาะฝ่ายที่ตนสังกัด (ผู้บริหาร/superadmin เห็นทุกฝ่าย, ครูอนุบาลเห็นฝ่ายปฐมวัยเพิ่ม)
+  const DEPARTMENT_NAV_KEYS=['administration','academic','early_childhood','budget','personnel','general'];
+  const departmentNavNodes=()=>DEPARTMENT_NAV_KEYS.map(key=>document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`)).filter(Boolean);
+  departmentNavNodes().forEach(node=>{node.hidden=true;node.style.display='none';});
+  apiRequest('/api/navigation/departments').then(v=>{const allowed=new Set(v.departments||[]);DEPARTMENT_NAV_KEYS.forEach(key=>{const node=document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`);if(!node)return;const ok=allowed.has(key);node.hidden=!ok;node.style.display=ok?'':'none';});const label=[...document.querySelectorAll('.sidebar nav > .nav-label')].find(l=>/ฝ่ายงาน/.test(l.textContent));if(label){if(!allowed.size)label.style.display='none';else label.textContent=v.all?'6 ฝ่ายงาน':'ฝ่ายงานของฉัน';}}).catch(()=>departmentNavNodes().forEach(node=>{node.hidden=false;node.style.display='';}));
   apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
 
   function showOverview() {
