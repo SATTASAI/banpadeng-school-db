@@ -18,6 +18,7 @@
 .in-scroll{max-height:62vh;overflow:auto}
 #rooms tr{cursor:pointer}#rooms tr:hover td{background:#f2f8ff}#rooms tr.sel td{background:#e8f2fd}#rooms tr.sel td:first-child{box-shadow:inset 3px 0 0 #2D7FD3}
 .in-cnt{font-variant-numeric:tabular-nums;white-space:nowrap}.in-cnt b{color:#1f7a50}.in-cnt i{font-style:normal;color:#a33a49}
+.in-print{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;z-index:60;background:rgba(21,35,50,.32)}.in-print>div{width:100%;max-width:440px;padding:22px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(20,40,70,.22)}.in-print h2{margin:0 0 12px;font-size:18px}.in-print label.opt{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;margin-bottom:8px;cursor:pointer}.in-print label.opt:has(input:checked){border-color:#2D7FD3;background:#f2f8ff}.in-print label.opt small{display:block;color:var(--color-text-muted)}.in-print .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.in-print .acts .btn{width:auto}
 .in-name small{display:block;color:var(--color-text-muted);font-size:12px}
 </style>
 </head>
@@ -40,6 +41,7 @@
 </main>
 <script src="/js/api.js"></script>
 <script src="/js/student-insurance.js"></script>
+<script src="/js/insurance-print.js"></script>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
@@ -73,7 +75,7 @@ function fillYears(){
 function render(){
   const p=info.permissions||{};
   $('info').innerHTML=`ผู้รับผิดชอบงานประกัน: <b>${esc(info.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage_all?'กรอก/แก้ไขได้ทุกห้อง':(p.homerooms||[]).length?'กรอก/แก้ไขห้อง '+p.homerooms.map(label).join(', '):'ดูได้อย่างเดียว'}`;
-  $('headActions').innerHTML=p.can_import?'<a class="btn btn-ghost" href="/import-center.html?template=insurance">นำเข้าจาก Excel</a>':'';
+  $('headActions').innerHTML='<button class="btn btn-primary" id="printBtn" type="button">พิมพ์ (Word / PDF)</button>'+(p.can_import?' <a class="btn btn-ghost" href="/import-center.html?template=insurance">นำเข้าจาก Excel</a>':'');
   const n={yes:0,no:0,none:0};students.forEach(s=>n[stateOf(s)]++);const total=students.length;
   $('cards').innerHTML=`<div class="tw-card"><span>นักเรียนที่กำลังศึกษา</span><strong>${total}</strong></div><div class="tw-card"><span>ทำประกัน</span><strong style="color:#1f7a50">${n.yes}</strong>${bar(n.yes,total)}</div><div class="tw-card"><span>ไม่ทำประกัน</span><strong style="color:#a33a49">${n.no}</strong></div><div class="tw-card"><span>ยังไม่บันทึก</span><strong>${n.none}</strong>${bar(total-n.none,total)}</div>`;
   const rooms=new Map();students.forEach(s=>{const k=key(s);if(!rooms.has(k))rooms.set(k,{yes:0,no:0,none:0,total:0});const r=rooms.get(k);r[stateOf(s)]++;r.total++});
@@ -94,6 +96,34 @@ function renderList(){
     return `<tr><td class="in-muted">${i+1}</td><td class="in-name">${esc(s.full_name)}${sub?`<small>${esc(sub)}</small>`:''}</td><td>${chip(st)}</td><td style="text-align:right">${canEditRoom(key(s))?`<button class="btn btn-ghost" data-student="${s.id}">${st==='none'?'บันทึก':'แก้ไข'}</button>`:''}</td></tr>`}).join('')+(rows.length>limit?`<tr><td colspan="4" class="in-more"><button class="btn btn-ghost" id="more">แสดงเพิ่ม (${rows.length-limit} คน)</button></td></tr>`:'')
     :'<tr><td colspan="4" class="in-muted">ไม่พบนักเรียน</td></tr>';
 }
+// ห้องสำหรับพิมพ์: แสดงนักเรียนทุกคนในห้องเสมอ (ไม่ใช้ตัวกรองสถานะ/คำค้น)
+function printRooms(onlyKey){
+  const map=new Map();students.forEach(s=>{const k=key(s);if(onlyKey&&k!==onlyKey)return;if(!map.has(k))map.set(k,[]);map.get(k).push({student_code:s.student_code,full_name:s.full_name,record:records.get(s.id)||null})});
+  return [...map].map(([k,list])=>({label:label(k),students:list}));
+}
+function openPrint(){
+  const room=$('fRoom').value;
+  const box=document.createElement('div');box.className='in-print';
+  box.innerHTML=`<div role="dialog" aria-modal="true" aria-labelledby="prTitle"><h2 id="prTitle">พิมพ์ข้อมูลประกันอุบัติเหตุ ปี ${esc($('year').value)}</h2>
+    <label class="opt"><input type="radio" name="kind" value="room" checked><span>รายชื่อห้อง ${esc(label(room))}<small>นักเรียนทุกคนในห้อง พร้อมสถานะ เบี้ย หมายเหตุ</small></span></label>
+    <label class="opt"><input type="radio" name="kind" value="all"><span>รายชื่อทุกห้อง<small>ไฟล์เดียว หน้าละห้อง</small></span></label>
+    <label class="opt"><input type="radio" name="kind" value="summary"><span>สรุปรายห้อง<small>จำนวนทำ/ไม่ทำ/ยังไม่บันทึก และเบี้ยรวม ทุกห้อง</small></span></label>
+    <div class="tw-error" id="prErr"></div>
+    <div class="acts"><button class="btn btn-primary" data-fmt="pdf">ดาวน์โหลด PDF</button><button class="btn btn-primary" data-fmt="docx">ดาวน์โหลด Word</button><button class="btn btn-ghost" data-close>ปิด</button></div></div>`;
+  const close=()=>{box.remove();document.removeEventListener('keydown',esc_)};const esc_=e=>{if(e.key==='Escape')close()};
+  document.addEventListener('keydown',esc_);
+  box.addEventListener('click',async e=>{
+    if(e.target===box||e.target.closest('[data-close]'))return close();
+    const b=e.target.closest('[data-fmt]');if(!b)return;
+    const kind=box.querySelector('[name=kind]:checked').value,rooms=printRooms(kind==='room'?room:null);
+    if(!rooms.length){box.querySelector('#prErr').textContent='ไม่มีนักเรียนให้พิมพ์';box.querySelector('#prErr').style.display='block';return}
+    const t=b.textContent;box.querySelectorAll('[data-fmt]').forEach(x=>x.disabled=true);b.textContent='กำลังสร้างไฟล์…';
+    try{await InsurancePrint.exportFile({kind,format:b.dataset.fmt,rooms,year:$('year').value});close()}
+    catch(err){box.querySelector('#prErr').textContent=err.message;box.querySelector('#prErr').style.display='block'}
+    finally{box.querySelectorAll('[data-fmt]').forEach(x=>x.disabled=false);b.textContent=t}
+  });
+  document.body.append(box);box.querySelector('[data-fmt]').focus();
+}
 function editStudent(id){
   const s=students.find(x=>x.id===Number(id));if(!s)return;
   StudentInsurance.openStudent(s,{year:$('year').value,record:records.get(s.id),onSaved:()=>load($('year').value)});
@@ -103,6 +133,7 @@ document.addEventListener('click',e=>{
   if(room){const [grade,classroom]=room.dataset.room.split('|');StudentInsurance.openClassroom(students,{grade,classroom,year:$('year').value,onClose:()=>load($('year').value)})}
   else if(stu)editStudent(stu.dataset.student);
   else if(e.target.closest('[data-pick]')){$('fRoom').value=e.target.closest('[data-pick]').dataset.pick;$('q').value='';limit=200;renderList()}
+  else if(e.target.id==='printBtn')openPrint();
   else if(e.target.id==='more'){limit+=200;renderList()}
 });
 $('year').onchange=()=>load($('year').value);
