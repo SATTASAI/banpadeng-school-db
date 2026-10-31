@@ -1641,9 +1641,26 @@ async function handleOwnPersonnel(request, env, method) {
   if (method === "PATCH") {
     let body;
     try { body = await request.json(); } catch { return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400); }
-    const current = await env.DB.prepare("SELECT academic_rank FROM personnel_records WHERE id = ?").bind(id).first();
+    const current = await env.DB.prepare("SELECT academic_rank, prefix, full_name FROM personnel_records WHERE id = ?").bind(id).first();
     const picked = rankChoiceToRecord(body.rank_choice, body.rank_other, current?.academic_rank);
     if (picked.error) return jsonResponse({ error: picked.error }, 400);
+    // ชื่อ–นามสกุลในทะเบียนบุคลากรของตัวเอง (คำนำหน้าเดิมคงไว้) — ไม่เปลี่ยนชื่อบัญชีผู้ใช้
+    if (body.first_name !== undefined || body.last_name !== undefined) {
+      const first = validateNamePart(body.first_name, "ชื่อ");
+      if (first.error) return jsonResponse({ error: first.error }, 400);
+      const last = validateNamePart(body.last_name, "นามสกุล");
+      if (last.error) return jsonResponse({ error: last.error }, 400);
+      const parts = splitName(current.full_name, current.prefix);
+      const fullName = joinName(parts.prefix, first.value, last.value, hasSpacedPrefix(current.full_name, parts.prefix));
+      if (fullName !== current.full_name) {
+        const normalized = fullName.normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\s.]+/g, "").toLowerCase();
+        const clash = await env.DB.prepare("SELECT id FROM personnel_records WHERE normalized_name = ? AND id <> ?").bind(normalized, id).first();
+        if (clash) return jsonResponse({ error: "มีบุคลากรชื่อนี้ในทะเบียนอยู่แล้ว กรุณาติดต่อผู้ดูแลระบบ" }, 409);
+        await env.DB.prepare("UPDATE personnel_records SET first_name = ?, last_name = ?, full_name = ?, normalized_name = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(first.value, last.value, fullName, normalized, id).run();
+        await writeAuditLog(env, user, "update", "personnel", id, { self_rename: true, previous_full_name: current.full_name, full_name: fullName }, request);
+      }
+    }
     return updateStaffRecord(env, id, { ...body, position: picked.position, academic_rank: picked.academic_rank }, user, request);
   }
   const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
@@ -1652,7 +1669,7 @@ async function handleOwnPersonnel(request, env, method) {
          WHERE y.status = 'active' AND h.user_id = p.user_id), p.homeroom_classroom)`
     : "p.homeroom_classroom";
   const person = await env.DB.prepare(
-    `SELECT p.id, p.full_name, p.personnel_type, p.position_number, p.position, p.academic_rank, p.subjects, p.phone,
+    `SELECT p.id, p.full_name, p.prefix, p.personnel_type, p.position_number, p.position, p.academic_rank, p.subjects, p.phone,
             ${homeroomSql} AS homeroom_classroom, p.departments, p.responsible_projects, p.teaching_periods,
             p.appointment_date, p.service_start_date, p.education_level, p.major, p.institution,
             p.employment_status, p.retirement_date, p.license_issue_date, p.license_expiry_date
@@ -1664,47 +1681,8 @@ async function handleOwnPersonnel(request, env, method) {
     person.subjects = l ? l.subjects.join(", ") : null;
     person.teaching_periods = l ? l.periods_per_week : null;
   }
-  return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank) }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
-}
-
-// หน้าบัญชีของฉัน: ครูแก้ชื่อ–นามสกุลของตัวเองได้ทันที (คำนำหน้าเดิมคงไว้) — ชื่อบัญชีและทะเบียนบุคลากรของตัวเองเปลี่ยนตาม
-async function handleOwnName(request, env, method) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (user.role === "viewer") return jsonResponse({ error: "บัญชีผู้ชมภายนอกแก้ชื่อไม่ได้" }, 403);
-  const account = await env.DB.prepare("SELECT id, full_name FROM users WHERE id = ? AND deleted_at IS NULL").bind(user.id).first();
-  if (!account) return jsonResponse({ error: "ไม่พบบัญชีผู้ใช้" }, 404);
-  await ensurePersonnelData(env);
-  const pid = await ownPersonnelId(env, user);
-  const person = pid ? await env.DB.prepare("SELECT id, prefix, full_name FROM personnel_records WHERE id = ?").bind(pid).first() : null;
-  const current = splitName(account.full_name);
-  if (method === "GET") {
-    const fromPerson = person ? splitName(person.full_name, person.prefix) : null;
-    return jsonResponse({ prefix: current.prefix || fromPerson?.prefix || null, first_name: current.first_name, last_name: current.last_name }, 200, { "Cache-Control": "private, no-store" });
-  }
-  let body;
-  try { body = await request.json(); } catch { return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400); }
-  const first = validateNamePart(body.first_name, "ชื่อ");
-  if (first.error) return jsonResponse({ error: first.error }, 400);
-  const last = validateNamePart(body.last_name, "นามสกุล");
-  if (last.error) return jsonResponse({ error: last.error }, 400);
-  const newName = joinName(current.prefix, first.value, last.value, hasSpacedPrefix(account.full_name, current.prefix));
-  if (newName === account.full_name) return jsonResponse({ ok: true, full_name: newName });
-  await env.DB.prepare("UPDATE users SET full_name = ? WHERE id = ? AND deleted_at IS NULL").bind(newName, user.id).run();
-  if (person) {
-    const parts = splitName(person.full_name, person.prefix);
-    const personName = joinName(parts.prefix, first.value, last.value, hasSpacedPrefix(person.full_name, parts.prefix));
-    await env.DB.prepare("UPDATE personnel_records SET first_name = ?, last_name = ?, full_name = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(first.value, last.value, personName, person.id).run();
-    // ชื่อสำหรับจับคู่ (normalized_name) เปลี่ยนตาม ถ้าไม่ชนกับรายการอื่น
-    const normalized = personName.normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\s.]+/g, "").toLowerCase();
-    await env.DB.prepare("UPDATE personnel_records SET normalized_name = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM personnel_records o WHERE o.normalized_name = ? AND o.id <> ?)")
-      .bind(normalized, person.id, normalized, person.id).run().catch(() => {});
-  }
-  await writeAuditLog(env, user, "update", "user", user.id, { self_rename: true, previous_full_name: account.full_name, full_name: newName }, request);
-  await securityAlert(env, await superadminIds(env, user.id), "account_changed", `${account.full_name} เปลี่ยนชื่อในบัญชีของตัวเองเป็น ${newName}`).catch(() => {});
-  forgetCurrentUser(request);
-  return jsonResponse({ ok: true, full_name: newName });
+  const nameParts = splitName(person.full_name, person.prefix);
+  return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank), name_prefix: nameParts.prefix, first_name: nameParts.first_name, last_name: nameParts.last_name }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
 }
 
 async function handleUpdateStaff(request, env, targetId) {
@@ -4867,7 +4845,6 @@ const app = {
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
       if (pathname === "/api/me/personnel" && (method === "GET" || method === "PATCH")) return await handleOwnPersonnel(request, env, method);
-      if (pathname === "/api/me/name" && (method === "GET" || method === "PATCH")) return await handleOwnName(request, env, method);
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
 
       if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
