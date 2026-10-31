@@ -1,4 +1,4 @@
-/* ประกันอุบัติเหตุนักเรียน: กรอกรายบุคคล (จากหน้าข้อมูลนักเรียน) และกรอกทั้งห้อง */
+/* ประกันอุบัติเหตุนักเรียน: กรอกรายบุคคลและกรอกทั้งห้อง (ใช้ที่เมนู ระบบสนับสนุน → ประกันอุบัติเหตุ) */
 (function (root) {
   'use strict';
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
@@ -48,7 +48,7 @@
         <div class="ins-year"><div><strong>ปีการศึกษา ${esc(r.academic_year)}</strong> <span class="ins-chip ${r._empty ? 'none' : Number(r.insured) ? 'yes' : 'no'}">${status(r._empty ? null : r)}</span>
           ${r._empty ? '' : `<div class="meta">${esc([r.company, r.plan_name, r.policy_no ? 'กรมธรรม์ ' + r.policy_no : '', r.premium != null ? 'เบี้ย ' + money(r.premium) + ' บาท' : '', r.coverage_amount != null ? 'คุ้มครอง ' + money(r.coverage_amount) + ' บาท' : '', r.start_date || r.end_date ? `${thaiDate(r.start_date)} – ${thaiDate(r.end_date)}` : '', r.notes].filter(Boolean).join(' · ') || '-')}</div>`}</div>
         </div>`).join('')}</div>
-        ${data.can_edit ? `<a class="btn btn-ghost" style="width:auto;margin-top:8px;font-size:13px;display:inline-flex" href="/import-center.html?template=insurance_person&student=${encodeURIComponent(student.id)}">บันทึก/แก้ไขที่เมนูนำเข้าข้อมูล</a>` : ''}`;
+        ${data.can_edit ? `<a class="btn btn-ghost" style="width:auto;margin-top:8px;font-size:13px;display:inline-flex" href="/insurance.html?student=${encodeURIComponent(student.id)}">บันทึก/แก้ไขที่เมนูประกันอุบัติเหตุ</a>` : ''}`;
     } catch (err) {
       section.innerHTML = `<h3>ประกันอุบัติเหตุ</h3><div class="student-cell-muted">${esc(err.message)}</div>`;
     }
@@ -144,6 +144,7 @@
       <div class="ins-table-wrap"><table class="ins-table"><thead><tr><th>#</th><th>เลขประจำตัว</th><th>ชื่อ–นามสกุล</th><th style="width:150px">การทำประกัน</th><th>เลขกรมธรรม์</th><th style="width:110px">เบี้ย (บาท)</th><th>หมายเหตุ</th></tr></thead><tbody id="insRows"><tr><td colspan="7" class="detail-loading">กำลังโหลด…</td></tr></tbody></table></div>
       <p class="ins-summary">แถวที่เลือก “ยังไม่บันทึก” จะไม่ถูกบันทึก (ข้อมูลเดิมของคนนั้นยังอยู่) · ข้อมูลที่เหมือนกันทั้งห้องจะใช้กับทุกคนที่บันทึกในครั้งนี้</p>
       <div class="modal-actions"><button type="button" class="btn btn-ghost" id="insCancel">ปิด</button><button type="button" class="btn btn-primary" id="insSave">บันทึกทั้งห้อง</button></div></div>`);
+    const baseClose = m.close; m.close = () => { baseClose(); defaults.onClose?.(); };
     m.$('#insCancel').onclick = () => { if (!dirty || confirm('ยังไม่ได้บันทึก ต้องการปิดหรือไม่?')) m.close(); };
     m.onEscape = () => m.$('#insCancel').click();
     let dirty = false, info = null, records = new Map(), roster = [];
@@ -156,7 +157,8 @@
     const yearSel = m.$('#insYear'), gradeSel = m.$('#insGrade'), roomSel = m.$('#insRoom');
     const years = [...new Set([...(info.years || []), info.current_year, info.current_year + 1])].sort((a, b) => b - a);
     years.forEach((y) => yearSel.add(new Option(String(y), String(y))));
-    yearSel.value = String(info.current_year);
+    if (defaults.year && !years.includes(Number(defaults.year))) yearSel.add(new Option(String(defaults.year), String(defaults.year)));
+    yearSel.value = String(defaults.year || info.current_year);
     [...new Set(rooms.map((k) => k.split('|')[0]))].forEach((g) => gradeSel.add(new Option(g || 'ไม่ระบุชั้น', g)));
     const firstRoom = rooms.find((k) => k === `${defaults.grade || ''}|${defaults.classroom || ''}`) || rooms.find((k) => k.startsWith(`${defaults.grade || ''}|`)) || rooms[0];
     gradeSel.value = firstRoom.split('|')[0];

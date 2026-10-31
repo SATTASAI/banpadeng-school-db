@@ -1,6 +1,7 @@
 // ประกันอุบัติเหตุนักเรียน — บันทึกรายปีการศึกษา (1 คน 1 รายการต่อปี)
-// ผู้บันทึก: ผู้ดูแลระบบ/เจ้าหน้าที่ (ทุกห้อง) และครูประจำชั้น (เฉพาะห้องของตนในปีที่เปิดใช้)
-// นำเข้าจาก Excel: ผู้ดูแลระบบ/เจ้าหน้าที่เท่านั้น
+// ผู้บันทึก: ผู้ดูแลระบบ/เจ้าหน้าที่/ผู้รับผิดชอบงานประกัน (ทุกห้อง) และครูประจำชั้น (เฉพาะห้องของตนในปีที่เปิดใช้)
+// นำเข้าจาก Excel: ผู้ดูแลระบบ/เจ้าหน้าที่/ผู้รับผิดชอบงานประกันเท่านั้น
+// ผู้รับผิดชอบงานประกัน = budget_role_assignments role_key 'insurance_officer' (ตั้งที่หน้า ตั้งค่าผู้อนุมัติ)
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 
 export const INSURANCE_TEXT_FIELDS = ["company", "policy_no", "plan_name", "start_date", "end_date", "notes"];
@@ -85,7 +86,21 @@ export function normalizeInsuranceInput(input) {
   return { record };
 }
 
-function canManageAll(user) { return isAdmin(user) || user.role === "staff"; }
+export const INSURANCE_ROLES = { insurance_officer: "ผู้รับผิดชอบงานประกันอุบัติเหตุ" };
+
+async function insuranceOfficer(env) {
+  let row = null;
+  try {
+    row = await env.DB.prepare(`SELECT a.user_id, u.full_name FROM budget_role_assignments a JOIN users u ON u.id = a.user_id
+      WHERE a.role_key = 'insurance_officer' AND a.department = '' AND u.status = 'active' AND u.deleted_at IS NULL`).first();
+  } catch { row = null; } // ยังไม่มีตารางตั้งค่าผู้อนุมัติ
+  return row ? { id: Number(row.user_id), name: row.full_name } : null;
+}
+
+async function canManageAll(env, user) {
+  if (isAdmin(user) || user.role === "staff") return true;
+  return Number((await insuranceOfficer(env))?.id) === Number(user.id);
+}
 
 async function activeYear(env) {
   const row = await env.DB.prepare("SELECT id, year_be FROM academic_years WHERE status = 'active' ORDER BY year_be DESC LIMIT 1").first().catch(() => null);
@@ -142,11 +157,14 @@ async function handleList(request, env, user) {
     : await env.DB.prepare("SELECT * FROM student_insurance WHERE academic_year = ? ORDER BY student_id").bind(year).all();
   const { results: yearRows } = await env.DB.prepare("SELECT DISTINCT academic_year FROM student_insurance ORDER BY academic_year DESC").all();
   const years = [...new Set([current.year_be, ...yearRows.map((r) => Number(r.academic_year))])].sort((a, b) => b - a);
-  const homerooms = canManageAll(user) ? [] : [...await homeroomKeys(env, user)];
+  const manageAll = await canManageAll(env, user);
+  const homerooms = manageAll ? [] : [...await homeroomKeys(env, user)];
+  const officer = await insuranceOfficer(env);
   return jsonResponse({
     academic_year: all ? null : year, current_year: current.year_be, years,
     records: (results || []).map(cleanRecord),
-    permissions: { manage_all: canManageAll(user), homerooms, can_import: canManageAll(user) },
+    permissions: { manage_all: manageAll, homerooms, can_import: manageAll, is_admin: isAdmin(user) },
+    officer: officer ? { name: officer.name } : null,
   });
 }
 
@@ -156,7 +174,7 @@ async function handleStudent(env, user, studentId) {
   const student = await env.DB.prepare("SELECT id, grade_level, classroom FROM students WHERE id = ?").bind(studentId).first();
   if (!student) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
   const { results } = await env.DB.prepare("SELECT * FROM student_insurance WHERE student_id = ? ORDER BY academic_year DESC").bind(studentId).all();
-  let canEdit = canManageAll(user);
+  let canEdit = await canManageAll(env, user);
   if (!canEdit) canEdit = (await homeroomKeys(env, user)).has(`${String(student.grade_level ?? "").trim()}|${String(student.classroom ?? "").trim()}`);
   return jsonResponse({ current_year: current.year_be, records: (results || []).map(cleanRecord), can_edit: canEdit });
 }
@@ -176,7 +194,7 @@ async function handleSave(request, env, user) {
   const byId = new Map(students.map((s) => [s.id, s]));
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length) return jsonResponse({ error: `ไม่พบนักเรียน ${missing.length} คน` }, 404);
-  if (!canManageAll(user)) {
+  if (!(await canManageAll(env, user))) {
     const rooms = await homeroomKeys(env, user);
     const denied = students.filter((s) => !rooms.has(`${String(s.grade_level ?? "").trim()}|${String(s.classroom ?? "").trim()}`));
     if (denied.length) return jsonResponse({ error: "บันทึกได้เฉพาะนักเรียนในห้องที่ท่านเป็นครูประจำชั้น" }, 403);
@@ -201,7 +219,7 @@ async function handleClear(request, env, user, studentId) {
   if (!year) return jsonResponse({ error: "กรุณาระบุปีการศึกษา" }, 400);
   const student = await env.DB.prepare("SELECT id, grade_level, classroom FROM students WHERE id = ?").bind(studentId).first();
   if (!student) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
-  if (!canManageAll(user) && !(await homeroomKeys(env, user)).has(`${String(student.grade_level ?? "").trim()}|${String(student.classroom ?? "").trim()}`)) {
+  if (!(await canManageAll(env, user)) && !(await homeroomKeys(env, user)).has(`${String(student.grade_level ?? "").trim()}|${String(student.classroom ?? "").trim()}`)) {
     return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขข้อมูลประกันของนักเรียนคนนี้" }, 403);
   }
   await env.DB.prepare("DELETE FROM student_insurance WHERE student_id = ? AND academic_year = ?").bind(studentId, year).run();
@@ -211,7 +229,7 @@ async function handleClear(request, env, user, studentId) {
 
 // POST /api/student-insurance/import — { rows:[{student_code, academic_year, insured, ...}] } อ้างอิงเลขประจำตัวนักเรียน
 async function handleImport(request, env, user) {
-  if (!canManageAll(user)) return jsonResponse({ error: "นำเข้าข้อมูลประกันได้เฉพาะผู้ดูแลระบบและเจ้าหน้าที่" }, 403);
+  if (!(await canManageAll(env, user))) return jsonResponse({ error: "นำเข้าข้อมูลประกันได้เฉพาะผู้ดูแลระบบ เจ้าหน้าที่ และผู้รับผิดชอบงานประกัน" }, 403);
   const body = await readJson(request);
   if (!body || !Array.isArray(body.rows)) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   if (body.rows.length > MAX_BATCH) return jsonResponse({ error: `นำเข้าได้ครั้งละไม่เกิน ${MAX_BATCH} แถว` }, 400);

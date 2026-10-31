@@ -3,6 +3,7 @@ import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureProjectWorkflowSchema, projectFundingSummary, canManageProjectFinance } from "./project-workflow.js";
 import { PROCUREMENT_ROLES } from "./procurement.js";
+import { INSURANCE_ROLES } from "./student-insurance.js";
 import { FINANCE_ROLES, FINANCE_ROLE_SQL, isFinanceMember } from "../lib/finance-roles.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
@@ -434,11 +435,11 @@ async function saveRoleAssignment(request, env) {
   if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหารหรือผู้ดูแลระบบเท่านั้น" }, 403);
   const body = await request.json().catch(() => null), roleKey = String(body?.role_key || ""), department = String(body?.department || ""), userId = Number(body?.user_id);
   // บทบาทงานพัสดุ (ไม่ใช่ขั้นลงนามคำขอแบบเดิม) ใช้กับทุกฝ่าย
-  const extra = PROCUREMENT_ROLES[roleKey] || FINANCE_ROLES[roleKey];
+  const extra = PROCUREMENT_ROLES[roleKey] || FINANCE_ROLES[roleKey] || INSURANCE_ROLES[roleKey];
   const definition = WORKFLOW_STEPS.find((step) => step.key === roleKey) || (extra ? { key: roleKey, label: extra, scoped: false } : null);
   if (!definition || !(ROLE_KEYS.includes(roleKey) || extra)) return jsonResponse({ error: "หน้าที่อนุมัติไม่ถูกต้อง" }, 400);
   // เจ้าหน้าที่การเงินเพิ่มเติมเป็นตำแหน่งไม่บังคับ — เลือก "ยังไม่กำหนด" เพื่อถอดออกได้
-  if ((FINANCE_ROLES[roleKey] || roleKey === "procurement_officer_2") && !body?.user_id) {
+  if ((FINANCE_ROLES[roleKey] || INSURANCE_ROLES[roleKey] || roleKey === "procurement_officer_2") && !body?.user_id) {
     await env.DB.prepare("DELETE FROM budget_role_assignments WHERE role_key=? AND department=''").bind(roleKey).run();
     await audit(env, user, "unassign_role", null, { role_key: roleKey }, request);
     return jsonResponse({ ok: true });
