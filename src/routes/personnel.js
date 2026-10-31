@@ -136,13 +136,10 @@ async function substituteStatsRoute(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensurePersonnelData(env);
-  const q = new URL(request.url).searchParams, all = await canViewPersonnelStats(env, user);
-  let own = null;
-  if (!all) {
-    own = await env.DB.prepare(`SELECT a.personnel_id FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active' WHERE a.user_id=? LIMIT 1`).bind(user.id).first();
-    if (!own) return jsonResponse({ error: "บัญชีนี้ยังไม่ได้ผูกกับทะเบียนบุคลากร จึงยังไม่มีสถิติการสอนแทน" }, 404);
-  }
-  const data = await substituteLoad(env, { date: q.get("date") || undefined, start: q.get("start"), end: q.get("end"), onlyPersonnelId: own?.personnel_id ?? null });
+  // สถิติการถูกจัดสอนแทนเก็บไว้ที่ฝ่ายบุคคล ผู้บริหาร และผู้ดูแลระบบเท่านั้น (ครูทั่วไปไม่เห็นตัวเลข แม้ของตนเอง)
+  if (!await canViewPersonnelStats(env, user)) return jsonResponse({ error: "สถิติการสอนแทนดูได้เฉพาะฝ่ายบุคคล ผู้บริหาร และผู้ดูแลระบบ" }, 403);
+  const q = new URL(request.url).searchParams;
+  const data = await substituteLoad(env, { date: q.get("date") || undefined, start: q.get("start"), end: q.get("end") });
   if (data.error) return jsonResponse({ error: data.error }, 400);
-  return jsonResponse({ ...data, scope: all ? "all" : "self" }, 200, { "Cache-Control": "private, no-store" });
+  return jsonResponse({ ...data, scope: "all" }, 200, { "Cache-Control": "private, no-store" });
 }

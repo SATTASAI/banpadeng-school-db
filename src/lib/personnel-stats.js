@@ -160,9 +160,10 @@ export async function substituteLoad(env, { date = bangkokToday(), start = null,
 
 // การ์ดสรุปบนแดชบอร์ด: ตัวเลขรวมทุกคน ส่วนรายชื่อครูที่ถูกจัดมากที่สุดเฉพาะผู้มีสิทธิ์ดูสถิติ
 export async function substituteDashboardSummary(env, user) {
+  const allowed = await canViewPersonnelStats(env, user);
+  if (!allowed) return null; // สถิติสอนแทนเฉพาะฝ่ายบุคคล ผู้บริหาร แอดมิน
   const data = await substituteLoad(env);
   if (data.error) return null;
-  const allowed = await canViewPersonnelStats(env, user);
   return { week: data.week, month: data.month, ...data.summary, can_view_people: allowed,
     top: allowed ? data.people.filter((r) => r.month).slice(0, 5).map((r) => ({ name: r.name, week: r.week, month: r.month })) : [] };
 }

@@ -1,4 +1,4 @@
-import {substituteLoad} from '../lib/personnel-stats.js';
+import {substituteLoad,canViewPersonnelStats} from '../lib/personnel-stats.js';
 import {loadStructure,validateStructure,ensureStructureSchema,canEditStructure,BANDS} from "../lib/timetable-structure.js";
 import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable} from "../lib/timetable-permissions.js";
@@ -166,15 +166,37 @@ async function moveSlot(request,env,term,id){
     return result.meta.changes?reply({ok:true}):reply({error:"ไม่พบคาบในร่าง"},404);
   }catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"คาบปลายทางไม่ว่าง หรือครู/ห้องสอนชนกัน"},409);throw error;}
 }
-async function publish(env,term){
+async function publish(env,term,user){
   const current=await plan(env,term.id,"draft");if(!current)return reply({error:"ยังไม่มีร่างตารางให้เผยแพร่"},400);
   const size=await env.DB.prepare("SELECT COUNT(*) AS count FROM timetable_entries WHERE plan_id=?").bind(current.id).first();
   if(!size.count)return reply({error:"เพิ่มคาบเรียนก่อนเผยแพร่"},400);
+  const previous=await plan(env,term.id,"published");
   await env.DB.batch([
     env.DB.prepare("UPDATE timetable_plans SET status='archived' WHERE academic_term_id=? AND status='published'").bind(term.id),
     env.DB.prepare("UPDATE timetable_plans SET status='published',published_at=datetime('now') WHERE id=? AND status='draft'").bind(current.id)
   ]);
-  return reply({ok:true});
+  const substitutes=previous?await syncSubstitutes(env,previous.id,current.id,user):{remapped:0,cancelled:0};
+  return reply({ok:true,substitutes});
+}
+// ตารางสอนเปลี่ยน (เผยแพร่ใหม่): คาบสอนแทนตั้งแต่วันนี้ที่ผูกกับตารางเดิม
+// - คาบเดิมยังอยู่ (ครู/ชั้น/ห้อง/วัน/คาบเดียวกัน) และครูสอนแทนยังว่าง → ย้ายไปผูกกับตารางใหม่อัตโนมัติ
+// - คาบถูกย้าย/ลบ หรือครูสอนแทนมีคาบสอนเองแล้ว → ยกเลิก แจ้งครูสอนแทน และให้ระบบเสนอครูใหม่ในหน้าจัดสอนแทน
+async function syncSubstitutes(env,oldPlanId,newPlanId,user){
+  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.substitute_teacher_id,e.teacher_id,e.grade_level,e.classroom,e.weekday,e.period
+    FROM substitute_assignments a JOIN timetable_entries e ON e.id=a.timetable_entry_id
+    WHERE e.plan_id=? AND a.absence_date>=date('now','+7 hours')`).bind(oldPlanId).all();
+  let remapped=0,cancelled=0;
+  for(const r of results){
+    const next=await env.DB.prepare(`SELECT id FROM timetable_entries WHERE plan_id=? AND teacher_id=? AND grade_level=? AND classroom=? AND weekday=? AND period=?`)
+      .bind(newPlanId,r.teacher_id,r.grade_level,r.classroom,r.weekday,r.period).first();
+    const busy=next&&await env.DB.prepare("SELECT 1 FROM timetable_entries WHERE plan_id=? AND teacher_id=? AND weekday=? AND period=?")
+      .bind(newPlanId,r.substitute_teacher_id,r.weekday,r.period).first();
+    if(next&&!busy){await env.DB.prepare("UPDATE substitute_assignments SET timetable_entry_id=? WHERE id=?").bind(next.id,r.id).run();remapped++;continue;}
+    const a=await assignmentDetail(env,r.id);if(!a)continue;
+    await env.DB.batch([cancellationRow(env,a,'cancelled',user),env.DB.prepare("DELETE FROM substitute_assignments WHERE id=?").bind(r.id)]);
+    cancelled++;
+  }
+  return {remapped,cancelled};
 }
 
 function weekday(date){const day=new Date(`${date}T12:00:00Z`).getUTCDay();return day>=1&&day<=5?day:null;}
@@ -198,7 +220,7 @@ async function sourceLeave(env,id,date,teacherId){
 async function coverage(env,date,teacherId){
   if(!validDate(date)||!teacherId)return reply({error:"เลือกวันที่และครูให้ถูกต้อง"},400);
   const day=weekday(date);if(!day)return reply({error:"เลือกวันจันทร์ถึงศุกร์"},400);
-  const term=await env.DB.prepare(`SELECT t.id,t.name,y.year_be FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
+  const term=await env.DB.prepare(`SELECT t.id,t.name,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
     WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
   if(!term)return reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404);
   const published=await plan(env,term.id,"published");if(!published)return reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400);
@@ -221,10 +243,33 @@ async function coverage(env,date,teacherId){
   // ภาระสอนแทนของสัปดาห์/เดือนของวันที่เลือก — ตัวเลขชุดเดียวกับหน้าสถิติการสอนแทนและแดชบอร์ด
   // เรียงครูที่ถูกจัดน้อยก่อน เพื่อกระจายงานสอนแทนให้เท่ากัน
   const load=await substituteLoad(env,{date});const loadById=new Map((load.people||[]).map(p=>[p.personnel_id,p]));
-  const withLoad=teachers.map(t=>({...t,week_count:loadById.get(t.id)?.week||0,month_count:loadById.get(t.id)?.month||0}))
-    .sort((a,b)=>a.week_count-b.week_count||a.month_count-b.month_count||String(a.full_name).localeCompare(String(b.full_name),'th'));
-  return reply({term,date,teacher_id:teacherId,load:{week:load.week,month:load.month},lessons:lessons.map(l=>({...l,available_teachers:withLoad.filter(t=>!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))}))});
+  // ช่วงชั้นของครูดูจากตารางสอนที่เผยแพร่ (ครูที่สอนหลายช่วงชั้น = ควบช่วงชั้น จัดได้ทุกช่วงที่สอน); ครูที่ไม่มีคาบในตารางไม่ถูกจัด
+  const {results:gradeRows}=await env.DB.prepare("SELECT DISTINCT teacher_id,grade_level FROM timetable_entries WHERE plan_id=? AND teacher_id IS NOT NULL").bind(published.id).all();
+  const bands=new Map();for(const r of gradeRows){if(!bands.has(r.teacher_id))bands.set(r.teacher_id,new Set());bands.get(r.teacher_id).add(gradeBand(r.grade_level));}
+  // สถิติทั้งภาคเรียน + วันล่าสุดที่สอนแทน + จำนวนคาบที่ถูกจัดในวันนี้ — ใช้เลือกครูที่ถูกจัดน้อยและไม่ซ้ำคนเดิม
+  const {results:termRows}=await env.DB.prepare(`SELECT substitute_teacher_id AS id,COUNT(*) AS term_count,MAX(absence_date) AS last_date,
+    SUM(CASE WHEN absence_date=? THEN 1 ELSE 0 END) AS day_count FROM substitute_assignments WHERE absence_date BETWEEN ? AND ? GROUP BY substitute_teacher_id`)
+    .bind(date,term.start_date,term.end_date).all();
+  const termById=new Map(termRows.map(r=>[r.id,r]));
+  const withLoad=teachers.filter(t=>bands.has(t.id)).map(t=>({...t,bands:[...bands.get(t.id)],week_count:loadById.get(t.id)?.week||0,month_count:loadById.get(t.id)?.month||0,
+    term_count:termById.get(t.id)?.term_count||0,day_count:termById.get(t.id)?.day_count||0,last_date:termById.get(t.id)?.last_date||null}))
+    .sort((a,b)=>a.term_count-b.term_count||a.month_count-b.month_count||a.week_count-b.week_count||String(a.full_name).localeCompare(String(b.full_name),'th'));
+  const result=lessons.map(l=>{const band=gradeBand(l.grade_level);return {...l,band,available_teachers:withLoad.filter(t=>t.bands.includes(band)&&!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))};});
+  // ข้อเสนอของระบบ: ทีละคาบ เลือกครูที่ (1) ถูกจัดในวันนั้นน้อยสุด รวมข้อเสนอก่อนหน้า (2) สอนแทนทั้งภาคเรียนน้อยสุด
+  // (3) เดือน/สัปดาห์น้อยสุด (4) ไม่ได้สอนแทนนานสุด — ค่าเฉลี่ยจึงใกล้กันและไม่จัดคนเดิมซ้ำ ผู้จัดยอมรับหรือเลือกเองได้
+  const extra=new Map();
+  for(const l of result){
+    if(l.assignment_id||!l.available_teachers.length){l.proposed_teacher_id=null;continue;}
+    const score=t=>[(t.day_count||0)+(extra.get(t.id)||0),t.term_count+(extra.get(t.id)||0),t.month_count,t.week_count];
+    const pick=[...l.available_teachers].sort((a,b)=>{const x=score(a),y=score(b);for(let i=0;i<x.length;i++)if(x[i]!==y[i])return x[i]-y[i];
+      return String(a.last_date||'').localeCompare(String(b.last_date||''))||String(a.full_name).localeCompare(String(b.full_name),'th');})[0];
+    l.proposed_teacher_id=pick.id;extra.set(pick.id,(extra.get(pick.id)||0)+1);
+  }
+  return reply({term,date,teacher_id:teacherId,load:{week:load.week,month:load.month},lessons:result});
 }
+// ช่วงชั้น: อนุบาล / ป.1-3 / ป.4-6
+function gradeBand(grade){const s=String(grade||'');if(/^อ|อนุบาล/.test(s))return 'kindergarten';const n=Number((s.match(/\d+/)||[])[0]);
+  return n>=1&&n<=3?'p1-3':n>=4&&n<=6?'p4-6':s;}
 async function assign(request,env,user){
   const body=await request.json().catch(()=>null),date=body?.date,teacherId=validId(body?.teacher_id),entryId=validId(body?.entry_id),subId=validId(body?.substitute_teacher_id);
   if(!validDate(date)||!teacherId||!entryId||!subId||teacherId===subId)return reply({error:"เลือกวัน ครู คาบ และครูสอนแทนให้ถูกต้อง"},400);
@@ -382,7 +427,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
   const isSubstitute=pathname.startsWith('/api/substitutes/');
   if(isSubstitute){
     const allowed=await canManageSubstitutes(env,user);
-    if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed});
+    if(pathname==='/api/substitutes/permissions'&&method==='GET')return reply({can_manage:allowed,can_view_stats:await canViewPersonnelStats(env,user)});
     if(pathname==='/api/substitutes/mine'&&method==='GET'){await ensurePersonnelData(env);await ensureSchema(env);return mine(env,user);}
     if(!allowed)return reply({error:'เฉพาะเจ้าหน้าที่ฝ่ายบุคลากรหรือผู้ดูแลระบบเท่านั้น'},403);
   }
@@ -417,7 +462,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     const removed=pathname.match(/^\/api\/timetable\/slot\/(\d+)$/);
     if(removed&&method==="DELETE")return deleteSlot(env,term,Number(removed[1]));
     if(removed&&method==="PATCH")return moveSlot(request,env,term,Number(removed[1]));
-    if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term);
+    if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term,user);
   }else{
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));

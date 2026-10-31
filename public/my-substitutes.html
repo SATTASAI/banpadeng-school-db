@@ -17,7 +17,6 @@ body{background:inherit}.ms-page{max-width:980px;margin:auto;padding:24px}.ms-pa
 <main class="ms-page"><h1>คาบสอนแทนของฉัน</h1><p class="lead">คาบที่ฝ่ายบุคคลจัดให้คุณเข้าสอนแทน และคาบของคุณที่มีครูท่านอื่นสอนแทน (ย้อนหลัง 30 วัน)</p>
 <div class="notice" id="status" role="status">กำลังโหลด...</div>
 <div id="content" hidden>
- <div class="ms-cards"><div class="ms-card"><span>ต้องสอนแทน (วันนี้เป็นต้นไป)</span><strong id="cUpcoming">0</strong></div><div class="ms-card"><span>สอนแทนวันนี้</span><strong id="cToday">0</strong></div><div class="ms-card"><span>สอนแทนแล้ว 30 วันที่ผ่านมา</span><strong id="cPast">0</strong></div></div>
  <section class="ms-section"><h2>คาบที่ต้องสอนแทน</h2><div class="ms-list" id="upcoming"></div></section>
  <section class="ms-section" id="cancelledSection" hidden><h2>ยกเลิกหรือเปลี่ยนครูแล้ว (ไม่ต้องเข้าสอน)</h2><div class="ms-list" id="cancelled"></div></section>
  <section class="ms-section"><h2>คาบของฉันที่มีครูสอนแทน</h2><div class="ms-list" id="covered"></div></section>
@@ -34,7 +33,6 @@ function list(id,rows,render,empty){$(id).innerHTML=rows.length?rows.map(render)
  const data=await apiRequest('/api/substitutes/mine');
  if(!data.linked){$("status").textContent='บัญชีของคุณยังไม่ได้ผูกกับทะเบียนบุคลากร จึงยังแสดงคาบสอนแทนไม่ได้ — ติดต่อผู้ดูแลระบบ';return}
  const today=data.today,upcoming=data.teaching.filter(r=>r.absence_date>=today).sort((a,b)=>a.absence_date.localeCompare(b.absence_date)||a.period-b.period),past=data.teaching.filter(r=>r.absence_date<today);
- $("cUpcoming").textContent=upcoming.length;$("cToday").textContent=upcoming.filter(r=>r.absence_date===today).length;$("cPast").textContent=past.length;
  const teach=r=>`<div class="ms-item${r.absence_date===today?' today':''}">${dateBox(r.absence_date)}<div><strong>คาบ ${r.period} · ${room(r)} · ${esc(r.subject)}${r.absence_date===today?'<span class="ms-badge">วันนี้</span>':''}</strong><p>สอนแทน ${esc(r.absent_name)}${r.absence_reason?' ('+esc(r.absence_reason)+')':''}${r.notes?' · '+esc(r.notes):''}</p></div></div>`;
  list('upcoming',upcoming,teach,'ยังไม่มีคาบที่ต้องสอนแทน');list('past',past,teach,'ไม่มีการสอนแทนใน 30 วันที่ผ่านมา');
  $("cancelledSection").hidden=!data.cancelled.length;

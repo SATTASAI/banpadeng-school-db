@@ -581,6 +581,7 @@
         if (item.evaluationOnly) { link.dataset.evaluationOnly='true'; link.hidden=true; link.style.display='none'; }
         if (item.supervisionOnly) { link.dataset.supervisionOnly=item.supervisionOnly; link.hidden=true; link.style.display='none'; }
         if (item.academicOnly) { link.dataset.academicOnly='true'; link.hidden=true; link.style.display='none'; }
+        if (item.statsOnly) { link.classList.add('substitute-stats-only'); link.hidden=true; link.style.display='none'; }
         if (item.substituteOnly) { link.classList.add('personnel-only'); link.title='จัดสอนแทนจากข้อมูลการลา'; link.hidden=true; link.style.display='none'; }
         if (item.adminOnly) { link.classList.add('admin-only'); link.style.display='none'; }
         if (item.url === '/finance-register.html') {
@@ -1264,6 +1265,7 @@
 
     const substitutePermission=await apiRequest('/api/substitutes/permissions').catch(()=>({can_manage:false}));
     document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
+    document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
     await loadOverview();
 
     const initialKey = window.location.hash.replace("#", "");
