@@ -37,6 +37,7 @@ import { handleViewAsRoute, viewAsState } from "./routes/view-as.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { mergeConfirmedPersonnel } from "./lib/personnel-merge.js";
+import { splitName, joinName, hasSpacedPrefix, validateNamePart } from "./lib/self-name.js";
 import { importStaffRows } from "./lib/staff-import.js";
 import { importProjectRows, upsertProjectRow, findDuplicateProject } from "./lib/project-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
@@ -1640,9 +1641,26 @@ async function handleOwnPersonnel(request, env, method) {
   if (method === "PATCH") {
     let body;
     try { body = await request.json(); } catch { return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400); }
-    const current = await env.DB.prepare("SELECT academic_rank FROM personnel_records WHERE id = ?").bind(id).first();
+    const current = await env.DB.prepare("SELECT academic_rank, prefix, full_name FROM personnel_records WHERE id = ?").bind(id).first();
     const picked = rankChoiceToRecord(body.rank_choice, body.rank_other, current?.academic_rank);
     if (picked.error) return jsonResponse({ error: picked.error }, 400);
+    // ชื่อ–นามสกุลในทะเบียนบุคลากรของตัวเอง (คำนำหน้าเดิมคงไว้) — ไม่เปลี่ยนชื่อบัญชีผู้ใช้
+    if (body.first_name !== undefined || body.last_name !== undefined) {
+      const first = validateNamePart(body.first_name, "ชื่อ");
+      if (first.error) return jsonResponse({ error: first.error }, 400);
+      const last = validateNamePart(body.last_name, "นามสกุล");
+      if (last.error) return jsonResponse({ error: last.error }, 400);
+      const parts = splitName(current.full_name, current.prefix);
+      const fullName = joinName(parts.prefix, first.value, last.value, hasSpacedPrefix(current.full_name, parts.prefix));
+      if (fullName !== current.full_name) {
+        const normalized = fullName.normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\s.]+/g, "").toLowerCase();
+        const clash = await env.DB.prepare("SELECT id FROM personnel_records WHERE normalized_name = ? AND id <> ?").bind(normalized, id).first();
+        if (clash) return jsonResponse({ error: "มีบุคลากรชื่อนี้ในทะเบียนอยู่แล้ว กรุณาติดต่อผู้ดูแลระบบ" }, 409);
+        await env.DB.prepare("UPDATE personnel_records SET first_name = ?, last_name = ?, full_name = ?, normalized_name = ?, updated_at = datetime('now') WHERE id = ?")
+          .bind(first.value, last.value, fullName, normalized, id).run();
+        await writeAuditLog(env, user, "update", "personnel", id, { self_rename: true, previous_full_name: current.full_name, full_name: fullName }, request);
+      }
+    }
     return updateStaffRecord(env, id, { ...body, position: picked.position, academic_rank: picked.academic_rank }, user, request);
   }
   const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
@@ -1651,7 +1669,7 @@ async function handleOwnPersonnel(request, env, method) {
          WHERE y.status = 'active' AND h.user_id = p.user_id), p.homeroom_classroom)`
     : "p.homeroom_classroom";
   const person = await env.DB.prepare(
-    `SELECT p.id, p.full_name, p.personnel_type, p.position_number, p.position, p.academic_rank, p.subjects, p.phone,
+    `SELECT p.id, p.full_name, p.prefix, p.personnel_type, p.position_number, p.position, p.academic_rank, p.subjects, p.phone,
             ${homeroomSql} AS homeroom_classroom, p.departments, p.responsible_projects, p.teaching_periods,
             p.appointment_date, p.service_start_date, p.education_level, p.major, p.institution,
             p.employment_status, p.retirement_date, p.license_issue_date, p.license_expiry_date
@@ -1663,7 +1681,8 @@ async function handleOwnPersonnel(request, env, method) {
     person.subjects = l ? l.subjects.join(", ") : null;
     person.teaching_periods = l ? l.periods_per_week : null;
   }
-  return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank) }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
+  const nameParts = splitName(person.full_name, person.prefix);
+  return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank), name_prefix: nameParts.prefix, first_name: nameParts.first_name, last_name: nameParts.last_name }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
 }
 
 async function handleUpdateStaff(request, env, targetId) {

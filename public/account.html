@@ -117,7 +117,8 @@
         const ctl=type==="select"?`<select name="${key}">${opts.map(([val,t])=>`<option value="${val}" ${String(v)===val?"selected":""}>${t}</option>`).join("")}</select>`
           :`<input name="${key}" type="${type}" value="${escapeHtml(v)}" ${type==="number"?'min="0" max="100" step="1"':''} ${ro?'readonly title="กำหนดที่ระบบรายงานผลการเรียน"':''}>`;
         return `<label class="${["responsible_projects","departments"].includes(key)?"wide":""}">${label}${ctl}</label>`;};
-      body.innerHTML=`<form id="personalForm"><label class="wide">ชื่อ–สกุล<input value="${escapeHtml(p.full_name)}" readonly></label>
+      body.innerHTML=`<form id="personalForm">${p.name_prefix?`<p class="muted wide" style="margin:0">คำนำหน้า: ${escapeHtml(p.name_prefix)}</p>`:""}
+        <div class="personal-grid"><label>ชื่อ<input name="first_name" value="${escapeHtml(p.first_name||"")}" maxlength="60" required autocomplete="given-name"></label><label>นามสกุล<input name="last_name" value="${escapeHtml(p.last_name||"")}" maxlength="60" required autocomplete="family-name"></label></div>
         <div class="wide" style="display:grid;gap:6px;font-size:13px;font-weight:600">ตำแหน่ง / วิทยฐานะ<div id="personalRank"></div></div>
         <div class="personal-grid">${PERSONAL_FIELDS.map(field).join("")}</div>
         <button class="btn btn-primary" id="personalSave">บันทึกข้อมูลส่วนตัว</button></form>`;
@@ -128,7 +129,8 @@
         if(!rank.rank_choice){personalMessage("กรุณาเลือกตำแหน่ง / วิทยฐานะ",true);return}
         const data=Object.fromEntries(PERSONAL_FIELDS.map(([key])=>[key,event.target.elements[key].value.trim()]));
         const button=document.getElementById("personalSave");button.disabled=true;
-        try{await apiRequest("/api/me/personnel",{method:"PATCH",body:{...data,...rank}});personalMessage("บันทึกข้อมูลส่วนตัวแล้ว");await loadPersonal()}
+        const name={first_name:event.target.elements.first_name.value.trim(),last_name:event.target.elements.last_name.value.trim()};
+        try{await apiRequest("/api/me/personnel",{method:"PATCH",body:{...data,...rank,...name}});personalMessage("บันทึกข้อมูลส่วนตัวแล้ว");await loadPersonal()}
         catch(error){personalMessage(error.message,true)}finally{button.disabled=false}
       });
     }
