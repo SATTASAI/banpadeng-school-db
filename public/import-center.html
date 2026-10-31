@@ -42,8 +42,6 @@ const TEMPLATES={
 };
 // งานกรอกข้อมูลบนหน้าเว็บ (ไม่ต้องใช้ไฟล์ Excel) — ทุกอย่างที่นำข้อมูลเข้าระบบอยู่ที่หน้านี้
 const FORMS={
-  insurance_room:{title:"ประกันอุบัติเหตุ — กรอกทั้งห้อง",description:"เลือกปี ชั้น ห้อง ใส่ข้อมูลที่เหมือนกันครั้งเดียว แล้วกำหนดทำ/ไม่ทำประกันรายคนในตาราง"},
-  insurance_person:{title:"ประกันอุบัติเหตุ — กรอกรายคน",description:"ค้นหานักเรียนทีละคน บันทึกหรือแก้ไขบริษัท เลขกรมธรรม์ เบี้ย และวันคุ้มครอง"}
 };
 let studentCache=null;
 async function loadStudentsForForms(){if(!studentCache){const data=await apiRequest("/api/students");studentCache=data.students||[]}return studentCache}
@@ -150,7 +148,7 @@ async function importData(){
 }
 function showResult(text,error){const box=$("resultBox");box.textContent=text;box.className=`result${error?" error":""}`;box.style.display="block"}
 $("downloadBtn").onclick=downloadTemplate;$("importBtn").onclick=importData;$("fileInput").onchange=async()=>{const file=$("fileInput").files[0];if(!file)return resetPreview();try{validateRows(await readFile(file))}catch(e){showResult("อ่านไฟล์ไม่สำเร็จ: "+e.message,true)}};
-(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}renderCatalog();const params=new URLSearchParams(location.search),requested=params.get("template");if(TEMPLATES[requested]){selectTemplate(requested);if(params.get("download")==="1")downloadTemplate()}else if(FORMS[requested])openForm(requested,params)})().catch(e=>showResult(e.message,true));
+(async()=>{const me=await apiRequest("/api/auth/me");if(!me.user){location="/login.html";return}renderCatalog();const params=new URLSearchParams(location.search),requested=params.get("template");if(TEMPLATES[requested]){selectTemplate(requested);if(params.get("download")==="1")downloadTemplate()}else if(requested==="insurance_room"||requested==="insurance_person"){location.replace("/insurance.html"+(params.get("student")?"?student="+encodeURIComponent(params.get("student")):""));return}else if(FORMS[requested])openForm(requested,params)})().catch(e=>showResult(e.message,true));
 </script>
 </body>
 </html>
