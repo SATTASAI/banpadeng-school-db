@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>แผนการจัดการเรียนการสอน — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+.lp-detail td{background:#fafbff}
+.lp-subject{margin:4px 0 10px}
+.lp-subject b{display:block;margin-bottom:4px}
+.lp-unit{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;padding:3px 0}
+.lp-unit>span{min-width:72px;color:#4F5FE0;font-weight:600}
+.lp-files{display:grid;gap:3px;flex:1;min-width:220px}
+.lp-files div{overflow-wrap:anywhere}
+.lp-toggle{border:0;background:none;color:#4F5FE0;cursor:pointer;padding:0;font:inherit;text-decoration:underline}
+.lp-muted{color:#6b7488;font-size:12.5px}
+</style>
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1>แผนการจัดการเรียนการสอน</h1><p>ฝ่ายวิชาการ · ติดตามการอัพโหลดแผนฯ ของครูจากเว็บสื่อการสอน (teachingmedia) · ดูและดาวน์โหลดได้ แก้ไข/ลบไม่ได้</p></div>
+    <div class="tw-actions"><label class="tw-term">ภาคเรียน<select id="term"></select></label></div>
+  </header>
+  <div class="tw-error" id="error" role="alert"></div>
+  <section id="cards" class="tw-cards"></section>
+  <section id="body"><p class="tw-note">กำลังโหลด…</p></section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const when=s=>s?new Date(s.replace(' ','T')+'Z').toLocaleString('th-TH',{dateStyle:'medium',timeStyle:'short'}):'';
+const size=n=>!n?'':n<1048576?`${Math.max(1,Math.round(n/1024))} KB`:`${(n/1048576).toFixed(1)} MB`;
+const termText=t=>`${t.year_be} ภาคเรียนที่ ${t.term_number}${t.status==='active'?' (ปัจจุบัน)':t.status==='closed'?' (ปิดแล้ว)':''}`;
+const bar=(d,t)=>`<i class="tw-bar"><b style="width:${t?Math.round(d/t*100):0}%"></b></i>`;
+const viewUrl=f=>['document','spreadsheet','presentation'].includes(f.category)?`/api/lesson-plans/preview/${f.id}`:`/api/lesson-plans/files/${f.id}`;
+let data=null,version=0;const open=new Set();
+function showError(m=''){const e=$('error');e.textContent=m;e.style.display=m?'block':'none';}
+
+async function load(){
+  const v=++version;showError();
+  try{
+    const term=$('term').value;
+    const d=await apiRequest(`/api/lesson-plans/progress${term?`?term_id=${term}`:''}`);
+    if(v!==version)return;data=d;
+    if(!$('term').options.length&&d.terms?.length)$('term').innerHTML=d.terms.map(t=>`<option value="${t.id}">${esc(termText(t))}</option>`).join('');
+    if(d.term)$('term').value=d.term.id;
+    render();
+  }catch(e){if(v===version){showError(e.message);$('body').innerHTML='';}}
+}
+
+function detail(t){
+  return t.subjects.map(s=>`<div class="lp-subject"><b>${esc(s.label)}</b>${s.units.length?s.units.map(u=>`<div class="lp-unit"><span>หน่วยที่ ${u.unit_no}</span><div class="lp-files">${u.files.map(f=>`<div>${esc(f.file_name)} <span class="lp-muted">${size(f.file_size)} · ${when(f.created_at)}</span> · <a href="${viewUrl(f)}" target="_blank" rel="noopener">ดู</a> · <a href="/api/lesson-plans/files/${f.id}?download=1">ดาวน์โหลด</a></div>`).join('')}</div></div>`).join(''):'<span class="lp-muted">ยังไม่อัพโหลด</span>'}</div>`).join('')||'<span class="lp-muted">ไม่มีข้อมูลรายวิชา</span>';
+}
+
+function render(){
+  $('cards').innerHTML='';
+  if(!data.term){$('body').innerHTML='<p class="tw-note">ยังไม่มีภาคเรียนในระบบ</p>';return;}
+  const t=data.teachers,done=t.filter(x=>x.files).length,files=t.reduce((n,x)=>n+x.files,0);
+  $('cards').innerHTML=`<div class="tw-card"><span>อัพโหลดแล้ว</span><strong>${done} / ${t.length} คน</strong>${bar(done,t.length)}</div>
+    <div class="tw-card"><span>ยังไม่อัพโหลด</span><strong>${t.length-done} คน</strong></div>
+    <div class="tw-card"><span>ไฟล์แผนฯ ทั้งหมด</span><strong>${files} ไฟล์</strong></div>`;
+  if(!t.length){$('body').innerHTML='<div class="tw-empty"><b>ยังไม่มีข้อมูลครูผู้สอนของภาคเรียนนี้</b></div>';return;}
+  $('body').innerHTML=`<div class="tw-filter"><input id="search" type="search" placeholder="ค้นหาชื่อครู / วิชา"><label><input type="checkbox" id="pending"> แสดงเฉพาะที่ยังไม่อัพโหลด</label></div>
+    <div class="tw-table"><table><thead><tr><th>ที่</th><th>ครู</th><th>วิชาที่อัพแล้ว</th><th>หน่วย</th><th>ไฟล์</th><th>ล่าสุด</th><th>สถานะ</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>`;
+  const rows=()=>{
+    const q=$('search').value.trim(),pending=$('pending').checked;
+    const list=t.filter(x=>(!q||(x.full_name+' '+x.subjects.map(s=>s.label).join(' ')).includes(q))&&(!pending||!x.files));
+    $('rows').innerHTML=list.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td><td>${x.subjects_done} / ${x.subjects.length}</td><td>${x.units}</td><td>${x.files}</td><td>${when(x.last_at)}</td>
+      <td>${x.files?'<span class="tw-badge ok">อัพโหลดแล้ว</span>':'<span class="tw-badge">ยังไม่อัพโหลด</span>'}</td>
+      <td><button class="lp-toggle" data-id="${x.user_id}">${open.has(x.user_id)?'ซ่อน':'ดูแผนฯ'}</button></td></tr>
+      ${open.has(x.user_id)?`<tr class="lp-detail"><td></td><td colspan="7">${detail(x)}</td></tr>`:''}`).join('')||'<tr><td colspan="8">ไม่พบข้อมูล</td></tr>';
+  };
+  $('search').oninput=rows;$('pending').onchange=rows;
+  $('rows').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;const id=Number(b.dataset.id);open.has(id)?open.delete(id):open.add(id);rows();};
+  rows();
+}
+$('term').onchange=()=>{open.clear();load();};
+apiRequest('/api/lesson-plans/permissions').then(p=>{
+  if(!p.view){$('body').innerHTML='<div class="tw-empty"><b>เฉพาะผู้บริหาร หัวหน้าฝ่ายวิชาการ และผู้ดูแลระบบ</b><p>หน้านี้ใช้ติดตามการอัพโหลดแผนการจัดการเรียนรู้ของครูทั้งโรงเรียน</p></div>';return;}
+  load();
+}).catch(e=>showError(e.message));
+})();
+</script></body></html>
