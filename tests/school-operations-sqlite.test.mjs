@@ -54,7 +54,13 @@ test("timetable uses registered classes and teachers, protects draft, and finds 
   // ครูสอนแทนต้องมีคาบในช่วงชั้นเดียวกันในตาราง
   await success(env,1,"timetable/slot","PUT",{...first,weekday:2,teacher_id:setup.teachers.find(p=>p.full_name==="เจ้าหน้าที่").id});
   await success(env,1,"timetable/publish","POST",{term_id:1});
-  assert.equal((await success(env,2,"timetable/entries?term_id=1&view=published")).entries.length,3);
+  // ตารางสอนรวม: ครูทั่วไปดูไม่ได้ (เฉพาะหัวหน้าฝ่ายวิชาการ ผู้บริหาร แอดมิน) แต่ดูตารางสอนของตนเองได้
+  assert.equal((await call(env,2,"timetable/entries?term_id=1&view=published")).status,403);
+  assert.equal((await success(env,2,"timetable/permissions")).view_all,false);
+  assert.equal((await success(env,1,"timetable/permissions")).view_all,true);
+  const mine=await success(env,2,"timetable/my-schedule?term_id=1");
+  assert.equal(mine.published,true);assert.equal(mine.entries.length,1);assert.equal(mine.entries[0].subject,"ภาษาไทย");
+  assert.equal((await success(env,1,"timetable/entries?term_id=1&view=published")).entries.length,3);
   env.raw.prepare("UPDATE personnel_records SET departments='personnel' WHERE user_id=3").run();
   assert.equal((await success(env,3,'substitutes/permissions')).can_manage,true);
   assert.equal((await success(env,1,'substitutes/permissions')).can_manage,false);

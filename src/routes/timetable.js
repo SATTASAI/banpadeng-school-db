@@ -1,7 +1,7 @@
 import {substituteLoad,canViewPersonnelStats} from '../lib/personnel-stats.js';
 import {loadStructure,validateStructure,ensureStructureSchema,canEditStructure,BANDS} from "../lib/timetable-structure.js";
 import {ensureAcademicData} from "../lib/academic-data.js";
-import {canManageTimetable} from "../lib/timetable-permissions.js";
+import {canManageTimetable,canViewAllTimetables} from "../lib/timetable-permissions.js";
 import {handleAuto} from "./timetable-auto.js";
 import {normalizeRoomName,roomNameKey} from "../lib/timetable-solver.js";
 import {ensureLeaveData} from "../lib/leave-data.js";
@@ -116,6 +116,31 @@ async function entries(env,term,view){
     JOIN personnel_records p ON p.id=e.teacher_id WHERE e.plan_id=?
     ORDER BY e.grade_level,e.classroom,e.weekday,e.period`).bind(chosen.id).all():{results:[]};
   return reply({term,plan:chosen,entries:rows.results});
+}
+// ตารางสอนรวม: ร่างดูได้เฉพาะผู้จัดตาราง, ตารางที่เผยแพร่ดูได้เฉพาะผู้จัดตาราง/หัวหน้าฝ่ายวิชาการ/ผู้บริหาร/ผู้ดูแลระบบ
+async function guardedEntries(env,user,term,view){
+  const canManage=await canManageTimetable(env,user);
+  if(view==="draft"&&!canManage)return reply({error:"เฉพาะผู้จัดตารางสอนที่ดูร่างตารางได้"},403);
+  if(!canManage&&!(await canViewAllTimetables(env,user)))return reply({error:"เฉพาะหัวหน้าฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);
+  return entries(env,term,view);
+}
+async function timetablePermissions(env,user){
+  return reply({view_all:await canViewAllTimetables(env,user),manage:await canManageTimetable(env,user)});
+}
+// ตารางสอนของฉัน (หน้าบัญชีของฉัน): เห็นเฉพาะคาบของตนเองในตารางที่เผยแพร่
+async function mySchedule(env,user,termId){
+  const {results:terms}=await env.DB.prepare(`SELECT t.*,y.year_be FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
+    ORDER BY y.year_be DESC,t.id DESC`).all();
+  const term=termId?terms.find(t=>t.id===termId):(terms.find(t=>t.status==="active")||terms[0]);
+  const list=terms.map(t=>({id:t.id,name:t.name,year_be:t.year_be}));
+  if(!term)return reply({term:null,terms:list,entries:[]});
+  const published=await plan(env,term.id,"published");
+  const {results:mine}=await env.DB.prepare(`SELECT id FROM personnel_records WHERE user_id=?
+    UNION SELECT personnel_id AS id FROM personnel_accounts WHERE user_id=?`).bind(user.id,user.id).all();
+  const ids=mine.map(r=>r.id).filter(Boolean);
+  const rows=published&&ids.length?(await env.DB.prepare(`SELECT id,grade_level,classroom,weekday,period,subject,room_name FROM timetable_entries
+    WHERE plan_id=? AND teacher_id IN (${ids.map(()=>"?").join(",")}) ORDER BY weekday,period`).bind(published.id,...ids).all()).results:[];
+  return reply({term:{id:term.id,name:term.name,year_be:term.year_be},terms:list,published:!!published,entries:rows});
 }
 async function saveSlot(request,env,term,user){
   const body=await request.json().catch(()=>null);
@@ -405,7 +430,7 @@ export async function handleTimetableReadRoute(request,env,pathname,method){
   if(pathname==="/api/timetable/periods")return timetablePeriods(env);
   const term=await termById(env,validId(new URL(request.url).searchParams.get('term_id')));
   if(!term)return reply({error:"เลือกภาคเรียนจากระบบก่อน"},400);
-  if(pathname==="/api/timetable/entries")return entries(env,term,new URL(request.url).searchParams.get('view')==='draft'?'draft':'published');
+  if(pathname==="/api/timetable/entries")return guardedEntries(env,user,term,new URL(request.url).searchParams.get('view')==='draft'?'draft':'published');
   const canManage=await canManageTimetable(env,user);
   if(pathname==="/api/timetable/setup")return setup(env,term,canManage);
   if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);
@@ -434,13 +459,15 @@ export async function handleTimetableRoute(request,env,pathname,method){
   if(pathname==="/api/timetable/periods"&&method==="GET"){await ensureAcademicData(env);return timetablePeriods(env);}
   await ensurePersonnelData(env);await ensureSchema(env);if(isSubstitute)await ensureLeaveData(env);
   const url=new URL(request.url),isTimetable=pathname.startsWith("/api/timetable/");
+  if(pathname==="/api/timetable/permissions"&&method==="GET")return timetablePermissions(env,user);
+  if(pathname==="/api/timetable/my-schedule"&&method==="GET")return mySchedule(env,user,validId(url.searchParams.get("term_id")));
   if(isTimetable){
     const term=await termById(env,validId(method==="GET"||method==="DELETE"?url.searchParams.get("term_id"):(await request.clone().json().catch(()=>null))?.term_id));
     if(!term)return reply({error:"เลือกภาคเรียนจากระบบก่อน"},400);
     const canManage=await canManageTimetable(env,user);
     if(pathname==="/api/timetable/setup"&&method==="GET")return setup(env,term,canManage);
     if(pathname==="/api/timetable/auto/config"&&method==="GET"){if(!canManage)return reply({error:"เฉพาะฝ่ายวิชาการ ผู้บริหาร หรือผู้ดูแลระบบ"},403);return handleAuto(request,env,term,user,pathname,method,{setup,plan,draft});}
-    if(pathname==="/api/timetable/entries"&&method==="GET")return entries(env,term,url.searchParams.get("view")==="draft"?"draft":"published");
+    if(pathname==="/api/timetable/entries"&&method==="GET")return guardedEntries(env,user,term,url.searchParams.get("view")==="draft"?"draft":"published");
     // โครงเวลาเรียน (แม่แบบ ป.ต้น / ป.ปลาย): ดูได้ทุกคน แก้ได้เฉพาะฝ่ายวัดผล ผู้จัดตาราง และผู้ดูแลระบบ
     if(pathname==="/api/timetable/structure"){
       const canEdit=await canEditStructure(env,user);
