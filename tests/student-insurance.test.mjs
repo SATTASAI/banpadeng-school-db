@@ -115,3 +115,15 @@ test("insurance officer (ตั้งค่าผู้อนุมัติ) ma
   r = await api(env, 3, "/api/student-insurance/import", "POST", { rows: [{ student_code: "0011", insured: "ทำ" }] });
   assert.equal(r.status, 200); assert.equal(r.data.saved, 1);
 });
+
+test("homeroom teacher cannot save or clear other years or other classrooms", async () => {
+  const env = environment();
+  let r = await api(env, 2, "/api/student-insurance", "PUT", { academic_year: 2568, records: [{ student_id: 10, insured: "ทำ" }] });
+  assert.equal(r.status, 403);
+  r = await api(env, 1, "/api/student-insurance", "PUT", { academic_year: 2569, records: [{ student_id: 12, insured: "ทำ" }] });
+  assert.equal(r.status, 200);
+  r = await api(env, 2, "/api/student-insurance/student/12?academic_year=2569", "DELETE");
+  assert.equal(r.status, 403);
+  r = await api(env, 2, "/api/student-insurance/student/10?academic_year=2568", "DELETE");
+  assert.equal(r.status, 403);
+});

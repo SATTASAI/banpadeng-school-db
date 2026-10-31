@@ -195,6 +195,7 @@ async function handleSave(request, env, user) {
   const missing = ids.filter((id) => !byId.has(id));
   if (missing.length) return jsonResponse({ error: `ไม่พบนักเรียน ${missing.length} คน` }, 404);
   if (!(await canManageAll(env, user))) {
+    if (year !== (await activeYear(env)).year_be) return jsonResponse({ error: "ครูประจำชั้นบันทึกได้เฉพาะปีการศึกษาปัจจุบัน" }, 403);
     const rooms = await homeroomKeys(env, user);
     const denied = students.filter((s) => !rooms.has(`${String(s.grade_level ?? "").trim()}|${String(s.classroom ?? "").trim()}`));
     if (denied.length) return jsonResponse({ error: "บันทึกได้เฉพาะนักเรียนในห้องที่ท่านเป็นครูประจำชั้น" }, 403);
@@ -219,8 +220,11 @@ async function handleClear(request, env, user, studentId) {
   if (!year) return jsonResponse({ error: "กรุณาระบุปีการศึกษา" }, 400);
   const student = await env.DB.prepare("SELECT id, grade_level, classroom FROM students WHERE id = ?").bind(studentId).first();
   if (!student) return jsonResponse({ error: "ไม่พบนักเรียน" }, 404);
-  if (!(await canManageAll(env, user)) && !(await homeroomKeys(env, user)).has(`${String(student.grade_level ?? "").trim()}|${String(student.classroom ?? "").trim()}`)) {
-    return jsonResponse({ error: "ไม่มีสิทธิ์แก้ไขข้อมูลประกันของนักเรียนคนนี้" }, 403);
+  if (!(await canManageAll(env, user))) {
+    if (year !== (await activeYear(env)).year_be) return jsonResponse({ error: "ครูประจำชั้นแก้ไขได้เฉพาะปีการศึกษาปัจจุบัน" }, 403);
+    if (!(await homeroomKeys(env, user)).has(`${String(student.grade_level ?? "").trim()}|${String(student.classroom ?? "").trim()}`)) {
+      return jsonResponse({ error: "แก้ไขได้เฉพาะนักเรียนในห้องที่ท่านเป็นครูประจำชั้น" }, 403);
+    }
   }
   await env.DB.prepare("DELETE FROM student_insurance WHERE student_id = ? AND academic_year = ?").bind(studentId, year).run();
   await audit(env, user, "clear", { student_id: studentId, academic_year: year });
