@@ -155,10 +155,11 @@
     const rooms = [...new Set(enrolled.map((s) => `${String(s.grade_level ?? '').trim()}|${String(s.classroom ?? '').trim()}`))].filter((k) => !allowed || allowed.has(k)).sort(compare);
     if (!rooms.length) { m.$('#insRows').innerHTML = '<tr><td colspan="7" class="detail-loading">ท่านไม่มีห้องที่บันทึกได้ (บันทึกได้เฉพาะผู้ดูแล/เจ้าหน้าที่ และครูประจำชั้นของห้องตนเอง)</td></tr>'; m.$('#insSave').disabled = true; return; }
     const yearSel = m.$('#insYear'), gradeSel = m.$('#insGrade'), roomSel = m.$('#insRoom');
-    const years = [...new Set([...(info.years || []), info.current_year, info.current_year + 1])].sort((a, b) => b - a);
+    // ครูประจำชั้นบันทึกได้เฉพาะปีการศึกษาปัจจุบัน
+    const years = perms.manage_all ? [...new Set([...(info.years || []), info.current_year, info.current_year + 1])].sort((a, b) => b - a) : [info.current_year];
     years.forEach((y) => yearSel.add(new Option(String(y), String(y))));
-    if (defaults.year && !years.includes(Number(defaults.year))) yearSel.add(new Option(String(defaults.year), String(defaults.year)));
-    yearSel.value = String(defaults.year || info.current_year);
+    if (perms.manage_all && defaults.year && !years.includes(Number(defaults.year))) yearSel.add(new Option(String(defaults.year), String(defaults.year)));
+    yearSel.value = String(perms.manage_all && defaults.year ? defaults.year : info.current_year);
     [...new Set(rooms.map((k) => k.split('|')[0]))].forEach((g) => gradeSel.add(new Option(g || 'ไม่ระบุชั้น', g)));
     const firstRoom = rooms.find((k) => k === `${defaults.grade || ''}|${defaults.classroom || ''}`) || rooms.find((k) => k.startsWith(`${defaults.grade || ''}|`)) || rooms[0];
     gradeSel.value = firstRoom.split('|')[0];

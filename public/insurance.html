@@ -53,7 +53,8 @@ const label=k=>{const [g,r]=k.split('|');return `${g||'ไม่ระบุช�
 const bar=(a,b)=>`<span class="tw-bar"><b style="width:${b?Math.round(a/b*100):0}%"></b></span>`;
 let students=[],info=null,records=new Map(),version=0,limit=200;
 
-function canEditRoom(k){const p=info?.permissions||{};return p.manage_all||(p.homerooms||[]).includes(k)}
+// ครูประจำชั้น: แก้ได้เฉพาะห้องตนเองในปีการศึกษาปัจจุบัน
+function canEditRoom(k){const p=info?.permissions||{};return p.manage_all||(Number(info.academic_year)===Number(info.current_year)&&(p.homerooms||[]).includes(k))}
 const stateOf=s=>{const r=records.get(s.id);return r?(Number(r.insured)?'yes':'no'):'none'};
 const chip=st=>`<span class="in-chip ${st}">${{yes:'ทำประกัน',no:'ไม่ทำประกัน',none:'ยังไม่บันทึก'}[st]}</span>`;
 
@@ -74,7 +75,7 @@ function fillYears(){
 }
 function render(){
   const p=info.permissions||{};
-  $('info').innerHTML=`ผู้รับผิดชอบงานประกัน: <b>${esc(info.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage_all?'กรอก/แก้ไขได้ทุกห้อง':(p.homerooms||[]).length?'กรอก/แก้ไขห้อง '+p.homerooms.map(label).join(', '):'ดูได้อย่างเดียว'}`;
+  $('info').innerHTML=`ผู้รับผิดชอบงานประกัน: <b>${esc(info.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage_all?'กรอก/แก้ไขได้ทุกห้อง':(p.homerooms||[]).length?'ครูประจำชั้น กรอก/แก้ไขได้เฉพาะห้อง '+p.homerooms.map(label).join(', ')+' (ปีการศึกษาปัจจุบัน) ห้องอื่นดูได้อย่างเดียว':'ดูได้อย่างเดียว'}`;
   $('headActions').innerHTML='<button class="btn btn-primary" id="printBtn" type="button">พิมพ์ (Word / PDF)</button>'+(p.can_import?' <a class="btn btn-ghost" href="/import-center.html?template=insurance">นำเข้าจาก Excel</a>':'');
   const n={yes:0,no:0,none:0};students.forEach(s=>n[stateOf(s)]++);const total=students.length;
   $('cards').innerHTML=`<div class="tw-card"><span>นักเรียนที่กำลังศึกษา</span><strong>${total}</strong></div><div class="tw-card"><span>ทำประกัน</span><strong style="color:#1f7a50">${n.yes}</strong>${bar(n.yes,total)}</div><div class="tw-card"><span>ไม่ทำประกัน</span><strong style="color:#a33a49">${n.no}</strong></div><div class="tw-card"><span>ยังไม่บันทึก</span><strong>${n.none}</strong>${bar(total-n.none,total)}</div>`;
