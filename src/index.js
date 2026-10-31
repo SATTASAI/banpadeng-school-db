@@ -37,7 +37,6 @@ import { handleViewAsRoute, viewAsState } from "./routes/view-as.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
 import { ensurePersonnelData, upsertSelfRegisteredPersonnel } from "./lib/personnel-data.js";
 import { mergeConfirmedPersonnel } from "./lib/personnel-merge.js";
-import { splitName, joinName, hasSpacedPrefix, validateNamePart } from "./lib/self-name.js";
 import { importStaffRows } from "./lib/staff-import.js";
 import { importProjectRows, upsertProjectRow, findDuplicateProject } from "./lib/project-import.js";
 import { ensureAcademicData, getCurrentAcademicPeriod } from "./lib/academic-data.js";
@@ -1665,46 +1664,6 @@ async function handleOwnPersonnel(request, env, method) {
     person.teaching_periods = l ? l.periods_per_week : null;
   }
   return jsonResponse({ person: { ...person, ...recordToRankChoice(person.position, person.academic_rank) }, rank_choices: RANK_CHOICES }, 200, { "Cache-Control": "private, no-store" });
-}
-
-// หน้าบัญชีของฉัน: ครูแก้ชื่อ–นามสกุลของตัวเองได้ทันที (คำนำหน้าเดิมคงไว้) — ชื่อบัญชีและทะเบียนบุคลากรของตัวเองเปลี่ยนตาม
-async function handleOwnName(request, env, method) {
-  const user = await getCurrentUser(request, env);
-  if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (user.role === "viewer") return jsonResponse({ error: "บัญชีผู้ชมภายนอกแก้ชื่อไม่ได้" }, 403);
-  const account = await env.DB.prepare("SELECT id, full_name FROM users WHERE id = ? AND deleted_at IS NULL").bind(user.id).first();
-  if (!account) return jsonResponse({ error: "ไม่พบบัญชีผู้ใช้" }, 404);
-  await ensurePersonnelData(env);
-  const pid = await ownPersonnelId(env, user);
-  const person = pid ? await env.DB.prepare("SELECT id, prefix, full_name FROM personnel_records WHERE id = ?").bind(pid).first() : null;
-  const current = splitName(account.full_name);
-  if (method === "GET") {
-    const fromPerson = person ? splitName(person.full_name, person.prefix) : null;
-    return jsonResponse({ prefix: current.prefix || fromPerson?.prefix || null, first_name: current.first_name, last_name: current.last_name }, 200, { "Cache-Control": "private, no-store" });
-  }
-  let body;
-  try { body = await request.json(); } catch { return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400); }
-  const first = validateNamePart(body.first_name, "ชื่อ");
-  if (first.error) return jsonResponse({ error: first.error }, 400);
-  const last = validateNamePart(body.last_name, "นามสกุล");
-  if (last.error) return jsonResponse({ error: last.error }, 400);
-  const newName = joinName(current.prefix, first.value, last.value, hasSpacedPrefix(account.full_name, current.prefix));
-  if (newName === account.full_name) return jsonResponse({ ok: true, full_name: newName });
-  await env.DB.prepare("UPDATE users SET full_name = ? WHERE id = ? AND deleted_at IS NULL").bind(newName, user.id).run();
-  if (person) {
-    const parts = splitName(person.full_name, person.prefix);
-    const personName = joinName(parts.prefix, first.value, last.value, hasSpacedPrefix(person.full_name, parts.prefix));
-    await env.DB.prepare("UPDATE personnel_records SET first_name = ?, last_name = ?, full_name = ?, updated_at = datetime('now') WHERE id = ?")
-      .bind(first.value, last.value, personName, person.id).run();
-    // ชื่อสำหรับจับคู่ (normalized_name) เปลี่ยนตาม ถ้าไม่ชนกับรายการอื่น
-    const normalized = personName.normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\s.]+/g, "").toLowerCase();
-    await env.DB.prepare("UPDATE personnel_records SET normalized_name = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM personnel_records o WHERE o.normalized_name = ? AND o.id <> ?)")
-      .bind(normalized, person.id, normalized, person.id).run().catch(() => {});
-  }
-  await writeAuditLog(env, user, "update", "user", user.id, { self_rename: true, previous_full_name: account.full_name, full_name: newName }, request);
-  await securityAlert(env, await superadminIds(env, user.id), "account_changed", `${account.full_name} เปลี่ยนชื่อในบัญชีของตัวเองเป็น ${newName}`).catch(() => {});
-  forgetCurrentUser(request);
-  return jsonResponse({ ok: true, full_name: newName });
 }
 
 async function handleUpdateStaff(request, env, targetId) {
@@ -4867,7 +4826,6 @@ const app = {
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);
       if (pathname === "/api/me/personnel" && (method === "GET" || method === "PATCH")) return await handleOwnPersonnel(request, env, method);
-      if (pathname === "/api/me/name" && (method === "GET" || method === "PATCH")) return await handleOwnName(request, env, method);
       if (staffMatch && method === "PATCH") return await handleUpdateStaff(request, env, Number(staffMatch[1]));
 
       if (pathname === "/api/reports/summary" && method === "GET") return await handleReportsSummary(request, env);
