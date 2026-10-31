@@ -51,8 +51,10 @@ test("timetable uses registered classes and teachers, protects draft, and finds 
   await success(env,1,"timetable/slot","PUT",first);
   assert.equal((await call(env,1,"timetable/slot","PUT",{...first,classroom:"2",subject:"คณิตศาสตร์"})).status,409);
   assert.equal((await call(env,1,"timetable/slot","PUT",{...first,classroom:"2",teacher_id:two,room_name:"ห้องคอม"})).status,200);
+  // ครูสอนแทนต้องมีคาบในช่วงชั้นเดียวกันในตาราง
+  await success(env,1,"timetable/slot","PUT",{...first,weekday:2,teacher_id:setup.teachers.find(p=>p.full_name==="เจ้าหน้าที่").id});
   await success(env,1,"timetable/publish","POST",{term_id:1});
-  assert.equal((await success(env,2,"timetable/entries?term_id=1&view=published")).entries.length,2);
+  assert.equal((await success(env,2,"timetable/entries?term_id=1&view=published")).entries.length,3);
   env.raw.prepare("UPDATE personnel_records SET departments='personnel' WHERE user_id=3").run();
   assert.equal((await success(env,3,'substitutes/permissions')).can_manage,true);
   assert.equal((await success(env,1,'substitutes/permissions')).can_manage,false);
@@ -61,8 +63,8 @@ test("timetable uses registered classes and teachers, protects draft, and finds 
   assert.equal((await call(env,2,'substitutes/assignments?date=2026-09-21')).status,403);
   assert.equal((await call(env,1,'substitutes/assignments','POST',{})).status,403);
   assert.equal((await call(env,3,'timetable/slot','PUT',{term_id:1})).status,403);
-  env.raw.exec("CREATE TABLE department_staff(department TEXT,personnel_id INTEGER)");
-  env.raw.prepare("INSERT INTO department_staff SELECT 'personnel',id FROM personnel_records WHERE user_id=2").run();
+  env.raw.exec("CREATE TABLE IF NOT EXISTS department_staff(department TEXT,personnel_id INTEGER)");
+  env.raw.prepare("INSERT INTO department_staff(department,personnel_id) SELECT 'personnel',id FROM personnel_records WHERE user_id=2").run();
   assert.equal((await success(env,2,'substitutes/permissions')).can_manage,true);
   env.raw.exec("DELETE FROM department_staff");
   assert.equal((await success(env,2,'substitutes/permissions')).can_manage,false);
@@ -75,8 +77,8 @@ test("timetable uses registered classes and teachers, protects draft, and finds 
   assert.equal((await success(env,3,"substitutes/assignments?date=2026-09-21")).assignments.length,1);
   assert.equal((await call(env,3,"substitutes/assignments","POST",{date:"2026-09-21",teacher_id:one,entry_id:coverage.lessons[0].id,substitute_teacher_id:staff,reason:"ไปราชการ"})).status,409);
   await success(env,1,"timetable/slot","PUT",{...first,period:2,subject:"ภาษาอังกฤษ"});
-  assert.equal((await success(env,1,"timetable/entries?term_id=1&view=published")).entries.length,2);
-  assert.equal((await success(env,1,"timetable/entries?term_id=1&view=draft")).entries.length,3);
+  assert.equal((await success(env,1,"timetable/entries?term_id=1&view=published")).entries.length,3);
+  assert.equal((await success(env,1,"timetable/entries?term_id=1&view=draft")).entries.length,4);
 });
 
 test("bank protects student money and tracks loan balance",async()=>{

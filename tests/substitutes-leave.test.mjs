@@ -18,6 +18,9 @@ async function setup(){
  INSERT INTO academic_terms(id,academic_year_id,term_number,name,start_date,end_date) VALUES(99,99,1,'ทดสอบ','2026-05-01','2026-10-31');
  INSERT INTO timetable_plans(id,academic_term_id,status,created_by) VALUES(99,99,'published',1);`);
  for(const period of [1,2])env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(?,99,'ป.4','1',2,?,'ภาษาไทย',?)").run(period,period,absent);
+ // ครูว่างและครูที่ลา สอน ป.4-6 ในวันอื่น (ช่วงชั้นเดียวกับคาบที่ต้องจัดแทน)
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(10,99,'ป.5','1',1,1,'คณิตศาสตร์',?)").run(person(4));
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(11,99,'ป.6','1',1,2,'คณิตศาสตร์',?)").run(person(5));
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(6,'old-account','x','x','บัญชีเดิม','teacher')`);
  env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(6,?)').run(absent);
  env.raw.exec(`INSERT INTO leave_requests(id,user_id,leave_type,leave_subtype,start_date,end_date,leave_days,status) VALUES
@@ -100,6 +103,7 @@ test('cancel and change keep history, notify the replaced teacher and keep only 
  env.raw.exec("INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(7,'ครูใหม่','test-person-7','ครู')");
  const other=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=7').get().id;
  env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(7,?)').run(other);
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(12,99,'ป.4','1',3,1,'ศิลปะ',?)").run(other);
  const today=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
  // วันที่ในอนาคตที่เป็นวันอังคาร (ตรงกับคาบทดสอบ weekday=2) และอยู่ในภาคเรียนทดสอบ
  env.raw.exec("UPDATE academic_terms SET end_date='2099-12-31' WHERE id=99");
@@ -129,4 +133,53 @@ test('cancel and change keep history, notify the replaced teacher and keep only 
  assert.equal((await (await call(env,path+'mine','GET',undefined,7)).json()).cancelled[0].action,'cancelled');
  assert((await keys(7)).some(k=>k.startsWith('substitute-cancel:')));
  assert.equal((await call(env,path+`assignments/${id}`,'DELETE',undefined,3)).status,404);
+});
+
+test('system proposes same-band teachers with the fewest substitutions, spreads periods, and hides stats from teachers',async()=>{
+ const {env,absent,free}=await setup();
+ const add=(uid,name)=>{env.raw.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(?,?,'x','x',?,'teacher')").run(uid,'t'+uid,name);
+  env.raw.prepare("INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(?,?,?,'ครู')").run(uid,name,'p-'+uid);
+  const id=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=?').get(uid).id;env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(?,?)').run(uid,id);return id;};
+ const lower=add(20,'ครูป.ต้น'),cross=add(21,'ครูควบช่วงชั้น'),none=add(22,'ครูไม่มีคาบ');
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(20,99,'ป.2','1',1,3,'ไทย',?)").run(lower);
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(21,99,'ป.3','1',1,4,'ไทย',?)").run(cross);
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(22,99,'ป.6','1',1,5,'ไทย',?)").run(cross);
+ const data=await (await call(env,path+'coverage?date=2026-10-06&teacher_id='+absent,'GET',undefined,3)).json();
+ const ids=data.lessons[0].available_teachers.map(t=>t.id);
+ assert(ids.includes(free)&&ids.includes(cross));assert(!ids.includes(lower));assert(!ids.includes(none));
+ assert.equal(data.lessons[0].band,'p4-6');
+ // สองคาบในวันเดียวกัน → เสนอคนละคน (ไม่จัดคนเดิมซ้ำ)
+ const proposed=data.lessons.map(l=>l.proposed_teacher_id);assert(proposed.every(Boolean));assert.notEqual(proposed[0],proposed[1]);
+ // ครูที่สอนแทนไปแล้วในภาคเรียน ถูกเสนอทีหลัง
+ env.raw.exec(`INSERT INTO substitute_absences(id,absence_date,teacher_id,reason,created_by) VALUES(50,'2026-09-01',${lower},'x',1)`);
+ env.raw.exec(`INSERT INTO substitute_assignments(absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,created_by) VALUES(50,20,${free},2,3,'2026-09-01',1)`);
+ const again=await (await call(env,path+'coverage?date=2026-10-06&teacher_id='+absent,'GET',undefined,3)).json();
+ assert.equal(again.lessons[0].proposed_teacher_id,cross);
+ // ไม่ให้จัดครูต่างช่วงชั้น แม้ส่งตรงมาที่ API
+ assert.equal((await call(env,path+'assignments','POST',{date:'2026-10-06',teacher_id:absent,entry_id:1,substitute_teacher_id:lower,leave_request_id:null,reason:'อบรม'},3)).status,409);
+ // สถิติ: ครูทั่วไปไม่เห็น แม้ของตนเอง; ฝ่ายบุคคลเห็น
+ assert.equal((await call(env,'/api/personnel/substitute-stats','GET',undefined,4)).status,403);
+ assert.equal((await call(env,'/api/personnel/substitute-stats','GET',undefined,3)).status,200);
+ assert.equal((await (await call(env,path+'permissions','GET',undefined,4)).json()).can_view_stats,false);
+});
+
+test('publishing a new timetable remaps future substitutes to the same lesson and cancels moved lessons',async()=>{
+ const {env,absent,free,onLeave}=await setup();
+ env.raw.exec("UPDATE academic_terms SET end_date='2099-12-31' WHERE id=99");
+ const today=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
+ let d=new Date(today+'T12:00:00Z');d=new Date(d.getTime()+864e5);while(d.getUTCDay()!==2)d=new Date(d.getTime()+864e5);const date=d.toISOString().slice(0,10);
+ for(const [entry,sub] of [[1,free],[2,onLeave]])assert.equal((await call(env,path+'assignments','POST',{date,teacher_id:absent,entry_id:entry,substitute_teacher_id:sub,leave_request_id:null,reason:'อบรม'},3)).status,200);
+ // ร่างใหม่: คาบ 1 เหมือนเดิม, คาบ 2 ของครูที่ไม่อยู่ย้ายไปคาบ 3
+ env.raw.exec(`INSERT INTO timetable_plans(id,academic_term_id,status,created_by) VALUES(100,99,'draft',1);
+  INSERT INTO timetable_entries(plan_id,grade_level,classroom,weekday,period,subject,teacher_id)
+  SELECT 100,grade_level,classroom,weekday,CASE WHEN id=2 THEN 3 ELSE period END,subject,teacher_id FROM timetable_entries WHERE plan_id=99;`);
+ const res=await call(env,'/api/timetable/publish','POST',{term_id:99},1);assert.equal(res.status,200);
+ assert.deepEqual((await res.json()).substitutes,{remapped:1,cancelled:1});
+ const rows=env.raw.prepare('SELECT a.substitute_teacher_id s,e.plan_id p,e.period FROM substitute_assignments a JOIN timetable_entries e ON e.id=a.timetable_entry_id').all();
+ assert.equal(rows.length,1);assert.equal(rows[0].s,free);assert.equal(rows[0].p,100);assert.equal(rows[0].period,1);
+ const c=env.raw.prepare('SELECT substitute_teacher_id s,action FROM substitute_cancellations').all();
+ assert.equal(c.length,1);assert.equal(c[0].s,onLeave);assert.equal(c[0].action,'cancelled');
+ // คาบที่ถูกยกเลิก ระบบเสนอครูใหม่ในคาบที่ย้ายไป
+ const cov=await (await call(env,path+'coverage?date='+date+'&teacher_id='+absent,'GET',undefined,3)).json();
+ const moved=cov.lessons.find(l=>l.period===3);assert(moved&&!moved.assignment_id&&moved.proposed_teacher_id);
 });
