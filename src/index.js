@@ -4,6 +4,7 @@ import {handleEvaluationLink} from './evaluation/link.js';
 import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
+import {handleNavVisibilityRoute} from './routes/nav-visibility.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
 import {handleTeachingWorksRoute} from './routes/teaching-works.js';
@@ -4741,6 +4742,8 @@ const app = {
       if (budgetResponse) return budgetResponse;
       const departmentStaffResponse = await handleDepartmentStaffRoute(request, env, pathname, method);
       if (departmentStaffResponse) return departmentStaffResponse;
+      const navVisibilityResponse = await handleNavVisibilityRoute(request, env, pathname, method);
+      if (navVisibilityResponse) return navVisibilityResponse;
       const personnelResponse = await handlePersonnelRoute(request, env, pathname, method);
       if (personnelResponse) return personnelResponse;
       const correspondenceResponse = await handleCorrespondenceRoute(request, env, pathname, method);
