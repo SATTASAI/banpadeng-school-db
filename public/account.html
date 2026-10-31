@@ -23,6 +23,7 @@
     .devices-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.devices-actions .btn{width:auto}
     @media(max-width:700px){.devices-card{grid-column:auto}.device{grid-template-columns:auto 1fr}.device .btn{grid-column:1/-1;justify-self:start}}
     @media(max-width:700px){.account-grid{grid-template-columns:1fr}.danger-card{grid-column:auto}.account-page{padding:18px 14px}.profile-row{grid-template-columns:1fr;gap:2px}}
+    .tm-card{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(135deg,#eef4ff,#f6f0ff);border-color:#cfdcf7}.tm-card h2{margin:0 0 4px}.tm-card p{margin:0}.btn-tm{width:auto;display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:12px;background:linear-gradient(135deg,#4F6BED,#7B4FE0);border:0;color:#fff;font-weight:650;text-decoration:none;box-shadow:0 6px 16px rgba(79,107,237,.28)}.btn-tm:hover{filter:brightness(1.06);color:#fff}
   </style>
 </head>
 <body>
@@ -30,6 +31,10 @@
     <a href="/dashboard.html">← กลับแดชบอร์ด</a>
     <header class="account-head"><h1>บัญชีและความปลอดภัย</h1><p>ตรวจสอบบัญชี เปลี่ยนรหัสผ่าน เชื่อมต่อ LINE และยกเลิกการเข้าสู่ระบบบนอุปกรณ์อื่น</p></header>
     <div class="account-grid">
+      <section class="account-card tm-card">
+        <div><h2>สื่อการสอนของฉัน</h2><p class="muted">อัพโหลด จัดเก็บ และเปิดดูสื่อการสอนของคุณ (เห็นได้เฉพาะเจ้าของบัญชี)</p></div>
+        <a class="btn btn-tm" href="/api/teachingmedia-sso" target="_blank" rel="noopener"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>อัพโหลดสื่อการสอน</a>
+      </section>
       <section class="account-card">
         <h2>ข้อมูลบัญชี</h2><p class="muted">ข้อมูลที่ใช้เข้าสู่ระบบโรงเรียน</p>
         <div id="profile">กำลังโหลด...</div>

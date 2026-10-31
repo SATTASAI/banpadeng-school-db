@@ -10,6 +10,7 @@ import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervisio
 import {handleTeachingWorksRoute} from './routes/teaching-works.js';
 import {handleProjectFilesRoute} from './routes/project-files.js';
 import {handleActivitySsoRoute} from './routes/activity-sso.js';
+import {handleTeachingMediaSsoRoute} from './routes/teachingmedia-sso.js';
 import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -4857,6 +4858,8 @@ const app = {
       if(leaveResponse)return leaveResponse;
       const activitySsoResponse=await handleActivitySsoRoute(request,env,pathname,method);
       if(activitySsoResponse)return activitySsoResponse;
+      const tmSsoResponse=await handleTeachingMediaSsoRoute(request,env,pathname,method);
+      if(tmSsoResponse)return tmSsoResponse;
       const teachingWorksResponse=await handleTeachingWorksRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
       const projectFilesResponse=await handleProjectFilesRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
       if(projectFilesResponse)return projectFilesResponse;
