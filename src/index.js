@@ -4723,7 +4723,6 @@ const app = {
       if (pathname.startsWith('/api/student-transfers')) {
         const actor = await getCurrentUser(request, env);
         if (!actor?.role) return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
-        if (!canManageAllStudents(actor)) return jsonResponse({error:'เฉพาะเจ้าหน้าที่ทะเบียน ผู้บริหาร และผู้ดูแลระบบ'},403);
         await ensureStudentTransfers(env);
         await ensureDashboardRevision(env);
         return await handleStudentTransfers(request,env,pathname,method,TRANSFER_STORAGE);

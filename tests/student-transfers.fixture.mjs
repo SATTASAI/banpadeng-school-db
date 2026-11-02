@@ -104,6 +104,8 @@ export async function fixture() {
       storage,
     );
   }
+  // Explicit fixture grant; production accounts receive no default grant.
+  await call("/permissions/2", "PUT", { allowed: true });
   return { env, storage, files, call, revision: () => dashboardRevision(env) };
 }
 export const form = (extra = {}) => ({

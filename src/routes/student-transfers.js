@@ -1,5 +1,9 @@
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
-import { canManageAllStudents } from "../lib/student-access.js";
+import {
+  mayUseTransfers,
+  handleTransferAccess,
+} from "../lib/transfer-access.js";
+import { handleTransferExtras } from "./transfer-extras.js";
 
 export const DOCUMENT_KINDS = ["referral", "transcript", "household"];
 const ready = new WeakSet();
@@ -110,15 +114,21 @@ export async function handleStudentTransfers(
   storage,
 ) {
   if (!pathname.startsWith("/api/student-transfers")) return null;
-  const match = pathname.match(
-    /^\/api\/student-transfers(?:\/(\d+)(?:\/(decision|note|documents)(?:\/(referral|transcript|household)(?:\/(verify))?)?)?)?$/,
-  );
-  if (!match) return response({ error: "ไม่พบเส้นทาง" }, 404);
   const user = await getCurrentUser(request, env);
   if (!user?.role) return response({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (!canManageAllStudents(user))
+  const accessResponse = await handleTransferAccess(
+    request,
+    env,
+    pathname,
+    method,
+    user,
+  );
+  if (accessResponse) return accessResponse;
+  if (!(await mayUseTransfers(env, user)))
     return response(
-      { error: "เฉพาะเจ้าหน้าที่ทะเบียน ผู้บริหาร และผู้ดูแลระบบ" },
+      {
+        error: "บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานทะเบียนย้าย กรุณาติดต่อแอดมิน",
+      },
       403,
     );
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
@@ -127,6 +137,19 @@ export async function handleStudentTransfers(
       return response({ error: "ไม่อนุญาตคำขอจากเว็บไซต์อื่น" }, 403);
   }
   await ensureStudentTransfers(env);
+  const extraResponse = await handleTransferExtras(
+    request,
+    env,
+    pathname,
+    method,
+    user,
+    normalizeTransfer,
+  );
+  if (extraResponse) return extraResponse;
+  const match = pathname.match(
+    /^\/api\/student-transfers(?:\/(\d+)(?:\/(decision|note|documents)(?:\/(referral|transcript|household)(?:\/(verify))?)?)?)?$/,
+  );
+  if (!match) return response({ error: "ไม่พบเส้นทาง" }, 404);
   const [, rawId, action, kind, verify] = match,
     id = Number(rawId);
   if (!rawId && method === "GET") {

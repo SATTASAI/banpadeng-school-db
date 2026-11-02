@@ -1259,7 +1259,8 @@
       return;
     }
     dashboardUser = user;
-    if (!['superadmin','executive','staff'].includes(user.role)) {
+    const transferAccess=user.role==='viewer'?{allowed:false}:await apiRequest('/api/student-transfers/access').catch(()=>({allowed:false}));
+    if (!transferAccess.allowed) {
       document.querySelectorAll('.nav-transfers, #studentTransferSection .inline-link').forEach(el=>el.remove());
     }
     if (user.role === "viewer") enterViewerMode(user);
