@@ -34,8 +34,7 @@
  }
  function success(message){$('errorBox').classList.remove('visible');$('submitError').hidden=true;$('successBox').textContent=message;$('successBox').hidden=false;}
  function row(r){
-  const actionable=r.can_acknowledge||r.can_decide;
-  const note=r.personnel_note;
+  const decisionDisabled=user?.view_as?.read_only?'disabled title="โหมดดูบัญชีอื่นอ่านได้อย่างเดียว ต้องเข้าสู่ระบบด้วยบัญชีผู้มีสิทธิ์เพื่ออนุมัติจริง"':'';
   return `<article class="leave-row ${r.status==='pending'?'pending':''}" id="leave-${Number(r.id)}">
    <h4>${esc(r.full_name)} · ${esc(types[r.leave_type])}</h4>
    <p>${esc(r.start_date)} ถึง ${esc(r.end_date)} · ${esc(r.leave_days??'')} วัน</p>
@@ -48,7 +47,8 @@
     <button class="btn btn-ghost" data-detail="${Number(r.id)}">รายละเอียด / ใบลา</button>
     <button class="btn btn-ghost" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="btn btn-ghost" data-export="pdf" data-id="${Number(r.id)}">PDF</button>
     ${!approvalView&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
-    ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}">อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}">ไม่อนุญาต</button>`:''}
+    ${r.can_acknowledge_approve?`<button class="btn btn-primary" data-action="acknowledge_approve" data-id="${Number(r.id)}" ${decisionDisabled}>รับทราบและอนุมัติ</button>`:''}
+    ${r.can_decide?`${!r.can_acknowledge_approve?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button>`:''}<button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}
     ${!approvalView&&r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
@@ -57,7 +57,8 @@
   if(approvalView){if(!data.can_view_all_leave)records=[];}
   else await loadAllowance();
   $('approvalAccess').hidden=!approvalView;
-  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'แสดงข้อมูลการลาทั้งหมด อนุมัติได้เมื่อฝ่ายบุคคลรับทราบและส่งต่อแล้ว':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'กดรับทราบและอนุมัติเพื่อบันทึกผลและนับเป็นสถิติการลาได้ทันที รวมรายการเดิมที่ยังรอรับทราบหรือส่งต่อ':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  if(user?.view_as?.read_only)$('approvalAccess').textContent+=' · ขณะนี้เป็นโหมดดูบัญชีอื่น ปุ่มอนุมัติแสดงเพื่อดูตัวอย่างและกดไม่ได้ ต้องเข้าสู่ระบบด้วยบัญชี ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์เพื่ออนุมัติจริง';
   $('delegationSettings').hidden=!data.can_manage_delegations;
   if(data.can_manage_delegations){
    const permissions=await apiRequest('/api/leave-delegations');
@@ -76,7 +77,7 @@
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
-  const pending=records.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide);
+  const pending=records.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide||r.can_acknowledge_approve);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
   $('historyPanel').innerHTML=records.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
@@ -155,6 +156,7 @@
  };
  document.addEventListener('click',async e=>{
   const button=e.target.closest('button');if(!button||busy)return;
+  if(user?.view_as?.read_only&&(button.dataset.delegate||button.dataset.action)){error(Error('โหมดดูบัญชีอื่นอ่านได้อย่างเดียว ต้องเข้าสู่ระบบด้วยบัญชีผู้มีสิทธิ์เพื่ออนุมัติจริง'));return;}
   if(button.dataset.delegate){
    busy=true;button.disabled=true;
    try{await apiRequest('/api/leave-delegations',{method:'PATCH',body:{personnel_id:Number(button.dataset.delegate),can_approve:button.dataset.grant==='true'}});success(button.dataset.grant==='true'?'มอบสิทธิ์อนุมัติการลาแล้ว':'ถอนสิทธิ์อนุมัติการลาแล้ว');await load();}
@@ -171,7 +173,7 @@
     else {const body=['approved','rejected'].includes(action)?{action:'decide',status:action,note}:{action,note};
      await apiRequest('/api/leave-requests/'+id,{method:'PATCH',body});
     }
-    success(({acknowledge:'รับทราบแล้ว ระบบส่งข้อมูลให้ ผอ. และรอง ผอ. ที่รับผิดชอบแล้ว',approved:'บันทึกคำสั่งอนุญาตแล้ว',rejected:'บันทึกคำสั่งไม่อนุญาตแล้ว',cancel:'ยกเลิกคำขอแล้ว'})[action]);await load();if(detailId===id&&records.some(r=>r.id===id))await details(id);
+    success(({acknowledge:'รับทราบแล้ว ระบบส่งข้อมูลให้ ผอ. และรอง ผอ. ที่รับผิดชอบแล้ว',acknowledge_approve:'รับทราบและอนุมัติแล้ว บันทึกเป็นสถิติการลาเรียบร้อย',approved:'บันทึกคำสั่งอนุญาตแล้ว',rejected:'บันทึกคำสั่งไม่อนุญาตแล้ว',cancel:'ยกเลิกคำขอแล้ว'})[action]);await load();if(detailId===id&&records.some(r=>r.id===id))await details(id);
    }
   }catch(e){error(e);}finally{busy=false;button.disabled=false;}
  });

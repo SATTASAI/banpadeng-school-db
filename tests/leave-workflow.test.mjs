@@ -21,6 +21,55 @@ async function setup(){
 }
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
 
+test('acknowledge and approve handles submitted, legacy acknowledged and forwarded requests once and updates statistics',async()=>{
+ for(const stage of ['submitted','acknowledged','forwarded']){
+  const {env}=await setup();
+  const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+  if(stage==='acknowledged'){
+   env.raw.prepare("UPDATE leave_requests SET workflow_stage='acknowledged',acknowledged_by=3,acknowledged_at='2026-11-02T03:45:21Z' WHERE id=?").run(id);
+   env.raw.prepare("INSERT INTO leave_events(leave_id,actor_id,action) VALUES(?,3,'acknowledged')").run(id);
+  }
+  if(stage==='forwarded')await call(env,path,'PATCH',{action:'acknowledge'},3);
+  const before=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+  const list=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(list.leave_requests.find(r=>r.id===id).can_acknowledge_approve,true);
+  for(const uid of [1,2,3,5,6])assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},uid)).status,403);
+  assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve',note:'รับทราบและอนุมัติ'},4)).status,200);
+  const after=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+  assert.equal(after.status,'approved');assert.equal(after.workflow_stage,'completed');assert.equal(after.approved_by,4);
+  assert.equal(after.decision_name,'ผู้อำนวยการตัวอย่าง');assert.equal(after.decision_note,'รับทราบและอนุมัติ');assert(after.approved_at);
+  assert.equal(after.acknowledged_by,before.acknowledged_by||4);assert.equal(after.acknowledged_at,before.acknowledged_at||after.approved_at);
+  assert.equal(after.forwarded_by,before.forwarded_by);assert.equal(after.forwarded_at,before.forwarded_at);
+  const events=env.raw.prepare('SELECT action FROM leave_events WHERE leave_id=? ORDER BY id').all(id).map(r=>r.action);
+  assert.deepEqual(events,stage==='forwarded'?['submitted','acknowledged','forwarded','approved']:['submitted','acknowledged','approved']);
+  const summary=await dashboardActivitySummary(env);assert.equal(summary.leave_summary.approved,1);assert.equal(summary.leave_summary.approved_days,0.5);assert.equal(summary.leave_summary.pending,0);
+  const allowance=await (await call(env,'/api/leave-allowance?date=2026-10-06','GET',undefined,2)).json();assert.equal(allowance.types.find(t=>t.leave_type==='general').approved,1);assert.equal(allowance.types.find(t=>t.leave_type==='general').pending,0);
+  assert(await notice(env,2,'leave:'+id+':approved'));
+  assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},4)).status,409);
+  assert.deepEqual(env.raw.prepare('SELECT action FROM leave_events WHERE leave_id=? ORDER BY id').all(id).map(r=>r.action),events);
+ }
+});
+
+test('combined approval uses deputy delegation, denies self-linked leave and prevents stale/revoked or concurrent decisions',async()=>{
+ const {env,deputy}=await setup();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
+ env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(deputy);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},5)).status,403);
+ const owner=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=2').get();
+ env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(owner.id);
+ const batch=env.DB.batch.bind(env.DB);
+ env.DB.batch=statements=>{env.raw.prepare('DELETE FROM leave_approval_delegations WHERE personnel_id=?').run(deputy);return batch(statements);};
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},5)).status,409);
+ assert.equal(env.raw.prepare('SELECT status FROM leave_requests WHERE id=?').get(id).status,'pending');
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_events WHERE leave_id=?').get(id).n,1);
+ env.DB.batch=batch;
+ await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
+ const responses=await Promise.all([call(env,path,'PATCH',{action:'acknowledge_approve'},5),call(env,path,'PATCH',{action:'acknowledge_approve'},4)]);
+ assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='approved'").get(id).n,1);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='acknowledged'").get(id).n,1);
+});
+
 test('admin and current executives read every existing leave stage and legacy outcome without changing approval permissions or data',async()=>{
  const {env}=await setup();
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(7,'outsider@test','x','x','ครูอื่น','teacher');

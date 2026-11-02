@@ -14,7 +14,7 @@
  <main class="app-main">
   <h2 id="leaveTitle">การลา</h2>
   <p id="approvalAccess" class="muted" hidden></p>
-  <p class="muted">ครูยื่นใบลา → หัวหน้าฝ่ายบุคลากรกดรับทราบ → ระบบส่งข้อมูลถึงผู้บริหาร → ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์อนุมัติ → บันทึกสถิติ</p>
+  <p class="muted">ครูยื่นใบลา → ฝ่ายบุคคลและผู้บริหารตรวจข้อมูล → ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์กดรับทราบและอนุมัติ → บันทึกสถิติการลา</p>
   <div class="error-box" id="errorBox" role="alert"></div>
   <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
@@ -57,7 +57,7 @@
   </section>
   <section id="delegationSettings" class="panel leave-panel" hidden>
    <h3>ให้สิทธิ์อนุมัติการลาแก่รอง ผอ.</h3>
-   <p class="muted">ผอ. มอบหรือถอนสิทธิ์ได้เป็นรายคน รอง ผอ. ที่ยังไม่ได้รับสิทธิ์ดูข้อมูลได้อย่างเดียว สิทธิ์มีผลกับใบลาที่ฝ่ายบุคคลส่งต่อแล้ว และไม่อนุญาตให้อนุมัติการลาของตนเอง</p>
+   <p class="muted">ผอ. มอบหรือถอนสิทธิ์ได้เป็นรายคน รอง ผอ. ที่ยังไม่ได้รับสิทธิ์ดูข้อมูลได้อย่างเดียว ผู้มีสิทธิ์กดรับทราบและอนุมัติคำขอลาที่รอพิจารณาได้ และไม่อนุญาตให้อนุมัติการลาของตนเอง</p>
    <div id="delegationList"></div>
   </section>
   <section id="pendingSection" hidden><h3>รายการรอดำเนินการ</h3><div class="panel" id="pendingPanel"></div></section>
