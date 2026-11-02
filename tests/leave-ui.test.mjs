@@ -1,4 +1,23 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+test('admin sees existing pending and historical leaves in approval view with view and export actions only',async()=>{
+ const nodes=new Map();
+ const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
+ const ctx=vm.createContext({URLSearchParams,location:{search:'?view=approval'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async path=>{
+  if(path==='/api/auth/me')return {user:{id:1,role:'superadmin'}};
+  assert.equal(path,'/api/leave-requests','admin approval page must not load settings or delegations');
+  return {profile:{},can_view_all_leave:true,is_leave_management:false,can_manage_delegations:false,can_approve_leave:false,leave_requests:[
+   {id:1,full_name:'รายการเดิมรอรับทราบ',status:'pending',workflow_stage:'submitted',can_acknowledge:true,can_cancel:true},
+   {id:2,full_name:'รายการเดิมอนุญาตแล้ว',status:'approved',workflow_stage:'submitted'},
+   {id:3,full_name:'รายการเดิมไม่อนุญาต',status:'rejected'}]};
+ }});
+ vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+ assert.match(node('approvalAccess').textContent,/แอดมินดูข้อมูลการลาทั้งหมด/);
+ assert.match(node('pendingPanel').innerHTML,/รายการเดิมรอรับทราบ/);
+ assert.match(node('historyPanel').innerHTML,/รายการเดิมอนุญาตแล้ว/);assert.match(node('historyPanel').innerHTML,/รายการเดิมไม่อนุญาต/);
+ assert.match(node('pendingPanel').innerHTML,/data-detail="1"/);assert.match(node('historyPanel').innerHTML,/data-export="pdf"/);
+ assert.doesNotMatch(node('pendingPanel').innerHTML+node('historyPanel').innerHTML,/data-action=/);
+ assert.equal(node('delegationSettings').hidden,true);assert.equal(node('headSettings').hidden,true);
+});
 test('administration approval view lists pending leaves for read-only deputies and lets director grant or revoke individually',async()=>{
  for(const director of [false,true]){
   const nodes=new Map();let click,granted=false;
@@ -10,13 +29,13 @@ test('administration approval view lists pending leaves for read-only deputies a
     if(options){assert.equal(options.body.personnel_id,5);granted=options.body.can_approve;return {ok:true};}
     return {deputies:[{id:5,full_name:'รอง <script>',position:'รองผู้อำนวยการ',can_approve:granted}]};
    }
-   return {profile:{},is_leave_management:true,can_manage_delegations:director,can_approve_leave:director,leave_requests:[
+   return {profile:{},is_leave_management:true,can_view_all_leave:true,can_manage_delegations:director,can_approve_leave:director,leave_requests:[
     {id:9,full_name:'ครูทดสอบ',leave_type:'sick',workflow_stage:'forwarded',status:'pending',can_decide:director},
     {id:10,full_name:'ยังไม่ส่งต่อ',workflow_stage:'submitted',status:'pending'}]};
   }});
   vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
   assert.equal(node('leaveTitle').textContent,'อนุมัติการลา');assert.equal(node('newLeaveSection').hidden,true);
-  assert.equal(node('pendingSection').hidden,false);assert.match(node('pendingPanel').innerHTML,/ครูทดสอบ/);assert.doesNotMatch(node('pendingPanel').innerHTML,/ยังไม่ส่งต่อ/);
+  assert.equal(node('pendingSection').hidden,false);assert.match(node('pendingPanel').innerHTML,/ครูทดสอบ/);assert.match(node('pendingPanel').innerHTML,/ยังไม่ส่งต่อ/);
   assert.equal(node('delegationSettings').hidden,!director);
   if(!director){assert.doesNotMatch(node('pendingPanel').innerHTML,/data-action="approved"|data-action="rejected"/);assert.match(node('approvalAccess').textContent,/ยังไม่มีสิทธิ์/);continue;}
   assert.match(node('delegationList').innerHTML,/รอง &lt;script&gt;/);
