@@ -19,6 +19,10 @@ export function ensureLeaveData(env) {
    catch(e) {if (!/duplicate column name/i.test(String(e.message))) throw e;}
   }
   await env.DB.batch([
+   env.DB.prepare(`CREATE TABLE IF NOT EXISTS leave_approval_delegations (
+    personnel_id INTEGER PRIMARY KEY REFERENCES personnel_records(id),
+    granted_by INTEGER NOT NULL REFERENCES users(id),
+    granted_at TEXT NOT NULL DEFAULT(datetime('now')))`),
    env.DB.prepare(`CREATE TABLE IF NOT EXISTS leave_reviewers (
     leave_id INTEGER NOT NULL REFERENCES leave_requests(id) ON DELETE CASCADE,
     user_id INTEGER NOT NULL REFERENCES users(id),kind TEXT NOT NULL,
@@ -47,7 +51,7 @@ export function isDeputy(p) {return /รองผู้อำนวยการ/
 export async function executives(env) {
  const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,p.position,a.user_id
   FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id
-  JOIN users u ON u.id=a.user_id WHERE p.status='active' AND u.status='active' AND u.role IN ('executive','superadmin')`).all();
+  JOIN users u ON u.id=a.user_id WHERE p.status='active' AND u.status='active' AND u.deleted_at IS NULL AND u.role IN ('executive','superadmin')`).all();
  const people=new Map();for (const p of results) {if(!people.has(p.id))people.set(p.id,{id:p.id,full_name:p.full_name,position:p.position,user_ids:[]});people.get(p.id).user_ids.push(p.user_id);}
  return [...people.values()];
 }
