@@ -122,7 +122,7 @@ test("LINE goes only to the person who must act: finance queue to the finance of
   } finally { line.restore(); }
 });
 
-test("a new leave pushes LINE to personnel head and designated deputy without early action permission",async()=>{
+test("a new leave notifies head first, then director and deputy after acknowledgement",async()=>{
  const env=await setup();
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
  (4,'director-leave@test','x','x','ผอ. ตัวอย่าง','executive'),(5,'deputy-leave@test','x','x','รอง ผอ. บุคลากร','executive'),(6,'other-deputy@test','x','x','รอง ผอ. ฝ่ายอื่น','executive');
@@ -134,7 +134,7 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
  (6,'รอง ผอ. ฝ่ายอื่น','รองผอฝ่ายอื่น','รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
  INSERT INTO personnel_accounts(user_id,personnel_id)
  SELECT user_id,id FROM personnel_records WHERE user_id IN (4,5,6);
- INSERT INTO line_user_links(user_id,line_user_id) VALUES(5,'U-deputy'),(6,'U-other-deputy');`);
+ INSERT INTO line_user_links(user_id,line_user_id) VALUES(4,'U-director'),(5,'U-deputy'),(6,'U-other-deputy');`);
  const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true})).status,200);
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
@@ -149,7 +149,10 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   const {id}=await response.json();
   unlock(env);
   await dispatchLineNotifications(env);
-  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-other']);
+  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-other']);
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
+  unlock(env);await dispatchLineNotifications(env);
+  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-director','U-other']);
   assert(line.pushes.every(p=>p.messages[0].text.includes('การลา: ครู ก')));
   assert(line.pushes.every(p=>p.messages[0].text.includes(`ใบลาเลขที่ ${id}: การลา: ครู ก`)));
   assert(line.pushes.every(p=>p.messages[0].text.includes('วันที่ลา: 19/10/2569 ถึง 20/10/2569')));
@@ -168,16 +171,15 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:(token[0]==='0'?'1':'0')+token.slice(1)})}),env,{})).status,404);
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ยังไม่ถึงคิว'},5)).status,403);
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'forward',deputy_personnel_id:deputy},5)).status,403);
-  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
-  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,200);
+
   unlock(env);
   await dispatchLineNotifications(env);
-  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-deputy','U-other']);
+  assert.deepEqual(line.pushes.map(p=>p.to).sort(),['U-deputy','U-director','U-other']);
   assert.match(line.pushes.at(-1).messages[0].text,/วันที่ลา: 19\/10\/2569 ถึง 20\/10\/2569/);
   assert.match(line.pushes.at(-1).messages[0].text,/เหตุผล: ไม่สบาย/);
   assert.match(line.pushes.at(-1).messages[0].text,/โทร: 0000000000/);
   const inbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
-  assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,true);
+  assert.equal(inbox.leave_requests.find(r=>r.id===id).can_review,false);
   env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");
   assert.equal((await anonymous()).status,404,'the link stops working if the deputy loses access');
   env.raw.exec("UPDATE users SET role='executive' WHERE id=5");
@@ -185,7 +187,7 @@ test("a new leave pushes LINE to personnel head and designated deputy without ea
   assert.equal((await anonymous()).status,404,'expired links cannot read the leave');
  } finally {line.restore();}
 });
-test('first feed after a linked deputy receives a new leave, including one already read in the bell',async()=>{
+test('first feed after acknowledgement notifies linked deputy even if already read in the bell',async()=>{
  const env=await setup();
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(5,'deputy-first@test','x','x','รอง ผอ.','executive');
  INSERT INTO staff_profiles(user_id,position) VALUES(5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
@@ -197,12 +199,14 @@ test('first feed after a linked deputy receives a new leave, including one alrea
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
  await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3);
  const {id}=await (await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ทดสอบแจ้งเตือน',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้าน',contact_phone:'0000000000'},2)).json();
- await call(env,'/api/notifications/read','POST',{message_key:`leave:${id}:pending`},5);
+ addLeaveDirector(env);
+ assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
+ await call(env,'/api/notifications/read','POST',{message_key:`leave:${id}:forwarded`},5);
  const line=mockLine();
  try{
   await dispatchLineNotifications(env);
   assert(line.pushes.some(p=>p.to==='U-first'&&p.messages[0].text.includes('การลา: ครู ก')));
-  assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=5 AND message_key=?").get(`leave:${id}:pending`).status,'sent');
+  assert.equal(env.raw.prepare("SELECT status FROM line_feed_sent WHERE user_id=5 AND message_key=?").get(`leave:${id}:forwarded`).status,'sent');
  }finally{line.restore();}
 });
 
@@ -253,6 +257,10 @@ test('deputy receives the leave through an existing LINE match on another login 
   await dispatchLineNotifications(env);
   const {id}=await (await call(env,'/api/leave-requests','POST',{leave_type:'sick',reason:'ทดสอบบัญชีร่วม',position:'ครู',start_date:'2026-10-19',end_date:'2026-10-19',contact_address:'บ้าน',contact_phone:'0000000000'},2)).json();
   unlock(env);await dispatchLineNotifications(env);
+  assert.equal(line.pushes.filter(p=>p.to==='U-shared-deputy').length,0);
+  addLeaveDirector(env);
+  assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'acknowledge'},3)).status,200);
+  unlock(env);await dispatchLineNotifications(env);
   assert.equal(line.pushes.filter(p=>p.to==='U-shared-deputy'&&/leave-view\.html\?token=[a-f0-9]{64}/.test(p.messages[0].text)).length,1);
   assert.equal(line.pushes.filter(p=>p.to==='U-other'&&p.messages[0].text.includes('การลา: ครู ก')).length,1,'the head gets only one copy across both accounts');
   assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
@@ -291,3 +299,9 @@ test('leave template renders single-day dates, legacy missing data and literal r
  assert(long.length<=5000);
  for(let i=0;i<5;i++)assert(long.includes('https://s.test/leave-view.html?token='+i));
 });
+
+function addLeaveDirector(env){
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'director-workflow@test','x','x','ผอ. ทดสอบ','executive');
+ INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(4,'ผอ. ทดสอบ','ผอทดสอบ','ผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ INSERT INTO personnel_accounts(user_id,personnel_id) SELECT user_id,id FROM personnel_records WHERE user_id=4;`);
+}
