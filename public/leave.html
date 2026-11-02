@@ -19,6 +19,7 @@
   <div id="successBox" class="leave-success" role="status" hidden></div>
   <section class="panel leave-panel">
    <h3>ยื่นใบลาใหม่</h3>
+   <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
    <form id="leaveForm" novalidate>
     <div class="leave-fields">
      <div class="field"><label for="fType">ประเภทการลา</label><select id="fType" required><option value="sick">ลาป่วย</option><option value="personal">ลากิจส่วนตัว</option><option value="maternity">ลาคลอดบุตร</option><option value="lenient">ลาอนุโลม</option><option value="other">อื่น ๆ</option></select></div>
@@ -38,6 +39,10 @@
    </form>
   </section>
   <section class="panel leave-panel" id="headSettings" hidden>
+   <h3>เงื่อนไขจำนวนครั้งการลา</h3>
+   <p class="muted">กำหนดจำนวนครั้งต่อคน แยกประเภท ต่อปีงบประมาณ 1 ตุลาคม–30 กันยายน ตามวันที่เริ่มลา เว้นว่าง = ไม่จำกัด, 0 = ไม่ให้ยื่นประเภทนี้ รายการรอพิจารณาจะกันสิทธิ์ไว้ และคืนสิทธิ์เมื่อไม่อนุญาตหรือยกเลิก</p>
+   <div id="leaveLimitFields" class="leave-fields"></div>
+   <button class="btn btn-primary" id="saveLeaveLimits" type="button">บันทึกเงื่อนไขการลา</button>
    <h3>รอง ผอ. ผู้รับแจ้งการลา</h3><p class="muted">เลือกรอง ผอ. ที่รับผิดชอบฝ่ายบุคลากรและกดบันทึกก่อนครูยื่นใบลา รอง ผอ. จะได้รับ LINE พร้อมหัวหน้าฝ่ายและดูใบลาได้ แต่ให้ความเห็นได้หลังหัวหน้าฝ่ายส่งต่อ</p>
    <label for="deputyChoice">รองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร</label><select id="deputyChoice"><option value="">เลือกรองผู้บริหาร</option></select>
    <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกผู้รับแจ้งล่วงหน้า</button><p id="deputyLineStatus" class="muted" role="status"></p>

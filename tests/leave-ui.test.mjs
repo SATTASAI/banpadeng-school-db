@@ -2,13 +2,14 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 test('head inbox shows acknowledgement and forwarding separately, sends the selected deputy, escapes text and retains draft notes on refresh',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:3,full_name:'หัวหน้าฝ่าย'}};
-  if(path==='/api/leave-settings')return{deputy_personnel_id:5,deputies:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ',line_status:'active'}]};
+  if(path==='/api/leave-settings')return{limits:[],deputy_personnel_id:5,deputies:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ',line_status:'active'}]};
   if(options){payload=options.body;stage='acknowledged';return{ok:true};}
   return{is_personnel_head:true,can_view_pending:true,deputy_choices:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ'}],default_deputy_id:5,profile:{},leave_requests:[{id:9,full_name:'ครู <img onerror=alert(1)>',leave_type:'sick',reason:'ไม่สบาย & พักผ่อน',workflow_stage:stage,status:'pending',can_acknowledge:stage==='submitted',can_record:stage==='acknowledged',can_forward:stage==='acknowledged'}]};
  }});
  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
- assert.equal(node('lineTemplateSettings').hidden,true);
+ assert.equal(node('lineTemplateSettings').hidden,true);assert.match(node('leaveAllowance').innerHTML,/ลาอนุโลม/);assert.match(node('leaveAllowance').innerHTML,/ยื่นได้อีก/);
  assert.match(node('pendingPanel').innerHTML,/รับทราบและบันทึก/);assert(!node('pendingPanel').innerHTML.includes('data-action="forward"'));assert.match(node('pendingPanel').innerHTML,/&lt;img onerror=alert\(1\)&gt;/);
  node('note-9').value='ตรวจแล้ว';await click({target:{closest:()=>({dataset:{id:'9',action:'acknowledge'},disabled:false})}});assert.equal(payload.action,'acknowledge');assert.equal(payload.note,'ตรวจแล้ว');assert.match(node('pendingPanel').innerHTML,/data-action="forward"/);
  node('note-9').value='บันทึกที่ยังไม่ได้กดส่ง';await poll();await new Promise(r=>setImmediate(r));assert.equal(node('note-9').value,'บันทึกที่ยังไม่ได้กดส่ง');
@@ -19,6 +20,7 @@ function submissionHarness({reject=false,reloadFails=false}={}){
  const nodes=new Map(),calls=[];let loads=0;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,attributes:{},classList:{add(){},remove(){}},scrollIntoView(){this.scrolled=true},focus(){this.focused=true},setAttribute(k,v){this.attributes[k]=v},removeAttribute(k){delete this.attributes[k]}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[],activeElement:{tagName:'BODY'},addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:2,full_name:'ครูทดสอบ'}};
   if(options){calls.push(options.body);if(reject)throw Error('ฐานข้อมูลไม่พร้อมใช้งาน');return{id:42};}
   if(++loads>1&&reloadFails)throw Error('โหลดไม่ได้');
@@ -49,8 +51,9 @@ test('superadmin inserts leave dates, reason and teacher phone at the cursor and
  const nodes=new Map();let saved;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},hidden:false,classList:{add(){},remove(){}},focus(){},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b;}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:1,role:'superadmin'}};
-  if(path==='/api/leave-settings'){if(options){saved=options.body.line_template;return{line_template:saved};}return{deputies:[],line_template:'วันที่ลา: '};}
+  if(path==='/api/leave-settings'){if(options){saved=options.body.line_template;return{line_template:saved};}return{limits:[],deputies:[],line_template:'วันที่ลา: '};}
   return{profile:{},leave_requests:[]};
  }});
  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));

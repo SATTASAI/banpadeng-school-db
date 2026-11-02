@@ -5,6 +5,7 @@ import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.
 import {ensureLineFeedSchema,DEFAULT_LEAVE_LINE_TEMPLATE,validLeaveLineTemplate} from '../lib/line-feed.js';
 import {unreadNotificationsFor} from './notifications.js';
 import {readLeaveAccess} from '../lib/leave-access.js';
+import {leaveTypes,leaveLimits,leaveAllowance,fiscalPeriod,ownerClause} from '../lib/leave-allowance.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -14,6 +15,13 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
 export async function handleLeaveRoute(request,env,pathname,method) {
+ if(pathname==='/api/leave-allowance'&&method==='GET'){
+  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
+  await ensureLeaveData(env);
+  const date=new URL(request.url).searchParams.get('date')||today();
+  if(!validDate(date))return fail('วันที่ไม่ถูกต้อง');
+  return json(await leaveAllowance(env,user.id,date));
+ }
  if(pathname==='/api/leave-view'&&method==='POST'){
   const body=await request.json().catch(()=>null);
   await ensureLeaveData(env);
@@ -85,7 +93,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    const saved=user.role==='superadmin'?await env.DB.prepare('SELECT line_template FROM leave_settings WHERE id=1').first():null;
    const links=await linkedLineAccounts(env);
    const {results:blocked}=await env.DB.prepare(`SELECT l.user_id,l.status FROM line_user_links l WHERE l.status='blocked'`).all();
-   return json({deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
+   return json({limits:await leaveLimits(env),deputy_personnel_id:selected?.id??null,line_configured:!!env.LINE_CHANNEL_ACCESS_TOKEN,
     ...(user.role==='superadmin'?{line_template:saved?.line_template||DEFAULT_LEAVE_LINE_TEMPLATE}:{}),deputies:people.filter(isDeputy).map(p=>({
     id:p.id,full_name:p.full_name,position:p.position,
     line_status:p.user_ids.some(id=>links.some(l=>l.user_id===id))?'active':
@@ -94,6 +102,13 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   }
   if(method==='PATCH'){
    const body=await request.json().catch(()=>null);
+   if(body&&Object.hasOwn(body,'limits')){
+    if(Object.keys(body).length!==1||!Array.isArray(body.limits)||body.limits.length!==leaveTypes.length||
+     new Set(body.limits.map(r=>r?.leave_type)).size!==leaveTypes.length||body.limits.some(r=>!r||!leaveTypes.includes(r.leave_type)||
+     !(r.max_count===null||(Number.isSafeInteger(r.max_count)&&r.max_count>=0&&r.max_count<=10000))))return fail('ระบุจำนวนครั้งเป็นจำนวนเต็ม 0–10000 หรือเว้นว่างเพื่อไม่จำกัด ให้ครบทุกประเภท');
+    await env.DB.batch(body.limits.map(r=>env.DB.prepare('INSERT INTO leave_limits(leave_type,max_count) VALUES(?,?) ON CONFLICT(leave_type) DO UPDATE SET max_count=excluded.max_count').bind(r.leave_type,r.max_count)));
+    return json({ok:true,limits:await leaveLimits(env)});
+   }
    if(body&&Object.hasOwn(body,'line_template')){
     if(user.role!=='superadmin')return fail('เฉพาะผู้ดูแลระบบเท่านั้น',403);
     if(Object.keys(body).some(k=>k!=='line_template')||!validLeaveLineTemplate(body.line_template))return fail('ข้อความต้องยาวไม่เกิน 400 ตัวอักษร ใช้ได้เฉพาะ {title} {message} {id} {link} {reason} {leave_dates} {phone}');
@@ -162,12 +177,17 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
   // Use configured personnel deputy (or sole active deputy) to prevent an unrelated executive receiving the early alert
   const deputyForNotice=await designatedDeputy(env,people);
+  const period=fiscalPeriod(body.start_date);
   const results=await env.DB.batch([
    env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null),
-   env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) VALUES(last_insert_rowid(),?,'submitted')").bind(user.id),
-   env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid()").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,? WHERE
+    (SELECT max_count FROM leave_limits WHERE leave_type=?) IS NULL OR
+    (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND COALESCE(leave_subtype,leave_type)=? AND start_date BETWEEN ? AND ? AND status IN ('approved','pending'))
+    < (SELECT max_count FROM leave_limits WHERE leave_type=?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null,body.leave_type,user.id,user.id,body.leave_type,period.from,period.to,body.leave_type),
+   env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) SELECT last_insert_rowid(),?,'submitted' WHERE changes()>0").bind(user.id),
+   env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid() AND changes()>0").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);
+  if(!results[0].meta.changes)return fail('จำนวนครั้งการลาประเภทนี้ครบตามเงื่อนไขปีงบประมาณแล้ว (รวมรายการรอพิจารณา)',409);
   const newId=results[0].meta.last_row_id;
   return json({id:newId},201);
  }

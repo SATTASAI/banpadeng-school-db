@@ -2,7 +2,24 @@
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
- let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false;
+ let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
+ async function loadAllowance(){
+  const version=++allowanceVersion;
+  try{
+   const data=await apiRequest('/api/leave-allowance?date='+encodeURIComponent($('fStart').value||$('fDate').value));
+   if(version!==allowanceVersion)return;
+   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลาปีงบประมาณ ${esc(data.period.from)} ถึง ${esc(data.period.to)}</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(types[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง รายการรอพิจารณากันสิทธิ์ไว้ ระบบตรวจสิทธิ์อีกครั้งเมื่อส่งใบลา</p>`;
+  }catch(e){if(version===allowanceVersion)$('leaveAllowance').textContent='โหลดสิทธิ์ลาไม่สำเร็จ: '+e.message;}
+ }
+ $('saveLeaveLimits').onclick=async()=>{
+  if(busy)return;
+  const limits=Object.keys(types).map(leave_type=>({leave_type,max_count:$('limit-'+leave_type).value===''?null:Number($('limit-'+leave_type).value)}));
+  if(limits.some(r=>r.max_count!==null&&(!Number.isInteger(r.max_count)||r.max_count<0||r.max_count>10000))){error(Error('จำนวนครั้งต้องเป็นจำนวนเต็ม 0–10000 หรือเว้นว่าง'));return;}
+  busy=true;$('saveLeaveLimits').disabled=true;
+  try{await apiRequest('/api/leave-settings',{method:'PATCH',body:{limits}});$('leaveLimitFields').dataset.dirty='false';success('บันทึกเงื่อนไขจำนวนครั้งการลาแล้ว');await load();}
+  catch(e){error(e);}finally{busy=false;$('saveLeaveLimits').disabled=false;}
+ };
+ $('leaveLimitFields').oninput=()=>{$('leaveLimitFields').dataset.dirty='true';};
  function error(e){$('errorBox').textContent=e.message||String(e);$('errorBox').classList.add('visible');}
  function submitError(message,field){
   error(Error(message));$('successBox').hidden=true;
@@ -38,6 +55,7 @@
  }
  async function load(){
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
+  await loadAllowance();
   const draftNotes=new Map([...document.querySelectorAll('.leave-note')].map(n=>[n.id,n.value]));
   const selected=$('deputyChoice').value||data.default_deputy_id||'';
   const canConfigure=data.is_personnel_head||user.role==='superadmin';
@@ -45,6 +63,7 @@
   $('lineTemplateSettings').hidden=user.role!=='superadmin';
   if(canConfigure){
    const settings=await apiRequest('/api/leave-settings');deputies=settings.deputies;lineConfigured=settings.line_configured;
+   if($('leaveLimitFields').dataset.dirty!=='true')$('leaveLimitFields').innerHTML=settings.limits.map(r=>`<div class="field"><label for="limit-${esc(r.leave_type)}">${esc(types[r.leave_type])} (ครั้ง/ปีงบประมาณ)</label><input id="limit-${esc(r.leave_type)}" type="number" min="0" max="10000" step="1" placeholder="ไม่จำกัด" value="${r.max_count??''}"></div>`).join('');
    $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+deputies.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');
    $('deputyChoice').value=String(selected||settings.deputy_personnel_id||'');showDeputyStatus();
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
@@ -102,7 +121,8 @@
   $('detailSection').scrollIntoView({behavior:'smooth',block:'start'});
  }
  function days(){const a=$('fStart').value,b=$('fEnd').value;if(a&&b&&b>=a)$('fDays').value=String(Math.round((Date.parse(b)-Date.parse(a))/86400000)+1);}
- for(const id of ['fStart','fEnd']){$(id).oninput=days;$(id).onchange=days;}
+ for(const id of ['fStart','fEnd']){$(id).oninput=days;$(id).onchange=()=>{days();if(id==='fStart')loadAllowance();};}
+ $('fDate').onchange=()=>{if(!$('fStart').value)loadAllowance();};
  const requiredFields=[['fType','ประเภทการลา'],['fDate','วันที่เขียนใบลา'],['fPosition','ตำแหน่ง'],['fReason','เหตุผลการลา'],['fStart','วันที่เริ่มลา'],['fEnd','วันที่สิ้นสุดการลา'],['fDays','จำนวนวันลา'],['fPhone','เบอร์ติดต่อ'],['fAddress','ที่อยู่ระหว่างลา']];
  function validateForm(){
   for(const [id,label] of requiredFields){
