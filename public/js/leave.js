@@ -2,18 +2,20 @@
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
+ const quotaLabels={general:'ลาทั่วไป (รวมทุกประเภท ยกเว้นลาอนุโลม)',lenient:'ลาอนุโลม'};
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
   const version=++allowanceVersion;
   try{
    const data=await apiRequest('/api/leave-allowance?date='+encodeURIComponent($('fStart').value||$('fDate').value));
    if(version!==allowanceVersion)return;
-   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลาปีงบประมาณ ${esc(data.period.from)} ถึง ${esc(data.period.to)}</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(types[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง รายการรอพิจารณากันสิทธิ์ไว้ ระบบตรวจสิทธิ์อีกครั้งเมื่อส่งใบลา</p>`;
+   if(!data.period){$('leaveAllowance').textContent=data.message;return;}
+   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง รายการรอพิจารณากันสิทธิ์ไว้ ระบบตรวจสิทธิ์อีกครั้งเมื่อส่งใบลา</p>`;
   }catch(e){if(version===allowanceVersion)$('leaveAllowance').textContent='โหลดสิทธิ์ลาไม่สำเร็จ: '+e.message;}
  }
  $('saveLeaveLimits').onclick=async()=>{
   if(busy)return;
-  const limits=Object.keys(types).map(leave_type=>({leave_type,max_count:$('limit-'+leave_type).value===''?null:Number($('limit-'+leave_type).value)}));
+  const limits=Object.keys(quotaLabels).map(leave_type=>({leave_type,max_count:$('limit-'+leave_type).value===''?null:Number($('limit-'+leave_type).value)}));
   if(limits.some(r=>r.max_count!==null&&(!Number.isInteger(r.max_count)||r.max_count<0||r.max_count>10000))){error(Error('จำนวนครั้งต้องเป็นจำนวนเต็ม 0–10000 หรือเว้นว่าง'));return;}
   busy=true;$('saveLeaveLimits').disabled=true;
   try{await apiRequest('/api/leave-settings',{method:'PATCH',body:{limits}});$('leaveLimitFields').dataset.dirty='false';success('บันทึกเงื่อนไขจำนวนครั้งการลาแล้ว');await load();}
@@ -33,7 +35,7 @@
   const actionable=r.can_acknowledge||r.can_record||r.can_review||r.can_decide;
   const note=r.can_review?r.reviewer_comment:r.personnel_note;
   return `<article class="leave-row ${r.status==='pending'?'pending':''}" id="leave-${Number(r.id)}">
-   <h4>${esc(r.full_name)} · ${esc(types[r.leave_type])}</h4>
+   <h4>${esc(r.full_name)} · ${esc(quotaLabels[r.leave_type])}</h4>
    <p>${esc(r.start_date)} ถึง ${esc(r.end_date)} · ${esc(r.leave_days??'')} วัน</p>
    <p>เหตุผล: ${esc(r.reason||'ยังไม่มีข้อมูลเหตุผลในรายการเดิม')}</p>
    <span class="leave-status">${esc(r.status==='approved'?'อนุญาตแล้ว':r.status==='rejected'?'ไม่อนุญาต':stages[r.workflow_stage]||'รอดำเนินการ')}</span>
@@ -63,7 +65,7 @@
   $('lineTemplateSettings').hidden=user.role!=='superadmin';
   if(canConfigure){
    const settings=await apiRequest('/api/leave-settings');deputies=settings.deputies;lineConfigured=settings.line_configured;
-   if($('leaveLimitFields').dataset.dirty!=='true')$('leaveLimitFields').innerHTML=settings.limits.map(r=>`<div class="field"><label for="limit-${esc(r.leave_type)}">${esc(types[r.leave_type])} (ครั้ง/ปีงบประมาณ)</label><input id="limit-${esc(r.leave_type)}" type="number" min="0" max="10000" step="1" placeholder="ไม่จำกัด" value="${r.max_count??''}"></div>`).join('');
+   if($('leaveLimitFields').dataset.dirty!=='true')$('leaveLimitFields').innerHTML=settings.limits.map(r=>`<div class="field"><label for="limit-${esc(r.leave_type)}">${esc(quotaLabels[r.leave_type])} (ครั้ง/เทอม)</label><input id="limit-${esc(r.leave_type)}" type="number" min="0" max="10000" step="1" placeholder="ไม่จำกัด" value="${r.max_count??''}"></div>`).join('');
    $('deputyChoice').innerHTML='<option value="">เลือกรองผู้บริหาร</option>'+deputies.map(p=>`<option value="${Number(p.id)}">${esc(p.full_name)} · ${esc(p.position)}</option>`).join('');
    $('deputyChoice').value=String(selected||settings.deputy_personnel_id||'');showDeputyStatus();
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}

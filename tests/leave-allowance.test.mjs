@@ -1,3 +1,4 @@
+import {seedLeaveCalendar} from './leave-calendar.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
@@ -5,10 +6,11 @@ import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {leaveTypes} from '../src/lib/leave-allowance.js';
 const form={leave_type:'lenient',reason:'เหตุผลทดสอบ',position:'ครู',start_date:'2026-10-06',end_date:'2026-10-06',contact_address:'บ้านพัก',contact_phone:'0000000000'};
 const limits=(count)=>leaveTypes.map(leave_type=>({leave_type,max_count:leave_type==='lenient'?count:null}));
-test('only personnel head/admin may configure validated limits; all types default to unlimited',async()=>{
- const env=await fixture();await ensureLeaveData(env);
+test('only personnel head/admin may configure validated limits; both quota groups default to two per term',async()=>{
+ const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);
  let data=await (await call(env,'/api/leave-allowance?date=2026-10-01','GET',undefined,2)).json();
- assert(data.types.every(r=>r.max_count===null&&r.remaining===null));
+ assert(data.types.every(r=>r.max_count===2&&r.remaining===2));
+ assert.equal(data.types.length,2);assert.equal(data.period.term_number,1);
  assert.equal((await call(env,'/api/leave-settings','PATCH',{limits:limits(2)},2)).status,403);
  const person=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
  await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:true});
@@ -17,13 +19,35 @@ test('only personnel head/admin may configure validated limits; all types defaul
  assert.equal((await call(env,'/api/leave-settings','PATCH',{limits:limits(2)},3)).status,200);
  assert.equal((await call(env,'/api/leave-allowance?date=2026-02-30','GET',undefined,2)).status,400);
 });
-test('linked history, pending reservations, fiscal reset, cancellation and concurrent submissions respect limits',async()=>{
- const env=await fixture();await ensureLeaveData(env);
+
+test('general types share two turns while lenient gets two separate turns; a new term resets both',async()=>{
+ const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);
+ const submit=(type,start_date,reason)=>call(env,'/api/leave-requests','POST',{...form,leave_type:type,start_date,end_date:start_date,reason},2);
+ assert.equal((await submit('sick','2026-10-30','ป่วย')).status,201);
+ assert.equal((await submit('personal','2026-10-31','กิจส่วนตัว')).status,201);
+ assert.equal((await submit('other','2026-10-31','เกินสิทธิ์ทั่วไป')).status,409);
+ assert.equal((await submit('lenient','2026-10-31','อนุโลมหนึ่ง')).status,201);
+ assert.equal((await submit('lenient','2026-10-31','อนุโลมสอง')).status,201);
+ assert.equal((await submit('lenient','2026-10-31','อนุโลมเกินสิทธิ์')).status,409);
+ const term2=await (await call(env,'/api/leave-allowance?date=2026-11-01','GET',undefined,2)).json();
+ assert.equal(term2.period.term_number,2);assert(term2.types.every(r=>r.remaining===2));
+ assert.equal((await submit('sick','2026-11-01','เทอมใหม่')).status,201);
+ const denied=await submit('sick','2027-04-01','นอกภาคเรียน');assert.equal(denied.status,400);
+ const outside=await (await call(env,'/api/leave-allowance?date=2027-04-01','GET',undefined,2)).json();assert.equal(outside.period,null);
+ // Actual calendar dates win over hard-coded semester boundaries and current active term.
+ env.raw.exec("UPDATE academic_terms SET end_date='2026-10-29' WHERE id=900; UPDATE academic_terms SET start_date='2026-10-30' WHERE id=901;");
+ const moved=await (await call(env,'/api/leave-allowance?date=2026-10-31','GET',undefined,2)).json();
+ assert.equal(moved.period.term_number,2);assert.equal(moved.types.find(r=>r.leave_type==='general').remaining,0);
+ env.raw.exec("UPDATE academic_terms SET end_date='2026-11-02' WHERE id=900");
+ assert.equal((await submit('lenient','2026-11-01','ปฏิทินซ้อนกัน')).status,400);
+});
+test('linked history, pending reservations, term reset, cancellation and concurrent submissions respect limits',async()=>{
+ const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);
  const person=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=2').get();
  env.raw.prepare('INSERT OR REPLACE INTO personnel_accounts(user_id,personnel_id) VALUES(3,?)').run(person.personnel_id);
  env.raw.exec(`INSERT INTO leave_requests(user_id,leave_type,leave_subtype,start_date,end_date,status) VALUES
  (3,'other','lenient','2026-10-01','2026-10-01','approved'),
- (2,'other','lenient','2026-09-30','2026-09-30','approved'),
+ (2,'other','lenient','2026-03-30','2026-03-30','approved'),
  (2,'other','lenient','2026-10-02','2026-10-02','rejected'),
  (2,'other',NULL,'2026-10-03','2026-10-03','approved');`);
  await call(env,'/api/leave-settings','PATCH',{limits:limits(2)});
@@ -36,9 +60,9 @@ test('linked history, pending reservations, fiscal reset, cancellation and concu
  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM audit_logs WHERE resource='leave_request' AND action='create'").get().n,1);
  assert.equal((await call(env,'/api/leave-requests/'+id,'DELETE',undefined,2)).status,200);
  data=await (await call(env,'/api/leave-allowance?date=2026-10-06','GET',undefined,2)).json();assert.equal(data.types.find(r=>r.leave_type==='lenient').remaining,1);
- data=await (await call(env,'/api/leave-allowance?date=2027-10-01','GET',undefined,2)).json();assert.equal(data.types.find(r=>r.leave_type==='lenient').remaining,2);
+ data=await (await call(env,'/api/leave-allowance?date=2026-11-01','GET',undefined,2)).json();assert.equal(data.types.find(r=>r.leave_type==='lenient').remaining,2);
  await call(env,'/api/leave-settings','PATCH',{limits:limits(0)});
- assert.equal((await call(env,'/api/leave-requests','POST',{...form,start_date:'2027-10-01',end_date:'2027-10-01'},2)).status,409);
+ assert.equal((await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-11-01',end_date:'2026-11-01'},2)).status,409);
  await call(env,'/api/leave-settings','PATCH',{limits:limits(null)});
  assert.equal((await call(env,'/api/leave-requests','POST',{...form,reason:'ไม่จำกัดสิทธิ์'},2)).status,201);
 });

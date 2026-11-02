@@ -1,3 +1,4 @@
+import {seedLeaveCalendar} from './leave-calendar.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -46,6 +47,7 @@ test('notification badge counts every unread message even when the panel display
 });
 test('new and existing leave requests notify the personnel head and their linked accounts, without notifying unrelated teachers',async()=>{
  const env=await fixture();await call(env,'/api/overview');await call(env,'/api/notifications');
+ seedLeaveCalendar(env);
  const person=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
  assert.equal((await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:true})).status,200);
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'linked@test','x','x','บัญชีหัวหน้าฝ่าย','teacher');`);

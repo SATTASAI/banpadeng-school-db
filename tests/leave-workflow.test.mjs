@@ -1,3 +1,4 @@
+import {seedLeaveCalendar} from './leave-calendar.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
@@ -7,6 +8,7 @@ import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
 const form={leave_type:'sick',reason:'มีไข้ ไปพบแพทย์',position:'ครู',request_date:'2026-10-06',start_date:'2026-10-06',end_date:'2026-10-06',leave_days:0.5,contact_address:'บ้านพักครู ที่อยู่ตัวอย่าง',contact_phone:'0000000000'};
 async function setup(){
  const env=await fixture();
+ seedLeaveCalendar(env);
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
  (4,'director@test','x','x','ผู้อำนวยการตัวอย่าง','executive'),(5,'deputy@test','x','x','รองผู้บริหารตัวอย่าง','executive'),(6,'other@test','x','x','รองฝ่ายอื่น','executive');
  INSERT INTO staff_profiles(user_id,position) VALUES(4,'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),(5,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),(6,'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง');`);
@@ -121,6 +123,7 @@ test('all leave types require reasons and contact details, real dates and valid 
 });
 test('form statistics and previous leave include canonical linked accounts, approved records only and the fiscal period',async()=>{
  const {env}=await setup();
+ await call(env,'/api/leave-settings','PATCH',{limits:[{leave_type:'general',max_count:null},{leave_type:'lenient',max_count:2}]});
  const p=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=2').get();
  env.raw.exec("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(7,'linked@test','x','x','บัญชีเดิมครู ก','teacher')");env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) VALUES(7,?)').run(p.id);
  env.raw.exec(`INSERT INTO leave_requests(user_id,leave_type,start_date,end_date,leave_days,status) VALUES
