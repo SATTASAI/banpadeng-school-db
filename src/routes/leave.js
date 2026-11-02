@@ -178,6 +178,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),
    can_record:false,can_forward:false,
    can_review:false,
+   can_acknowledge_approve:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&['submitted','acknowledged','forwarded'].includes(r.workflow_stage),
    can_decide:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
    is_personnel_head:head,can_manage_delegations:director,is_leave_management:management,can_view_all_leave:admin||management,can_approve_leave:canDecide,
@@ -261,12 +262,32 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
   }
   if(action==='review')return fail('รองผู้อำนวยการรับข้อมูลเพื่อทราบ ผู้อำนวยการเป็นผู้อนุมัติ',403);
-  if(action==='decide') {
+  if(action==='decide'||action==='acknowledge_approve') {
+   const combined=action==='acknowledge_approve';
    if(!canDecide)return fail('เฉพาะผู้อำนวยการหรือรองผู้อำนวยการที่ได้รับมอบสิทธิ์จาก ผอ.',403);
-   if(row.status!=='pending'||row.workflow_stage!=='forwarded')return fail('คำขอยังไม่ถูกส่งต่อ หรือมีผลพิจารณาแล้ว',409);
-   if(!['approved','rejected'].includes(body.status))return fail('กรุณาเลือกอนุญาตหรือไม่อนุญาต');
+   if(row.status!=='pending'||!(combined?['submitted','acknowledged','forwarded']:['forwarded']).includes(row.workflow_stage))return fail('คำขอยังไม่พร้อมพิจารณา หรือมีผลพิจารณาแล้ว',409);
+   if(combined?body.status!==undefined&&body.status!=='approved':!['approved','rejected'].includes(body.status))return fail('กรุณาเลือกอนุญาตหรือไม่อนุญาต');
    const applicant=await env.DB.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').bind(row.user_id).first();
    if(Number(row.user_id)===Number(user.id)||Number(applicant?.personnel_id)===Number(person.id))return fail('ไม่สามารถอนุมัติการลาของตนเองได้',403);
+   if(combined){
+    // Match the stage read above: a concurrent head acknowledgement or decision must not
+    // overwrite its history. All result, acknowledgement, event and audit writes are atomic.
+    const currentDirector=people.find(isDirector);
+    const results=await env.DB.batch([
+     env.DB.prepare(`UPDATE leave_requests SET status='approved',workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,
+      acknowledged_by=COALESCE(acknowledged_by,?),acknowledged_at=COALESCE(acknowledged_at,?),
+      director_name=COALESCE(director_name,?),director_position=COALESCE(director_position,?)
+      WHERE id=? AND status='pending' AND workflow_stage=?
+      AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))`)
+      .bind(user.id,now,note,person.full_name,person.position,user.id,now,currentDirector?.full_name??null,currentDirector?.position??null,id,row.workflow_stage,director?1:0,person.id),
+     env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note)
+      SELECT ?,?,action,? FROM (SELECT 'acknowledged' action,0 ordering WHERE ?=1 UNION ALL SELECT 'approved',1)
+      WHERE changes()>0 ORDER BY ordering`).bind(id,user.id,note,row.acknowledged_at?0:1),
+     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'approved','leave_request',?,? WHERE changes()>0")
+      .bind(user.id,id,JSON.stringify({action:'acknowledge_approve',previous_stage:row.workflow_stage}))
+    ]);
+    return results[0].meta.changes?json({ok:true}):fail('สถานะหรือสิทธิ์เปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
+   }
    return change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?
     WHERE id=? AND status='pending' AND workflow_stage='forwarded'
     AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))`,[body.status,user.id,now,note,person.full_name,person.position,id,director?1:0,person.id],body.status);
