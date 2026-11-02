@@ -1,3 +1,4 @@
+import {seedLeaveCalendar} from './leave-calendar.mjs';
 import test from "node:test";
 import assert from "node:assert/strict";
 import { fixture, call } from "./notifications.test.mjs";
@@ -19,7 +20,7 @@ function mockLine(quota = { type: "none" }, usage = 0) {
 }
 
 async function setup() {
-  const env = await fixture();
+  const env = await fixture();seedLeaveCalendar(env);
   env.LINE_CHANNEL_ACCESS_TOKEN = "token";
   env.PUBLIC_BASE_URL = "https://school.test";
   await call(env, "/api/overview");

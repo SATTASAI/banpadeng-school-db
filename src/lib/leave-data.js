@@ -29,6 +29,8 @@ export function ensureLeaveData(env) {
     created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
    env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_leave_reviewers_user ON leave_reviewers(user_id,leave_id)'),
    env.DB.prepare('CREATE TABLE IF NOT EXISTS leave_limits (leave_type TEXT PRIMARY KEY,max_count INTEGER CHECK(max_count IS NULL OR max_count>=0))'),
+   env.DB.prepare("CREATE TABLE IF NOT EXISTS leave_term_limits (leave_type TEXT PRIMARY KEY CHECK(leave_type IN ('general','lenient')),max_count INTEGER CHECK(max_count IS NULL OR max_count>=0))"),
+   env.DB.prepare("INSERT OR IGNORE INTO leave_term_limits(leave_type,max_count) VALUES('general',2),('lenient',2)"),
    env.DB.prepare("CREATE TABLE IF NOT EXISTS leave_settings (id INTEGER PRIMARY KEY CHECK(id=1),deputy_personnel_id INTEGER,line_template TEXT)")
   ]);
   const {results:settingColumns}=await env.DB.prepare('PRAGMA table_info(leave_settings)').all();

@@ -1,3 +1,4 @@
+import {seedLeaveCalendar} from './leave-calendar.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -36,7 +37,7 @@ test('dashboard includes earlier-year projects and immediately reflects allocati
 });
 
 test('leave counts update on request, approval and deletion and selected-year days clip a cross-year leave',async()=>{
- const env=sharedEnv;const before=await (await call(env,'/api/overview')).json();
+ const env=sharedEnv;seedLeaveCalendar(env);const before=await (await call(env,'/api/overview')).json();
  const form={reason:'เหตุผลทดสอบ',position:'ครู',contact_address:'ที่อยู่ทดสอบ',contact_phone:'0000000000'};
  const created=await call(env,'/api/leave-requests','POST',{...form,leave_type:'sick',start_date:'2026-09-30',end_date:'2026-10-02'},2);assert.equal(created.status,201);const{id}=await created.json();
  let data=await (await call(env,'/api/overview')).json();assert.notEqual(data.data_revision,before.data_revision);assert.equal(data.leave_summary.pending,1);assert.equal(data.pending_leave_requests,1);
