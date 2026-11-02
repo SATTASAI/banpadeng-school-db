@@ -3,6 +3,47 @@ import assert from "node:assert/strict";
 import { fixture, form } from "./student-transfers.fixture.mjs";
 import worker from "../src/index.js";
 import { signJWT } from "../src/lib/crypto.js";
+test("student sorting orders the full roster before pagination and accepts only known sort options", async () => {
+  const { call, env } = await fixture();
+  const insert = env.raw.prepare(
+    "INSERT INTO students(student_code,full_name,grade_level,classroom,status) VALUES(?,?,?,?,?)",
+  );
+  for (let i = 1; i <= 105; i++)
+    insert.run(
+      String(i),
+      "Name " + String(106 - i).padStart(3, "0"),
+      i % 3 === 0 ? "อนุบาล 3" : i % 3 === 1 ? "ป.2" : "ม.1",
+      String((i % 2) + 1),
+      "enrolled",
+    );
+  let data = await (
+    await call("/students?sort=code&order=asc&offset=100")
+  ).json();
+  assert.deepEqual(
+    data.students.map((s) => s.student_code),
+    ["101", "102", "103", "104", "105", "1001"],
+  );
+  data = await (await call("/students?sort=code&order=desc&offset=100")).json();
+  assert.deepEqual(
+    data.students.map((s) => s.student_code),
+    ["6", "5", "4", "3", "2", "1"],
+  );
+  data = await (await call("/students?sort=name&order=asc&q=Name")).json();
+  assert.equal(data.students[0].full_name, "Name 001");
+  data = await (await call("/students?sort=name&order=desc&q=Name")).json();
+  assert.equal(data.students[0].full_name, "Name 105");
+  data = await (await call("/students?sort=grade&order=asc&q=Name")).json();
+  assert.equal(data.students[0].grade_level, "อนุบาล 3");
+  data = await (await call("/students?sort=grade&order=desc&q=Name")).json();
+  assert.equal(data.students[0].grade_level, "ม.1");
+  for (const query of [
+    "sort=invalid",
+    "order=invalid",
+    "sort=full_name%3BDROP%20TABLE%20students",
+  ])
+    assert.equal((await call("/students?" + query)).status, 400);
+  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM students").get().n, 106);
+});
 test("200-row import stays within bounded statement sizes and commits every row", async () => {
   const { call, env } = await fixture();
   const original = env.DB.prepare;

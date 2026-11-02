@@ -135,6 +135,8 @@ export async function handleTransferExtras(
     const url = new URL(request.url),
       q = (url.searchParams.get("q") || "").trim().slice(0, 100),
       status = url.searchParams.get("status") || "",
+      sort = url.searchParams.get("sort") || "grade",
+      order = url.searchParams.get("order") || "asc",
       offset = Math.floor(
         Math.max(
           0,
@@ -146,6 +148,20 @@ export async function handleTransferExtras(
       !["enrolled", "transferred", "withdrawn", "graduated"].includes(status)
     )
       return reply({ error: "สถานะไม่ถูกต้อง" }, 400);
+    if (
+      !["name", "code", "grade"].includes(sort) ||
+      !["asc", "desc"].includes(order)
+    )
+      return reply({ error: "รูปแบบการจัดเรียงไม่ถูกต้อง" }, 400);
+    const direction = order === "desc" ? "DESC" : "ASC";
+    const numericCode = `CASE WHEN student_code<>'' AND student_code NOT GLOB '*[^0-9]*' THEN 0 ELSE 1 END ASC, CASE WHEN student_code<>'' AND student_code NOT GLOB '*[^0-9]*' THEN CAST(student_code AS INTEGER) END ${direction},student_code COLLATE NOCASE ${direction}`;
+    const gradeRank = `(CASE WHEN grade_level LIKE '%อนุบาล%' OR grade_level LIKE 'อ.%' THEN 0 WHEN grade_level LIKE '%ประถม%' OR grade_level LIKE 'ป.%' THEN 10 WHEN grade_level LIKE '%มัธยม%' OR grade_level LIKE 'ม.%' THEN 20 ELSE 30 END + CASE WHEN substr(trim(grade_level),-1) GLOB '[0-9]' THEN CAST(substr(trim(grade_level),-1) AS INTEGER) ELSE 0 END)`;
+    const orderBy =
+      sort === "name"
+        ? `full_name COLLATE NOCASE ${direction},${numericCode},id ${direction}`
+        : sort === "code"
+          ? `${numericCode},id ${direction}`
+          : `${gradeRank} ${direction},grade_level COLLATE NOCASE ${direction},CAST(COALESCE(classroom,'0') AS INTEGER) ${direction},classroom COLLATE NOCASE ${direction},${numericCode},id ${direction}`;
     const conditions = [],
       args = [];
     if (q) {
@@ -161,7 +177,7 @@ export async function handleTransferExtras(
     const where = conditions.length ? " WHERE " + conditions.join(" AND ") : "";
     const [rows, count] = await Promise.all([
       env.DB.prepare(
-        `SELECT id,student_code,full_name,grade_level,classroom,status FROM students${where} ORDER BY grade_level,classroom,student_code,id LIMIT 100 OFFSET ?`,
+        `SELECT id,student_code,full_name,grade_level,classroom,status FROM students${where} ORDER BY ${orderBy} LIMIT 100 OFFSET ?`,
       )
         .bind(...args, offset)
         .all(),
