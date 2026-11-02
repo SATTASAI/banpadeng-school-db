@@ -118,6 +118,19 @@ export async function handleTransferExtras(
   user,
   normalize,
 ) {
+  const selectedStudent = path.match(
+    /^\/api\/student-transfers\/students\/(\d+)$/,
+  );
+  if (selectedStudent && method === "GET") {
+    const student = await env.DB.prepare(
+      "SELECT id,student_code,full_name,grade_level,classroom,status FROM students WHERE id=?",
+    )
+      .bind(Number(selectedStudent[1]))
+      .first();
+    return student
+      ? reply({ student })
+      : reply({ error: "ไม่พบนักเรียนในทะเบียนกลาง" }, 404);
+  }
   if (path === "/api/student-transfers/students" && method === "GET") {
     const url = new URL(request.url),
       q = (url.searchParams.get("q") || "").trim().slice(0, 100),

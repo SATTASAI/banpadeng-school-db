@@ -132,6 +132,13 @@ test("iframe student API reads shared roster with pagination and excludes privat
     0,
   );
   assert.equal((await call("/students?status=invalid")).status, 400);
+  const selected = await (await call("/students/" + d.students[0].id)).json();
+  assert.deepEqual(selected.student, d.students[0]);
+  assert.equal(
+    (await call("/students/" + d.students[0].id, "GET", undefined, 3)).status,
+    403,
+  );
+  assert.equal((await call("/students/99999999")).status, 404);
 });
 test("import preview never writes; confirmation is atomic and retries are idempotent", async () => {
   const { call, env, revision } = await fixture();
