@@ -12,7 +12,7 @@
  function workScopeFor(area,topics){const keys=String(topics||'').split(',').filter(Boolean);if(!keys.length)return null;return Object.entries(workScopes).find(([,s])=>s.contexts[area]&&keys.every(k=>s.contexts[area].includes(k)))?.[0]||null;}
  const item=(label,url)=>({label,url});
  const groups={
-  administration:[{label:'นิเทศการสอน',url:'/supervision-admin.html',supervisionOnly:'evaluate'},{label:'ประเมินผลการนิเทศ',url:'/supervision-admin.html?view=summary',supervisionOnly:'view_all'},{label:'ประเมินผลการปฏิบัติงาน',url:'https://evaluate.banpadengschool.ac.th/',external:true,evaluationOnly:true}],
+  administration:[item('อนุมัติการลา','/leave.html?view=approval'),{label:'นิเทศการสอน',url:'/supervision-admin.html',supervisionOnly:'evaluate'},{label:'ประเมินผลการนิเทศ',url:'/supervision-admin.html?view=summary',supervisionOnly:'view_all'},{label:'ประเมินผลการปฏิบัติงาน',url:'https://evaluate.banpadengschool.ac.th/',external:true,evaluationOnly:true}],
   students:[item('วิเคราะห์ผู้เรียน','/learner-analysis.html')],
   academic:[item('หลักสูตรและแผนสอน','/work-center.html?area=academic&topic=0,2'),item('โครงการ','/department.html?dept=academic'),{label:'ตารางสอน',url:'/timetable.html',timetableViewOnly:true},item('จัดตารางสอน','/timetable-auto.html'),item('โครงเวลาเรียน','/timetable-structure.html'),item('สอบและวัดผล','/work-center.html?area=academic&topic=4,6'),item('ประกันคุณภาพ','/work-center.html?area=academic&topic=7'),{label:'งานนิเทศภายใน',url:'/supervision-admin.html?view=results',supervisionOnly:'view_all|manage_evaluators'},{label:'ป่าเด็งโมเดล',url:'/padeng-model.html?view=progress',academicOnly:true},{label:'วิจัยในชั้นเรียน',url:'/classroom-research.html?view=progress',academicOnly:true},{label:'แผนการจัดการเรียนการสอน',url:'/lesson-plans.html',lessonPlanOnly:true},{label:'Q-Info',url:'https://qinfo.co/',external:true},{label:'ภาพรวม Q-Info',url:'https://qinfo.co/dashboard/index.html?information',external:true}],
   early_childhood:[item('โครงการ','/department.html?dept=early_childhood'),item('หลักสูตรและแผน','/work-center.html?area=early_childhood&topic=0,1'),item('พัฒนาการเด็ก','/work-center.html?area=early_childhood&topic=2'),item('กิจกรรมอนุบาล','/work-center.html?area=early_childhood&topic=3'),item('สื่อและสุขภาวะ','/work-center.html?area=early_childhood&topic=4,5'),item('ผู้ปกครองและคุณภาพ','/work-center.html?area=early_childhood&topic=6,7')],
@@ -35,6 +35,7 @@
  function parentFor(key,url){
   const u=new URL(url||routes[key]||'/','https://school.invalid'),path=u.pathname.replace(/\.html$/,'');
   if(path==='/budget'&&u.searchParams.get('view')==='roles')return 'approvers';
+  if(path==='/leave'&&u.searchParams.get('view')==='approval')return 'administration';
   if(path==='/budget'&&u.searchParams.get('view')==='requests')return 'finance-requests';
   if(path==='/procurement')return u.searchParams.get('mine')==='1'?'finance-requests':'budget';
   if(path==='/supervision-admin'&&['results','evaluators'].includes(u.searchParams.get('view')))return 'academic';

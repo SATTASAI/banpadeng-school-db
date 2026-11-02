@@ -1,4 +1,31 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
+test('administration approval view lists pending leaves for read-only deputies and lets director grant or revoke individually',async()=>{
+ for(const director of [false,true]){
+  const nodes=new Map();let click,granted=false;
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
+  const ctx=vm.createContext({URLSearchParams,location:{search:'?view=approval'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(){},apiRequest:async(path,options)=>{
+   if(path==='/api/auth/me')return {user:{id:director?4:5,role:'executive'}};
+   if(path.startsWith('/api/leave-allowance'))throw Error('approval page must not load personal allowance');
+   if(path==='/api/leave-delegations'){
+    if(options){assert.equal(options.body.personnel_id,5);granted=options.body.can_approve;return {ok:true};}
+    return {deputies:[{id:5,full_name:'รอง <script>',position:'รองผู้อำนวยการ',can_approve:granted}]};
+   }
+   return {profile:{},is_leave_management:true,can_manage_delegations:director,can_approve_leave:director,leave_requests:[
+    {id:9,full_name:'ครูทดสอบ',leave_type:'sick',workflow_stage:'forwarded',status:'pending',can_decide:director},
+    {id:10,full_name:'ยังไม่ส่งต่อ',workflow_stage:'submitted',status:'pending'}]};
+  }});
+  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+  assert.equal(node('leaveTitle').textContent,'อนุมัติการลา');assert.equal(node('newLeaveSection').hidden,true);
+  assert.equal(node('pendingSection').hidden,false);assert.match(node('pendingPanel').innerHTML,/ครูทดสอบ/);assert.doesNotMatch(node('pendingPanel').innerHTML,/ยังไม่ส่งต่อ/);
+  assert.equal(node('delegationSettings').hidden,!director);
+  if(!director){assert.doesNotMatch(node('pendingPanel').innerHTML,/data-action="approved"|data-action="rejected"/);assert.match(node('approvalAccess').textContent,/ยังไม่มีสิทธิ์/);continue;}
+  assert.match(node('delegationList').innerHTML,/รอง &lt;script&gt;/);
+  for(const value of ['true','false']){
+   await click({target:{closest:()=>({dataset:{delegate:'5',grant:value},disabled:false})}});
+   assert.equal(granted,value==='true');assert.match(node('delegationList').innerHTML,value==='true'?/ถอนสิทธิ์อนุมัติ/:/มอบสิทธิ์อนุมัติ/);
+  }
+ }
+});
 test('head inbox acknowledges and forwards in one action, escapes text and retains draft notes on refresh',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{

@@ -12,12 +12,13 @@
   <div class="app-user"><a href="/dashboard.html" id="backHomeLink">← กลับหน้าหลัก</a></div>
  </div>
  <main class="app-main">
-  <h2>การลา</h2>
-  <p class="muted">ครูยื่นใบลา → หัวหน้าฝ่ายบุคลากรกดรับทราบ → ระบบส่งข้อมูลถึง ผอ. และรอง ผอ. ที่รับผิดชอบ → ผอ. อนุมัติ → บันทึกสถิติ</p>
+  <h2 id="leaveTitle">การลา</h2>
+  <p id="approvalAccess" class="muted" hidden></p>
+  <p class="muted">ครูยื่นใบลา → หัวหน้าฝ่ายบุคลากรกดรับทราบ → ระบบส่งข้อมูลถึงผู้บริหาร → ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์อนุมัติ → บันทึกสถิติ</p>
   <div class="error-box" id="errorBox" role="alert"></div>
   <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
-  <section class="panel leave-panel">
+  <section class="panel leave-panel" id="newLeaveSection">
    <h3>ยื่นใบลาใหม่</h3>
    <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
    <form id="leaveForm" novalidate>
@@ -53,6 +54,11 @@
    <div class="leave-actions"><button class="btn btn-ghost" id="insertLeaveReason" type="button">แทรกเหตุผลการลา</button><button class="btn btn-ghost" id="insertLeaveDates" type="button">แทรกวันที่ลา</button><button class="btn btn-ghost" id="insertLeavePhone" type="button">แทรกเบอร์โทรศัพท์ครู</button></div>
    <p class="muted">ตัวอย่างข้อความที่จะส่ง</p><pre id="leaveLinePreview" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
    <button class="btn btn-primary" id="saveLeaveLineTemplate" type="button">บันทึกข้อความ LINE</button></div>
+  </section>
+  <section id="delegationSettings" class="panel leave-panel" hidden>
+   <h3>ให้สิทธิ์อนุมัติการลาแก่รอง ผอ.</h3>
+   <p class="muted">ผอ. มอบหรือถอนสิทธิ์ได้เป็นรายคน รอง ผอ. ที่ยังไม่ได้รับสิทธิ์ดูข้อมูลได้อย่างเดียว สิทธิ์มีผลกับใบลาที่ฝ่ายบุคคลส่งต่อแล้ว และไม่อนุญาตให้อนุมัติการลาของตนเอง</p>
+   <div id="delegationList"></div>
   </section>
   <section id="pendingSection" hidden><h3>รายการรอดำเนินการ</h3><div class="panel" id="pendingPanel"></div></section>
   <section id="detailSection" class="panel leave-panel" hidden aria-live="polite"><div class="leave-detail-heading"><h3>รายละเอียดใบลา</h3><button class="btn btn-ghost" id="closeDetail" type="button">ปิดรายละเอียด</button></div><div id="detailPanel"></div></section>

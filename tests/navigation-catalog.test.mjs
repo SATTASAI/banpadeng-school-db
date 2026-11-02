@@ -2,6 +2,11 @@ import test from 'node:test';import assert from 'node:assert/strict';import fs f
 import {WORK_SCOPES,workScopeCondition,workScopeSummary} from '../src/lib/work-scopes.js';
 const ctx=vm.createContext({URL});vm.runInContext(fs.readFileSync('public/js/navigation-catalog.js','utf8'),ctx);const n=ctx.SchoolNavigation;
 const plain=value=>JSON.parse(JSON.stringify(value));
+test('leave approval is under administration and personal leave keeps its own navigation',()=>{
+ assert(n.groups.administration.some(i=>i.label==='อนุมัติการลา'&&i.url==='/leave.html?view=approval'));
+ assert.equal(n.parentFor('leave','/leave.html?view=approval'),'administration');
+ assert.equal(n.parentFor('leave','/leave.html'),'leave');
+});
 test('menu destinations are unique, concise, and implemented; budget tabs remain distinct',()=>{
  const html=fs.readFileSync('public/dashboard.html','utf8'),parents=[...html.matchAll(/<a\b[^>]*data-page="([^"]+)"/g)].map(m=>m[1]),urls=parents.map(k=>n.routes[k]);
  for(const [key,links] of Object.entries(n.groups)) {assert(parents.includes(key),key);urls.push(...links.map(i=>i.url));}

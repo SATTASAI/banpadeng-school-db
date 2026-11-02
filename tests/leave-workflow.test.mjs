@@ -20,6 +20,68 @@ async function setup(){
  return {env,deputy};
 }
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
+
+test('only the current director grants individual deputy approval; revoke applies to existing requests immediately',async()=>{
+ const {env,deputy}=await setup(),endpoint='/api/leave-delegations';
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ await call(env,path,'PATCH',{action:'acknowledge'},3);
+ for(const uid of [1,2,3,5,6]){
+  assert.equal((await call(env,endpoint,'GET',undefined,uid)).status,403);
+  assert.equal((await call(env,endpoint,'PATCH',{personnel_id:deputy,can_approve:true},uid)).status,403);
+ }
+ // All current deputies can read forwarded requests, including deputies not assigned the LINE notice.
+ assert.equal((await call(env,path,'GET',undefined,6)).status,200);
+ const list=async uid=>(await (await call(env,'/api/leave-requests','GET',undefined,uid)).json());
+ assert.equal((await list(5)).leave_requests.find(r=>r.id===id).can_decide,false);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ for(const body of [{personnel_id:deputy,can_approve:'true'},{personnel_id:String(deputy),can_approve:true},{personnel_id:9999,can_approve:true}])assert.equal((await call(env,endpoint,'PATCH',body,4)).status,400);
+ assert.equal((await call(env,endpoint,'PATCH',{personnel_id:deputy,can_approve:true},4)).status,200);
+ let permissions=await (await call(env,endpoint,'GET',undefined,4)).json();
+ assert.equal(permissions.deputies.find(p=>p.id===deputy).can_approve,true);
+ assert.equal((await list(5)).leave_requests.find(r=>r.id===id).can_decide,true);
+ assert.equal((await list(6)).leave_requests.find(r=>r.id===id).can_decide,false);
+ assert.equal((await call(env,endpoint,'PATCH',{personnel_id:deputy,can_approve:false},4)).status,200);
+ assert.equal((await list(5)).leave_requests.find(r=>r.id===id).can_decide,false);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ await call(env,endpoint,'PATCH',{personnel_id:deputy,can_approve:true},4);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,200);
+ const result=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+ assert.equal(result.approved_by,5);assert.equal(result.decision_name,'รองผู้บริหารตัวอย่าง');
+ assert.equal((await call(env,path,'PATCH',{status:'rejected'},4)).status,409);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM audit_logs WHERE resource='leave_approval_delegation'").get().n,3);
+ assert.equal((await call(env,path,'GET',undefined,6)).status,200);
+});
+
+test('revocation between permission read and decision update prevents the decision and its history',async()=>{
+ const {env,deputy}=await setup();
+ await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ await call(env,path,'PATCH',{action:'acknowledge'},3);
+ const batch=env.DB.batch.bind(env.DB);
+ env.DB.batch=statements=>{env.raw.prepare('DELETE FROM leave_approval_delegations WHERE personnel_id=?').run(deputy);return batch(statements);};
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,409);
+ assert.equal(env.raw.prepare('SELECT status FROM leave_requests WHERE id=?').get(id).status,'pending');
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='approved'").get(id).n,0);
+});
+
+test('delegation cannot approve a deputy own or linked leave, or survive losing executive role or current position',async()=>{
+ const {env,deputy}=await setup();
+ await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ await call(env,path,'PATCH',{action:'acknowledge'},3);
+ env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(deputy);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();assert.equal(list.leave_requests.find(r=>r.id===id).can_decide,false);
+ env.raw.prepare('UPDATE leave_requests SET user_id=5 WHERE id=?').run(id);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ env.raw.exec("UPDATE users SET role='executive' WHERE id=5");
+ env.raw.prepare("UPDATE personnel_records SET position='ครู' WHERE id=?").run(deputy);
+ assert.equal((await call(env,path,'PATCH',{status:'approved'},5)).status,403);
+ env.raw.exec("UPDATE personnel_records SET position='ครู' WHERE id=(SELECT personnel_id FROM personnel_accounts WHERE user_id=4)");
+ assert.equal((await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4)).status,403);
+});
 test('head acknowledgement forwards once to director and responsible deputy; only director decides, then statistics update',async()=>{
  const {env,deputy}=await setup();
  const created=await call(env,'/api/leave-requests','POST',form,2);assert.equal(created.status,201);
@@ -27,7 +89,7 @@ test('head acknowledgement forwards once to director and responsible deputy; onl
  assert(await notice(env,3,'leave:'+id+':pending'));assert(!await notice(env,5,'leave:'+id+':pending'));assert(!await notice(env,4,'leave:'+id+':pending'));
  assert.equal((await call(env,path,'GET',undefined,5)).status,403);
  for(const uid of [1,2,4,5,6])assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},uid)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,409);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge',note:'ตรวจสอบแล้ว'},3)).status,200);
  let row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
  assert.equal(row.workflow_stage,'forwarded');assert.equal(row.status,'pending');assert.equal(row.deputy_personnel_id,deputy);

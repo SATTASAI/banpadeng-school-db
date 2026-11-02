@@ -1,6 +1,8 @@
 (function(){
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const approvalView=new URLSearchParams(location.search).get('view')==='approval';
+ if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;}
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
  const quotaLabels={general:'ลาทั่วไป (รวมทุกประเภท ยกเว้นลาอนุโลม)',lenient:'ลาอนุโลม'};
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
@@ -52,10 +54,18 @@
  }
  async function load(){
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
-  await loadAllowance();
+  if(approvalView)records=records.filter(r=>['forwarded','completed'].includes(r.workflow_stage));
+  else await loadAllowance();
+  $('approvalAccess').hidden=!approvalView;
+  $('approvalAccess').textContent=!data.is_leave_management?'หน้านี้สำหรับ ผอ. และรอง ผอ.':data.can_approve_leave?'คุณมีสิทธิ์อนุมัติการลาที่ฝ่ายบุคคลส่งต่อแล้ว':'คุณดูข้อมูลการลาได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  $('delegationSettings').hidden=!data.can_manage_delegations;
+  if(data.can_manage_delegations){
+   const permissions=await apiRequest('/api/leave-delegations');
+   $('delegationList').innerHTML=permissions.deputies.map(p=>`<article class="leave-row"><h4>${esc(p.full_name)}</h4><p>${esc(p.position)}</p><p>${p.can_approve?'มีสิทธิ์อนุมัติการลา':'ดูข้อมูลได้อย่างเดียว'}</p>${p.grant?`<p class="muted">มอบสิทธิ์โดย ${esc(p.grant.granted_by_name)} · ${esc(p.grant.granted_at)}</p>`:''}<button type="button" class="btn ${p.can_approve?'btn-ghost':'btn-primary'}" data-delegate="${Number(p.id)}" data-grant="${!p.can_approve}">${p.can_approve?'ถอนสิทธิ์อนุมัติ':'มอบสิทธิ์อนุมัติ'}</button></article>`).join('')||'<p class="muted">ยังไม่มีรอง ผอ. ที่มีบัญชีผู้บริหารใช้งานอยู่ กรุณาตรวจทะเบียนบุคลากร</p>';
+  }
   const draftNotes=new Map([...document.querySelectorAll('.leave-note')].map(n=>[n.id,n.value]));
   const selected=$('deputyChoice').value||data.default_deputy_id||'';
-  const canConfigure=data.is_personnel_head||user.role==='superadmin';
+  const canConfigure=!approvalView&&(data.is_personnel_head||user.role==='superadmin');
   $('headSettings').hidden=!canConfigure;
   $('lineTemplateSettings').hidden=user.role!=='superadmin';
   if(canConfigure){
@@ -66,7 +76,7 @@
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
-  const pending=records.filter(r=>r.can_acknowledge||r.can_decide);
+  const pending=records.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
   $('historyPanel').innerHTML=records.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
@@ -145,6 +155,11 @@
  };
  document.addEventListener('click',async e=>{
   const button=e.target.closest('button');if(!button||busy)return;
+  if(button.dataset.delegate){
+   busy=true;button.disabled=true;
+   try{await apiRequest('/api/leave-delegations',{method:'PATCH',body:{personnel_id:Number(button.dataset.delegate),can_approve:button.dataset.grant==='true'}});success(button.dataset.grant==='true'?'มอบสิทธิ์อนุมัติการลาแล้ว':'ถอนสิทธิ์อนุมัติการลาแล้ว');await load();}
+   catch(e){error(e);}finally{busy=false;button.disabled=false;}return;
+  }
   const id=Number(button.dataset.id||button.dataset.detail);if(!id)return;
   busy=true;button.disabled=true;
   try{
