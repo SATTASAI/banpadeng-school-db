@@ -156,6 +156,57 @@ test('published timetable limits registration to the teacher’s own lessons; ca
  assert.equal((await json(env,'/api/supervision/requests','POST',{visit_date:'2020-01-07',period:1,supervision_type:'teaching'},2)).status,400,'past dates rejected');
 });
 
+function publishPlan(env){
+ env.raw.exec(`CREATE TABLE IF NOT EXISTS timetable_plans(id INTEGER PRIMARY KEY AUTOINCREMENT,academic_term_id INTEGER NOT NULL,status TEXT NOT NULL,created_by INTEGER NOT NULL,created_at TEXT NOT NULL DEFAULT(datetime('now')),published_at TEXT);
+ CREATE TABLE IF NOT EXISTS timetable_entries(id INTEGER PRIMARY KEY AUTOINCREMENT,plan_id INTEGER NOT NULL,grade_level TEXT NOT NULL,classroom TEXT NOT NULL,weekday INTEGER NOT NULL,period INTEGER NOT NULL,subject TEXT NOT NULL,teacher_id INTEGER NOT NULL,room_name TEXT);
+ INSERT INTO timetable_plans(id,academic_term_id,status,created_by) VALUES(9,90,'published',1);`);
+}
+test('kindergarten teacher without timetable follows the normal registration, acceptance and evaluation workflow',async()=>{
+ const {env,pid}=await school();publishPlan(env);
+ env.raw.prepare("UPDATE personnel_records SET homeroom_classroom='อ.2/1' WHERE id=?").run(pid(2));
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2);
+ assert.equal(week.terms[0].mode,'manual');assert.equal(week.terms[0].kindergarten_manual,true);
+ assert.equal(week.terms[0].lessons.length,0);
+ const invalid=await json(env,'/api/supervision/requests','POST',manual,2);
+ assert.equal(invalid.status,400);assert.match(invalid.body.error,/เฉพาะชั้นอนุบาล/);
+ const r=(await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.2',subject:'กิจกรรมเสริมประสบการณ์'},2)).request;
+ assert.equal(r.source,'manual');assert.equal(r.grade_band,'k');assert.equal(r.status,'pending');
+ assert.equal(r.subject,'กิจกรรมเสริมประสบการณ์');
+ assert((await ok(env,'/api/notifications','GET',undefined,5)).notifications.some(n=>/กิจกรรมเสริมประสบการณ์/.test(n.message)));
+ const again=await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.2',period:3},2);
+ assert.equal(again.status,409);assert.match(again.body.error,/ภาคเรียนละ 1 ครั้ง/);
+ await ok(env,`/api/supervision/requests/${r.id}/accept`,'POST',{},5);
+ await ok(env,`/api/supervision/requests/${r.id}/evaluate`,'POST',{scores:FULL,suggestion:'จัดกิจกรรมได้ดี'},5);
+ const result=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests[0];
+ assert.equal(result.status,'evaluated');assert.equal(result.evaluation.total,100);assert.equal(result.evaluation.suggestion,'จัดกิจกรรมได้ดี');
+});
+test('only verified kindergarten teachers can bypass a published plan, and existing kindergarten lessons remain required',async()=>{
+ const {env,pid}=await school();publishPlan(env);
+ const week=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,3);
+ assert.equal(week.terms[0].mode,'timetable');assert.equal(week.terms[0].kindergarten_manual,false);
+ const forged=await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.1',kindergarten_manual:true,mode:'manual'},3);
+ assert.equal(forged.status,409);assert.match(forged.body.error,/ไม่มีคาบสอน/);
+ env.raw.prepare("UPDATE personnel_records SET homeroom_classroom='อนุบาล 3' WHERE id=?").run(pid(2));
+ env.raw.prepare("INSERT INTO timetable_entries(plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(9,'อ.3','1',1,3,'กิจกรรมสร้างสรรค์',?)").run(pid(2));
+ const own=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2);
+ assert.equal(own.terms[0].mode,'timetable');assert.equal(own.terms[0].kindergarten_manual,false);
+ assert.equal((await json(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.3'},2)).status,409);
+ const r=(await ok(env,'/api/supervision/requests','POST',{...manual,period:3,subject:'ปลอม'},2)).request;
+ assert.equal(r.source,'timetable');assert.equal(r.subject,'กิจกรรมสร้างสรรค์');
+});
+test('kindergarten membership is verified from department and term/year assignments',async()=>{
+ for(const kind of ['department','homeroom','class','course']){
+  const {env,pid}=await school();publishPlan(env);
+  if(kind==='department')env.raw.prepare("INSERT INTO department_staff(department,personnel_id) VALUES('early_childhood',?)").run(pid(2));
+  if(kind==='homeroom')env.raw.exec("CREATE TABLE gr_homerooms(user_id INTEGER,academic_year_id INTEGER,grade_level TEXT); INSERT INTO gr_homerooms VALUES(2,90,'อ.1');");
+  if(kind==='class')env.raw.exec("INSERT INTO learner_class_assignments(academic_term_id,teacher_user_id,grade_level,classroom,assigned_by) VALUES(90,2,'อ.1','1',1);");
+  if(kind==='course')env.raw.exec(`CREATE TABLE gr_subjects(id INTEGER,academic_year_id INTEGER,grade_level TEXT);CREATE TABLE gr_courses(id INTEGER,subject_id INTEGER);CREATE TABLE gr_course_teachers(course_id INTEGER,user_id INTEGER);
+   INSERT INTO gr_subjects VALUES(1,90,'อ.1');INSERT INTO gr_courses VALUES(1,1);INSERT INTO gr_course_teachers VALUES(1,2);`);
+  const w=await ok(env,'/api/supervision/week?start=2030-01-07','GET',undefined,2);
+  assert.equal(w.terms[0].kindergarten_manual,true,kind);
+  assert.equal((await ok(env,'/api/supervision/requests','POST',{...manual,grade_level:'อ.1'},2)).request.source,'manual',kind);
+ }
+});
 test('menus: teacher registration under support, executive pages under administration and academic',()=>{
  const nav=vm.createContext({URL});vm.runInContext(fs.readFileSync('public/js/navigation-catalog.js','utf8'),nav);
  const n=nav.SchoolNavigation,html=fs.readFileSync('public/dashboard.html','utf8');
