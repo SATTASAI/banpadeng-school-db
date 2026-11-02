@@ -16,104 +16,84 @@ async function setup(){
  const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
  await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true});
  const deputy=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=5').get().id;
+ env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
  return {env,deputy};
 }
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
-test('leave goes through personnel acknowledgement, saved records, explicit executive forwarding, deputy opinion and director decision',async()=>{
+test('head acknowledgement forwards once to director and responsible deputy; only director decides, then statistics update',async()=>{
  const {env,deputy}=await setup();
- env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
- const created=await call(env,'/api/leave-requests','POST',form,2);assert.equal(created.status,201);const {id}=await created.json();const path='/api/leave-requests/'+id;
- assert(await notice(env,3,`leave:${id}:pending`));assert(await notice(env,5,`leave:${id}:pending`));
- assert(!await notice(env,4,`leave:${id}:pending`));assert(!await notice(env,6,`leave:${id}:pending`));
- const earlyInbox=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();
- assert(earlyInbox.leave_requests.some(r=>r.id===id&&!r.can_acknowledge&&!r.can_record&&!r.can_forward&&!r.can_review&&!r.can_decide));
+ const created=await call(env,'/api/leave-requests','POST',form,2);assert.equal(created.status,201);
+ const {id}=await created.json(),path='/api/leave-requests/'+id;
+ assert(await notice(env,3,'leave:'+id+':pending'));assert(!await notice(env,5,'leave:'+id+':pending'));assert(!await notice(env,4,'leave:'+id+':pending'));
+ assert.equal((await call(env,path,'GET',undefined,5)).status,403);
+ for(const uid of [1,2,4,5,6])assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},uid)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge',note:'ตรวจสอบแล้ว'},3)).status,200);
+ let row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.workflow_stage,'forwarded');assert.equal(row.status,'pending');assert.equal(row.deputy_personnel_id,deputy);
+ assert.equal(row.acknowledged_by,3);assert(row.acknowledged_at);assert.equal(row.personnel_note,'ตรวจสอบแล้ว');assert.equal(row.reviewer_at,null);
+ assert(!await notice(env,3,'leave:'+id+':pending'));assert(await notice(env,4,'leave:'+id+':forwarded'));assert(await notice(env,5,'leave:'+id+':forwarded'));assert(!await notice(env,6,'leave:'+id+':forwarded'));
+ const delivery=await (await call(env,path+'/delivery','GET',undefined,3)).json();
+ assert.deepEqual(delivery.recipients.map(r=>r.kind).sort(),['deputy','director']);assert(delivery.recipients.every(r=>r.feed_has_notice));
+ const summaryBefore=await dashboardActivitySummary(env);assert.equal(summaryBefore.leave_summary.approved,0);
+ const deputyList=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();assert.equal(deputyList.leave_requests.find(r=>r.id===id).can_review,false);assert.equal(deputyList.leave_requests.find(r=>r.id===id).can_decide,false);
  assert.equal((await call(env,path,'GET',undefined,5)).status,200);
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},5)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},5)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'review',note:'ก่อนถึงคิว'},5)).status,403);
- assert.equal((await call(env,path,'GET',undefined,6)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},2)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},1)).status,403);
- assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,409);
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge',note:'ตรวจสอบใบลาแล้ว'},3)).status,200);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,409);
- assert(!await notice(env,3,`leave:${id}:pending`));assert(await notice(env,5,`leave:${id}:pending`));
  assert.equal((await call(env,path,'DELETE',undefined,2)).status,409);
- assert.equal((await call(env,path,'PATCH',{action:'record',note:'บันทึกในทะเบียนแล้ว'},3)).status,200);
- assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:9999},3)).status,400);
- assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,200);
- assert.equal((await call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)).status,409);
- assert(await notice(env,4,`leave:${id}:forwarded`));assert(await notice(env,5,`leave:${id}:forwarded`));assert(!await notice(env,6,`leave:${id}:forwarded`));
+ for(const uid of [1,2,3,5,6])assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},uid)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'review',note:'ความเห็น'},5)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved',note:'อนุมัติ'},4)).status,200);
  assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,409);
- assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},5)).status,403);
- await call(env,'/api/notifications/read','POST',{all:true},4);
- assert.equal((await call(env,path,'PATCH',{action:'review',note:'เห็นควรอนุญาต'},5)).status,200);
- assert(await notice(env,4,`leave:${id}:reviewed`));assert(!await notice(env,5,`leave:${id}:reviewed`));
- assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved',note:'อนุญาตตามเสนอ'},4)).status,200);
- assert.equal((await call(env,path,'PATCH',{action:'decide',status:'rejected'},4)).status,409);
- const detail=await (await call(env,path,'GET',undefined,3)).json();
- assert.equal(detail.leave_request.status,'approved');assert.equal(detail.leave_request.personnel_note,'บันทึกในทะเบียนแล้ว');assert.equal(detail.leave_request.deputy_name,'รองผู้บริหารตัวอย่าง');assert.equal(detail.leave_request.decision_name,'ผู้อำนวยการตัวอย่าง');
- assert.deepEqual(detail.events.map(e=>e.action),['submitted','acknowledged','recorded','forwarded','reviewed','approved']);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM audit_logs WHERE resource='leave_request' AND resource_id=?").get(String(id)).n,6);
- assert(await notice(env,2,`leave:${id}:approved`));
- const overview=await dashboardActivitySummary(env);assert.equal(overview.leave_summary.approved,1);assert.equal(overview.leave_summary.approved_days,0.5);assert.equal(overview.leave_summary.pending,0);
- const history=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert(history.leave_requests.some(r=>r.id===id));
- // Permissions follow current accounts, not the token or a stale page.
+ const detail=await (await call(env,path,'GET',undefined,2)).json();
+ assert.deepEqual(detail.events.map(e=>e.action),['submitted','acknowledged','forwarded','approved']);
+ assert.equal(detail.leave_request.deputy_name,'รองผู้บริหารตัวอย่าง');assert.equal(detail.leave_request.decision_name,'ผู้อำนวยการตัวอย่าง');
+ const summary=await dashboardActivitySummary(env);assert.equal(summary.leave_summary.approved,1);assert.equal(summary.leave_summary.approved_days,0.5);assert.equal(summary.leave_summary.pending,0);
+ assert(await notice(env,2,'leave:'+id+':approved'));
  env.raw.exec("UPDATE users SET role='teacher' WHERE id=5");assert.equal((await call(env,path,'GET',undefined,5)).status,403);
 });
-test('one active deputy gets an early read-only notice, but multiple unassigned deputies do not',async()=>{
- const {env,deputy}=await setup();
- const first=await (await call(env,'/api/leave-requests','POST',form,2)).json();
- assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(first.id).deputy_personnel_id,null);
- assert(!await notice(env,5,`leave:${first.id}:pending`));assert(!await notice(env,6,`leave:${first.id}:pending`));
- env.raw.exec("UPDATE users SET role='teacher' WHERE id=6");
- // ใบลาที่ข้อมูลเหมือนกันทุกช่องภายในไม่กี่วินาทีถือเป็นการกดส่งซ้ำ (submit-guard) จึงเปลี่ยนเหตุผล
- const second=await (await call(env,'/api/leave-requests','POST',{...form,reason:form.reason+' (ครั้งที่ 2)'},2)).json();
- assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(second.id).deputy_personnel_id,deputy);
- assert(await notice(env,5,`leave:${second.id}:pending`));
- assert.equal((await call(env,'/api/leave-requests/'+second.id,'PATCH',{action:'review',note:'ยังไม่ส่งต่อ'},5)).status,403);
-});
-test('head configures the early deputy before forwarding; unassigned pending leaves gain read-only access and LINE status is visible',async()=>{
- const {env,deputy}=await setup();
- const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json();
- assert.equal((await call(env,'/api/leave-settings','GET',undefined,2)).status,403);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},5)).status,403);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title}'},2)).status,403);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title}'},3)).status,403);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {unknown}'},1)).status,400);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:'ใบลา {title} เลขที่ {id}'},1)).status,200);
- assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,1)).json()).line_template,'ใบลา {title} เลขที่ {id}');
- assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,3)).json()).line_template,undefined);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{line_template:''},1)).status,200);
- assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:9999},3)).status,400);
- const settings=await (await call(env,'/api/leave-settings','GET',undefined,3)).json();
- assert.equal(settings.deputies.find(p=>p.id===deputy).line_status,'not_linked');
- env.raw.exec("INSERT INTO line_user_links(user_id,line_user_id,status) VALUES(5,'U-deputy','blocked')");
- assert.equal((await (await call(env,'/api/leave-settings','GET',undefined,3)).json()).deputies.find(p=>p.id===deputy).line_status,'blocked');
- assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3)).status,200);
- assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(id).deputy_personnel_id,deputy);
- assert(await notice(env,5,`leave:${id}:pending`));
- assert.equal((await call(env,`/api/leave-requests/${id}`,'GET',undefined,5)).status,200);
- assert.equal((await call(env,`/api/leave-requests/${id}`,'PATCH',{action:'review',note:'ก่อนส่งต่อ'},5)).status,403);
- const next=(await (await call(env,'/api/leave-requests','POST',{...form,reason:form.reason+' (ครั้งที่ 2)'},2)).json()).id;
- assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(next).deputy_personnel_id,deputy);
-});
-test('personnel-scoped deputy assignment resolves the first leave when there are several deputies',async()=>{
- const {env,deputy}=await setup();
- env.raw.prepare("INSERT INTO budget_role_assignments(role_key,department,user_id) VALUES('deputy_director','personnel',5)").run();
- const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json();
- assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_requests WHERE id=?').get(id).deputy_personnel_id,deputy);
- assert(await notice(env,5,`leave:${id}:pending`));
- assert(!await notice(env,6,`leave:${id}:pending`));
-});
-test('concurrent forwarding creates one recorded transition and only the intended recipients',async()=>{
- const {env,deputy}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
- await call(env,path,'PATCH',{action:'acknowledge'},3);
- const responses=await Promise.all([call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3),call(env,path,'PATCH',{action:'forward',deputy_personnel_id:deputy},3)]);
+
+test('concurrent acknowledgements create exactly one transition with one set of recipients',async()=>{
+ const {env}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json();
+ const responses=await Promise.all([call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3),call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3)]);
  assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='forwarded'").get(id).n,1);
+ for(const action of ['acknowledged','forwarded'])assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action=?').get(id,action).n,1);
  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_reviewers WHERE leave_id=?').get(id).n,2);
 });
+
+test('missing recipients leave the request untouched; saved personnel deputy is resolved when head acknowledges',async()=>{
+ const {env,deputy}=await setup();env.raw.exec('DELETE FROM leave_settings');
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,409);
+ assert.equal(env.raw.prepare('SELECT workflow_stage FROM leave_requests WHERE id=?').get(id).workflow_stage,'submitted');
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_reviewers').get().n,0);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},2)).status,403);
+ assert.equal((await call(env,'/api/leave-settings','PATCH',{deputy_personnel_id:deputy},3)).status,200);
+ env.raw.exec("UPDATE users SET status='disabled' WHERE id=4");
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,409);
+ env.raw.exec("UPDATE users SET status='active' WHERE id=4");
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+});
+
+test('legacy acknowledged requests can be forwarded with acknowledgement; already forwarded requests need no deputy review',async()=>{
+ const {env}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ env.raw.prepare("UPDATE leave_requests SET workflow_stage='acknowledged',acknowledged_by=3,acknowledged_at='2026-10-06T00:00:00Z' WHERE id=?").run(id);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert(list.leave_requests.find(r=>r.id===id).can_acknowledge);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.equal(env.raw.prepare('SELECT acknowledged_at FROM leave_requests WHERE id=?').get(id).acknowledged_at,'2026-10-06T00:00:00Z');
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'rejected'},4)).status,200);
+ const summary=await dashboardActivitySummary(env);assert.equal(summary.leave_summary.approved,0);assert(await notice(env,2,'leave:'+id+':rejected'));
+});
+
+test('director cannot approve a linked personal leave or decide after losing the director position',async()=>{
+ const {env}=await setup();const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ const director=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=4').get();
+ env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(director.personnel_id);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,403);
+ env.raw.prepare("UPDATE personnel_records SET position='ครู' WHERE id=?").run(director.personnel_id);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,403);
+});
+
 test('all leave types require reasons and contact details, real dates and valid half-day units; drafts can be cancelled',async()=>{
  const {env}=await setup();
  for(const leave_type of ['sick','personal','maternity','other'])assert.equal((await call(env,'/api/leave-requests','POST',{...form,leave_type,reason:' '},2)).status,400);
@@ -147,8 +127,6 @@ test('lenient leave remains distinct from other leave through notifications, app
  const list=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert.equal(list.leave_requests.find(r=>r.id===id).leave_type,'lenient');assert(await notice(env,3,'leave:'+id+':pending'));
  let summary=await dashboardActivitySummary(env,2570);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='lenient').pending,1);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='other').total,0);
  await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3);
- await call(env,'/api/leave-requests/'+id,'PATCH',{action:'forward',deputy_personnel_id:deputy},3);
- await call(env,'/api/leave-requests/'+id,'PATCH',{action:'review',note:'ความเห็นทดสอบ'},5);
  assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
  summary=await dashboardActivitySummary(env,2570);const stats=summary.leave_summary.by_type.find(r=>r.key==='lenient');assert.equal(stats.label,'ลาอนุโลม');assert.equal(stats.approved,1);assert.equal(stats.approved_days,0.5);assert.equal(summary.leave_summary.total,1);
  const next=await (await call(env,'/api/leave-requests','POST',{...form,leave_type:'lenient',start_date:'2026-10-07',end_date:'2026-10-07'},2)).json();

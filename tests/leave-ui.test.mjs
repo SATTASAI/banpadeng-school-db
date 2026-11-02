@@ -1,19 +1,30 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
-test('head inbox shows acknowledgement and forwarding separately, sends the selected deputy, escapes text and retains draft notes on refresh',async()=>{
+test('head inbox acknowledges and forwards in one action, escapes text and retains draft notes on refresh',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{
   if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:3,full_name:'หัวหน้าฝ่าย'}};
   if(path==='/api/leave-settings')return{limits:[],deputy_personnel_id:5,deputies:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ',line_status:'active'}]};
-  if(options){payload=options.body;stage='acknowledged';return{ok:true};}
+  if(options){payload=options.body;stage='forwarded';return{ok:true};}
   return{is_personnel_head:true,can_view_pending:true,deputy_choices:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ'}],default_deputy_id:5,profile:{},leave_requests:[{id:9,full_name:'ครู <img onerror=alert(1)>',leave_type:'sick',reason:'ไม่สบาย & พักผ่อน',workflow_stage:stage,status:'pending',can_acknowledge:stage==='submitted',can_record:stage==='acknowledged',can_forward:stage==='acknowledged'}]};
  }});
  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
  assert.equal(node('lineTemplateSettings').hidden,true);assert.match(node('leaveAllowance').innerHTML,/ลาอนุโลม/);assert.match(node('leaveAllowance').innerHTML,/ยื่นได้อีก/);
- assert.match(node('pendingPanel').innerHTML,/รับทราบและบันทึก/);assert(!node('pendingPanel').innerHTML.includes('data-action="forward"'));assert.match(node('pendingPanel').innerHTML,/&lt;img onerror=alert\(1\)&gt;/);
- node('note-9').value='ตรวจแล้ว';await click({target:{closest:()=>({dataset:{id:'9',action:'acknowledge'},disabled:false})}});assert.equal(payload.action,'acknowledge');assert.equal(payload.note,'ตรวจแล้ว');assert.match(node('pendingPanel').innerHTML,/data-action="forward"/);
+ assert.match(node('pendingPanel').innerHTML,/รับทราบและส่งต่ออัตโนมัติ/);assert(!node('pendingPanel').innerHTML.includes('data-action="forward"'));assert.match(node('pendingPanel').innerHTML,/&lt;img onerror=alert\(1\)&gt;/);
  node('note-9').value='บันทึกที่ยังไม่ได้กดส่ง';await poll();await new Promise(r=>setImmediate(r));assert.equal(node('note-9').value,'บันทึกที่ยังไม่ได้กดส่ง');
- node('deputyChoice').value='5';await click({target:{closest:()=>({dataset:{id:'9',action:'forward'},disabled:false})}});assert.equal(payload.action,'forward');assert.equal(payload.deputy_personnel_id,5);
+ node('note-9').value='ตรวจแล้ว';await click({target:{closest:()=>({dataset:{id:'9',action:'acknowledge'},disabled:false})}});assert.equal(payload.action,'acknowledge');assert.equal(payload.note,'ตรวจแล้ว');assert(!node('pendingPanel').innerHTML.includes('data-action="forward"'));assert.match(node('historyPanel').innerHTML,/รอผู้อำนวยการอนุมัติ/);
+});
+
+test('director sees approve and reject immediately without a deputy opinion',async()=>{
+ const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
+ const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path)=>{
+  if(path==='/api/auth/me')return {user:{id:4,role:'executive'}};
+  if(path.startsWith('/api/leave-allowance'))return {period:null,message:'ไม่มีข้อมูล'};
+  return {profile:{},leave_requests:[{id:9,full_name:'ครูทดสอบ',leave_type:'sick',workflow_stage:'forwarded',status:'pending',can_decide:true,reviewer_at:null}]};
+ }});
+ vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+ assert.match(node('pendingPanel').innerHTML,/data-action="approved"/);assert.match(node('pendingPanel').innerHTML,/data-action="rejected"/);
+ assert.match(node('pendingPanel').innerHTML,/ลาป่วย/);assert.doesNotMatch(node('pendingPanel').innerHTML,/รอรองผู้บริหาร|data-action="review"/);
 });
 
 function submissionHarness({reject=false,reloadFails=false}={}){

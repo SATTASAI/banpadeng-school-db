@@ -13,7 +13,7 @@
  </div>
  <main class="app-main">
   <h2>การลา</h2>
-  <p class="muted">ยื่นใบลา → หัวหน้าฝ่ายบุคลากรรับทราบและบันทึก → ส่งต่อรองผู้บริหารให้ความเห็น → ผู้อำนวยการออกคำสั่ง</p>
+  <p class="muted">ครูยื่นใบลา → หัวหน้าฝ่ายบุคลากรกดรับทราบ → ระบบส่งข้อมูลถึง ผอ. และรอง ผอ. ที่รับผิดชอบ → ผอ. อนุมัติ → บันทึกสถิติ</p>
   <div class="error-box" id="errorBox" role="alert"></div>
   <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
@@ -43,9 +43,9 @@
    <p class="muted">กำหนดจำนวนครั้งต่อคนต่อเทอมตามวันที่เริ่มลา อ้างอิงวันเริ่ม–สิ้นสุดภาคเรียนในปฏิทินปีการศึกษา ค่าเริ่มต้นลาทั่วไปทุกประเภทรวมกันไม่เกิน 2 ครั้ง และลาอนุโลมแยกอีกไม่เกิน 2 ครั้งต่อเทอม เว้นว่าง = ไม่จำกัด, 0 = ไม่ให้ยื่นประเภทนี้ รายการรอพิจารณาจะกันสิทธิ์ไว้ และคืนสิทธิ์เมื่อไม่อนุญาตหรือยกเลิก</p>
    <div id="leaveLimitFields" class="leave-fields"></div>
    <button class="btn btn-primary" id="saveLeaveLimits" type="button">บันทึกเงื่อนไขการลา</button>
-   <h3>รอง ผอ. ผู้รับแจ้งการลา</h3><p class="muted">เลือกรอง ผอ. ที่รับผิดชอบฝ่ายบุคลากรและกดบันทึกก่อนครูยื่นใบลา รอง ผอ. จะได้รับ LINE พร้อมหัวหน้าฝ่ายและดูใบลาได้ แต่ให้ความเห็นได้หลังหัวหน้าฝ่ายส่งต่อ</p>
+   <h3>รอง ผอ. ผู้รับข้อมูลการลา</h3><p class="muted">เลือกรอง ผอ. ที่รับผิดชอบฝ่ายบุคลากรและกดบันทึก ระบบจะส่งข้อมูลและแจ้งเตือน ผอ. กับรอง ผอ. เมื่อหัวหน้าฝ่ายกดรับทราบ ผอ. เป็นผู้อนุมัติ รอง ผอ. ดูข้อมูลเพื่อทราบ</p>
    <label for="deputyChoice">รองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร</label><select id="deputyChoice"><option value="">เลือกรองผู้บริหาร</option></select>
-   <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกผู้รับแจ้งล่วงหน้า</button><p id="deputyLineStatus" class="muted" role="status"></p>
+   <button class="btn btn-primary" id="saveDeputy" type="button">บันทึกรอง ผอ. ผู้รับผิดชอบ</button><p id="deputyLineStatus" class="muted" role="status"></p>
    <div id="lineTemplateSettings" hidden><h4>ข้อความแจ้งการลาทาง LINE</h4>
    <p class="muted">ปรับข้อความสำหรับใบลาใหม่และการเปลี่ยนสถานะครั้งต่อไป ใช้ {title} ชื่อผู้ยื่น, {message} สถานะ, {id} เลขที่ใบลา, {link} ลิงก์ใบลา, {reason} เหตุผลการลา, {leave_dates} วันที่ลา (ตั้งแต่–ถึง), {phone} เบอร์โทรศัพท์ครูจากใบลา ข้อความส่วนหัวและลิงก์เปิดดูยังแสดงเสมอ</p>
    <label for="leaveLineTemplate">ข้อความในรายการแจ้งเตือน</label>

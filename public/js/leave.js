@@ -1,7 +1,7 @@
 (function(){
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รับทราบและบันทึกแล้ว รอส่งต่อ',forwarded:'ส่งต่อผู้บริหารแล้ว',completed:'ดำเนินการเสร็จแล้ว'};
+ const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
  const quotaLabels={general:'ลาทั่วไป (รวมทุกประเภท ยกเว้นลาอนุโลม)',lenient:'ลาอนุโลม'};
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
@@ -32,26 +32,21 @@
  }
  function success(message){$('errorBox').classList.remove('visible');$('submitError').hidden=true;$('successBox').textContent=message;$('successBox').hidden=false;}
  function row(r){
-  const actionable=r.can_acknowledge||r.can_record||r.can_review||r.can_decide;
-  const note=r.can_review?r.reviewer_comment:r.personnel_note;
+  const actionable=r.can_acknowledge||r.can_decide;
+  const note=r.personnel_note;
   return `<article class="leave-row ${r.status==='pending'?'pending':''}" id="leave-${Number(r.id)}">
-   <h4>${esc(r.full_name)} · ${esc(quotaLabels[r.leave_type])}</h4>
+   <h4>${esc(r.full_name)} · ${esc(types[r.leave_type])}</h4>
    <p>${esc(r.start_date)} ถึง ${esc(r.end_date)} · ${esc(r.leave_days??'')} วัน</p>
    <p>เหตุผล: ${esc(r.reason||'ยังไม่มีข้อมูลเหตุผลในรายการเดิม')}</p>
    <span class="leave-status">${esc(r.status==='approved'?'อนุญาตแล้ว':r.status==='rejected'?'ไม่อนุญาต':stages[r.workflow_stage]||'รอดำเนินการ')}</span>
    ${r.acknowledged_name?`<p class="muted">รับทราบโดย ${esc(r.acknowledged_name)} · ${esc(r.acknowledged_at)}</p>`:''}
    ${r.deputy_name?`<p class="muted">ส่งต่อ: ${esc(r.director_name)} และ ${esc(r.deputy_name)}</p>`:''}
    ${r.reviewer_comment?`<p>ความเห็นผู้บังคับบัญชา: ${esc(r.reviewer_comment)}</p>`:''}
-   ${r.can_decide&&!r.reviewer_at?'<p class="muted">รอรองผู้บริหารบันทึกความเห็นก่อนออกคำสั่ง</p>':''}
-   ${actionable?`<label for="note-${Number(r.id)}">${r.can_review?'ความเห็นผู้บังคับบัญชา':r.can_decide?'หมายเหตุคำสั่ง':'บันทึกหัวหน้าฝ่ายบุคลากร'}</label><textarea class="leave-note" id="note-${Number(r.id)}" rows="2" maxlength="2000">${esc(r.can_decide?r.decision_note||'':note||'')}</textarea>`:''}
    <div class="leave-actions">
     <button class="btn btn-ghost" data-detail="${Number(r.id)}">รายละเอียด / ใบลา</button>
     <button class="btn btn-ghost" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="btn btn-ghost" data-export="pdf" data-id="${Number(r.id)}">PDF</button>
-    ${r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและบันทึก</button>`:''}
-    ${r.can_record?`<button class="btn btn-ghost" data-action="record" data-id="${Number(r.id)}">บันทึกข้อมูล</button>`:''}
-    ${r.can_forward?`<button class="btn btn-primary" data-action="forward" data-id="${Number(r.id)}">ส่งต่อผู้บริหาร</button>`:''}
-    ${r.can_review?`<button class="btn btn-primary" data-action="review" data-id="${Number(r.id)}">บันทึกความเห็น</button>`:''}
-    ${r.can_decide&&r.reviewer_at?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}">อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}">ไม่อนุญาต</button>`:''}
+    ${r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
+    ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}">อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}">ไม่อนุญาต</button>`:''}
     ${r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
@@ -71,7 +66,7 @@
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
-  const pending=records.filter(r=>r.can_acknowledge||r.can_record||r.can_review||r.can_decide);
+  const pending=records.filter(r=>r.can_acknowledge||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
   $('historyPanel').innerHTML=records.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
@@ -79,7 +74,7 @@
  }
  function showDeputyStatus(){
   const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
-  $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับแจ้ง':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
+  $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับข้อมูลหลังรับทราบ':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
  }
  function showLinePreview(){
   const template=$('leaveLineTemplate').value||'• {title}\n  {message}\n  วันที่ลา: {leave_dates}\n  เหตุผลการลา: {reason}\n  เบอร์โทรศัพท์ครู: {phone}';
@@ -106,7 +101,7 @@
  $('saveDeputy').onclick=async()=>{
   if(busy)return;const id=Number($('deputyChoice').value);if(!id){error(Error('กรุณาเลือกรอง ผอ.'));return;}
   busy=true;$('saveDeputy').disabled=true;
-  try{await apiRequest('/api/leave-settings',{method:'PATCH',body:{deputy_personnel_id:id}});success('บันทึกรอง ผอ. ผู้รับแจ้งล่วงหน้าแล้ว');await load();}
+  try{await apiRequest('/api/leave-settings',{method:'PATCH',body:{deputy_personnel_id:id}});success('บันทึกรอง ผอ. ผู้รับข้อมูลหลังหัวหน้าฝ่ายรับทราบแล้ว');await load();}
   catch(e){error(e);}finally{busy=false;$('saveDeputy').disabled=false;}
  };
  async function details(id){
@@ -159,10 +154,9 @@
     const action=button.dataset.action,note=$('note-'+id)?.value||'';
     if(action==='cancel'){if(!confirm('ยืนยันยกเลิกคำขอลานี้?'))return;await apiRequest('/api/leave-requests/'+id,{method:'DELETE'});}
     else {const body=['approved','rejected'].includes(action)?{action:'decide',status:action,note}:{action,note};
-     if(action==='forward'){body.deputy_personnel_id=Number($('deputyChoice').value);if(!body.deputy_personnel_id)throw Error('กรุณาเลือกรองผู้บริหารที่รับผิดชอบฝ่ายบุคลากร');}
      await apiRequest('/api/leave-requests/'+id,{method:'PATCH',body});
     }
-    success(({acknowledge:'รับทราบและบันทึกแล้ว',record:'บันทึกข้อมูลแล้ว',forward:'ส่งต่อผู้อำนวยการและรองผู้บริหารแล้ว',review:'บันทึกความเห็นแล้ว แจ้งผู้อำนวยการเรียบร้อย',approved:'บันทึกคำสั่งอนุญาตแล้ว',rejected:'บันทึกคำสั่งไม่อนุญาตแล้ว',cancel:'ยกเลิกคำขอแล้ว'})[action]);await load();if(detailId===id&&records.some(r=>r.id===id))await details(id);
+    success(({acknowledge:'รับทราบแล้ว ระบบส่งข้อมูลให้ ผอ. และรอง ผอ. ที่รับผิดชอบแล้ว',approved:'บันทึกคำสั่งอนุญาตแล้ว',rejected:'บันทึกคำสั่งไม่อนุญาตแล้ว',cancel:'ยกเลิกคำขอแล้ว'})[action]);await load();if(detailId===id&&records.some(r=>r.id===id))await details(id);
    }
   }catch(e){error(e);}finally{busy=false;button.disabled=false;}
  });
