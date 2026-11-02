@@ -1,5 +1,6 @@
 import { money, sumMoney } from './project-finance.js';
 import {ensureLeaveData} from './leave-data.js';
+import {ensureStudentTransfers} from '../routes/student-transfers.js';
 // Live dashboard aggregates use the stored ledgers; no totals are kept in browser storage.
 export async function dashboardActivitySummary(env, fiscalYear = null) {
   await ensureLeaveData(env);
@@ -39,6 +40,7 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
 
 const revisionReady=new WeakSet();
 export async function ensureDashboardRevision(env) {
+  await ensureStudentTransfers(env);
   if(revisionReady.has(env.DB)) return;
   await env.DB.batch([
     env.DB.prepare('CREATE TABLE IF NOT EXISTS dashboard_revision (id INTEGER PRIMARY KEY CHECK(id=1),revision INTEGER NOT NULL DEFAULT 0)'),
@@ -48,7 +50,7 @@ export async function ensureDashboardRevision(env) {
     'project_balance_requests','project_balance_changes','users','academic_years','academic_terms','inventory_items','inventory_transactions',
     'substitute_assignments','substitute_absences',
     // บันทึกการมาเรียน/ปฏิทินวันหยุดจากระบบ grades (ฐานข้อมูลเดียวกัน) → แดชบอร์ดอัปเดตทันทีเมื่อครูประจำชั้นบันทึก
-    'gr_attendance','gr_holidays','student_enrollments'];
+    'gr_attendance','gr_holidays','student_enrollments','student_transfer_requests','student_transfer_documents'];
   const existing=await env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
   const names=new Set(existing.results.map(r=>r.name));
   const statements=[];

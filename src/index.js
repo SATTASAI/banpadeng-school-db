@@ -1,3 +1,4 @@
+import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from './routes/student-transfers.js';
 import { RANK_CHOICES, rankChoiceToRecord, recordToRankChoice } from "./lib/rank-choice.js";
 import {handleEvaluationRead} from './evaluation/read.js';
 import {handleEvaluationLink} from './evaluation/link.js';
@@ -3682,6 +3683,7 @@ function departmentDriveLabel(department) {
 }
 
 async function getDriveFolderSegments(env, entityType, entityId) {
+  if (entityType === 'student_transfer') return ['ทะเบียนย้ายเข้า-ออก',String(entityId)];
   if (entityType === "public_site_image") {
     return ["เว็บไซต์ประชาสัมพันธ์", String(new Date().getUTCFullYear())];
   }
@@ -3742,6 +3744,12 @@ async function deleteGoogleDriveFile(env, fileId) {
 }
 
 // ป่าเด็งโมเดล / วิจัยในชั้นเรียน (src/routes/teaching-works.js) ใช้บัญชี Google Drive เดียวกัน
+const TRANSFER_STORAGE = {
+  validate: validateManagedFile,
+  upload: (env,file,id,name,mime) => uploadToGoogleDrive(env,file,'student_transfer',id,name,mime),
+  async read(env,id) { const token=await getGoogleDriveAccessToken(env); return (await googleDriveRequest(token, '/files/'+encodeURIComponent(id)+'?alt=media')).body; },
+  remove: deleteGoogleDriveFile,
+};
 const TEACHING_WORKS_DRIVE = {
   ready: (env) => requireDriveConfig(env),
   token: (env) => getGoogleDriveAccessToken(env),
@@ -4578,6 +4586,7 @@ async function handleOverview(request, env) {
     // สถิติสอนแทน: ชุดเดียวกับหน้าสถิติการสอนแทนและหน้าจัดสอนแทน (src/lib/personnel-stats.js)
     substitute_summary: user.role === "viewer" ? null : await substituteDashboardSummary(env, user).catch(() => null),
     attendance_summary: await attendanceDashboard(env).catch((error) => { console.error("attendance summary", error); return null; }),
+    student_transfer_summary: await transferSummary(env),
     ...activity,
   },200,{ "Cache-Control": "no-store" });
 }
@@ -4711,6 +4720,14 @@ const app = {
         if (viewer?.role === "viewer" && !viewerMayAccess(method, pathname)) return jsonResponse(VIEWER_BLOCKED, 403);
       }
 
+      if (pathname.startsWith('/api/student-transfers')) {
+        const actor = await getCurrentUser(request, env);
+        if (!actor?.role) return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
+        if (!canManageAllStudents(actor)) return jsonResponse({error:'เฉพาะเจ้าหน้าที่ทะเบียน ผู้บริหาร และผู้ดูแลระบบ'},403);
+        await ensureStudentTransfers(env);
+        await ensureDashboardRevision(env);
+        return await handleStudentTransfers(request,env,pathname,method,TRANSFER_STORAGE);
+      }
       // This module owns its schema. Reads avoid unrelated fiscal/HR migrations.
       if (pathname.startsWith("/api/timetable/")) {
         const fastRead = await handleTimetableReadRoute(request, env, pathname, method);
