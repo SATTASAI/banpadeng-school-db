@@ -165,7 +165,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  const canDecide=director||delegated;
  const deputyChoices=people.filter(isDeputy).map(({user_ids,...p})=>p);
  if(!id&&method==='GET') {
-  const {results}=await env.DB.prepare(`${select} WHERE (?=1 AND r.workflow_stage IN ('forwarded','completed')) OR ?=1 OR ?=1 OR r.user_id=? OR
+  const {results}=await env.DB.prepare(`${select} WHERE ?=1 OR ?=1 OR ?=1 OR r.user_id=? OR
    (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?)) OR
    (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
    SELECT 1 FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id
@@ -180,7 +180,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    can_review:false,
    can_decide:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
-   is_personnel_head:head,can_manage_delegations:director,is_leave_management:management,can_approve_leave:canDecide,
+   is_personnel_head:head,can_manage_delegations:director,is_leave_management:management,can_view_all_leave:admin||management,can_approve_leave:canDecide,
    can_view_pending:management||head||admin||assigned.length>0||earlyDeputy,deputy_choices:head?deputyChoices:[],
    default_deputy_id:setting?.id||null,profile:profile||{}});
  }
@@ -188,7 +188,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const row=await env.DB.prepare(`${select} WHERE r.id=?`).bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
   const assigned=execAccount&&await env.DB.prepare('SELECT 1 FROM leave_reviewers WHERE leave_id=? AND user_id=?').bind(id,user.id).first();
   const earlyDeputy=execAccount&&row.status==='pending'&&row.workflow_stage==='forwarded'&&people.some(p=>isDeputy(p)&&p.id===row.deputy_personnel_id&&p.user_ids.includes(user.id));
-  if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!earlyDeputy&&!(management&&['forwarded','completed'].includes(row.workflow_stage)))return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
+  if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!earlyDeputy&&!management)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
   const {results:events}=await env.DB.prepare(`SELECT e.action,e.note,e.created_at,u.full_name FROM leave_events e JOIN users u ON u.id=e.actor_id WHERE e.leave_id=? ORDER BY e.id`).bind(id).all();
   return json({leave_request:await leaveForm(env,row),events});
  }

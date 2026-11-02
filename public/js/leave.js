@@ -47,17 +47,17 @@
    <div class="leave-actions">
     <button class="btn btn-ghost" data-detail="${Number(r.id)}">รายละเอียด / ใบลา</button>
     <button class="btn btn-ghost" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="btn btn-ghost" data-export="pdf" data-id="${Number(r.id)}">PDF</button>
-    ${r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
+    ${!approvalView&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
     ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}">อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}">ไม่อนุญาต</button>`:''}
-    ${r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
+    ${!approvalView&&r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
  async function load(){
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
-  if(approvalView)records=records.filter(r=>['forwarded','completed'].includes(r.workflow_stage));
+  if(approvalView){if(!data.can_view_all_leave)records=[];}
   else await loadAllowance();
   $('approvalAccess').hidden=!approvalView;
-  $('approvalAccess').textContent=!data.is_leave_management?'หน้านี้สำหรับ ผอ. และรอง ผอ.':data.can_approve_leave?'คุณมีสิทธิ์อนุมัติการลาที่ฝ่ายบุคคลส่งต่อแล้ว':'คุณดูข้อมูลการลาได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'แสดงข้อมูลการลาทั้งหมด อนุมัติได้เมื่อฝ่ายบุคคลรับทราบและส่งต่อแล้ว':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
   $('delegationSettings').hidden=!data.can_manage_delegations;
   if(data.can_manage_delegations){
    const permissions=await apiRequest('/api/leave-delegations');

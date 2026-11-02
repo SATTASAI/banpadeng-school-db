@@ -21,6 +21,36 @@ async function setup(){
 }
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
 
+test('admin and current executives read every existing leave stage and legacy outcome without changing approval permissions or data',async()=>{
+ const {env}=await setup();
+ env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(7,'outsider@test','x','x','ครูอื่น','teacher');
+  INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date,status,workflow_stage) VALUES
+  (101,2,'sick','2025-10-01','2025-10-01','approved','submitted'),
+  (102,2,'personal','2025-10-02','2025-10-02','rejected','submitted'),
+  (103,2,'sick','2026-10-01','2026-10-01','pending','submitted'),
+  (104,2,'sick','2026-10-02','2026-10-02','pending','acknowledged'),
+  (105,2,'sick','2026-10-03','2026-10-03','pending','forwarded'),
+  (106,2,'sick','2026-10-04','2026-10-04','approved','completed');`);
+ const before=env.raw.prepare('SELECT * FROM leave_requests ORDER BY id').all();
+ for(const uid of [1,4,5,6]){
+  const list=await (await call(env,'/api/leave-requests','GET',undefined,uid)).json();
+  assert.equal(list.can_view_all_leave,true);assert.equal(list.can_approve_leave,uid===4);assert.equal(list.can_manage_delegations,uid===4);
+  assert.deepEqual(list.leave_requests.map(r=>r.id).sort(),[101,102,103,104,105,106]);
+  for(const row of list.leave_requests){
+   assert.equal(row.can_decide,uid===4&&row.id===105);
+   assert.equal((await call(env,'/api/leave-requests/'+row.id,'GET',undefined,uid)).status,200);
+  }
+ }
+ for(const uid of [1,5,6]){
+  assert.equal((await call(env,'/api/leave-requests/105','PATCH',{status:'approved'},uid)).status,403);
+  assert.equal((await call(env,'/api/leave-delegations','GET',undefined,uid)).status,403);
+ }
+ const outsider=await (await call(env,'/api/leave-requests','GET',undefined,7)).json();assert.equal(outsider.can_view_all_leave,false);assert.equal(outsider.leave_requests.length,0);
+ assert.equal((await call(env,'/api/leave-requests/101','GET',undefined,7)).status,403);
+ assert.deepEqual(env.raw.prepare('SELECT * FROM leave_requests ORDER BY id').all(),before);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_events').get().n,0);
+});
+
 test('only the current director grants individual deputy approval; revoke applies to existing requests immediately',async()=>{
  const {env,deputy}=await setup(),endpoint='/api/leave-delegations';
  const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
@@ -87,7 +117,7 @@ test('head acknowledgement forwards once to director and responsible deputy; onl
  const created=await call(env,'/api/leave-requests','POST',form,2);assert.equal(created.status,201);
  const {id}=await created.json(),path='/api/leave-requests/'+id;
  assert(await notice(env,3,'leave:'+id+':pending'));assert(!await notice(env,5,'leave:'+id+':pending'));assert(!await notice(env,4,'leave:'+id+':pending'));
- assert.equal((await call(env,path,'GET',undefined,5)).status,403);
+ assert.equal((await call(env,path,'GET',undefined,5)).status,200);
  for(const uid of [1,2,4,5,6])assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},uid)).status,403);
  assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,409);
  assert.equal((await call(env,path,'PATCH',{action:'acknowledge',note:'ตรวจสอบแล้ว'},3)).status,200);
