@@ -1,20 +1,20 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import vm from 'node:vm';
-test('director combined approval moves pending leave into history; view-as displays a disabled preview and blocks writes',async()=>{
+test('director approval of a forwarded leave moves it into history; view-as displays a disabled preview and blocks writes',async()=>{
  for(const readOnly of [false,true]){
   const nodes=new Map(),writes=[];let click,approved=false;
   const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
   const ctx=vm.createContext({URLSearchParams,location:{search:'?view=approval'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(){},apiRequest:async(path,options)=>{
    if(path==='/api/auth/me')return {user:{id:4,role:'executive',view_as:readOnly?{read_only:true}:null}};
    if(options){writes.push(options.body);assert.equal(path,'/api/leave-requests/9');approved=true;return {ok:true};}
-   return {profile:{},can_view_all_leave:true,can_approve_leave:true,leave_requests:[{id:9,full_name:'ครูตัวอย่าง',leave_type:'personal',status:approved?'approved':'pending',workflow_stage:approved?'completed':'acknowledged',can_acknowledge_approve:!approved}]};
+   return {profile:{},can_view_all_leave:true,can_approve_leave:true,leave_requests:[{id:9,full_name:'ครูตัวอย่าง',leave_type:'personal',status:approved?'approved':'pending',workflow_stage:approved?'completed':'forwarded',can_decide:!approved}]};
   }});
   vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
-  assert.match(node('pendingPanel').innerHTML,/รับทราบและอนุมัติ/);
-  if(readOnly){assert.match(node('pendingPanel').innerHTML,/data-action="acknowledge_approve"[^>]*disabled/);assert.match(node('approvalAccess').textContent,/โหมดดูบัญชีอื่น/);}
+  assert.match(node('pendingPanel').innerHTML,/อนุญาต/);assert.doesNotMatch(node('pendingPanel').innerHTML,/รับทราบและอนุมัติ/);
+  if(readOnly){assert.match(node('pendingPanel').innerHTML,/data-action="approved"[^>]*disabled/);assert.match(node('approvalAccess').textContent,/โหมดดูบัญชีอื่น/);}
   else assert.doesNotMatch(node('pendingPanel').innerHTML,/disabled/);
-  await click({target:{closest:()=>({dataset:{id:'9',action:'acknowledge_approve'},disabled:readOnly})}});
+  await click({target:{closest:()=>({dataset:{id:'9',action:'approved'},disabled:readOnly})}});
   if(readOnly){assert.equal(writes.length,0);assert.match(node('errorBox').textContent,/อ่านได้อย่างเดียว/);}
-  else{assert.equal(writes[0].action,'acknowledge_approve');assert.equal(node('pendingSection').hidden,true);assert.match(node('historyPanel').innerHTML,/อนุญาตแล้ว/);assert.match(node('successBox').textContent,/บันทึกเป็นสถิติการลา/);}
+  else{assert.equal(writes[0].action,'decide');assert.equal(writes[0].status,'approved');assert.equal(node('pendingSection').hidden,true);assert.match(node('historyPanel').innerHTML,/อนุญาตแล้ว/);assert.match(node('successBox').textContent,/บันทึกคำสั่งอนุญาต/);}
  }
 });
 test('admin sees existing pending and historical leaves in approval view with view and export actions only',async()=>{

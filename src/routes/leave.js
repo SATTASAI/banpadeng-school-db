@@ -1,5 +1,5 @@
 import {handleSignatureRoute,signatureFor} from '../lib/signatures.js';
-import {workingDays,leaveCalendar,normalizeLeaves,leaveFiscalSummary} from '../lib/leave-working-days.js';
+import {leaveSpanDays,leaveCalendar,normalizeLeaves,leaveFiscalSummary} from '../lib/leave-working-days.js';
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
@@ -7,7 +7,7 @@ import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.
 import {ensureLineFeedSchema,DEFAULT_LEAVE_LINE_TEMPLATE,validLeaveLineTemplate} from '../lib/line-feed.js';
 import {unreadNotificationsFor} from './notifications.js';
 import {readLeaveAccess} from '../lib/leave-access.js';
-import {leaveTypes,leaveLimits,leaveAllowance,leavePeriod,ownerClause,quotaGroupSql} from '../lib/leave-allowance.js';
+import {leaveTypes,leaveLimits,leaveAllowance,leavePeriod,ownerClause,quotaGroupSql,quotaGroupOf,quotaCheck} from '../lib/leave-allowance.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -17,13 +17,31 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  (SELECT personnel_id FROM personnel_accounts WHERE user_id=r.user_id LIMIT 1) applicant_personnel_id
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
+const leaveInputTypes=['sick','personal','maternity','lenient','other'];
+const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
+const spanError=type=>type==='maternity'?'จำนวนวันลาคลอดต้องมากกว่า 0 ไม่เกินจำนวนวันตามปฏิทิน (นับรวมวันหยุด) และระบุได้ทีละครึ่งวัน':'จำนวนวันลาต้องมากกว่า 0 ไม่เกินจำนวนวันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด) และระบุได้ทีละครึ่งวัน';
+async function validLeaveDays(env,type,start,end,value){
+ const maxDays=leaveSpanDays(type,start,end,await leaveCalendar(env));
+ const days=Number(value??maxDays);
+ return Number.isFinite(days)&&days>0&&days<=maxDays&&days*2===Math.round(days*2)?days:null;
+}
+// Personnel ids of active personnel-department heads (their own leave is acknowledged by superadmin).
+async function personnelHeadIds(env){
+ const {results}=await env.DB.prepare(`SELECT d.personnel_id pid,a.user_id FROM department_staff d JOIN personnel_records p ON p.id=d.personnel_id AND p.status='active'
+  LEFT JOIN personnel_accounts a ON a.personnel_id=d.personnel_id WHERE d.department='personnel' AND d.is_head=1`).all();
+ return {pids:new Set(results.map(r=>Number(r.pid))),users:new Set(results.filter(r=>r.user_id!=null).map(r=>Number(r.user_id)))};
+}
+async function personnelIdOf(env,userId){
+ const row=await env.DB.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').bind(userId).first();
+ return row?.personnel_id==null?null:Number(row.personnel_id);
+}
 export async function handleLeaveRoute(request,env,pathname,method) {
  const signatureResponse=await handleSignatureRoute(request,env,pathname,method);if(signatureResponse)return signatureResponse;
  if(pathname==='/api/leave-working-days'&&method==='GET'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
-  const q=new URL(request.url).searchParams,start=q.get('start'),end=q.get('end');
+  const q=new URL(request.url).searchParams,start=q.get('start'),end=q.get('end'),type=q.get('type');
   if(!validDate(start)||!validDate(end)||end<start||calendarDays(start,end)>3660)return fail('ช่วงวันที่ลาไม่ถูกต้อง');
-  return json({working_days:workingDays(start,end,await leaveCalendar(env))});
+  return json({working_days:leaveSpanDays(type,start,end,await leaveCalendar(env)),counts_calendar_days:type==='maternity'});
  }
  if(pathname==='/api/leave-allowance'&&method==='GET'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
@@ -173,6 +191,13 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  const delegated=deputy&&!!await env.DB.prepare('SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?').bind(person.id).first();
  const canDecide=director||delegated;
  const deputyChoices=people.filter(isDeputy).map(({user_ids,...p})=>p);
+ const myPid=await personnelIdOf(env,user.id),heads=await personnelHeadIds(env);
+ const own=r=>Number(r.user_id)===Number(user.id)||(myPid!=null&&Number(r.applicant_personnel_id)===myPid);
+ const applicantIsHead=r=>heads.users.has(Number(r.user_id))||heads.pids.has(Number(r.applicant_personnel_id));
+ // หัวหน้าฝ่ายบุคลากรรับทราบใบลาของตนเองไม่ได้ — ใบลาของหัวหน้าฝ่ายให้ superadmin รับทราบแทน
+ const canAcknowledgeRow=r=>!own(r)&&(head||(admin&&applicantIsHead(r)));
+ // แก้ไข/ลบใบลาได้ทุกสถานะ: หัวหน้าฝ่ายบุคลากรหรือ superadmin ยกเว้นใบลาของตนเอง
+ const canEditRow=r=>!own(r)&&(head||admin);
  if(!id&&method==='GET') {
   const {results}=await env.DB.prepare(`${select} WHERE ?=1 OR ?=1 OR ?=1 OR r.user_id=? OR
    (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?)) OR
@@ -184,10 +209,11 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const earlyDeputy=execAccount&&results.some(r=>r.status==='pending'&&r.workflow_stage==='forwarded'&&people.some(p=>isDeputy(p)&&p.id===r.deputy_personnel_id&&p.user_ids.includes(user.id)));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await designatedDeputy(env,people);
-  return json({fiscal_statistics:await leaveFiscalSummary(env,results),leave_requests:(await normalizeLeaves(env,results)).map(({teacher_signature,deputy_signature,approver_signature,...r})=>leaveRecord(r)).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),
+  return json({fiscal_statistics:await leaveFiscalSummary(env,results.filter(own)),leave_requests:(await normalizeLeaves(env,results)).map(({teacher_signature,deputy_signature,approver_signature,...r})=>leaveRecord(r)).map(r=>({...r,can_acknowledge:canAcknowledgeRow(r)&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),can_edit:canEditRow(r),
    can_record:false,can_forward:false,
    can_review:false,
-   can_acknowledge_approve:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&['submitted','acknowledged','forwarded'].includes(r.workflow_stage),
+   // ต้องผ่านการรับทราบของหัวหน้าฝ่ายบุคลากรก่อนเสมอ
+   can_acknowledge_approve:false,
    can_decide:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&r.workflow_stage==='forwarded',
    can_cancel:r.status==='pending'&&r.workflow_stage==='submitted'&&r.user_id===user.id})),
    is_personnel_head:head,can_manage_delegations:director,is_leave_management:management,can_view_all_leave:admin||management,can_approve_leave:canDecide,
@@ -200,18 +226,17 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const earlyDeputy=execAccount&&row.status==='pending'&&row.workflow_stage==='forwarded'&&people.some(p=>isDeputy(p)&&p.id===row.deputy_personnel_id&&p.user_ids.includes(user.id));
   if(row.user_id!==user.id&&!head&&!admin&&!assigned&&!earlyDeputy&&!management)return fail('ไม่มีสิทธิ์ดูใบลานี้',403);
   const {results:events}=await env.DB.prepare(`SELECT e.action,e.note,e.created_at,u.full_name FROM leave_events e JOIN users u ON u.id=e.actor_id WHERE e.leave_id=? ORDER BY e.id`).bind(id).all();
-  return json({leave_request:await leaveForm(env,row),events});
+  return json({leave_request:{...(await leaveForm(env,row)),can_edit:canEditRow(row)},events});
  }
  if(!id&&method==='POST') {
   const body=await request.json().catch(()=>null);if(!body||typeof body!=='object')return fail('รูปแบบข้อมูลไม่ถูกต้อง');
   for(const [field,max] of [['reason',2000],['position',200],['contact_address',1000],['contact_phone',100],['applicant_note',2000],['substitute_teacher',500]])if(typeof body[field]==='string'&&body[field].length>max)return fail('ข้อมูลยาวเกินกำหนด');
-  if(!['sick','personal','maternity','lenient','other'].includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
+  if(!leaveInputTypes.includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
   const reason=text(body.reason,2000);if(!reason)return fail('กรุณาระบุเหตุผลการลา');
   if(!validDate(body.start_date)||!validDate(body.end_date)||body.end_date<body.start_date)return fail('วันที่เริ่มและสิ้นสุดการลาไม่ถูกต้อง');
   if(calendarDays(body.start_date,body.end_date)>3660)return fail('ช่วงวันที่ลายาวเกินกำหนด');
-  const maxDays=workingDays(body.start_date,body.end_date,await leaveCalendar(env));
-  const days=Number(body.leave_days??maxDays);
-  if(!Number.isFinite(days)||days<=0||days>maxDays||days*2!==Math.round(days*2))return fail('จำนวนวันลาต้องมากกว่า 0 ไม่เกินจำนวนวันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด) และระบุได้ทีละครึ่งวัน');
+  const days=await validLeaveDays(env,body.leave_type,body.start_date,body.end_date,body.leave_days);
+  if(days===null)return fail(spanError(body.leave_type));
   const position=text(body.position,200),address=text(body.contact_address,1000),phone=text(body.contact_phone,100);
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
@@ -222,26 +247,26 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const applicantNote=text(body.applicant_note,2000),substituteTeacher=body.leave_type==='lenient'?text(body.substitute_teacher,500):'';
   if(body.leave_type==='lenient'&&!substituteTeacher)return fail('กรุณาระบุผู้ที่ได้รับมอบหมายคาบสอนแทน');
   const teacherSignature=(await signatureFor(env,user.id))?.data_url||null;
-  const quotaGroup=body.leave_type==='lenient'?'lenient':'general';
+  const quotaGroup=quotaGroupOf(body.leave_type);
   const results=await env.DB.batch([
    env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id,applicant_note,substitute_teacher,teacher_signature)
     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE
     (SELECT max_count FROM leave_term_limits WHERE leave_type=?) IS NULL OR
-    (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status IN ('approved','pending'))
+    (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved')
     < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null,applicantNote,substituteTeacher,teacherSignature,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) SELECT last_insert_rowid(),?,'submitted' WHERE changes()>0").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid() AND changes()>0").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);
-  if(!results[0].meta.changes)return fail('จำนวนครั้งการลากลุ่มนี้ครบตามเงื่อนไขภาคเรียนแล้ว (รวมรายการรอพิจารณา)',409);
+  if(!results[0].meta.changes)return fail('จำนวนครั้งการลากลุ่มนี้ที่อนุมัติแล้วครบตามเงื่อนไขภาคเรียนแล้ว',409);
   const newId=results[0].meta.last_row_id;
   return json({id:newId},201);
  }
  if(id&&method==='PATCH') {
   const body=await request.json().catch(()=>null);if(!body)return fail('รูปแบบข้อมูลไม่ถูกต้อง');
   if(body.note!==undefined&&(typeof body.note!=='string'||body.note.length>2000))return fail('บันทึกต้องเป็นข้อความไม่เกิน 2,000 ตัวอักษร');
-  const row=await env.DB.prepare('SELECT * FROM leave_requests WHERE id=?').bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
+  const row=await env.DB.prepare('SELECT r.*,(SELECT personnel_id FROM personnel_accounts WHERE user_id=r.user_id LIMIT 1) applicant_personnel_id FROM leave_requests r WHERE r.id=?').bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
   const action=body.action||(body.status==='approved'||body.status==='rejected'?'decide':'');
-  if(['acknowledge','record','forward'].includes(action)&&!head)return fail('เฉพาะหัวหน้าฝ่ายบุคลากรเท่านั้น',403);
+  if(['acknowledge','record','forward'].includes(action)&&!canAcknowledgeRow(row))return fail(own(row)&&head?'ไม่สามารถรับทราบใบลาของตนเองได้ ใบลาของหัวหน้าฝ่ายบุคลากรให้ผู้ดูแลระบบรับทราบแทน':'เฉพาะหัวหน้าฝ่ายบุคลากรเท่านั้น',403);
   const now=new Date().toISOString(),note=text(body.note,2000);
   const change=async(sql,values,event,eventNote=note)=>{
    const statements=[env.DB.prepare(sql).bind(...values),env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note)
@@ -255,67 +280,97 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    // Keep the old forward endpoint only for requests already acknowledged before this workflow change.
    if(action==='forward'&&row.workflow_stage!=='acknowledged')return fail('กรุณากดรับทราบเพื่อส่งต่ออัตโนมัติ',409);
    const directors=people.filter(isDirector);
-   const deputy=await designatedDeputy(env,people)||people.find(p=>p.id===row.deputy_personnel_id&&isDeputy(p));
    if(directors.length!==1)return fail('ต้องมีผู้อำนวยการหนึ่งท่านที่มีบัญชีผู้บริหารใช้งานอยู่ กรุณาตรวจทะเบียนบุคลากร',409);
-   if(!deputy)return fail('กรุณาตั้งค่ารองผู้อำนวยการที่รับผิดชอบฝ่ายบุคลากรก่อนรับทราบ',409);
    const director=directors[0],token=crypto.randomUUID();
-   const applicant=await env.DB.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').bind(row.user_id).first();
-   if(director.user_ids.map(Number).includes(Number(row.user_id))||Number(applicant?.personnel_id)===Number(director.id))return fail('ไม่สามารถส่งคำขอลาให้ผู้อำนวยการอนุมัติการลาของตนเองได้ กรุณาเสนอผู้บังคับบัญชาเหนือขึ้นไป',409);
+   const applicantIsDirector=director.user_ids.map(Number).includes(Number(row.user_id))||Number(row.applicant_personnel_id)===Number(director.id);
+   let deputy,reviewers,approverName,approverPosition;
+   if(applicantIsDirector){
+    // ใบลาของ ผอ. ส่งให้รอง ผอ. ที่ ผอ. มอบสิทธิ์อนุมัติการลาเป็นผู้อนุมัติ
+    const {results:grants}=await env.DB.prepare('SELECT personnel_id FROM leave_approval_delegations').all();
+    const approvers=people.filter(p=>isDeputy(p)&&grants.some(g=>Number(g.personnel_id)===p.id));
+    if(!approvers.length)return fail('ใบลาของผู้อำนวยการต้องให้รองผู้อำนวยการที่ได้รับมอบสิทธิ์อนุมัติการลาเป็นผู้อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์ก่อน',409);
+    const preferred=await designatedDeputy(env,people);
+    deputy=approvers.find(p=>p.id===preferred?.id)||approvers[0];
+    reviewers=approvers.flatMap(p=>p.user_ids.map(user_id=>({user_id,kind:'deputy'})));
+    approverName=deputy.full_name;approverPosition=deputy.position;
+   }else{
+    deputy=await designatedDeputy(env,people)||people.find(p=>p.id===row.deputy_personnel_id&&isDeputy(p));
+    if(!deputy)return fail('กรุณาตั้งค่ารองผู้อำนวยการที่รับผิดชอบฝ่ายบุคลากรก่อนรับทราบ',409);
+    reviewers=[...director.user_ids.map(user_id=>({user_id,kind:'director'})),...deputy.user_ids.map(user_id=>({user_id,kind:'deputy'}))];
+    approverName=director.full_name;approverPosition=director.position;
+   }
    const results=await env.DB.batch([
     env.DB.prepare(`UPDATE leave_requests SET workflow_stage='forwarded',forwarded_by=?,forwarded_at=?,forward_token=?,personnel_note=?,
      deputy_personnel_id=?,deputy_name=?,deputy_position=?,director_name=?,director_position=?,
      acknowledged_by=COALESCE(acknowledged_by,?),acknowledged_at=COALESCE(acknowledged_at,?)
-     WHERE id=? AND status='pending' AND workflow_stage IN ('submitted','acknowledged')`).bind(user.id,now,token,body.note===undefined?row.personnel_note:note,deputy.id,deputy.full_name,deputy.position,director.full_name,director.position,user.id,now,id),
-    ...[...director.user_ids.map(user_id=>({user_id,kind:'director'})),...deputy.user_ids.map(user_id=>({user_id,kind:'deputy'}))].map(r=>env.DB.prepare(`INSERT OR IGNORE INTO leave_reviewers(leave_id,user_id,kind)
+     WHERE id=? AND status='pending' AND workflow_stage IN ('submitted','acknowledged')`).bind(user.id,now,token,body.note===undefined?row.personnel_note:note,deputy.id,deputy.full_name,deputy.position,approverName,approverPosition,user.id,now,id),
+    ...reviewers.map(r=>env.DB.prepare(`INSERT OR IGNORE INTO leave_reviewers(leave_id,user_id,kind)
      SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,r.user_id,r.kind,id,token)),
     ...(row.workflow_stage==='submitted'?[env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'acknowledged',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)").bind(id,user.id,note,id,token)]:[]),
-    env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'forwarded',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,user.id,`ส่งถึง ${director.full_name} และ ${deputy.full_name}`,id,token),
-    env.DB.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) SELECT 1,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?) ON CONFLICT(id) DO UPDATE SET deputy_personnel_id=excluded.deputy_personnel_id').bind(deputy.id,id,token),
+    env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'forwarded',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,user.id,applicantIsDirector?`ใบลาของผู้อำนวยการ ส่งถึงรองผู้อำนวยการที่ได้รับมอบสิทธิ์ (${deputy.full_name})`:`ส่งถึง ${director.full_name} และ ${deputy.full_name}`,id,token),
+    ...(applicantIsDirector?[]:[env.DB.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) SELECT 1,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?) ON CONFLICT(id) DO UPDATE SET deputy_personnel_id=excluded.deputy_personnel_id').bind(deputy.id,id,token)]),
     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'forward','leave_request',?,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)").bind(user.id,id,JSON.stringify({director_personnel_id:director.id,deputy_personnel_id:deputy.id}),id,token)
    ]);
    return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
   }
   if(action==='review')return fail('รองผู้อำนวยการรับข้อมูลเพื่อทราบ ผู้อำนวยการเป็นผู้อนุมัติ',403);
-  if(action==='decide'||action==='acknowledge_approve') {
-   const combined=action==='acknowledge_approve';
+  if(action==='acknowledge_approve')return fail('ต้องให้หัวหน้าฝ่ายบุคลากรรับทราบและส่งต่อก่อน จึงอนุญาตได้',409);
+  if(action==='decide') {
    if(!canDecide)return fail('เฉพาะผู้อำนวยการหรือรองผู้อำนวยการที่ได้รับมอบสิทธิ์จาก ผอ.',403);
-   if(row.status!=='pending'||!(combined?['submitted','acknowledged','forwarded']:['forwarded']).includes(row.workflow_stage))return fail('คำขอยังไม่พร้อมพิจารณา หรือมีผลพิจารณาแล้ว',409);
-   if(combined?body.status!==undefined&&body.status!=='approved':!['approved','rejected'].includes(body.status))return fail('กรุณาเลือกอนุญาตหรือไม่อนุญาต');
-   const applicant=await env.DB.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').bind(row.user_id).first();
-   if(Number(row.user_id)===Number(user.id)||Number(applicant?.personnel_id)===Number(person.id))return fail('ไม่สามารถอนุมัติการลาของตนเองได้',403);
-   const signingDeputy=people.find(p=>isDeputy(p)&&p.id===row.deputy_personnel_id)||await designatedDeputy(env,people);
-   const approverSignature=(combined||body.status==='approved')?(await signatureFor(env,user.id))?.data_url||null:null;
-   const deputySignature=(combined||body.status==='approved')&&signingDeputy?(await signatureFor(env,signingDeputy.user_ids[0]))?.data_url||null:null;
-   if(combined){
-    // Match the stage read above: a concurrent head acknowledgement or decision must not
-    // overwrite its history. All result, acknowledgement, event and audit writes are atomic.
-    const currentDirector=people.find(isDirector);
-    const results=await env.DB.batch([
-     env.DB.prepare(`UPDATE leave_requests SET status='approved',workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,
-      acknowledged_by=COALESCE(acknowledged_by,?),acknowledged_at=COALESCE(acknowledged_at,?),
-      director_name=COALESCE(director_name,?),director_position=COALESCE(director_position,?),
-      approver_signature=?,deputy_signature=?,deputy_personnel_id=COALESCE(deputy_personnel_id,?),deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?)
-      WHERE id=? AND status='pending' AND workflow_stage=?
-      AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))`)
-      .bind(user.id,now,note,person.full_name,person.position,user.id,now,currentDirector?.full_name??null,currentDirector?.position??null,approverSignature,deputySignature,signingDeputy?.id??null,signingDeputy?.full_name??null,signingDeputy?.position??null,id,row.workflow_stage,director?1:0,person.id),
-     env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note)
-      SELECT ?,?,action,? FROM (SELECT 'acknowledged' action,0 ordering WHERE ?=1 UNION ALL SELECT 'approved',1)
-      WHERE changes()>0 ORDER BY ordering`).bind(id,user.id,note,row.acknowledged_at?0:1),
-     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'approved','leave_request',?,? WHERE changes()>0")
-      .bind(user.id,id,JSON.stringify({action:'acknowledge_approve',previous_stage:row.workflow_stage}))
-    ]);
-    return results[0].meta.changes?json({ok:true}):fail('สถานะหรือสิทธิ์เปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
-   }
+   if(row.status!=='pending'||row.workflow_stage!=='forwarded')return fail('คำขอยังไม่พร้อมพิจารณา หรือมีผลพิจารณาแล้ว',409);
+   if(!['approved','rejected'].includes(body.status))return fail('กรุณาเลือกอนุญาตหรือไม่อนุญาต');
+   if(Number(row.user_id)===Number(user.id)||Number(row.applicant_personnel_id)===Number(person.id))return fail('ไม่สามารถอนุมัติการลาของตนเองได้',403);
+   const approving=body.status==='approved';
+   // ตรวจจำนวนครั้งอีกครั้งตอนอนุมัติ (นับเฉพาะใบที่อนุมัติแล้ว)
+   const quota=approving?await quotaCheck(env,row,id):{ok:true};
+   if(!quota.ok)return fail(`อนุมัติไม่ได้: จำนวนครั้งการลากลุ่มนี้ที่อนุมัติแล้วครบ ${quota.max} ครั้งใน${quota.period.name||'ภาคเรียนนี้'}แล้ว`,409);
+   const enforce=approving&&quota.max!=null;
+   const applicantIsDirector=people.some(p=>isDirector(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
+   const signingDeputy=applicantIsDirector?null:people.find(p=>isDeputy(p)&&p.id===row.deputy_personnel_id)||await designatedDeputy(env,people);
+   const approverSignature=approving?(await signatureFor(env,user.id))?.data_url||null:null;
+   const deputySignature=approving&&signingDeputy?(await signatureFor(env,signingDeputy.user_ids[0]))?.data_url||null:null;
    return change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,approver_signature=?,deputy_signature=?,deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?)
     WHERE id=? AND status='pending' AND workflow_stage='forwarded'
-    AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))`,[body.status,user.id,now,note,person.full_name,person.position,approverSignature,deputySignature,signingDeputy?.full_name??null,signingDeputy?.position??null,id,director?1:0,person.id],body.status);
+    AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))
+    AND (?=0 OR (SELECT COUNT(*) FROM leave_requests q WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved' AND id<>?)<?)`,
+    [body.status,user.id,now,note,person.full_name,person.position,approverSignature,deputySignature,signingDeputy?.full_name??null,signingDeputy?.position??null,id,director?1:0,person.id,
+     enforce?1:0,row.user_id,row.user_id,quota.group??'',quota.period?.from??'',quota.period?.to??'',id,quota.max??0],body.status);
+  }
+  if(action==='edit') {
+   if(!canEditRow(row))return fail(own(row)?'ไม่สามารถแก้ไขใบลาของตนเองได้':'เฉพาะหัวหน้าฝ่ายบุคลากรหรือผู้ดูแลระบบ',403);
+   if(!note)return fail('กรุณาระบุเหตุผลการแก้ไข');
+   if(!leaveInputTypes.includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
+   if(!validDate(body.start_date)||!validDate(body.end_date)||body.end_date<body.start_date||calendarDays(body.start_date,body.end_date)>3660)return fail('วันที่เริ่มและสิ้นสุดการลาไม่ถูกต้อง');
+   const days=await validLeaveDays(env,body.leave_type,body.start_date,body.end_date,body.leave_days);
+   if(days===null)return fail(spanError(body.leave_type));
+   const before=`${typeLabels[row.leave_subtype||row.leave_type]||row.leave_type} ${row.start_date} ถึง ${row.end_date} ${Number(row.leave_days)} วัน`;
+   const after=`${typeLabels[body.leave_type]} ${body.start_date} ถึง ${body.end_date} ${days} วัน`;
+   const lenient=body.leave_type==='lenient';
+   const statements=[env.DB.prepare(`UPDATE leave_requests SET leave_type=?,leave_subtype=?,start_date=?,end_date=?,leave_days=? WHERE id=? AND status=? AND start_date=? AND end_date=?`)
+     .bind(lenient?'other':body.leave_type,lenient?'lenient':null,body.start_date,body.end_date,days,id,row.status,row.start_date,row.end_date),
+    env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'edited',? WHERE changes()>0`).bind(id,user.id,`${note} (เดิม: ${before} → ใหม่: ${after})`),
+    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'edit','leave_request',?,? WHERE changes()>0")
+     .bind(user.id,id,JSON.stringify({before:{leave_type:row.leave_subtype||row.leave_type,start_date:row.start_date,end_date:row.end_date,leave_days:row.leave_days},after:{leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date,leave_days:days},note}))];
+   const results=await env.DB.batch(statements);
+   return results[0].meta.changes?json({ok:true}):fail('ข้อมูลใบลาเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
   }
   return fail('การดำเนินการไม่ถูกต้อง');
  }
  if(id&&method==='DELETE') {
-  const row=await env.DB.prepare('SELECT user_id,status,workflow_stage FROM leave_requests WHERE id=?').bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
-  if(row.user_id!==user.id)return fail('เฉพาะผู้ยื่นคำขอเท่านั้น',403);
-  if(row.status!=='pending'||row.workflow_stage!=='submitted')return fail('ยกเลิกได้ก่อนหัวหน้าฝ่ายรับทราบเท่านั้น',409);
+  const row=await env.DB.prepare(`SELECT r.*,(SELECT personnel_id FROM personnel_accounts WHERE user_id=r.user_id LIMIT 1) applicant_personnel_id FROM leave_requests r WHERE r.id=?`).bind(id).first();if(!row)return fail('ไม่พบคำขอลา',404);
+  if(canEditRow(row)){
+   // หัวหน้าฝ่ายบุคลากร/superadmin ลบได้ทุกสถานะ เก็บสำเนาใบลาไว้ใน audit log
+   const body=await request.json().catch(()=>null),reason=text(body?.note,2000);
+   if(!reason)return fail('กรุณาระบุเหตุผลการลบใบลา');
+   const {teacher_signature,deputy_signature,approver_signature,forward_token,...snapshot}=row;
+   const results=await env.DB.batch([
+    env.DB.prepare('DELETE FROM leave_requests WHERE id=? AND status=?').bind(id,row.status),
+    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'delete','leave_request',?,? WHERE changes()>0").bind(user.id,id,JSON.stringify({reason,snapshot}))
+   ]);
+   return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว',409);
+  }
+  if(row.user_id!==user.id)return fail('เฉพาะผู้ยื่นคำขอ หัวหน้าฝ่ายบุคลากร หรือผู้ดูแลระบบ',403);
+  if(row.status!=='pending'||row.workflow_stage!=='submitted')return fail('ยกเลิกได้ก่อนหัวหน้าฝ่ายรับทราบเท่านั้น หากต้องการแก้ไขหรือยกเลิกหลังจากนั้น กรุณาแจ้งหัวหน้าฝ่ายบุคลากร',409);
   const results=await env.DB.batch([
    env.DB.prepare("DELETE FROM leave_requests WHERE id=? AND user_id=? AND status='pending' AND workflow_stage='submitted'").bind(id,user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'delete','leave_request',?,? WHERE changes()>0").bind(user.id,id,JSON.stringify({previous_status:row.status}))

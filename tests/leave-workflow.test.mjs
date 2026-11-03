@@ -21,53 +21,111 @@ async function setup(){
 }
 const notice=async(env,user,key)=>(await (await call(env,'/api/notifications','GET',undefined,user)).json()).notifications.some(n=>n.message_key===key);
 
-test('acknowledge and approve handles submitted, legacy acknowledged and forwarded requests once and updates statistics',async()=>{
- for(const stage of ['submitted','acknowledged','forwarded']){
+test('director cannot approve before the personnel head acknowledges; combined approval is retired',async()=>{
+ for(const stage of ['submitted','acknowledged']){
   const {env}=await setup();
   const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
   if(stage==='acknowledged'){
    env.raw.prepare("UPDATE leave_requests SET workflow_stage='acknowledged',acknowledged_by=3,acknowledged_at='2026-11-02T03:45:21Z' WHERE id=?").run(id);
    env.raw.prepare("INSERT INTO leave_events(leave_id,actor_id,action) VALUES(?,3,'acknowledged')").run(id);
   }
-  if(stage==='forwarded')await call(env,path,'PATCH',{action:'acknowledge'},3);
-  const before=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
-  const list=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(list.leave_requests.find(r=>r.id===id).can_acknowledge_approve,true);
-  for(const uid of [1,2,3,5,6])assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},uid)).status,403);
-  assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve',note:'รับทราบและอนุมัติ'},4)).status,200);
-  const after=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
-  assert.equal(after.status,'approved');assert.equal(after.workflow_stage,'completed');assert.equal(after.approved_by,4);
-  assert.equal(after.decision_name,'ผู้อำนวยการตัวอย่าง');assert.equal(after.decision_note,'รับทราบและอนุมัติ');assert(after.approved_at);
-  assert.equal(after.acknowledged_by,before.acknowledged_by||4);assert.equal(after.acknowledged_at,before.acknowledged_at||after.approved_at);
-  assert.equal(after.forwarded_by,before.forwarded_by);assert.equal(after.forwarded_at,before.forwarded_at);
-  const events=env.raw.prepare('SELECT action FROM leave_events WHERE leave_id=? ORDER BY id').all(id).map(r=>r.action);
-  assert.deepEqual(events,stage==='forwarded'?['submitted','acknowledged','forwarded','approved']:['submitted','acknowledged','approved']);
-  const summary=await dashboardActivitySummary(env);assert.equal(summary.leave_summary.approved,1);assert.equal(summary.leave_summary.approved_days,0.5);assert.equal(summary.leave_summary.pending,0);
-  const allowance=await (await call(env,'/api/leave-allowance?date=2026-10-06','GET',undefined,2)).json();assert.equal(allowance.types.find(t=>t.leave_type==='general').approved,1);assert.equal(allowance.types.find(t=>t.leave_type==='general').pending,0);
-  assert(await notice(env,2,'leave:'+id+':approved'));
+  const list=await (await call(env,'/api/leave-requests','GET',undefined,4)).json(),r=list.leave_requests.find(x=>x.id===id);
+  assert.equal(r.can_acknowledge_approve,false);assert.equal(r.can_decide,false);
   assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},4)).status,409);
-  assert.deepEqual(env.raw.prepare('SELECT action FROM leave_events WHERE leave_id=? ORDER BY id').all(id).map(r=>r.action),events);
+  assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,409);
+  assert.equal(env.raw.prepare('SELECT status FROM leave_requests WHERE id=?').get(id).status,'pending');
+  assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+  assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved',note:'อนุญาต'},4)).status,200);
+  const events=env.raw.prepare('SELECT action FROM leave_events WHERE leave_id=? ORDER BY id').all(id).map(r=>r.action);
+  assert.deepEqual(events,['submitted','acknowledged','forwarded','approved']);
+  const summary=await dashboardActivitySummary(env);assert.equal(summary.leave_summary.approved,1);assert.equal(summary.leave_summary.approved_days,0.5);
+  assert(await notice(env,2,'leave:'+id+':approved'));
  }
 });
 
-test('combined approval uses deputy delegation, denies self-linked leave and prevents stale/revoked or concurrent decisions',async()=>{
+test('director own leave goes to a delegated deputy, who alone decides it',async()=>{
  const {env,deputy}=await setup();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,4)).json(),path='/api/leave-requests/'+id;
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,409);
+ assert.equal(env.raw.prepare('SELECT workflow_stage FROM leave_requests WHERE id=?').get(id).workflow_stage,'submitted');
+ await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.deepEqual(env.raw.prepare('SELECT user_id,kind FROM leave_reviewers WHERE leave_id=? ORDER BY user_id').all(id).map(r=>({...r})),[{user_id:5,kind:'deputy'}]);
+ assert.equal(env.raw.prepare('SELECT director_name FROM leave_requests WHERE id=?').get(id).director_name,'รองผู้บริหารตัวอย่าง');
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},6)).status,403);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,5)).json();assert.equal(list.leave_requests.find(r=>r.id===id).can_decide,true);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},5)).status,200);
+ const row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.status,'approved');assert.equal(row.approved_by,5);assert.equal(row.decision_name,'รองผู้บริหารตัวอย่าง');assert.equal(row.deputy_signature,null);
+});
+
+test('personnel head cannot acknowledge own leave; superadmin acknowledges it instead',async()=>{
+ const {env}=await setup();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,3)).json(),path='/api/leave-requests/'+id;
+ const mine=await (await call(env,'/api/leave-requests','GET',undefined,3)).json();assert.equal(mine.leave_requests.find(r=>r.id===id).can_acknowledge,false);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,403);
+ const admin=await (await call(env,'/api/leave-requests','GET',undefined,1)).json();assert.equal(admin.leave_requests.find(r=>r.id===id).can_acknowledge,true);
+ const teacherLeave=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-07',end_date:'2026-10-07'},2)).json();
+ assert.equal((await call(env,'/api/leave-requests/'+teacherLeave.id,'PATCH',{action:'acknowledge'},1)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},1)).status,200);
+ assert.equal(env.raw.prepare('SELECT workflow_stage FROM leave_requests WHERE id=?').get(id).workflow_stage,'forwarded');
+});
+
+test('quota is re-checked at approval; pending leaves do not consume a turn',async()=>{
+ const {env}=await setup();
+ await call(env,'/api/leave-settings','PATCH',{limits:[{leave_type:'general',max_count:1},{leave_type:'lenient',max_count:2}]});
+ const personal={...form,leave_type:'personal'};
+ const first=await (await call(env,'/api/leave-requests','POST',personal,2)).json();
+ const second=await call(env,'/api/leave-requests','POST',{...personal,start_date:'2026-10-07',end_date:'2026-10-07'},2);assert.equal(second.status,201);
+ const {id:secondId}=await second.json();
+ for(const id of [first.id,secondId])assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.equal((await call(env,'/api/leave-requests/'+first.id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ const denied=await call(env,'/api/leave-requests/'+secondId,'PATCH',{action:'decide',status:'approved'},4);assert.equal(denied.status,409);
+ assert.match((await denied.json()).error,/ครบ 1 ครั้ง/);
+ assert.equal((await call(env,'/api/leave-requests/'+secondId,'PATCH',{action:'decide',status:'rejected'},4)).status,200);
+ // Sick leave is never blocked by the quota.
+ const sick=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-08',end_date:'2026-10-08'},2)).json();
+ await call(env,'/api/leave-requests/'+sick.id,'PATCH',{action:'acknowledge'},3);
+ assert.equal((await call(env,'/api/leave-requests/'+sick.id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+});
+
+test('personnel head and superadmin edit or delete any leave with a reason; not their own; teachers cannot',async()=>{
+ const {env}=await setup();
  const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
- await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
- env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(deputy);
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},5)).status,403);
- const owner=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=2').get();
- env.raw.prepare('UPDATE personnel_accounts SET personnel_id=? WHERE user_id=2').run(owner.id);
- const batch=env.DB.batch.bind(env.DB);
- env.DB.batch=statements=>{env.raw.prepare('DELETE FROM leave_approval_delegations WHERE personnel_id=?').run(deputy);return batch(statements);};
- assert.equal((await call(env,path,'PATCH',{action:'acknowledge_approve'},5)).status,409);
- assert.equal(env.raw.prepare('SELECT status FROM leave_requests WHERE id=?').get(id).status,'pending');
- assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_events WHERE leave_id=?').get(id).n,1);
- env.DB.batch=batch;
- await call(env,'/api/leave-delegations','PATCH',{personnel_id:deputy,can_approve:true},4);
- const responses=await Promise.all([call(env,path,'PATCH',{action:'acknowledge_approve'},5),call(env,path,'PATCH',{action:'acknowledge_approve'},4)]);
- assert.deepEqual(responses.map(r=>r.status).sort(),[200,409]);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='approved'").get(id).n,1);
- assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM leave_events WHERE leave_id=? AND action='acknowledged'").get(id).n,1);
+ await call(env,path,'PATCH',{action:'acknowledge'},3);await call(env,path,'PATCH',{action:'decide',status:'approved'},4);
+ const edit={action:'edit',note:'ครูกลับมาก่อนกำหนด',leave_type:'personal',start_date:'2026-10-06',end_date:'2026-10-07',leave_days:1.5};
+ assert.equal((await call(env,path,'PATCH',edit,2)).status,403);
+ assert.equal((await call(env,path,'PATCH',{...edit,note:''},3)).status,400);
+ assert.equal((await call(env,path,'PATCH',{...edit,leave_days:3},3)).status,400);
+ assert.equal((await call(env,path,'PATCH',edit,3)).status,200);
+ const row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.status,'approved');assert.equal(row.leave_type,'personal');assert.equal(row.end_date,'2026-10-07');assert.equal(row.leave_days,1.5);
+ assert(env.raw.prepare("SELECT 1 FROM leave_events WHERE leave_id=? AND action='edited'").get(id));
+ assert.equal((await dashboardActivitySummary(env)).leave_summary.approved_days,1.5);
+ const detail=await (await call(env,path,'GET',undefined,3)).json();assert.equal(detail.leave_request.can_edit,true);
+ assert.equal((await (await call(env,path,'GET',undefined,2)).json()).leave_request.can_edit,false);
+ const headLeave=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-08',end_date:'2026-10-08'},3)).json();
+ assert.equal((await call(env,'/api/leave-requests/'+headLeave.id,'PATCH',{...edit,start_date:'2026-10-08',end_date:'2026-10-08',leave_days:1},3)).status,403);
+ assert.equal((await call(env,'/api/leave-requests/'+headLeave.id,'PATCH',{...edit,start_date:'2026-10-08',end_date:'2026-10-08',leave_days:1},1)).status,200);
+ assert.equal((await call(env,path,'DELETE',undefined,2)).status,409);
+ assert.equal((await call(env,path,'DELETE',{},3)).status,400);
+ assert.equal((await call(env,path,'DELETE',{note:'บันทึกซ้ำ'},3)).status,200);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM leave_requests WHERE id=?').get(id).n,0);
+ const audit=JSON.parse(env.raw.prepare("SELECT details FROM audit_logs WHERE resource='leave_request' AND action='delete' AND resource_id=?").get(id).details);
+ assert.equal(audit.reason,'บันทึกซ้ำ');assert.equal(audit.snapshot.status,'approved');assert(!('teacher_signature' in audit.snapshot));
+});
+
+test('maternity leave counts calendar days including weekends; my leave totals show only my own leave',async()=>{
+ const {env}=await setup();
+ const maternity={...form,leave_type:'maternity',start_date:'2026-11-06',end_date:'2026-11-09'};
+ assert.equal((await (await call(env,'/api/leave-working-days?start=2026-11-06&end=2026-11-09&type=maternity','GET',undefined,2)).json()).working_days,4);
+ assert.equal((await call(env,'/api/leave-requests','POST',{...maternity,leave_type:'sick',leave_days:4},2)).status,400);
+ const created=await call(env,'/api/leave-requests','POST',{...maternity,leave_days:undefined},2);assert.equal(created.status,201);
+ const {id}=await created.json();assert.equal(env.raw.prepare('SELECT leave_days FROM leave_requests WHERE id=?').get(id).leave_days,4);
+ await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3);await call(env,'/api/leave-requests/'+id,'PATCH',{action:'decide',status:'approved'},4);
+ const teacher=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();assert.equal(teacher.fiscal_statistics.real.days,4);
+ for(const uid of [1,3,4]){const data=await (await call(env,'/api/leave-requests','GET',undefined,uid)).json();assert.equal(data.fiscal_statistics.real.times,0);}
 });
 
 test('admin and current executives read every existing leave stage and legacy outcome without changing approval permissions or data',async()=>{
@@ -254,7 +312,8 @@ test('form statistics and previous leave include canonical linked accounts, appr
  const {leave_request:r}=await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json();
  assert.equal(r.last_leave.leave_type,'personal');assert.equal(r.last_leave.start_date,'2026-10-03');
  assert.deepEqual(r.stats[0],{type:'sick',previous_count:1,previous_days:0.5,current_days:0.5,total_count:2,total_days:1});
- assert.equal(r.stats[1].total_days,0);assert.equal(r.statistics_period.from,'2026-10-01');
+ // Stored leave_days is final (no recomputation from the calendar), so the raw 1-day record stays 1.
+ assert.equal(r.stats[1].total_days,1);assert.equal(r.statistics_period.from,'2026-10-01');
 });
 test('runtime migration preserves legacy leave records and permits the new head workflow',async()=>{
  const env=await fixture();env.raw.exec('DROP TABLE leave_requests; CREATE TABLE leave_requests(id INTEGER PRIMARY KEY,user_id INTEGER,leave_type TEXT,reason TEXT,start_date TEXT,end_date TEXT,status TEXT DEFAULT \'pending\',approved_by INTEGER,approved_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date) VALUES(99,2,\'sick\',\'2026-10-01\',\'2026-10-01\');');

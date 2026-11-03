@@ -20,14 +20,14 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
       UNION SELECT fiscal_year FROM project_expenses WHERE fiscal_year IS NOT NULL ORDER BY fiscal_year DESC`).all(),
   ]);
   const holidays=await leaveCalendar(env);
-  leaveRows.results=leaveRows.results.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:1,
+  leaveRows.results=leaveRows.results.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:!start||(r.start_date>=start&&r.start_date<=end)?1:0,
    approved_days:r.status==='approved'?effectiveLeaveDays(r,holidays,start||r.start_date,end||r.end_date):0}));
   const date=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
   if(!workingDays(date,date,holidays))today.people=0;
   const labels={sick:'ลาป่วย',personal:'ลากิจ',maternity:'ลาคลอด',lenient:'ลาอนุโลม',other:'ลาอื่น ๆ'};
   const byType=Object.entries(labels).map(([key,label])=>{
     const rows=leaveRows.results.filter(r=>r.leave_type===key);
-    const count=status=>rows.filter(r=>r.status===status).length;
+    const count=status=>rows.filter(r=>r.status===status).reduce((n,r)=>n+Number(r.request_count),0);
     return {key,label,pending:count('pending'),approved:count('approved'),rejected:count('rejected'),
       total:rows.reduce((sum,r)=>sum+Number(r.request_count),0),approved_days:rows.reduce((sum,r)=>sum+Number(r.approved_days),0)};
   });

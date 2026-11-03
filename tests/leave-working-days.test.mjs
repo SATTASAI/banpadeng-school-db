@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
 import {seedLeaveCalendar} from './leave-calendar.mjs';
-import {workingDays,effectiveLeaveDays,leaveCalendar} from '../src/lib/leave-working-days.js';
+import {workingDays,effectiveLeaveDays,leaveCalendar,legacyCappedDays,leaveSpanDays} from '../src/lib/leave-working-days.js';
 import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
 import {leaveStatistics} from '../src/lib/personnel-stats.js';
@@ -15,11 +15,18 @@ test('weekends, official/substitute holidays and cross-year periods use working 
  assert.equal(workingDays('2026-12-30','2027-01-04'),2);
  assert.equal(workingDays('2026-11-06','2026-11-09',['2026-11-09']),1);
  const row={start_date:'2026-11-06',end_date:'2026-11-09',leave_days:4};
- assert.equal(effectiveLeaveDays(row),2);
- assert.equal(effectiveLeaveDays({...row,leave_days:3.5}),1.5);
- assert.equal(effectiveLeaveDays({...row,leave_days:0.5}),0.5);
- assert.equal(effectiveLeaveDays(row,[],'2026-11-07','2026-11-08'),0);
- assert.equal(effectiveLeaveDays(row,[],'2026-11-09','2026-11-09'),1);
+ // Legacy cap is used once by the freeze migration; afterwards stored days are final.
+ assert.equal(legacyCappedDays(row),2);
+ assert.equal(legacyCappedDays({...row,leave_days:3.5}),1.5);
+ assert.equal(legacyCappedDays({...row,leave_days:0.5}),0.5);
+ assert.equal(effectiveLeaveDays(row),4);
+ assert.equal(effectiveLeaveDays({...row,leave_days:2},['2026-11-09']),2);
+ assert.equal(effectiveLeaveDays({...row,leave_days:2},[],'2026-11-07','2026-11-08'),0);
+ assert.equal(effectiveLeaveDays({...row,leave_days:2},[],'2026-11-09','2026-11-09'),1);
+ // Maternity counts calendar days, including weekends and holidays.
+ assert.equal(leaveSpanDays('maternity','2026-11-06','2026-11-09'),4);
+ assert.equal(legacyCappedDays({...row,leave_type:'maternity'}),4);
+ assert.equal(effectiveLeaveDays({...row,leave_type:'maternity'},[],'2026-11-08','2026-11-09'),2);
 });
 
 test('school holidays exclude activity dates, deduplicate dates and support old calendar schemas',async()=>{
@@ -32,9 +39,13 @@ test('school holidays exclude activity dates, deduplicate dates and support old 
  assert.equal(workingDays('2026-11-06','2026-11-10',await leaveCalendar(env)),1);
 });
 
-test('API enforces working days and old requests match forms, lists, dashboard and staff statistics without rewriting history',async()=>{
- const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);
+test('API enforces working days; legacy totals are capped once, then stored days never change with the calendar',async()=>{
+ const env=await fixture();seedLeaveCalendar(env);
  env.raw.exec(`CREATE TABLE gr_holidays(holiday_date TEXT,kind TEXT); INSERT INTO gr_holidays VALUES('2026-11-09','holiday');`);
+ // A legacy record stored calendar days (5) for a span with only 2 working days.
+ env.raw.exec("INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date,leave_days,status) VALUES(500,2,'sick','2026-11-06','2026-11-10',5,'approved')");
+ await ensureLeaveData(env);
+ assert.equal(env.raw.prepare('SELECT leave_days FROM leave_requests WHERE id=500').get().leave_days,2);
  const preview=await call(env,'/api/leave-working-days?start=2026-11-06&end=2026-11-10','GET',undefined,2);
  assert.equal((await preview.json()).working_days,2);
  for(const date of ['bad','2026-02-30'])assert.equal((await call(env,'/api/leave-working-days?start='+date+'&end=2026-11-10','GET',undefined,2)).status,400);
@@ -43,12 +54,13 @@ test('API enforces working days and old requests match forms, lists, dashboard a
  assert.equal((await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-11-07',end_date:'2026-11-08'},2)).status,400);
  const submitted=await call(env,'/api/leave-requests','POST',form,2);assert.equal(submitted.status,201);
  const {id}=await submitted.json();assert.equal(env.raw.prepare('SELECT leave_days FROM leave_requests WHERE id=?').get(id).leave_days,2);
- env.raw.prepare("UPDATE leave_requests SET status='approved',workflow_stage='completed',leave_days=5 WHERE id=?").run(id);
- const list=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();assert.equal(list.leave_requests.find(r=>r.id===id).leave_days,2);
- const detail=await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json();assert.equal(detail.leave_request.leave_days,2);
+ env.raw.prepare("DELETE FROM leave_requests WHERE id=?").run(id);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();assert.equal(list.leave_requests.find(r=>r.id===500).leave_days,2);
+ const detail=await (await call(env,'/api/leave-requests/500','GET',undefined,2)).json();assert.equal(detail.leave_request.leave_days,2);
  assert.equal((await dashboardActivitySummary(env,2570)).leave_summary.approved_days,2);
  assert.equal((await leaveStatistics(env,{fiscalYear:2570})).summary.approved_days,2);
- assert.equal(env.raw.prepare('SELECT leave_days FROM leave_requests WHERE id=?').get(id).leave_days,5);
+ // A holiday added after approval no longer changes the approved history.
  env.raw.exec("INSERT INTO gr_holidays VALUES('2026-11-10','holiday')");
- assert.equal((await dashboardActivitySummary(env,2570)).leave_summary.approved_days,1);
+ assert.equal((await dashboardActivitySummary(env,2570)).leave_summary.approved_days,2);
+ assert.equal((await leaveStatistics(env,{fiscalYear:2570})).summary.approved_days,2);
 });

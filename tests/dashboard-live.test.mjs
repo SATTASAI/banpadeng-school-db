@@ -44,7 +44,9 @@ test('leave counts update on request, approval and deletion and selected-year da
  // The end-to-end leave workflow tests exercise the authorized decision route.
  env.raw.prepare("UPDATE leave_requests SET status='approved' WHERE id=?").run(id);
  data=await (await call(env,'/api/overview')).json();assert.equal(data.leave_summary.approved,1);assert.equal(data.leave_summary.approved_days,3);assert.equal(data.pending_leave_requests,0);
- const selected=await (await call(env,'/api/overview?fiscal_year=2570')).json();assert.equal(selected.leave_summary.approved_days,2);assert.equal(selected.leave_summary.by_type[0].approved,1);
+ const selected=await (await call(env,'/api/overview?fiscal_year=2570')).json();assert.equal(selected.leave_summary.approved_days,2);
+ // The leave started in FY2569, so it counts as a time there; FY2570 gets only the overlapping days.
+ assert.equal(selected.leave_summary.by_type[0].approved,0);
  const draft=await (await call(env,'/api/leave-requests','POST',{...form,leave_type:'personal',start_date:'2026-10-01',end_date:'2026-10-01'},2)).json();
  assert.equal((await call(env,`/api/leave-requests/${draft.id}`,'DELETE',undefined,2)).status,200);
  data=await (await call(env,'/api/overview')).json();assert.equal(data.leave_summary.total,1);assert.equal(data.leave_summary.pending,0);
