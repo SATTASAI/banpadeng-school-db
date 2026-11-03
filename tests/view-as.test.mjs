@@ -35,6 +35,7 @@ test('superadmin views the system as another account, read-only, on this session
  const me=(await call(env,'/api/auth/me')).body.user;
  assert.equal(me.id,2);assert.equal(me.role,'teacher');assert.equal(me.is_admin,false);assert.equal(me.view_as.read_only,true);
  assert.equal((await call(env,'/api/leave-requests/1','PATCH',{action:'acknowledge_approve'})).body.code,'VIEW_AS_READ_ONLY');
+ assert.equal((await call(env,'/api/signatures','PUT',{data_url:'x'})).body.code,'VIEW_AS_READ_ONLY');
  // permissions follow the target account
  assert.equal((await call(env,'/api/admin/users')).status,403);
  // writes are refused while viewing as someone else

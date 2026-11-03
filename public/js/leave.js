@@ -5,6 +5,7 @@
  if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;}
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
  const quotaLabels={general:'ลาทั่วไป (รวมทุกประเภท ยกเว้นลาอนุโลม)',lenient:'ลาอนุโลม'};
+ let leaveCategory='real';
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
   const version=++allowanceVersion;
@@ -77,12 +78,32 @@
    if(user.role==='superadmin'&&$('leaveLineTemplate').dataset.dirty!=='true'){$('leaveLineTemplate').value=settings.line_template||'';showLinePreview();}
   }
   if(first){$('fPosition').value=data.profile.position||'';$('fPhone').value=data.profile.phone||'';}
-  const pending=records.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide||r.can_acknowledge_approve);
-  $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
-  $('historyPanel').innerHTML=records.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
+  const now=new Date(),fy=now.getFullYear()+(now.getMonth()>=9?1:0),from=(fy-1)+'-10-01',to=fy+'-09-30';
+  const real=records.filter(r=>r.leave_type!=='lenient'&&r.status==='approved'&&r.start_date>=from&&r.start_date<=to),lenient=records.filter(r=>r.leave_type==='lenient'&&r.status==='approved');
+  const totals=data.fiscal_statistics;
+  $('realLeaveTotal').textContent=(totals?.real.times??real.length)+' ครั้ง · '+(totals?.real.days??real.reduce((n,r)=>n+Number(r.leave_days||0),0))+' วัน';
+  $('lenientLeaveTotal').textContent=(totals?.lenient.times??lenient.length)+' ครั้ง · '+(totals?.lenient.days??lenient.reduce((n,r)=>n+Number(r.leave_days||0),0))+' วัน (แยกต่างหาก)';
+  renderRegisters();
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
-  if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id))await details(id);}
+  if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id)){setCategory(records.find(r=>r.id===id).leave_type==='lenient'?'lenient':'real');await details(id);}}
  }
+ function renderRegisters(){
+  const visible=records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient'));
+  const pending=visible.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide||r.can_acknowledge_approve);
+  $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
+  $('historyPanel').innerHTML=visible.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
+ }
+ function setCategory(category,changeForm=true){
+  leaveCategory=category;$('detailSection').hidden=true;detailId=null;
+  for(const [id,selected] of [['realLeaveCard',category==='real'],['lenientLeaveCard',category==='lenient']]){
+   $(id).classList[selected?'add':'remove']('active');$(id).setAttribute('aria-pressed',String(selected));
+  }
+  if(changeForm){if(category==='lenient')$('fType').value='lenient';else if($('fType').value==='lenient')$('fType').value='sick';}
+  $('substituteTeacherField').hidden=$('fType').value!=='lenient';$('fSubstitute').required=$('fType').value==='lenient';
+  renderRegisters();
+ }
+ $('realLeaveCard').onclick=()=>setCategory('real');$('lenientLeaveCard').onclick=()=>setCategory('lenient');
+ $('fType').onchange=()=>setCategory($('fType').value==='lenient'?'lenient':'real',false);
  function showDeputyStatus(){
   const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
   $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับข้อมูลหลังรับทราบ':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
@@ -120,9 +141,9 @@
   $('detailSection').hidden=false;
   const last=r.last_leave;
   $('detailPanel').innerHTML=`<div class="leave-details">${[
-   ['ชื่อ',r.full_name],['ตำแหน่ง',r.position],['วันที่เขียน',r.request_date],['ประเภท',types[r.leave_type]],['เหตุผล',r.reason||'—'],['วันลา',`${r.start_date} ถึง ${r.end_date} (${r.leave_days} วัน)`],['ที่อยู่ระหว่างลา',r.contact_address||'—'],['เบอร์ติดต่อ',r.contact_phone||'—'],['การลาครั้งล่าสุด',last?`${types[last.leave_type]} ${last.start_date} ถึง ${last.end_date}`:'ไม่มีรายการที่อนุมัติในระบบ'],['บันทึกหัวหน้าฝ่าย',r.personnel_note||'—']
+   ['ชื่อ',r.full_name],['ตำแหน่ง',r.position],['วันที่เขียน',r.request_date],['ประเภท',types[r.leave_type]],['เหตุผล',r.reason||'—'],['หมายเหตุ',r.applicant_note||'—'],...(r.leave_type==='lenient'?[['มอบหมายคาบสอนแทนให้แก่',r.substitute_teacher||'—']]:[]),['วันลา',`${r.start_date} ถึง ${r.end_date} (${r.leave_days} วัน)`],['ที่อยู่ระหว่างลา',r.contact_address||'—'],['เบอร์ติดต่อ',r.contact_phone||'—'],['การลาครั้งล่าสุด',last?`${types[last.leave_type]} ${last.start_date} ถึง ${last.end_date}`:'ไม่มีรายการที่อนุมัติในระบบ'],['บันทึกหัวหน้าฝ่าย',r.personnel_note||'—']
   ].map(([label,value])=>`<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join('')}</div>
-  <p class="muted">สถิติปีงบประมาณ ${esc(r.statistics_period.from)} ถึง ${esc(r.statistics_period.to)}</p>
+  <p class="muted">${r.leave_type==='lenient'?'สถิติลาอนุโลมแยกต่างหาก ไม่นับรวมปีงบประมาณ':'สถิติปีงบประมาณ'} ${esc(r.statistics_period.from)} ถึง ${esc(r.statistics_period.to)}</p>
   <div class="leave-stats"><table><thead><tr><th>ประเภท</th><th>ลามาแล้ว (ครั้ง)</th><th>ลามาแล้ว (วัน)</th><th>ลาครั้งนี้ (วัน)</th><th>รวม (ครั้ง)</th><th>รวม (วัน)</th></tr></thead><tbody>${r.stats.map(s=>`<tr>${[types[s.type],s.previous_count,s.previous_days,s.current_days,s.total_count,s.total_days].map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
   <h4>บันทึกการดำเนินการ</h4>${events.map(e=>`<p>${esc(e.created_at)} · ${esc(e.full_name)} · ${esc(({submitted:'ยื่นใบลา',acknowledged:'รับทราบ',recorded:'บันทึก',forwarded:'ส่งต่อ',reviewed:'ให้ความเห็น',approved:'อนุญาต',rejected:'ไม่อนุญาต'})[e.action]||e.action)} ${esc(e.note||'')}</p>`).join('')}
   <div class="leave-actions"><button class="btn btn-primary" data-export="docx" data-id="${Number(id)}">ดาวน์โหลดใบลา Word</button><button class="btn btn-primary" data-export="pdf" data-id="${Number(id)}">ดาวน์โหลดใบลา PDF</button></div>`;
@@ -154,14 +175,15 @@
   if(!Number.isFinite(count)||count<=0||count>span||count*2!==Math.round(count*2)){
    submitError('จำนวนวันลาต้องมากกว่า 0 ไม่เกิน '+span+' วัน และระบุได้ทีละครึ่งวัน','fDays');return false;
   }
+  if($('fType').value==='lenient'&&!$('fSubstitute').value.trim()){submitError('กรุณาระบุผู้ที่ได้รับมอบหมายคาบสอนแทน','fSubstitute');return false;}
   return true;
  }
  $('leaveForm').onsubmit=async e=>{
   e.preventDefault();if(busy||!validateForm())return;busy=true;$('submitBtn').disabled=true;$('submitBtn').textContent='กำลังส่งใบลา…';$('submitError').hidden=true;
   try{if(daysPending)throw Error('กรุณารอคำนวณวันทำงาน');
    const preview=await apiRequest('/api/leave-working-days?start='+encodeURIComponent($('fStart').value)+'&end='+encodeURIComponent($('fEnd').value));
-   if(Number($('fDays').value)>preview.working_days||preview.working_days<=0)throw Error('จำนวนวันลาต้องไม่เกิน '+preview.working_days+' วันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด)');await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim()}});
-   success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';
+   if(Number($('fDays').value)>preview.working_days||preview.working_days<=0)throw Error('จำนวนวันลาต้องไม่เกิน '+preview.working_days+' วันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด)');await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim(),applicant_note:$('fNote').value.trim(),substitute_teacher:$('fSubstitute').value.trim()}});
+   success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fNote').value='';$('fSubstitute').value='';$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';
    try{await load();}catch(e){error(Error('บันทึกใบลาสำเร็จแล้ว แต่โหลดทะเบียนไม่สำเร็จ กรุณาโหลดหน้าใหม่เพื่อดูรายการ'));}
    $('successBox').scrollIntoView({behavior:'smooth',block:'center'});
   }catch(e){submitError(e.message||'ส่งใบลาไม่สำเร็จ กรุณาลองใหม่');}finally{busy=false;$('submitBtn').disabled=false;$('submitBtn').textContent='ส่งใบลาให้หัวหน้าฝ่ายบุคลากร';}
@@ -191,7 +213,7 @@
  });
  $('closeDetail').onclick=()=>{$('detailSection').hidden=true;detailId=null;};
  $('backHomeLink').onclick=e=>{if(window.parent!==window&&window.parent.showOverview){e.preventDefault();window.parent.showOverview();}};
- (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(!user)throw Error('กรุณาเข้าสู่ระบบ');$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
+ (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(typeof SignatureUpload!=='undefined'&&!approvalView&&user&&!user.view_as?.read_only)SignatureUpload.mount($('teacherSignatureUpload'),{label:'อัปโหลดลายเซ็นครู'});if(!user)throw Error('กรุณาเข้าสู่ระบบ');$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
   setInterval(()=>{if(!document.hidden&&!busy&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||''))load().catch(error);},15000);
  }catch(e){error(e);$('submitBtn').disabled=true;$('leaveLoginPrompt').hidden=false;}})();
 })();

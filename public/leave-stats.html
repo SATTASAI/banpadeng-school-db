@@ -71,7 +71,7 @@ function render(){
   if(!data)return;const s=data.summary,types=Object.entries(data.types);
   $('lead').textContent=`${data.scope==='self'?'สถิติการลาของฉัน':'สถิติการลาครูและบุคลากรรายบุคคล'} · ${new Date(data.start+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} – ${new Date(data.end+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} · นับเฉพาะใบลาที่อนุมัติแล้ว`;
   const list=rows(),flags=data.people.filter(flagged).length;
-  $('cards').innerHTML=[['ครั้งที่ลา (อนุมัติ)',s.approved_times],['วันลารวม',num(s.approved_days)],['ผู้ที่มีการลา',`${s.people_with_leave} / ${s.people}`],['เฉลี่ยวันลาต่อคน',num(s.people?s.approved_days/s.people:0)],['รออนุมัติ',s.pending,'warn'],['เกินเกณฑ์ ป่วย+กิจ',flags,flags?'warn':'']]
+  $('cards').innerHTML=[['ลาจริง (ครั้ง/ปีงบประมาณ)',s.approved_times],['ลาจริง (วัน/ปีงบประมาณ)',num(s.approved_days)],['ลาอนุโลม (แยกต่างหาก)',(s.lenient_times||0)+' ครั้ง · '+num(s.lenient_days||0)+' วัน'],['ผู้ที่มีการลา',`${s.people_with_leave} / ${s.people}`],['เฉลี่ยวันลาต่อคน',num(s.people?s.approved_days/s.people:0)],['รออนุมัติ',s.pending,'warn'],['เกินเกณฑ์ ป่วย+กิจ',flags,flags?'warn':'']]
     .map(([l,v,c=''])=>`<div class="st-card ${c}"><span>${l}</span><strong>${v}</strong></div>`).join('');
   const maxType=Math.max(1,...data.by_type.map(t=>t.days));
   $('byType').innerHTML=data.by_type.map(t=>`<div class="st-bar"><span>${esc(t.label)}</span><i style="width:${t.days/maxType*100}%"></i><em>${t.times} ครั้ง · ${num(t.days)} วัน</em></div>`).join('');

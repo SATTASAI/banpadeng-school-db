@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
 import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {leaveTypes} from '../src/lib/leave-allowance.js';
-const form={leave_type:'lenient',reason:'เหตุผลทดสอบ',position:'ครู',start_date:'2026-10-06',end_date:'2026-10-06',contact_address:'บ้านพัก',contact_phone:'0000000000'};
+const form={substitute_teacher:'ครูผู้รับมอบหมาย',leave_type:'lenient',reason:'เหตุผลทดสอบ',position:'ครู',start_date:'2026-10-06',end_date:'2026-10-06',contact_address:'บ้านพัก',contact_phone:'0000000000'};
 const limits=(count)=>leaveTypes.map(leave_type=>({leave_type,max_count:leave_type==='lenient'?count:null}));
 test('only personnel head/admin may configure validated limits; both quota groups default to two per term',async()=>{
  const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);

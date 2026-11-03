@@ -8,7 +8,7 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
   const start = fiscalYear ? `${fiscalYear-544}-10-01` : null;
   const end = fiscalYear ? `${fiscalYear-543}-09-30` : null;
   const [leaveRows, today, finances, years] = await Promise.all([
-    env.DB.prepare(`SELECT * FROM leave_requests WHERE (? IS NULL OR (end_date>=? AND start_date<=?))`).bind(start,start,end).all(),
+    env.DB.prepare(`SELECT leave_type,leave_subtype,status,start_date,end_date,leave_days FROM leave_requests WHERE (? IS NULL OR (end_date>=? AND start_date<=?))`).bind(start,start,end).all(),
     env.DB.prepare(`SELECT COUNT(DISTINCT user_id) people FROM leave_requests WHERE status='approved'
       AND start_date<=date('now','+7 hours') AND end_date>=date('now','+7 hours')`).first(),
     env.DB.prepare(`SELECT
@@ -35,8 +35,8 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
   return { fiscal_year:fiscalYear, fiscal_years:years.results.map(r=>Number(r.fiscal_year)),
     finance_summary:{received_amount:money(finances.received_amount),paid_amount:money(finances.paid_amount),
       reserved_amount:money(finances.reserved_amount),balance_amount:sumMoney([finances.received_amount,-finances.paid_amount])},
-    leave_summary:{total:sum('total'),pending:sum('pending'),approved:sum('approved'),rejected:sum('rejected'),
-      approved_days:sum('approved_days'),on_leave_today:Number(today.people||0),by_type:byType} };
+    leave_summary:{total:sum('total'),pending:sum('pending'),approved:byType.filter(r=>r.key!=='lenient').reduce((n,r)=>n+r.approved,0),rejected:sum('rejected'),
+      approved_days:byType.filter(r=>r.key!=='lenient').reduce((n,r)=>n+r.approved_days,0),lenient:byType.find(r=>r.key==='lenient'),on_leave_today:Number(today.people||0),by_type:byType} };
 }
 
 const revisionReady=new WeakSet();

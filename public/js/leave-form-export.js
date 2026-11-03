@@ -18,34 +18,60 @@
    last:last?'ข้าพเจ้าได้ลา '+(labels[last.leave_type]||'')+' ครั้งสุดท้ายตั้งแต่วันที่ '+date(last.start_date):'ข้าพเจ้าได้ลา (   ) ป่วย (   ) กิจส่วนตัว (   ) คลอดบุตร ครั้งสุดท้ายตั้งแต่วันที่ '+dotted,
    lastEnd:last?'ถึงวันที่ '+date(last.end_date)+' มีกำหนด '+(last.leave_days??(Math.round((Date.parse(last.end_date)-Date.parse(last.start_date))/86400000)+1))+' วัน':'ถึงวันที่ '+dotted+' มีกำหนด ........ วัน',
    contact:'ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ '+(r.contact_address||dotted),phone:'เบอร์โทรศัพท์ที่สามารถติดต่อได้ '+(r.contact_phone||dotted),
+   note:r.applicant_note||'',substitute:r.leave_type==='lenient'?'มอบหมายคาบสอนแทนให้แก่ '+(r.substitute_teacher||dotted):'',
    signature:['ขอแสดงความนับถือ','(ลงชื่อ) '+dotted,'('+(r.full_name||dotted)+')'],
    stats:(r.stats||[]).map(s=>[labels[s.type]||s.type,String(s.previous_count),String(s.previous_days),String(s.current_days),String(s.total_count),String(s.total_days)]),
-   checker:['ลงชื่อ '+dotted+' ผู้ตรวจสอบ','('+(r.reviewer_name||r.deputy_name||dotted)+')','ตำแหน่ง '+(r.reviewer_position||r.deputy_position||'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),'วันที่ '+eventDate(r.reviewer_at)],
+   checker:['ลงชื่อ '+dotted+' ผู้ตรวจสอบ','('+(r.deputy_name||r.reviewer_name||dotted)+')','ตำแหน่ง '+(r.deputy_position||r.reviewer_position||'รองผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),'วันที่ '+eventDate(r.reviewer_at)],
    opinion:'ความเห็นผู้บังคับบัญชา',comment:r.reviewer_comment||dotted+dotted,
    decision:'คำสั่ง',decisionChoice:(r.status==='approved'?'( / )':'(   )')+' อนุญาต    '+(r.status==='rejected'?'( / )':'(   )')+' ไม่อนุญาต',
    director:['(ลงชื่อ) '+dotted,'('+(r.decision_name||r.director_name||dotted)+')','ตำแหน่ง '+(r.decision_position||r.director_position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'),'วันที่ '+eventDate(r.approved_at)],decisionNote:r.decision_note||''};
  }
+
+ function formRows(r,m){
+  return [['ชื่อ–สกุล',r.full_name||dotted],['ตำแหน่ง / สังกัด',(r.position||dotted)+' / โรงเรียนบ้านป่าเด็ง'],
+   ['ประเภทการลา','ลา'+(labels[r.leave_type]||r.leave_type)],['เหตุผล',r.reason||dotted],
+   ['ระยะเวลาการลา',m.period],['ที่อยู่ระหว่างลา',r.contact_address||dotted],['เบอร์โทรศัพท์',r.contact_phone||dotted],
+   ...(m.substitute?[['มอบหมายคาบสอนแทนให้แก่',r.substitute_teacher||dotted]]:[]),['หมายเหตุ',m.note||'—']];
+ }
+ function signatureData(r){return {teacher:r.teacher_signature||null,deputy:r.status==='approved'?r.deputy_signature||null:null,approver:r.status==='approved'?r.approver_signature||null:null};}
+ function pngBytes(data){return Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0));}
  function docxFiles(r){
-  const m=model(r),p=(t,{bold=false,align='left',after=0,before=0,size=32}={})=>`<w:p><w:pPr><w:jc w:val="${align}"/><w:spacing w:before="${before}" w:after="${after}" w:line="350" w:lineRule="exact"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="TH Sarabun PSK" w:hAnsi="TH Sarabun PSK" w:cs="TH Sarabun PSK"/>${bold?'<w:b/>':''}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr><w:t xml:space="preserve">${xml(t)}</w:t></w:r></w:p>`;
-  const tc=(body,width,span=1)=>`<w:tc><w:tcPr><w:tcW w:w="${width}" w:type="dxa"/>${span>1?`<w:gridSpan w:val="${span}"/>`:''}<w:vAlign w:val="center"/></w:tcPr>${body}</w:tc>`;
-  const widths=[1250,700,700,1050,650,650];
-  const stats='<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(k=>`<w:${k} w:val="single" w:sz="4"/>`).join('')+'</w:tblBorders></w:tblPr><w:tblGrid>'+widths.map(w=>`<w:gridCol w:w="${w}"/>`).join('')+'</w:tblGrid><w:tr>'+tc(p('ประเภทลา',{align:'center',size:28}),1250)+tc(p('ลามาแล้ว',{align:'center',size:28}),1400,2)+tc(p('ลาครั้งนี้',{align:'center',size:28}),1050)+tc(p('รวมเป็น',{align:'center',size:28}),1300,2)+'</w:tr><w:tr>'+['','(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'].map((s,i)=>tc(p(s,{align:'center',size:28}),widths[i])).join('')+'</w:tr>'+m.stats.map(row=>'<w:tr>'+row.map((s,i)=>tc(p(s,{align:i===0?'left':'center',size:28}),widths[i])).join('')+'</w:tr>').join('')+'</w:tbl>';
-  const outer=(left,right)=>`<w:tbl><w:tblPr><w:tblW w:w="9350" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblBorders>${['top','left','bottom','right','insideH','insideV'].map(k=>`<w:${k} w:val="nil"/>`).join('')}</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="5150"/><w:gridCol w:w="4200"/></w:tblGrid><w:tr>${tc(left,5150)}${tc(right,4200)}</w:tr></w:tbl>`;
-  const body=p(m.title,{bold:true,align:'center',after:360,size:36})+m.written.map(t=>p(t,{align:'right'})).join('')+p('',{after:100})+p(m.subject)+p(m.to)+p(m.name,{before:200})+p(m.agency)+p('ขอลา')+m.choices.map(t=>p(t)).join('')+(m.other?p(m.other):'')+p(m.period)+p(m.last)+p(m.lastEnd)+p(m.contact)+p(m.phone)+m.signature.map((t,i)=>p(t,{align:'right',before:i<2?240:0})).join('')+p('สถิติการลา',{bold:true,before:120})+outer(stats+p(''),p('',{before:300})+m.checker.map(t=>p(t,{align:'center',size:30})).join(''))+p(m.opinion,{before:180})+p(m.comment)+outer(p(''),p(m.decision,{align:'center'})+p(m.decisionChoice,{align:'center'})+(m.decisionNote?p(m.decisionNote,{align:'center'}):'')+m.director.map((t,i)=>p(t,{align:'center',before:i===0?240:0,size:30})).join(''));
-  return {'[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+  const m=model(r),signatures=signatureData(r),media={},rels=[];
+  const p=(t,{bold=false,align='both',after=60,before=0,size=32}={})=>'<w:p><w:pPr><w:jc w:val="'+align+'"/><w:spacing w:before="'+before+'" w:after="'+after+'" w:line="320" w:lineRule="atLeast"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="TH Sarabun PSK" w:hAnsi="TH Sarabun PSK" w:cs="TH Sarabun PSK"/>'+(bold?'<w:b/>':'')+'<w:sz w:val="'+size+'"/><w:szCs w:val="'+size+'"/></w:rPr><w:t xml:space="preserve">'+xml(t)+'</w:t></w:r></w:p>';
+  function image(key){
+   if(!signatures[key])return p('(ลงชื่อ) '+dotted,{align:'center',before:140});
+   const bytes=pngBytes(signatures[key]),view=new DataView(bytes.buffer),w=view.getUint32(16),h=view.getUint32(20),scale=Math.min(145/w,38/h),cx=Math.round(w*scale*12700),cy=Math.round(h*scale*12700),id=rels.length+1;
+   media['word/media/'+key+'.png']=bytes;rels.push('<Relationship Id="sig'+id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/'+key+'.png"/>');
+   return '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="100" w:after="0"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="'+cx+'" cy="'+cy+'"/><wp:docPr id="'+id+'" name="ลายเซ็น '+key+'"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="'+id+'" name="'+key+'.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="sig'+id+'"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+cx+'" cy="'+cy+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+  }
+  const tc=(body,width,span=1)=>'<w:tc><w:tcPr><w:tcW w:w="'+width+'" w:type="dxa"/>'+(span>1?'<w:gridSpan w:val="'+span+'"/>':'')+'<w:vAlign w:val="center"/></w:tcPr>'+body+'</w:tc>';
+  const table=(rows,widths,border=false)=>'<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(k=>'<w:'+k+' w:val="'+(border?'single':'nil')+'" w:sz="4" w:color="777777"/>').join('')+'</w:tblBorders></w:tblPr><w:tblGrid>'+widths.map(w=>'<w:gridCol w:w="'+w+'"/>').join('')+'</w:tblGrid>'+rows.map(row=>'<w:tr><w:trPr><w:cantSplit/></w:trPr>'+row.join('')+'</w:tr>').join('')+'</w:tbl>';
+  const fields=table(formRows(r,m).map(([label,value])=>[tc(p(label,{bold:true}),2200),tc(p(value),7438)]),[2200,7438]);
+  const widths=[2438,1440,1440,1440,1440,1440],stats=table([
+   [tc(p('ประเภทลา',{align:'center',bold:true}),2438),tc(p('ลามาแล้ว',{align:'center'}),2880,2),tc(p('ลาครั้งนี้',{align:'center'}),1440),tc(p('รวมเป็น',{align:'center'}),2880,2)],
+   ['', '(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'].map((v,i)=>tc(p(v,{align:'center'}),widths[i])),
+   ...m.stats.map(row=>row.map((v,i)=>tc(p(v,{align:i?'center':'left'}),widths[i])))],widths,true);
+  const teacher=p('ขอแสดงความนับถือ',{align:'center',before:100})+image('teacher')+p('('+(r.full_name||dotted)+')',{align:'center'});
+  const checker=image('deputy')+m.checker.slice(1).map(t=>p(t,{align:'center',size:30})).join('');
+  const decision=p(m.decision,{align:'center',bold:true})+p(m.decisionChoice,{align:'center'})+(m.decisionNote?p(m.decisionNote,{align:'center'}):'')+image('approver')+m.director.slice(1).map(t=>p(t,{align:'center',size:30})).join('');
+  const body=p(m.title,{bold:true,align:'center',size:38,after:200})+m.written.map(t=>p(t,{align:'right',after:0})).join('')+p(m.subject,{before:180})+p(m.to)+fields+p(m.last)+p(m.lastEnd)+table([[tc(p(''),4819),tc(teacher,4819)]],[4819,4819])+p(r.leave_type==='lenient'?'สถิติลาอนุโลม (แยกต่างหาก ไม่นับรวมปีงบประมาณ)':'สถิติการลาจริงประจำปีงบประมาณ',{bold:true,before:120})+stats+p(m.opinion,{bold:true,before:120})+p(m.comment)+table([[tc(checker,4819),tc(decision,4819)]],[4819,4819]);
+  const files={'[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
    '_rels/.rels':'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
-   'word/document.xml':'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'+body+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1080" w:bottom="850" w:left="1440"/></w:sectPr></w:body></w:document>'};
+   'word/document.xml':'<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>'+body+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="850" w:right="1134" w:bottom="850" w:left="1134"/></w:sectPr></w:body></w:document>'};
+  if(rels.length){files['word/_rels/document.xml.rels']='<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rels.join('')+'</Relationships>';Object.assign(files,media);}
+  return files;
  }
  function pdfDefinition(r){
-  const m=model(r),line=(text,extra={})=>({text,...extra}),right=(text,extra={})=>line(text,{alignment:'right',...extra});
-  const table={table:{widths:[64,28,28,32,28,28],body:[[{text:'ประเภทลา',rowSpan:2},{text:'ลามาแล้ว',colSpan:2},{},{text:'ลาครั้งนี้'},{text:'รวมเป็น',colSpan:2},{}],['','(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'],...m.stats].map(row=>row.map(c=>typeof c==='string'?{text:c,alignment:'center'}:c))},fontSize:14,layout:{paddingLeft:()=>3,paddingRight:()=>3,paddingTop:()=>2,paddingBottom:()=>2}};
-  return {pageSize:'A4',pageMargins:[62,42,48,42],defaultStyle:{font:'Sarabun',fontSize:16,lineHeight:0.84},content:[
-   line(m.title,{bold:true,alignment:'center',fontSize:18,margin:[0,0,0,14]}),...m.written.map(t=>right(t)),line(m.subject,{margin:[0,16,0,0]}),line(m.to),line(m.name,{margin:[0,14,0,0]}),line(m.agency),
-   {columns:[{text:'ขอลา',width:58},{stack:m.choices.map(t=>line(t)),width:'*'}]},...(m.other?[line(m.other)]:[]),line(m.period),line(m.last),line(m.lastEnd),line(m.contact),line(m.phone),
-   ...m.signature.map((t,i)=>right(t,{margin:[0,i<2?10:0,0,0]})),line('สถิติการลา',{bold:true,margin:[0,10,0,3]}),
-   {columns:[{width:260,stack:[table]},{width:'*',stack:m.checker.map(t=>line(t,{alignment:'center',fontSize:15})),margin:[0,26,0,0]}],columnGap:12},
-   line(m.opinion,{margin:[0,14,0,0]}),line(m.comment),
-   {columns:[{width:250,text:''},{width:'*',stack:[line(m.decision,{alignment:'center'}),line(m.decisionChoice,{alignment:'center'}),...(m.decisionNote?[line(m.decisionNote,{alignment:'center'})]:[]),...m.director.map((t,i)=>line(t,{alignment:'center',fontSize:15,margin:[0,i===0?20:0,0,0]}))]}],columnGap:12}
+  const m=model(r),signatures=signatureData(r),line=(text,extra={})=>({text,...extra}),center=t=>line(t,{alignment:'center'});
+  const image=key=>signatures[key]?{image:signatures[key],fit:[145,38],alignment:'center',margin:[0,5,0,2]}:line('(ลงชื่อ) '+dotted,{alignment:'center',margin:[0,15,0,2]});
+  const fieldTable={table:{widths:[105,'*'],body:formRows(r,m).map(([label,value])=>[{text:label,bold:true},line(value)])},layout:{hLineWidth:()=>0,vLineWidth:()=>0,paddingLeft:()=>4,paddingRight:()=>4,paddingTop:()=>1,paddingBottom:()=>1},margin:[0,8,0,8]};
+  const stats={table:{widths:['*',40,40,45,40,40],body:[[{text:'ประเภทลา',rowSpan:2},{text:'ลามาแล้ว',colSpan:2},{},{text:'ลาครั้งนี้'},{text:'รวมเป็น',colSpan:2},{}],['','(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'],...m.stats].map(row=>row.map(c=>typeof c==='string'?center(c):c))},fontSize:14,layout:{paddingLeft:()=>4,paddingRight:()=>4,paddingTop:()=>2,paddingBottom:()=>2}};
+  return {pageSize:'A4',pageMargins:[56.7,34,56.7,34],defaultStyle:{font:'Sarabun',fontSize:16,lineHeight:0.9,alignment:'justify'},content:[
+   line(m.title,{bold:true,alignment:'center',fontSize:19,margin:[0,0,0,10]}),...m.written.map(t=>line(t,{alignment:'right'})),line(m.subject,{margin:[0,12,0,0]}),line(m.to),fieldTable,line(m.last),line(m.lastEnd),
+   {columns:[{width:'*',text:''},{width:'*',stack:[center('ขอแสดงความนับถือ'),image('teacher'),center('('+(r.full_name||dotted)+')')]}],margin:[0,8,0,8]},
+   line(r.leave_type==='lenient'?'สถิติลาอนุโลม (แยกต่างหาก ไม่นับรวมปีงบประมาณ)':'สถิติการลาจริงประจำปีงบประมาณ',{bold:true,margin:[0,5,0,3]}),stats,
+   line(m.opinion,{bold:true,margin:[0,8,0,0]}),line(m.comment),
+   {unbreakable:true,columns:[{width:'*',stack:[image('deputy'),...m.checker.slice(1).map(center)]},{width:'*',stack:[center(m.decision),center(m.decisionChoice),...(m.decisionNote?[center(m.decisionNote)]:[]),image('approver'),...m.director.slice(1).map(center)]}],columnGap:16}
   ]};
  }
  const loading=new Map();

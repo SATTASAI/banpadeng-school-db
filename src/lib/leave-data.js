@@ -13,7 +13,7 @@ export function ensureLeaveData(env) {
    personnel_note:'TEXT',forwarded_by:'INTEGER',forwarded_at:'TEXT',forward_token:'TEXT',deputy_personnel_id:'INTEGER',
    deputy_name:'TEXT',deputy_position:'TEXT',director_name:'TEXT',director_position:'TEXT',
    reviewer_name:'TEXT',reviewer_position:'TEXT',reviewer_comment:'TEXT',reviewer_at:'TEXT',
-   decision_note:'TEXT',decision_name:'TEXT',decision_position:'TEXT'
+   decision_note:'TEXT',decision_name:'TEXT',decision_position:'TEXT',applicant_note:'TEXT',substitute_teacher:'TEXT',teacher_signature:'TEXT',deputy_signature:'TEXT',approver_signature:'TEXT'
   };
   for (const [name,type] of Object.entries(columns)) if (!results.some(c=>c.name===name)) {
    try {await env.DB.prepare(`ALTER TABLE leave_requests ADD COLUMN ${name} ${type}`).run();}
@@ -76,12 +76,12 @@ export async function leaveForm(env,row) {
  row=leaveRecord((await normalizeLeaves(env,[row]))[0]);
  const person=await env.DB.prepare(`SELECT p.* FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(row.user_id).first();
  const start=row.start_date,year=Number(start.slice(0,4))-(start.slice(5,7)<'10'?1:0),from=`${year}-10-01`,to=`${year+1}-09-30`;
- const {results:storedHistory}=await env.DB.prepare(`SELECT r.* FROM leave_requests r
+ const {results:storedHistory}=await env.DB.prepare(`SELECT r.id,r.user_id,r.leave_type,r.leave_subtype,r.start_date,r.end_date,r.leave_days,r.status FROM leave_requests r
   WHERE r.status='approved' AND r.id<>? AND r.start_date<=? AND
   (r.user_id=? OR (? IS NOT NULL AND r.user_id IN (SELECT user_id FROM personnel_accounts WHERE personnel_id=?)))
   ORDER BY r.start_date DESC,r.id DESC`).bind(row.id,start,row.user_id,person?.id??null,person?.id??null).all();
- const history=(await normalizeLeaves(env,storedHistory)).map(leaveRecord);
- const stats=['sick','personal','maternity',...(row.leave_type==='lenient'||history.some(r=>r.leave_type==='lenient')?['lenient']:[]),...(row.leave_type==='other'?['other']:[])].map(type=>{
+ const history=(await normalizeLeaves(env,storedHistory)).map(leaveRecord).filter(r=>(r.leave_type==='lenient')===(row.leave_type==='lenient'));
+ const stats=(row.leave_type==='lenient'?['lenient']:['sick','personal','maternity',...(row.leave_type==='other'?['other']:[])]).map(type=>{
   const prior=history.filter(r=>r.leave_type===type&&r.start_date>=from&&r.start_date<=to);
   const previous_days=prior.reduce((sum,r)=>sum+Number(r.leave_days??calendarDays(r.start_date,r.end_date)),0),current_days=row.leave_type===type?Number(row.leave_days??calendarDays(row.start_date,row.end_date)):0;
   return {type,previous_count:prior.length,previous_days,current_days,total_count:prior.length+(current_days>0?1:0),total_days:previous_days+current_days};
@@ -89,6 +89,6 @@ export async function leaveForm(env,row) {
  const people=await executives(env),directors=people.filter(isDirector);
  return {...row,position:row.position||person?.position||'',request_date:row.request_date||row.created_at?.slice(0,10)||today(),
   leave_days:Number(row.leave_days??calendarDays(row.start_date,row.end_date)),last_leave:history[0]||null,stats,
-  statistics_period:{from,to},director_name:row.director_name||(directors.length===1?directors[0].full_name:''),
+  statistics_period:{from,to,included_in_fiscal_year:row.leave_type!=='lenient'},director_name:row.director_name||(directors.length===1?directors[0].full_name:''),
   director_position:row.director_position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'};
 }

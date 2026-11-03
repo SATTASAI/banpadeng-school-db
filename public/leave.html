@@ -18,6 +18,10 @@
   <div class="error-box" id="errorBox" role="alert"></div>
   <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
+  <div class="leave-category-cards" aria-label="ประเภทการลา">
+   <button type="button" class="leave-category-card active" id="realLeaveCard" aria-pressed="true"><strong>ลาจริง</strong><span>นับรวมสถิติปีงบประมาณ</span><b id="realLeaveTotal">—</b></button>
+   <button type="button" class="leave-category-card" id="lenientLeaveCard" aria-pressed="false"><strong>ลาอนุโลม</strong><span>ไม่นับรวมสถิติปีงบประมาณ</span><b id="lenientLeaveTotal">—</b></button>
+  </div>
   <section class="panel leave-panel" id="newLeaveSection">
    <h3>ยื่นใบลาใหม่</h3>
    <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
@@ -34,7 +38,10 @@
      <div class="field"><label for="fPhone">เบอร์โทรศัพท์ที่ติดต่อได้ *</label><input id="fPhone" type="tel" maxlength="100" required></div>
      <div class="field leave-wide"><label for="fAddress">ที่อยู่ที่ติดต่อได้ระหว่างลา *</label><textarea id="fAddress" rows="2" maxlength="1000" required></textarea></div>
     </div>
-    <p class="muted">การลาครั้งล่าสุดและสถิติการลาดึงจากรายการที่อนุมัติในระบบ สถิติใช้ปีงบประมาณ 1 ตุลาคม–30 กันยายน</p>
+    <div class="field leave-wide" id="substituteTeacherField" hidden><label for="fSubstitute">มอบหมายคาบสอนแทนให้แก่ *</label><input id="fSubstitute" maxlength="500" placeholder="ระบุชื่อครูผู้รับมอบหมายคาบสอนแทน"><small class="muted">ครูผู้ลาระบุเอง ข้อมูลนี้จะแสดงในใบลาอนุโลม</small></div>
+    <div class="field leave-wide"><label for="fNote">หมายเหตุ</label><textarea id="fNote" rows="2" maxlength="2000"></textarea></div>
+    <section id="teacherSignatureUpload" class="panel leave-panel"></section>
+    <p class="muted">การลาครั้งล่าสุดและสถิติการลาดึงจากรายการที่อนุมัติในระบบ ลาจริงใช้สถิติปีงบประมาณ 1 ตุลาคม–30 กันยายน ลาอนุโลมแยกต่างหากและไม่นับรวมยอดปีงบประมาณ</p>
     <p id="submitError" class="leave-submit-error" role="alert" hidden></p>
     <button class="btn btn-primary" id="submitBtn" type="submit">ส่งใบลาให้หัวหน้าฝ่ายบุคลากร</button>
    </form>
@@ -65,5 +72,5 @@
   <h3>ทะเบียนและประวัติการลา</h3><div class="panel" id="historyPanel"></div>
  </main>
 </div>
-<script src="/js/api.js"></script><script src="/js/leave-form-export.js"></script><script src="/js/leave.js"></script>
+<script src="/js/api.js"></script><script src="/js/leave-form-export.js"></script><script src="/js/signature-upload.js"></script><script src="/js/leave.js"></script>
 </body></html>
