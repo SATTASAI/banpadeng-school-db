@@ -1,3 +1,4 @@
+import {workingDays,leaveCalendar,normalizeLeaves} from '../lib/leave-working-days.js';
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData,executives,designatedDeputy,isDirector,isDeputy,validDate,calendarDays,today,leaveForm,leaveRecord} from '../lib/leave-data.js';
@@ -16,6 +17,12 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
 export async function handleLeaveRoute(request,env,pathname,method) {
+ if(pathname==='/api/leave-working-days'&&method==='GET'){
+  const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
+  const q=new URL(request.url).searchParams,start=q.get('start'),end=q.get('end');
+  if(!validDate(start)||!validDate(end)||end<start||calendarDays(start,end)>3660)return fail('ช่วงวันที่ลาไม่ถูกต้อง');
+  return json({working_days:workingDays(start,end,await leaveCalendar(env))});
+ }
  if(pathname==='/api/leave-allowance'&&method==='GET'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
   await ensureLeaveData(env);
@@ -28,7 +35,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   await ensureLeaveData(env);
   const row=await readLeaveAccess(env,body?.token);
   if(!row)return fail('ลิงก์ไม่ถูกต้องหรือหมดอายุแล้ว',404);
-  return json({leave:{...row,leave_type:row.leave_subtype||row.leave_type,leave_subtype:undefined}});
+  return json({leave:{...(await normalizeLeaves(env,[row]))[0],leave_type:row.leave_subtype||row.leave_type,leave_subtype:undefined}});
  }
  const deliveryMatch=pathname.match(/^\/api\/leave-requests\/(\d+)\/delivery$/);
  if(deliveryMatch&&method==='GET'){
@@ -175,7 +182,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const earlyDeputy=execAccount&&results.some(r=>r.status==='pending'&&r.workflow_stage==='forwarded'&&people.some(p=>isDeputy(p)&&p.id===r.deputy_personnel_id&&p.user_ids.includes(user.id)));
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await designatedDeputy(env,people);
-  return json({leave_requests:results.map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),
+  return json({leave_requests:(await normalizeLeaves(env,results)).map(leaveRecord).map(r=>({...r,can_acknowledge:head&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),
    can_record:false,can_forward:false,
    can_review:false,
    can_acknowledge_approve:canDecide&&r.user_id!==user.id&&Number(r.applicant_personnel_id)!==Number(person.id)&&r.status==='pending'&&['submitted','acknowledged','forwarded'].includes(r.workflow_stage),
@@ -199,8 +206,10 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(!['sick','personal','maternity','lenient','other'].includes(body.leave_type))return fail('กรุณาเลือกประเภทการลา');
   const reason=text(body.reason,2000);if(!reason)return fail('กรุณาระบุเหตุผลการลา');
   if(!validDate(body.start_date)||!validDate(body.end_date)||body.end_date<body.start_date)return fail('วันที่เริ่มและสิ้นสุดการลาไม่ถูกต้อง');
-  const days=Number(body.leave_days??calendarDays(body.start_date,body.end_date));
-  if(!Number.isFinite(days)||days<=0||days>calendarDays(body.start_date,body.end_date)||days*2!==Math.round(days*2))return fail('จำนวนวันลาต้องมากกว่า 0 ไม่เกินช่วงวันที่ลา และระบุได้ทีละครึ่งวัน');
+  if(calendarDays(body.start_date,body.end_date)>3660)return fail('ช่วงวันที่ลายาวเกินกำหนด');
+  const maxDays=workingDays(body.start_date,body.end_date,await leaveCalendar(env));
+  const days=Number(body.leave_days??maxDays);
+  if(!Number.isFinite(days)||days<=0||days>maxDays||days*2!==Math.round(days*2))return fail('จำนวนวันลาต้องมากกว่า 0 ไม่เกินจำนวนวันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด) และระบุได้ทีละครึ่งวัน');
   const position=text(body.position,200),address=text(body.contact_address,1000),phone=text(body.contact_phone,100);
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');

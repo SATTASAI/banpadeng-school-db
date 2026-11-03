@@ -66,6 +66,7 @@ test('administration approval view lists pending leaves for read-only deputies a
 test('head inbox acknowledges and forwards in one action, escapes text and retains draft notes on refresh',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}},scrollIntoView(){}});return nodes.get(id);};let click,poll,payload,stage='submitted';
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[node('note-9')],activeElement:{tagName:'BODY'},addEventListener(event,fn){if(event==='click')click=fn;}},setInterval(fn){poll=fn;},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return {working_days:q.get('end')==='2026-10-07'?2:1};}
   if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:3,full_name:'หัวหน้าฝ่าย'}};
   if(path==='/api/leave-settings')return{limits:[],deputy_personnel_id:5,deputies:[{id:5,full_name:'รองฝ่ายบุคลากร',position:'รองผู้อำนวยการ',line_status:'active'}]};
@@ -83,6 +84,7 @@ test('director sees approve and reject immediately without a deputy opinion',asy
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path)=>{
   if(path==='/api/auth/me')return {user:{id:4,role:'executive'}};
+  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return {working_days:q.get('end')==='2026-10-07'?2:1};}
   if(path.startsWith('/api/leave-allowance'))return {period:null,message:'ไม่มีข้อมูล'};
   return {profile:{},leave_requests:[{id:9,full_name:'ครูทดสอบ',leave_type:'sick',workflow_stage:'forwarded',status:'pending',can_decide:true,reviewer_at:null}]};
  }});
@@ -95,6 +97,7 @@ function submissionHarness({reject=false,reloadFails=false}={}){
  const nodes=new Map(),calls=[];let loads=0;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,attributes:{},classList:{add(){},remove(){}},scrollIntoView(){this.scrolled=true},focus(){this.focused=true},setAttribute(k,v){this.attributes[k]=v},removeAttribute(k){delete this.attributes[k]}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[],activeElement:{tagName:'BODY'},addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return {working_days:q.get('end')==='2026-10-07'?2:1};}
   if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:2,full_name:'ครูทดสอบ'}};
   if(options){calls.push(options.body);if(reject)throw Error('ฐานข้อมูลไม่พร้อมใช้งาน');return{id:42};}
@@ -114,7 +117,7 @@ test('missing required details and impossible leave days show a focused field an
  h.fill();h.node('fDays').value='0.3';await h.submit();assert.equal(h.calls.length,0);
 });
 test('date input calculates days immediately and failed submission keeps the draft and re-enables retry',async()=>{
- const h=submissionHarness({reject:true});await new Promise(r=>setImmediate(r));h.fill();h.node('fEnd').value='2026-10-07';h.node('fEnd').oninput();assert.equal(h.node('fDays').value,'2');
+ const h=submissionHarness({reject:true});await new Promise(r=>setImmediate(r));h.fill();h.node('fEnd').value='2026-10-07';await h.node('fEnd').oninput();assert.equal(h.node('fDays').value,'2');
  await h.submit();assert.equal(h.calls.length,1);assert.equal(h.node('fReason').value,'เหตุผลทดสอบ');assert.equal(h.node('submitBtn').disabled,false);assert.match(h.node('submitError').textContent,/ฐานข้อมูลไม่พร้อม/);assert.equal(h.node('submitError').scrolled,true);
 });
 test('saved request stays successful if refreshing the registry fails, so users are not told to submit a duplicate',async()=>{
@@ -126,6 +129,7 @@ test('superadmin inserts leave dates, reason and teacher phone at the cursor and
  const nodes=new Map();let saved;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',dataset:{},hidden:false,classList:{add(){},remove(){}},focus(){},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b;}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:'',origin:'https://school.test'},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
+  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return {working_days:q.get('end')==='2026-10-07'?2:1};}
   if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:1,role:'superadmin'}};
   if(path==='/api/leave-settings'){if(options){saved=options.body.line_template;return{line_template:saved};}return{limits:[],deputies:[],line_template:'วันที่ลา: '};}

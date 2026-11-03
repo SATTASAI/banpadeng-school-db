@@ -24,14 +24,14 @@ test('general types share two turns while lenient gets two separate turns; a new
  const env=await fixture();await ensureLeaveData(env);seedLeaveCalendar(env);
  const submit=(type,start_date,reason)=>call(env,'/api/leave-requests','POST',{...form,leave_type:type,start_date,end_date:start_date,reason},2);
  assert.equal((await submit('sick','2026-10-30','ป่วย')).status,201);
- assert.equal((await submit('personal','2026-10-31','กิจส่วนตัว')).status,201);
- assert.equal((await submit('other','2026-10-31','เกินสิทธิ์ทั่วไป')).status,409);
- assert.equal((await submit('lenient','2026-10-31','อนุโลมหนึ่ง')).status,201);
- assert.equal((await submit('lenient','2026-10-31','อนุโลมสอง')).status,201);
- assert.equal((await submit('lenient','2026-10-31','อนุโลมเกินสิทธิ์')).status,409);
+ assert.equal((await submit('personal','2026-10-29','กิจส่วนตัว')).status,201);
+ assert.equal((await submit('other','2026-10-29','เกินสิทธิ์ทั่วไป')).status,409);
+ assert.equal((await submit('lenient','2026-10-29','อนุโลมหนึ่ง')).status,201);
+ assert.equal((await submit('lenient','2026-10-29','อนุโลมสอง')).status,201);
+ assert.equal((await submit('lenient','2026-10-29','อนุโลมเกินสิทธิ์')).status,409);
  const term2=await (await call(env,'/api/leave-allowance?date=2026-11-01','GET',undefined,2)).json();
  assert.equal(term2.period.term_number,2);assert(term2.types.every(r=>r.remaining===2));
- assert.equal((await submit('sick','2026-11-01','เทอมใหม่')).status,201);
+ assert.equal((await submit('sick','2026-11-02','เทอมใหม่')).status,201);
  const denied=await submit('sick','2027-04-01','นอกภาคเรียน');assert.equal(denied.status,400);
  const outside=await (await call(env,'/api/leave-allowance?date=2027-04-01','GET',undefined,2)).json();assert.equal(outside.period,null);
  // Actual calendar dates win over hard-coded semester boundaries and current active term.
@@ -62,7 +62,7 @@ test('linked history, pending reservations, term reset, cancellation and concurr
  data=await (await call(env,'/api/leave-allowance?date=2026-10-06','GET',undefined,2)).json();assert.equal(data.types.find(r=>r.leave_type==='lenient').remaining,1);
  data=await (await call(env,'/api/leave-allowance?date=2026-11-01','GET',undefined,2)).json();assert.equal(data.types.find(r=>r.leave_type==='lenient').remaining,2);
  await call(env,'/api/leave-settings','PATCH',{limits:limits(0)});
- assert.equal((await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-11-01',end_date:'2026-11-01'},2)).status,409);
+ assert.equal((await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-11-02',end_date:'2026-11-02'},2)).status,409);
  await call(env,'/api/leave-settings','PATCH',{limits:limits(null)});
  assert.equal((await call(env,'/api/leave-requests','POST',{...form,reason:'ไม่จำกัดสิทธิ์'},2)).status,201);
 });

@@ -1,3 +1,4 @@
+import {normalizeLeaves} from './leave-working-days.js';
 import {ensureDepartmentStaff} from '../routes/department-staff.js';
 
 const ready = new WeakMap();
@@ -72,14 +73,14 @@ export function today() {return new Date().toLocaleDateString('sv-SE',{timeZone:
 // Additive subtype preserves existing D1 CHECK constraints and foreign-key history.
 export function leaveRecord(row) {return {...row,leave_type:row.leave_subtype||row.leave_type};}
 export async function leaveForm(env,row) {
- row=leaveRecord(row);
+ row=leaveRecord((await normalizeLeaves(env,[row]))[0]);
  const person=await env.DB.prepare(`SELECT p.* FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(row.user_id).first();
  const start=row.start_date,year=Number(start.slice(0,4))-(start.slice(5,7)<'10'?1:0),from=`${year}-10-01`,to=`${year+1}-09-30`;
  const {results:storedHistory}=await env.DB.prepare(`SELECT r.* FROM leave_requests r
   WHERE r.status='approved' AND r.id<>? AND r.start_date<=? AND
   (r.user_id=? OR (? IS NOT NULL AND r.user_id IN (SELECT user_id FROM personnel_accounts WHERE personnel_id=?)))
   ORDER BY r.start_date DESC,r.id DESC`).bind(row.id,start,row.user_id,person?.id??null,person?.id??null).all();
- const history=storedHistory.map(leaveRecord);
+ const history=(await normalizeLeaves(env,storedHistory)).map(leaveRecord);
  const stats=['sick','personal','maternity',...(row.leave_type==='lenient'||history.some(r=>r.leave_type==='lenient')?['lenient']:[]),...(row.leave_type==='other'?['other']:[])].map(type=>{
   const prior=history.filter(r=>r.leave_type===type&&r.start_date>=from&&r.start_date<=to);
   const previous_days=prior.reduce((sum,r)=>sum+Number(r.leave_days??calendarDays(r.start_date,r.end_date)),0),current_days=row.leave_type===type?Number(row.leave_days??calendarDays(row.start_date,row.end_date)):0;

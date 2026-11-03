@@ -254,7 +254,7 @@ test('form statistics and previous leave include canonical linked accounts, appr
  const {leave_request:r}=await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json();
  assert.equal(r.last_leave.leave_type,'personal');assert.equal(r.last_leave.start_date,'2026-10-03');
  assert.deepEqual(r.stats[0],{type:'sick',previous_count:1,previous_days:0.5,current_days:0.5,total_count:2,total_days:1});
- assert.equal(r.stats[1].total_days,1);assert.equal(r.statistics_period.from,'2026-10-01');
+ assert.equal(r.stats[1].total_days,0);assert.equal(r.statistics_period.from,'2026-10-01');
 });
 test('runtime migration preserves legacy leave records and permits the new head workflow',async()=>{
  const env=await fixture();env.raw.exec('DROP TABLE leave_requests; CREATE TABLE leave_requests(id INTEGER PRIMARY KEY,user_id INTEGER,leave_type TEXT,reason TEXT,start_date TEXT,end_date TEXT,status TEXT DEFAULT \'pending\',approved_by INTEGER,approved_at TEXT,created_at TEXT DEFAULT CURRENT_TIMESTAMP); INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date) VALUES(99,2,\'sick\',\'2026-10-01\',\'2026-10-01\');');

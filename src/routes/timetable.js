@@ -1,3 +1,4 @@
+import {normalizeLeaves} from '../lib/leave-working-days.js';
 import {substituteLoad,canViewPersonnelStats} from '../lib/personnel-stats.js';
 import {loadStructure,validateStructure,ensureStructureSchema,canEditStructure,BANDS} from "../lib/timetable-structure.js";
 import {ensureAcademicData} from "../lib/academic-data.js";
@@ -234,7 +235,7 @@ async function leaveAbsences(env,date){
     JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
     WHERE ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved')
     ORDER BY CASE r.status WHEN 'approved' THEN 0 ELSE 1 END,p.full_name,r.id`).bind(date).all();
-  return reply({date,leave_requests:results});
+  return reply({date,leave_requests:await normalizeLeaves(env,results)});
 }
 async function sourceLeave(env,id,date,teacherId){
   return env.DB.prepare(`SELECT r.id FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id

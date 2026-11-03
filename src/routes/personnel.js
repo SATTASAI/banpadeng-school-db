@@ -1,3 +1,4 @@
+import {leaveCalendar,effectiveLeaveDays,workingDays} from '../lib/leave-working-days.js';
 import { workScopeSummary } from "../lib/work-scopes.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData } from "../lib/personnel-data.js";
@@ -65,6 +66,10 @@ async function overview(request, env) {
       FROM projects WHERE COALESCE(management_area,department)='personnel'`).first(),
   ]);
 
+  const holidays=await leaveCalendar(env);
+  const {results:approvedLeaves}=await env.DB.prepare("SELECT * FROM leave_requests WHERE status='approved' AND end_date>=?").bind(fyStart).all();
+  leaveSummary.approved_days_ytd=approvedLeaves.reduce((n,r)=>n+effectiveLeaveDays(r,holidays,fyStart,bkToday),0);
+  if(!workingDays(bkToday,bkToday,holidays))leaveSummary.absent_today=0;
   const today = bkToday;
   const people = staff.results.map((row) => ({
     id: row.id,
