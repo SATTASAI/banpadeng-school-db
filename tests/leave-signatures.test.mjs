@@ -10,6 +10,10 @@ import {leaveStatistics} from '../src/lib/personnel-stats.js';
 import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
 const png="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==";
 const form={leave_type:'personal',reason:'ติดต่อธุระ',position:'ครู',start_date:'2026-11-06',end_date:'2026-11-09',contact_address:'บ้านพัก',contact_phone:'0000000000',applicant_note:'หมายเหตุของครู'};
+async function approveViaHead(env,id){
+ assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+}
 async function setup(){
  const env=await fixture();seedLeaveCalendar(env);
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
@@ -17,6 +21,8 @@ async function setup(){
  INSERT INTO staff_profiles(user_id,position) VALUES(4,'ผู้อำนวยการโรงเรียน'),(5,'รองผู้อำนวยการโรงเรียน');
  INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('director_approval','',4,1),('deputy_director','personnel',5,1);`);
  await ensureLeaveData(env);
+ const head=env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=3').get();
+ await call(env,'/api/department-staff/personnel','POST',{personnel_id:head.id,is_head:true});
  const deputy=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=5').get().personnel_id;
  env.raw.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) VALUES(1,?)').run(deputy);
  return env;
@@ -42,20 +48,21 @@ test('leave stores teacher and approver signature snapshots at their transitions
  const response=await call(env,'/api/leave-requests','POST',form,2);assert.equal(response.status,201);const {id}=await response.json();
  let r=(await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json()).leave_request;
  assert.equal(r.teacher_signature,png);assert.equal(r.approver_signature,null);assert.equal(r.deputy_signature,null);assert.equal(r.applicant_note,form.applicant_note);
- assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge_approve'},4)).status,200);
+ await approveViaHead(env,id);
  env.raw.exec("DELETE FROM teacher_signatures");
  r=(await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json()).leave_request;
  assert.equal(r.approver_signature,png);assert.equal(r.deputy_signature,png);assert.equal(r.teacher_signature,png);assert.match(r.deputy_name,/รองผู้อำนวยการ/);
- const list=await (await call(env,'/api/leave-requests','GET',undefined,1)).json();assert(!('approver_signature' in list.leave_requests[0]));assert.equal(list.fiscal_statistics.real.days,2);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,1)).json();assert(!('approver_signature' in list.leave_requests[0]));assert.equal(list.fiscal_statistics.real.days,0);
+ const own=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();assert.equal(own.fiscal_statistics.real.days,2);
 });
 
 test('lenient leave requires teacher handover, stores it, and stays outside all ordinary fiscal totals and forms',async()=>{
  const env=await setup();
  assert.equal((await call(env,'/api/leave-requests','POST',{...form,leave_type:'lenient'},2)).status,400);
  const {id}=await (await call(env,'/api/leave-requests','POST',{...form,leave_type:'lenient',substitute_teacher:'ครูผู้รับมอบหมาย คาบ 1–3'},2)).json();
- assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge_approve'},4)).status,200);
+ await approveViaHead(env,id);
  const actual=await (await call(env,'/api/leave-requests','POST',form,2)).json();
- assert.equal((await call(env,'/api/leave-requests/'+actual.id,'PATCH',{action:'acknowledge_approve'},4)).status,200);
+ await approveViaHead(env,actual.id);
  const stat=await leaveStatistics(env,{fiscalYear:2570});assert.equal(stat.summary.approved_days,2);assert.equal(stat.summary.approved_times,1);assert.equal(stat.summary.lenient_days,2);assert.equal(stat.summary.lenient_times,1);assert.equal(stat.monthly[0].times,1);
  const dash=await dashboardActivitySummary(env,2570);assert.equal(dash.leave_summary.approved_days,2);assert.equal(dash.leave_summary.lenient.approved_days,2);
  const list=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();assert.equal(list.fiscal_statistics.real.days,2);assert.equal(list.fiscal_statistics.lenient.days,2);

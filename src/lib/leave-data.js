@@ -1,4 +1,4 @@
-import {normalizeLeaves} from './leave-working-days.js';
+import {normalizeLeaves,leaveCalendar,legacyCappedDays,effectiveLeaveDays} from './leave-working-days.js';
 import {ensureDepartmentStaff} from '../routes/department-staff.js';
 
 const ready = new WeakMap();
@@ -39,14 +39,27 @@ export function ensureLeaveData(env) {
    env.DB.prepare("CREATE TABLE IF NOT EXISTS leave_settings (id INTEGER PRIMARY KEY CHECK(id=1),deputy_personnel_id INTEGER,line_template TEXT)")
   ]);
   const {results:settingColumns}=await env.DB.prepare('PRAGMA table_info(leave_settings)').all();
-  if(!settingColumns.some(c=>c.name==='line_template')){
-   try{await env.DB.prepare('ALTER TABLE leave_settings ADD COLUMN line_template TEXT').run();}
+  for(const [name,type] of [['line_template','TEXT']])if(!settingColumns.some(c=>c.name===name)){
+   try{await env.DB.prepare(`ALTER TABLE leave_settings ADD COLUMN ${name} ${type}`).run();}
    catch(e){if(!/duplicate column/i.test(String(e.message)))throw e;}
   }
+  await freezeLeaveDays(env);
  })().catch(e=>{ready.delete(env.DB);throw e;});
  ready.set(env.DB,promise);return promise;
 }
 
+// One-time: store the capped value that used to be recomputed on every read, so later
+// holiday-calendar edits can no longer change history (stored leave_days becomes final).
+async function freezeLeaveDays(env){
+ await env.DB.prepare('CREATE TABLE IF NOT EXISTS leave_migrations (key TEXT PRIMARY KEY,done_at TEXT NOT NULL DEFAULT(datetime(\'now\')))').run();
+ if(await env.DB.prepare("SELECT 1 FROM leave_migrations WHERE key='freeze_leave_days'").first())return;
+ const holidays=await leaveCalendar(env);
+ const {results}=await env.DB.prepare('SELECT id,leave_type,leave_subtype,start_date,end_date,leave_days FROM leave_requests').all();
+ const updates=results.map(r=>({id:r.id,days:legacyCappedDays(r,holidays)})).filter((u,i)=>results[i].leave_days==null||u.days!==Number(results[i].leave_days));
+ const statements=updates.map(u=>env.DB.prepare('UPDATE leave_requests SET leave_days=? WHERE id=?').bind(u.days,u.id));
+ statements.push(env.DB.prepare("INSERT OR IGNORE INTO leave_migrations(key) VALUES('freeze_leave_days')"));
+ for(let i=0;i<statements.length;i+=50)await env.DB.batch(statements.slice(i,i+50));
+}
 export function isDirector(p) {const position=String(p.position||'').replace(/\s/g,'');return /ผู้อำนวยการ/.test(position)&&!/รองผู้อำนวยการ|ผู้ช่วยผู้อำนวยการ/.test(position);}
 export function isDeputy(p) {return /รองผู้อำนวยการ/.test(String(p.position||'').replace(/\s/g,''));}
 export async function executives(env) {
@@ -80,11 +93,14 @@ export async function leaveForm(env,row) {
   WHERE r.status='approved' AND r.id<>? AND r.start_date<=? AND
   (r.user_id=? OR (? IS NOT NULL AND r.user_id IN (SELECT user_id FROM personnel_accounts WHERE personnel_id=?)))
   ORDER BY r.start_date DESC,r.id DESC`).bind(row.id,start,row.user_id,person?.id??null,person?.id??null).all();
+ const holidays=await leaveCalendar(env),round=n=>Math.round(n*100)/100;
  const history=(await normalizeLeaves(env,storedHistory)).map(leaveRecord).filter(r=>(r.leave_type==='lenient')===(row.leave_type==='lenient'));
  const stats=(row.leave_type==='lenient'?['lenient']:['sick','personal','maternity',...(row.leave_type==='other'?['other']:[])]).map(type=>{
-  const prior=history.filter(r=>r.leave_type===type&&r.start_date>=from&&r.start_date<=to);
-  const previous_days=prior.reduce((sum,r)=>sum+Number(r.leave_days??calendarDays(r.start_date,r.end_date)),0),current_days=row.leave_type===type?Number(row.leave_days??calendarDays(row.start_date,row.end_date)):0;
-  return {type,previous_count:prior.length,previous_days,current_days,total_count:prior.length+(current_days>0?1:0),total_days:previous_days+current_days};
+  // Same rule as statistics: a leave counts once in the year it starts; days follow the overlap.
+  const typed=history.filter(r=>r.leave_type===type&&r.end_date>=from&&r.start_date<=to);
+  const previous_count=typed.filter(r=>r.start_date>=from).length;
+  const previous_days=round(typed.reduce((sum,r)=>sum+effectiveLeaveDays(r,holidays,from,to),0)),current_days=row.leave_type===type?round(effectiveLeaveDays(row,holidays,from,to)):0;
+  return {type,previous_count,previous_days,current_days,total_count:previous_count+(row.leave_type===type?1:0),total_days:round(previous_days+current_days)};
  });
  const people=await executives(env),directors=people.filter(isDirector);
  return {...row,position:row.position||person?.position||'',request_date:row.request_date||row.created_at?.slice(0,10)||today(),

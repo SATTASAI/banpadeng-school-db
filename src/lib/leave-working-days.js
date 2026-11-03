@@ -22,15 +22,34 @@ export function workingDays(start,end,holidays=[]) {
  }
  return count;
 }
-// Preserve an explicitly reduced/half-day request, cap legacy calendar-day totals.
-// Stored history is never rewritten, so later calendar edits cannot subtract twice.
-export function effectiveLeaveDays(row,holidays=[],from=row.start_date,to=row.end_date) {
- const total=workingDays(row.start_date,row.end_date,holidays);
+// ลาคลอดนับวันต่อเนื่องรวมวันหยุดตามระเบียบ ประเภทอื่นนับเฉพาะวันทำงาน
+export function calendarDaysBetween(start,end){
+ if(!start||!end||end<start)return 0;
+ return Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;
+}
+export function leaveSpanDays(type,start,end,holidays=[]){
+ return type==='maternity'?calendarDaysBetween(start,end):workingDays(start,end,holidays);
+}
+const rowType=row=>row.leave_subtype||row.leave_type;
+// Pre-freeze rule: cap stored totals to the span (legacy rows stored calendar days).
+// Used once by the freeze migration; afterwards stored leave_days is the source of truth.
+export function legacyCappedDays(row,holidays=[]){
+ const total=leaveSpanDays(rowType(row),row.start_date,row.end_date,holidays);
  if(!total)return 0;
  const stored=row.leave_days==null?total:Number(row.leave_days);
- const days=Math.max(0,Math.min(stored,total-(stored%1)));
- const overlap=workingDays(row.start_date>from?row.start_date:from,row.end_date<to?row.end_date:to,holidays);
- return days*overlap/total;
+ return Math.max(0,Math.min(stored,total-(stored%1)));
+}
+// Stored leave_days is frozen at submission/edit, so later calendar edits never change
+// approved history. Only a leave that straddles the requested range is prorated.
+export function effectiveLeaveDays(row,holidays=[],from=row.start_date,to=row.end_date) {
+ const type=rowType(row),a=row.start_date>from?row.start_date:from,b=row.end_date<to?row.end_date:to;
+ if(b<a)return 0;
+ const total=leaveSpanDays(type,row.start_date,row.end_date,holidays);
+ const stored=row.leave_days==null?total:Number(row.leave_days);
+ if(a===row.start_date&&b===row.end_date)return stored;
+ const span=total||calendarDaysBetween(row.start_date,row.end_date);
+ const overlap=total?leaveSpanDays(type,a,b,holidays):calendarDaysBetween(a,b);
+ return span?stored*overlap/span:0;
 }
 export async function normalizeLeaves(env,rows) {
  const holidays=await leaveCalendar(env);
@@ -42,7 +61,8 @@ export async function leaveFiscalSummary(env,rows,date=new Date(Date.now()+7*360
  for(const row of rows){
   if(row.status!=='approved'||row.end_date<from||row.start_date>to)continue;
   const group=(row.leave_subtype||row.leave_type)==='lenient'?lenient:real;
-  group.times++;group.days+=effectiveLeaveDays(row,holidays,from,to);
+  // One leave = one time, counted in the period of its start date; days follow the overlap.
+  if(row.start_date>=from&&row.start_date<=to)group.times++;group.days+=effectiveLeaveDays(row,holidays,from,to);
  }
  real.days=Math.round(real.days*100)/100;lenient.days=Math.round(lenient.days*100)/100;
  return {from,to,real,lenient};

@@ -4,7 +4,7 @@
  const approvalView=new URLSearchParams(location.search).get('view')==='approval';
  if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;}
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
- const quotaLabels={general:'ลาทั่วไป (รวมทุกประเภท ยกเว้นลาอนุโลม)',lenient:'ลาอนุโลม'};
+ const quotaLabels={general:'ลาทั่วไป (ลากิจและอื่น ๆ — ลาป่วย ลาคลอดไม่จำกัดครั้ง)',lenient:'ลาอนุโลม'};
  let leaveCategory='real';
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
@@ -13,7 +13,7 @@
    const data=await apiRequest('/api/leave-allowance?date='+encodeURIComponent($('fStart').value||$('fDate').value));
    if(version!==allowanceVersion)return;
    if(!data.period){$('leaveAllowance').textContent=data.message;return;}
-   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง รายการรอพิจารณากันสิทธิ์ไว้ ระบบตรวจสิทธิ์อีกครั้งเมื่อส่งใบลา</p>`;
+   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง นับเฉพาะใบที่อนุมัติแล้ว ระบบตรวจสิทธิ์อีกครั้งเมื่อ ผอ. อนุมัติ ลาป่วยและลาคลอดไม่จำกัดจำนวนครั้ง</p>`;
   }catch(e){if(version===allowanceVersion)$('leaveAllowance').textContent='โหลดสิทธิ์ลาไม่สำเร็จ: '+e.message;}
  }
  $('saveLeaveLimits').onclick=async()=>{
@@ -48,8 +48,7 @@
     <button class="btn btn-ghost" data-detail="${Number(r.id)}">รายละเอียด / ใบลา</button>
     <button class="btn btn-ghost" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="btn btn-ghost" data-export="pdf" data-id="${Number(r.id)}">PDF</button>
     ${!approvalView&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
-    ${r.can_acknowledge_approve?`<button class="btn btn-primary" data-action="acknowledge_approve" data-id="${Number(r.id)}" ${decisionDisabled}>รับทราบและอนุมัติ</button>`:''}
-    ${r.can_decide?`${!r.can_acknowledge_approve?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button>`:''}<button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}
+    ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}
     ${!approvalView&&r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
@@ -58,7 +57,7 @@
   if(approvalView){if(!data.can_view_all_leave)records=[];}
   else await loadAllowance();
   $('approvalAccess').hidden=!approvalView;
-  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'กดรับทราบและอนุมัติเพื่อบันทึกผลและนับเป็นสถิติการลาได้ทันที รวมรายการเดิมที่ยังรอรับทราบหรือส่งต่อ':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'อนุญาตได้เมื่อหัวหน้าฝ่ายบุคลากรรับทราบและส่งต่อแล้ว ผลอนุญาตนับเป็นสถิติการลาทันที':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
   if(user?.view_as?.read_only)$('approvalAccess').textContent+=' · ขณะนี้เป็นโหมดดูบัญชีอื่น ปุ่มอนุมัติแสดงเพื่อดูตัวอย่างและกดไม่ได้ ต้องเข้าสู่ระบบด้วยบัญชี ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์เพื่ออนุมัติจริง';
   $('delegationSettings').hidden=!data.can_manage_delegations;
   if(data.can_manage_delegations){
@@ -89,7 +88,7 @@
  }
  function renderRegisters(){
   const visible=records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient'));
-  const pending=visible.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide||r.can_acknowledge_approve);
+  const pending=visible.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
   $('historyPanel').innerHTML=visible.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
  }
@@ -103,7 +102,7 @@
   renderRegisters();
  }
  $('realLeaveCard').onclick=()=>setCategory('real');$('lenientLeaveCard').onclick=()=>setCategory('lenient');
- $('fType').onchange=()=>setCategory($('fType').value==='lenient'?'lenient':'real',false);
+ $('fType').onchange=()=>{setCategory($('fType').value==='lenient'?'lenient':'real',false);days();};
  function showDeputyStatus(){
   const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
   $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับข้อมูลหลังรับทราบ':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';
@@ -145,8 +144,17 @@
   ].map(([label,value])=>`<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join('')}</div>
   <p class="muted">${r.leave_type==='lenient'?'สถิติลาอนุโลมแยกต่างหาก ไม่นับรวมปีงบประมาณ':'สถิติปีงบประมาณ'} ${esc(r.statistics_period.from)} ถึง ${esc(r.statistics_period.to)}</p>
   <div class="leave-stats"><table><thead><tr><th>ประเภท</th><th>ลามาแล้ว (ครั้ง)</th><th>ลามาแล้ว (วัน)</th><th>ลาครั้งนี้ (วัน)</th><th>รวม (ครั้ง)</th><th>รวม (วัน)</th></tr></thead><tbody>${r.stats.map(s=>`<tr>${[types[s.type],s.previous_count,s.previous_days,s.current_days,s.total_count,s.total_days].map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
-  <h4>บันทึกการดำเนินการ</h4>${events.map(e=>`<p>${esc(e.created_at)} · ${esc(e.full_name)} · ${esc(({submitted:'ยื่นใบลา',acknowledged:'รับทราบ',recorded:'บันทึก',forwarded:'ส่งต่อ',reviewed:'ให้ความเห็น',approved:'อนุญาต',rejected:'ไม่อนุญาต'})[e.action]||e.action)} ${esc(e.note||'')}</p>`).join('')}
-  <div class="leave-actions"><button class="btn btn-primary" data-export="docx" data-id="${Number(id)}">ดาวน์โหลดใบลา Word</button><button class="btn btn-primary" data-export="pdf" data-id="${Number(id)}">ดาวน์โหลดใบลา PDF</button></div>`;
+  <h4>บันทึกการดำเนินการ</h4>${events.map(e=>`<p>${esc(e.created_at)} · ${esc(e.full_name)} · ${esc(({submitted:'ยื่นใบลา',acknowledged:'รับทราบ',recorded:'บันทึก',forwarded:'ส่งต่อ',reviewed:'ให้ความเห็น',approved:'อนุญาต',rejected:'ไม่อนุญาต',edited:'แก้ไขใบลา'})[e.action]||e.action)} ${esc(e.note||'')}</p>`).join('')}
+  <div class="leave-actions"><button class="btn btn-primary" data-export="docx" data-id="${Number(id)}">ดาวน์โหลดใบลา Word</button><button class="btn btn-primary" data-export="pdf" data-id="${Number(id)}">ดาวน์โหลดใบลา PDF</button></div>
+  ${r.can_edit?`<h4>แก้ไข / ลบใบลา (หัวหน้าฝ่ายบุคลากร/ผู้ดูแลระบบ)</h4>
+  <div class="leave-details">
+   <div class="field"><label for="eType">ประเภท</label><select id="eType">${Object.entries(types).map(([k,l])=>`<option value="${k}" ${k===r.leave_type?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+   <div class="field"><label for="eStart">วันเริ่มลา</label><input id="eStart" type="date" value="${esc(r.start_date)}"></div>
+   <div class="field"><label for="eEnd">วันสิ้นสุด</label><input id="eEnd" type="date" value="${esc(r.end_date)}"></div>
+   <div class="field"><label for="eDays">จำนวนวัน</label><input id="eDays" type="number" min="0.5" step="0.5" value="${esc(r.leave_days)}"></div>
+   <div class="field"><label for="eNote">เหตุผลการแก้ไข/ลบ</label><input id="eNote" type="text" maxlength="2000"></div>
+  </div>
+  <div class="leave-actions"><button class="btn btn-primary" data-edit-save="${Number(id)}">บันทึกการแก้ไข</button><button class="btn btn-ghost" data-edit-delete="${Number(id)}">ลบใบลานี้</button></div>`:''}`;
   $('detailSection').scrollIntoView({behavior:'smooth',block:'start'});
  }
  let daysVersion=0,daysPending=false,daysValid=false;
@@ -155,7 +163,7 @@
   daysValid=false;$('fDays').value='';
   if(!a||!b||b<a){daysPending=false;return;}
   daysPending=true;
-  try{const data=await apiRequest('/api/leave-working-days?start='+encodeURIComponent(a)+'&end='+encodeURIComponent(b));
+  try{const data=await apiRequest('/api/leave-working-days?start='+encodeURIComponent(a)+'&end='+encodeURIComponent(b)+'&type='+encodeURIComponent($('fType').value));
    if(version!==daysVersion)return;
    $('fDays').value=String(data.working_days);$('fDays').max=String(data.working_days);daysValid=true;
   }catch(e){if(version===daysVersion)error(e);}finally{if(version===daysVersion)daysPending=false;}
@@ -181,8 +189,8 @@
  $('leaveForm').onsubmit=async e=>{
   e.preventDefault();if(busy||!validateForm())return;busy=true;$('submitBtn').disabled=true;$('submitBtn').textContent='กำลังส่งใบลา…';$('submitError').hidden=true;
   try{if(daysPending)throw Error('กรุณารอคำนวณวันทำงาน');
-   const preview=await apiRequest('/api/leave-working-days?start='+encodeURIComponent($('fStart').value)+'&end='+encodeURIComponent($('fEnd').value));
-   if(Number($('fDays').value)>preview.working_days||preview.working_days<=0)throw Error('จำนวนวันลาต้องไม่เกิน '+preview.working_days+' วันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด)');await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim(),applicant_note:$('fNote').value.trim(),substitute_teacher:$('fSubstitute').value.trim()}});
+   const preview=await apiRequest('/api/leave-working-days?start='+encodeURIComponent($('fStart').value)+'&end='+encodeURIComponent($('fEnd').value)+'&type='+encodeURIComponent($('fType').value));
+   if(Number($('fDays').value)>preview.working_days||preview.working_days<=0)throw Error(preview.counts_calendar_days?'จำนวนวันลาคลอดต้องไม่เกิน '+preview.working_days+' วัน (นับรวมวันหยุด)':'จำนวนวันลาต้องไม่เกิน '+preview.working_days+' วันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด)');await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim(),applicant_note:$('fNote').value.trim(),substitute_teacher:$('fSubstitute').value.trim()}});
    success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fNote').value='';$('fSubstitute').value='';$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';
    try{await load();}catch(e){error(Error('บันทึกใบลาสำเร็จแล้ว แต่โหลดทะเบียนไม่สำเร็จ กรุณาโหลดหน้าใหม่เพื่อดูรายการ'));}
    $('successBox').scrollIntoView({behavior:'smooth',block:'center'});
@@ -195,6 +203,16 @@
    busy=true;button.disabled=true;
    try{await apiRequest('/api/leave-delegations',{method:'PATCH',body:{personnel_id:Number(button.dataset.delegate),can_approve:button.dataset.grant==='true'}});success(button.dataset.grant==='true'?'มอบสิทธิ์อนุมัติการลาแล้ว':'ถอนสิทธิ์อนุมัติการลาแล้ว');await load();}
    catch(e){error(e);}finally{busy=false;button.disabled=false;}return;
+  }
+  if(button.dataset.editSave||button.dataset.editDelete){
+   const id=Number(button.dataset.editSave||button.dataset.editDelete),note=$('eNote').value.trim();
+   if(!note){error(Error('กรุณาระบุเหตุผลการแก้ไข/ลบ'));$('eNote').focus();return;}
+   if(button.dataset.editDelete&&!confirm('ยืนยันลบใบลานี้ออกจากระบบ? ข้อมูลจะถูกลบออกจากสถิติการลา'))return;
+   busy=true;button.disabled=true;
+   try{
+    if(button.dataset.editSave){await apiRequest('/api/leave-requests/'+id,{method:'PATCH',body:{action:'edit',note,leave_type:$('eType').value,start_date:$('eStart').value,end_date:$('eEnd').value,leave_days:Number($('eDays').value)}});success('บันทึกการแก้ไขใบลาแล้ว');await load();await details(id);}
+    else{await apiRequest('/api/leave-requests/'+id,{method:'DELETE',body:{note}});success('ลบใบลาแล้ว');$('detailSection').hidden=true;detailId=null;await load();}
+   }catch(e){error(e);}finally{busy=false;button.disabled=false;}return;
   }
   const id=Number(button.dataset.id||button.dataset.detail);if(!id)return;
   busy=true;button.disabled=true;

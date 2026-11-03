@@ -81,7 +81,8 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
   const { results:stored }=await env.DB.prepare(`SELECT r.user_id,r.leave_type,r.leave_subtype,r.status,r.start_date,r.end_date,r.leave_days,u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
     WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))`)
     .bind(range.start,range.end,userFilter,userFilter).all();
-  const results=stored.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:1,
+  // ใบลาหนึ่งใบนับหนึ่งครั้งในช่วงที่เป็นวันเริ่มลา ส่วนจำนวนวันนับตามส่วนที่อยู่ในช่วง (กฎเดียวกับหน้าการลา/ใบลา)
+  const results=stored.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:r.start_date>=range.start&&r.start_date<=range.end?1:0,
     days:r.status==='approved'?effectiveLeaveDays(r,holidays,range.start,range.end):0}));
   const blank = (key, name, position) => ({ key, name, position: position || '', pending: 0, rejected: 0, approved_times: 0, approved_days: 0,
     sick_personal_times: 0, sick_personal_days: 0, lenient_times:0,lenient_days:0,
