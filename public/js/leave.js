@@ -128,7 +128,17 @@
   <div class="leave-actions"><button class="btn btn-primary" data-export="docx" data-id="${Number(id)}">ดาวน์โหลดใบลา Word</button><button class="btn btn-primary" data-export="pdf" data-id="${Number(id)}">ดาวน์โหลดใบลา PDF</button></div>`;
   $('detailSection').scrollIntoView({behavior:'smooth',block:'start'});
  }
- function days(){const a=$('fStart').value,b=$('fEnd').value;if(a&&b&&b>=a)$('fDays').value=String(Math.round((Date.parse(b)-Date.parse(a))/86400000)+1);}
+ let daysVersion=0,daysPending=false,daysValid=false;
+ async function days(){
+  const version=++daysVersion,a=$('fStart').value,b=$('fEnd').value;
+  daysValid=false;$('fDays').value='';
+  if(!a||!b||b<a){daysPending=false;return;}
+  daysPending=true;
+  try{const data=await apiRequest('/api/leave-working-days?start='+encodeURIComponent(a)+'&end='+encodeURIComponent(b));
+   if(version!==daysVersion)return;
+   $('fDays').value=String(data.working_days);$('fDays').max=String(data.working_days);daysValid=true;
+  }catch(e){if(version===daysVersion)error(e);}finally{if(version===daysVersion)daysPending=false;}
+ }
  for(const id of ['fStart','fEnd']){$(id).oninput=days;$(id).onchange=()=>{days();if(id==='fStart')loadAllowance();};}
  $('fDate').onchange=()=>{if(!$('fStart').value)loadAllowance();};
  const requiredFields=[['fType','ประเภทการลา'],['fDate','วันที่เขียนใบลา'],['fPosition','ตำแหน่ง'],['fReason','เหตุผลการลา'],['fStart','วันที่เริ่มลา'],['fEnd','วันที่สิ้นสุดการลา'],['fDays','จำนวนวันลา'],['fPhone','เบอร์ติดต่อ'],['fAddress','ที่อยู่ระหว่างลา']];
@@ -140,7 +150,7 @@
   }
   const start=$('fStart').value,end=$('fEnd').value,count=Number($('fDays').value);
   if(end<start){submitError('วันที่สิ้นสุดการลาต้องไม่อยู่ก่อนวันที่เริ่มลา','fEnd');return false;}
-  const span=Math.round((Date.parse(end)-Date.parse(start))/86400000)+1;
+  const span=daysValid?Number($('fDays').max):Math.round((Date.parse(end)-Date.parse(start))/86400000)+1;
   if(!Number.isFinite(count)||count<=0||count>span||count*2!==Math.round(count*2)){
    submitError('จำนวนวันลาต้องมากกว่า 0 ไม่เกิน '+span+' วัน และระบุได้ทีละครึ่งวัน','fDays');return false;
   }
@@ -148,7 +158,9 @@
  }
  $('leaveForm').onsubmit=async e=>{
   e.preventDefault();if(busy||!validateForm())return;busy=true;$('submitBtn').disabled=true;$('submitBtn').textContent='กำลังส่งใบลา…';$('submitError').hidden=true;
-  try{await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim()}});
+  try{if(daysPending)throw Error('กรุณารอคำนวณวันทำงาน');
+   const preview=await apiRequest('/api/leave-working-days?start='+encodeURIComponent($('fStart').value)+'&end='+encodeURIComponent($('fEnd').value));
+   if(Number($('fDays').value)>preview.working_days||preview.working_days<=0)throw Error('จำนวนวันลาต้องไม่เกิน '+preview.working_days+' วันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด)');await apiRequest('/api/leave-requests',{method:'POST',body:{leave_type:$('fType').value,reason:$('fReason').value.trim(),request_date:$('fDate').value,position:$('fPosition').value.trim(),start_date:$('fStart').value,end_date:$('fEnd').value,leave_days:Number($('fDays').value),contact_address:$('fAddress').value.trim(),contact_phone:$('fPhone').value.trim()}});
    success('ส่งใบลาให้หัวหน้าฝ่ายบุคลากรแล้ว');$('fReason').value='';$('fStart').value='';$('fEnd').value='';$('fDays').value='';
    try{await load();}catch(e){error(Error('บันทึกใบลาสำเร็จแล้ว แต่โหลดทะเบียนไม่สำเร็จ กรุณาโหลดหน้าใหม่เพื่อดูรายการ'));}
    $('successBox').scrollIntoView({behavior:'smooth',block:'center'});

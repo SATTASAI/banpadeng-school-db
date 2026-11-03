@@ -1,3 +1,4 @@
+import {leaveCalendar,effectiveLeaveDays} from './leave-working-days.js';
 // สถิติฝ่ายบุคคล: วันลาของครู และจำนวนครั้งที่ถูกจัดสอนแทน
 // ทุกหน้าที่แสดงตัวเลขเหล่านี้ (หน้าสถิติ, หน้าจัดสอนแทน, แดชบอร์ด) อ่านจากฟังก์ชันในไฟล์นี้ชุดเดียวกัน
 // จึงไม่มียอดสะสมแยกที่อาจไม่ตรงกัน — ข้อมูลต้นทางคือ leave_requests และ substitute_assignments เท่านั้น
@@ -76,14 +77,12 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
   const ownPerson = onlyUserId ? personByUser.get(Number(onlyUserId)) : null;
   const userFilter = onlyUserId ? JSON.stringify(ownPerson ? [...personByUser].filter(([, pid]) => pid === ownPerson).map(([uid]) => uid) : [Number(onlyUserId)]) : null;
   // วันลาที่อนุมัติ นับเฉพาะส่วนที่อยู่ในช่วงเวลา ตามสัดส่วนจำนวนวันลาที่ยื่น (สูตรเดียวกับแดชบอร์ด)
-  const { results } = await env.DB.prepare(`SELECT r.user_id,u.full_name,COALESCE(r.leave_subtype,r.leave_type) leave_type,r.status,
-      COUNT(*) request_count,
-      COALESCE(SUM(CASE WHEN r.status='approved' THEN MAX(0,julianday(MIN(r.end_date,?))-julianday(MAX(r.start_date,?))+1)
-        *COALESCE(r.leave_days,julianday(r.end_date)-julianday(r.start_date)+1)/(julianday(r.end_date)-julianday(r.start_date)+1) ELSE 0 END),0) days
-    FROM leave_requests r JOIN users u ON u.id=r.user_id
-    WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))
-    GROUP BY r.user_id,COALESCE(r.leave_subtype,r.leave_type),r.status`)
-    .bind(range.end, range.start, range.start, range.end, userFilter, userFilter).all();
+  const holidays=await leaveCalendar(env);
+  const { results:stored }=await env.DB.prepare(`SELECT r.*,u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
+    WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))`)
+    .bind(range.start,range.end,userFilter,userFilter).all();
+  const results=stored.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:1,
+    days:r.status==='approved'?effectiveLeaveDays(r,holidays,range.start,range.end):0}));
   const blank = (key, name, position) => ({ key, name, position: position || '', pending: 0, rejected: 0, approved_times: 0, approved_days: 0,
     sick_personal_times: 0, sick_personal_days: 0,
     by_type: Object.fromEntries(Object.keys(LEAVE_TYPES).map((t) => [t, { times: 0, days: 0 }])) });
