@@ -78,13 +78,13 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
   const userFilter = onlyUserId ? JSON.stringify(ownPerson ? [...personByUser].filter(([, pid]) => pid === ownPerson).map(([uid]) => uid) : [Number(onlyUserId)]) : null;
   // วันลาที่อนุมัติ นับเฉพาะส่วนที่อยู่ในช่วงเวลา ตามสัดส่วนจำนวนวันลาที่ยื่น (สูตรเดียวกับแดชบอร์ด)
   const holidays=await leaveCalendar(env);
-  const { results:stored }=await env.DB.prepare(`SELECT r.*,u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
+  const { results:stored }=await env.DB.prepare(`SELECT r.user_id,r.leave_type,r.leave_subtype,r.status,r.start_date,r.end_date,r.leave_days,u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
     WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))`)
     .bind(range.start,range.end,userFilter,userFilter).all();
   const results=stored.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:1,
     days:r.status==='approved'?effectiveLeaveDays(r,holidays,range.start,range.end):0}));
   const blank = (key, name, position) => ({ key, name, position: position || '', pending: 0, rejected: 0, approved_times: 0, approved_days: 0,
-    sick_personal_times: 0, sick_personal_days: 0,
+    sick_personal_times: 0, sick_personal_days: 0, lenient_times:0,lenient_days:0,
     by_type: Object.fromEntries(Object.keys(LEAVE_TYPES).map((t) => [t, { times: 0, days: 0 }])) });
   const rows = new Map();
   if (!onlyUserId) for (const p of people) rows.set(`p${p.id}`, blank(`p${p.id}`, p.full_name, p.position));
@@ -100,7 +100,7 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
     if (r.status === 'pending') row.pending += n;
     else if (r.status === 'rejected') row.rejected += n;
     else if (r.status === 'approved') {
-      row.approved_times += n; row.approved_days += days;
+      if(type==='lenient'){row.lenient_times+=n;row.lenient_days+=days;}else{row.approved_times += n; row.approved_days += days;}
       row.by_type[type].times += n; row.by_type[type].days += days;
       if (type === 'sick' || type === 'personal') { row.sick_personal_times += n; row.sick_personal_days += days; }
     }
@@ -112,11 +112,11 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
     times: list.reduce((s, r) => s + r.by_type[key].times, 0), days: Math.round(list.reduce((s, r) => s + r.by_type[key].days, 0) * 100) / 100 }));
   // รายเดือนในช่วงเวลา (นับตามวันที่เริ่มลา) สำหรับกราฟแนวโน้ม
   const { results: monthly } = await env.DB.prepare(`SELECT substr(start_date,1,7) month,COUNT(*) times
-    FROM leave_requests WHERE status='approved' AND start_date BETWEEN ? AND ? AND (? IS NULL OR user_id IN (SELECT value FROM json_each(?))) GROUP BY substr(start_date,1,7) ORDER BY month`)
+    FROM leave_requests WHERE status='approved' AND COALESCE(leave_subtype,leave_type)<>'lenient' AND start_date BETWEEN ? AND ? AND (? IS NULL OR user_id IN (SELECT value FROM json_each(?))) GROUP BY substr(start_date,1,7) ORDER BY month`)
     .bind(range.start, range.end, userFilter, userFilter).all();
   return { ...range, types: LEAVE_TYPES, people: list, by_type: byType, monthly,
     summary: { people: list.length, people_with_leave: list.filter((r) => r.approved_times).length, approved_times: total('approved_times'),
-      approved_days: Math.round(total('approved_days') * 100) / 100, pending: total('pending'), rejected: total('rejected') } };
+      approved_days: Math.round(total('approved_days') * 100) / 100, lenient_times:total('lenient_times'),lenient_days:Math.round(total('lenient_days')*100)/100,pending: total('pending'), rejected: total('rejected') } };
 }
 
 // จำนวนครั้ง (คาบ) ที่ครูแต่ละคนถูกจัดสอนแทน — ใช้ร่วมกันโดยหน้าสถิติ หน้าจัดสอนแทน และแดชบอร์ด

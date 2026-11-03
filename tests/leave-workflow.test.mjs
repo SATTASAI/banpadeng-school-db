@@ -5,7 +5,7 @@ import {fixture,call} from './notifications.test.mjs';
 import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
 
-const form={leave_type:'sick',reason:'มีไข้ ไปพบแพทย์',position:'ครู',request_date:'2026-10-06',start_date:'2026-10-06',end_date:'2026-10-06',leave_days:0.5,contact_address:'บ้านพักครู ที่อยู่ตัวอย่าง',contact_phone:'0000000000'};
+const form={substitute_teacher:'ครูผู้รับมอบหมาย',leave_type:'sick',reason:'มีไข้ ไปพบแพทย์',position:'ครู',request_date:'2026-10-06',start_date:'2026-10-06',end_date:'2026-10-06',leave_days:0.5,contact_address:'บ้านพักครู ที่อยู่ตัวอย่าง',contact_phone:'0000000000'};
 async function setup(){
  const env=await fixture();
  seedLeaveCalendar(env);

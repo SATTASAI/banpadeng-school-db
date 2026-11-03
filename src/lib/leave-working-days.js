@@ -36,3 +36,14 @@ export async function normalizeLeaves(env,rows) {
  const holidays=await leaveCalendar(env);
  return rows.map(row=>({...row,leave_days:effectiveLeaveDays(row,holidays)}));
 }
+export async function leaveFiscalSummary(env,rows,date=new Date(Date.now()+7*3600e3).toISOString().slice(0,10)){
+ const year=Number(date.slice(0,4))+(date.slice(5,7)>='10'?1:0),from=`${year-1}-10-01`,to=`${year}-09-30`;
+ const holidays=await leaveCalendar(env),real={times:0,days:0},lenient={times:0,days:0};
+ for(const row of rows){
+  if(row.status!=='approved'||row.end_date<from||row.start_date>to)continue;
+  const group=(row.leave_subtype||row.leave_type)==='lenient'?lenient:real;
+  group.times++;group.days+=effectiveLeaveDays(row,holidays,from,to);
+ }
+ real.days=Math.round(real.days*100)/100;lenient.days=Math.round(lenient.days*100)/100;
+ return {from,to,real,lenient};
+}
