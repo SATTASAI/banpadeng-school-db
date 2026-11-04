@@ -89,14 +89,24 @@ test('Word and PDF embed snapshot images in their correct blocks and omit manage
  const pdf=ctx.LeaveFormExport.pdfDefinition(row);assert.equal(pdf.pageMargins[0],pdf.pageMargins[2]);assert(JSON.stringify(pdf).includes(png));
 });
 
-test('category cards filter registries and switch the lenient handover field without losing draft notes',async()=>{
+test('registries show all until a card is chosen; cards filter registries and form types without losing draft notes',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},hidden:false,textContent:'',innerHTML:'',setAttribute(){},classList:{add(){},remove(){}}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,Date,location:{search:'?view=approval'},document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async path=>path==='/api/auth/me'?{user:{id:4,role:'executive'}}:{profile:{},can_view_all_leave:true,leave_requests:[{id:1,full_name:'ครู ก',leave_type:'sick',status:'pending'},{id:2,full_name:'ครู ข',leave_type:'lenient',status:'pending'}]}});
  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
- assert.match(node('pendingPanel').innerHTML,/ครู ก/);assert.doesNotMatch(node('pendingPanel').innerHTML,/ครู ข/);
- node('fNote').value='ร่างหมายเหตุ';node('lenientLeaveCard').onclick();
+ assert.match(node('pendingPanel').innerHTML,/ครู ก/);assert.match(node('pendingPanel').innerHTML,/ครู ข/);
+ node('fNote').value='ร่างหมายเหตุ';node('lenientLeaveCard').onclick();assert.doesNotMatch(node('fType').innerHTML,/sick/);
  assert.equal(node('fType').value,'lenient');assert.equal(node('substituteTeacherField').hidden,false);assert.equal(node('fSubstitute').required,true);assert.match(node('pendingPanel').innerHTML,/ครู ข/);assert.doesNotMatch(node('pendingPanel').innerHTML,/ครู ก/);
  node('realLeaveCard').onclick();assert.equal(node('substituteTeacherField').hidden,true);assert.equal(node('fNote').value,'ร่างหมายเหตุ');
+ assert.equal(node('fType').value,'sick');assert.doesNotMatch(node('fType').innerHTML,/lenient/);
+});
+
+test('teacher sees the new-leave form only after choosing a real or lenient card',async()=>{
+ const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},hidden:id==='newLeaveSection',textContent:'',innerHTML:'',setAttribute(){},classList:{add(){},remove(){}}});return nodes.get(id);};
+ const ctx=vm.createContext({URLSearchParams,Date,location:{search:''},document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async path=>path==='/api/auth/me'?{user:{id:2,role:'teacher',full_name:'ครู ก'}}:path.startsWith('/api/leave-allowance')?{period:null,message:''}:{profile:{},leave_requests:[]}});
+ vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+ assert.equal(node('newLeaveSection').hidden,true);
+ node('lenientLeaveCard').onclick();assert.equal(node('newLeaveSection').hidden,false);assert.equal(node('leaveCategoryHint').hidden,true);assert.equal(node('newLeaveTitle').textContent,'ยื่นใบลาอนุโลม');
+ node('realLeaveCard').onclick();assert.equal(node('newLeaveTitle').textContent,'ยื่นใบลาจริง');
 });
 
 test('approver settings offers assigned users and mounts the upload against the selected identity',()=>{
