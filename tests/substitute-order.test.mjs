@@ -3,10 +3,10 @@ const context=vm.createContext({});vm.runInContext(fs.readFileSync('public/js/su
 const rows=[{period:3,grade_level:'ป.4',classroom:'1',subject:'ภาษาไทย & อ่าน',absent_name:'ครู ก',substitute_name:'ครู ข <ทดสอบ>'},{period:1,grade_level:'ป.3',classroom:'2',subject:'วิทยาศาสตร์',absent_name:'ครู ค',substitute_name:'ครู ง'}];
 const meta={date:'2026-10-05',issue_date:'2026-10-03',order_number:'123/2569',director_name:'ผู้อำนวยการตัวอย่าง',garuda_data_url:'data:image/png;base64,'+fs.readFileSync('public/assets/garuda.png').toString('base64')};
 test('substitute orders export the chosen date, sorted assignments and Thai dates in real Word/PDF structures',()=>{
- const order=e.order(rows,meta);assert.equal(order.rows[0][0],'1');assert.match(order.introduction,/2569/);assert.match(order.issued,/3 ตุลาคม/);assert.equal(order.number,'ที่ 123/2569');
+ const order=e.order(rows,meta);assert.equal(order.rows[0][0],'๑');assert.match(order.introduction,/๒๕๖๙/);assert.match(order.issued,/๓ ตุลาคม/);assert.equal(order.number,'ที่ ๑๒๓/๒๕๖๙');assert(!/\d/.test(JSON.stringify(order)));
  const files=e.docxFiles(rows,meta);assert(files['[Content_Types].xml'].includes('wordprocessingml.document.main+xml'));
  assert.match(files['word/document.xml'],/ภาษาไทย &amp; อ่าน/);assert.match(files['word/document.xml'],/ครู ข &lt;ทดสอบ&gt;/);assert.match(files['word/document.xml'],/w:tblHeader/);assert.match(files['word/document.xml'],/ผู้อำนวยการตัวอย่าง/);
- const pdf=e.pdfDefinition(rows,meta),table=pdf.content.find(x=>x.table).table;assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(table.headerRows,1);assert.equal(table.body.length,3);assert.equal(table.body[1][0].text,'1');
+ const pdf=e.pdfDefinition(rows,meta),table=pdf.content.find(x=>x.table).table;assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(table.headerRows,1);assert.equal(table.body.length,3);assert.equal(table.body[1][0].text,'๑');
  assert.throws(()=>e.order([],meta),/ยังไม่มีรายการ/);
  assert.equal(rows[0].period,3);
 });
@@ -43,8 +43,8 @@ test('export refreshes the director from the current roster instead of an editab
 test('orders state leave reasons, cite the statute, and embed the director e-signature',()=>{
  const sigPng=fs.readFileSync('public/assets/garuda.png').toString('base64');
  const list=[{...rows[0],leave_reason:'ไปราชการ'},{...rows[1],leave_reason:'ไปราชการ'},{...rows[0],absent_name:'ครู จ',leave_reason:null,absence_reason:'ลาป่วย'}];
- const o=e.order(list,meta);assert.match(o.introduction,/^ด้วย ครู ก, ครู ค ไปราชการ และ ครู จ ลาป่วย ในวันจันทร์ที่ 5 ตุลาคม พ\.ศ\. 2569 เพื่อให้การเรียนการสอนดำเนินไปด้วยความเรียบร้อย$/);
- assert.match(o.authority,/มาตรา ๓๙\(๑\)/);assert.equal(o.subject,'เรื่อง แต่งตั้งครูเข้าสอนแทน');assert.match(o.effective,/ตั้งแต่วันที่ 5 ตุลาคม 2569 เป็นต้นไป/);
+ const o=e.order(list,meta);assert.match(o.introduction,/^ด้วย ครู ก, ครู ค ไปราชการ และ ครู จ ลาป่วย ในวันจันทร์ที่ ๕ ตุลาคม พ\.ศ\. ๒๕๖๙ เพื่อให้การเรียนการสอนดำเนินไปด้วยความเรียบร้อย$/);
+ assert.match(o.authority,/มาตรา ๓๙\(๑\)/);assert.equal(o.subject,'เรื่อง แต่งตั้งครูเข้าสอนแทน');assert.match(o.effective,/ตั้งแต่วันที่ ๕ ตุลาคม ๒๕๖๙ เป็นต้นไป/);
  const withSig={...meta,director_signature:'data:image/png;base64,'+sigPng},files=e.docxFiles(list,withSig);
  assert.equal(files['word/media/signature.png'].base64,sigPng);assert.match(files['word/_rels/document.xml.rels'],/rIdSignature/);assert.match(files['word/document.xml'],/r:embed="rIdSignature"/);
  assert(e.pdfDefinition(list,withSig).content.some(x=>x.image===withSig.director_signature));
