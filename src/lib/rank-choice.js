@@ -1,6 +1,6 @@
 // ปุ่มเลือกตำแหน่ง/วิทยฐานะ (หน้าสมัครสมาชิก และ บัญชีของฉัน) ↔ personnel_records.position / academic_rank
 // ระบบประเมิน PA เลือกชุดตัวชี้วัดจาก academic_rank · ครูผู้ช่วยแยกจาก position
-export const RANK_CHOICES = ["ครูผู้ช่วย", "ครู", "ครูชำนาญการ", "ครูชำนาญการพิเศษ", "ครูเชี่ยวชาญ", "อื่น ๆ"];
+export const RANK_CHOICES = ["ครูผู้ช่วย", "ครู", "ครูชำนาญการ", "ครูชำนาญการพิเศษ", "ครูเชี่ยวชาญ", "บุคลากรทางการศึกษา", "อื่น ๆ"];
 
 // คืน { position, academic_rank } หรือ { error } · อื่น ๆ: ใช้ตำแหน่งที่พิมพ์ และคงวิทยฐานะเดิม (keepRank) ไว้
 export function rankChoiceToRecord(choice, other, keepRank = null) {
@@ -11,12 +11,15 @@ export function rankChoiceToRecord(choice, other, keepRank = null) {
     if (/^ครู/.test(position)) return { error: "ตำแหน่งครูให้เลือกจากปุ่มวิทยฐานะ" };
     return { position, academic_rank: keepRank || null };
   }
+  // บุคลากรทางการศึกษา: ตั้งประเภทบุคลากรให้ด้วย · คงวิทยฐานะเดิมไว้
+  if (choice === "บุคลากรทางการศึกษา") return { position: "บุคลากรทางการศึกษา", academic_rank: keepRank || null, personnel_type: "education_staff" };
   if (choice === "ครูผู้ช่วย") return { position: "ครูผู้ช่วย", academic_rank: null };
   return { position: "ครู", academic_rank: choice === "ครู" ? null : choice };
 }
 
 export function recordToRankChoice(position, academicRank) {
   const pos = String(position || "").replace(/\s+/g, ""), rank = String(academicRank || "").replace(/\s+/g, "");
+  if (pos === "บุคลากรทางการศึกษา") return { choice: "บุคลากรทางการศึกษา", other: "" };
   if (!/^ครู/.test(pos)) return { choice: pos ? "อื่น ๆ" : "", other: String(position || "").trim() };
   if (/^ครูผู้ช่วย/.test(pos)) return { choice: "ครูผู้ช่วย", other: "" };
   const all = pos + rank;

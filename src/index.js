@@ -445,12 +445,13 @@ export async function handleRegister(request, env) {
   const password = body.password || "";
   const fullName = (body.full_name || "").trim();
   // ตำแหน่ง/วิทยฐานะ: ปุ่มบังคับเลือก (rank_choice) — position แบบพิมพ์เองรองรับไว้สำหรับไคลเอนต์เดิม
-  let position = String(body.position || "").trim().slice(0, 200), rankFields = {};
+  let position = String(body.position || "").trim().slice(0, 200), rankFields = {}, personnelType = null;
   if (body.rank_choice !== undefined) {
     const picked = rankChoiceToRecord(body.rank_choice, body.rank_other);
     if (picked.error) return jsonResponse({ error: picked.error }, 400);
     position = picked.position;
     if (body.rank_choice !== "อื่น ๆ") rankFields = { academic_rank: picked.academic_rank };
+    if (picked.personnel_type) personnelType = picked.personnel_type;
   }
   const phone = String(body.phone || "").trim().slice(0, 50);
   const allowedDepartments = new Set(["academic", "early_childhood", "budget", "personnel", "general"]);
@@ -516,7 +517,7 @@ export async function handleRegister(request, env) {
 
   const userId = result.meta.last_row_id;
   try {
-    await upsertSelfRegisteredPersonnel(env, {
+    const personnelId = await upsertSelfRegisteredPersonnel(env, {
       user_id: userId,
       email,
       full_name: fullName,
@@ -529,6 +530,7 @@ export async function handleRegister(request, env) {
       teaching_periods: teachingPeriods,
       ...rankFields,
     });
+    if (personnelType && personnelId) await env.DB.prepare("UPDATE personnel_records SET personnel_type = ? WHERE id = ?").bind(personnelType, personnelId).run();
   } catch (error) {
     await env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId).run().catch(() => null);
     const conflict = String(error?.message || "").startsWith("PERSONNEL_");
@@ -1663,7 +1665,7 @@ async function handleOwnPersonnel(request, env, method) {
         await writeAuditLog(env, user, "update", "personnel", id, { self_rename: true, previous_full_name: current.full_name, full_name: fullName }, request);
       }
     }
-    return updateStaffRecord(env, id, { ...body, position: picked.position, academic_rank: picked.academic_rank }, user, request);
+    return updateStaffRecord(env, id, { ...body, position: picked.position, academic_rank: picked.academic_rank, ...(picked.personnel_type ? { personnel_type: picked.personnel_type } : {}) }, user, request);
   }
   const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
   const homeroomSql = hasGrade

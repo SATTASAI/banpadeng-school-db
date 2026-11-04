@@ -57,7 +57,15 @@
     </div>
 
     <div class="error-box" id="errorBox"></div>
-    <div class="summary-line" id="personnelSummary">กำลังโหลดทะเบียนบุคลากร...</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <div class="summary-line" id="personnelSummary">กำลังโหลดทะเบียนบุคลากร...</div>
+      <label style="margin-top:16px;font-size:14px;display:flex;gap:8px;align-items:center;">เรียงตาม
+        <select class="plain" id="sortSelect" style="width:auto;padding:6px 10px;">
+          <option value="rank">ตำแหน่ง/วิทยฐานะ</option>
+          <option value="name">ชื่อ (ก–ฮ)</option>
+        </select>
+      </label>
+    </div>
     <div class="panel staff-panel" id="staffPanel"></div>
     <details class="panel deleted-staff" id="deletedPanel" hidden>
       <summary>บุคลากรที่ลบแล้ว <span id="deletedCount"></span></summary>
@@ -156,6 +164,33 @@
   const requestedStaffId = Number(new URLSearchParams(window.location.search).get("staff"));
 
   let shownStaff = [];
+  let allStaff = [];
+  // ลำดับตำแหน่ง: ผอ. → รอง ผอ. → ครู → ครูผู้ช่วย → ครูอัตราจ้าง → บุคลากรทางการศึกษา → อื่น ๆ
+  function positionOrder(s) {
+    const p = `${s.position || ""} ${s.academic_rank || ""}`.replace(/\s+/g, "");
+    if (/รอง(ผู้อำนวยการ|ผอ)/.test(p)) return 1;
+    if (/ผู้อำนวยการ|ผอ\./.test(p) || s.personnel_type === "executive") return 0;
+    if (s.personnel_type === "education_staff" || /บุคลากรทางการศึกษา/.test(p)) return 5;
+    if (s.personnel_type === "contractor" || /อัตราจ้าง|พนักงานราชการ/.test(p)) return 4;
+    if (/ครูผู้ช่วย/.test(p)) return 3;
+    if (/ครู/.test(p) || s.personnel_type === "teacher") return 2;
+    return 6;
+  }
+  // วิทยฐานะ: เชี่ยวชาญพิเศษ → เชี่ยวชาญ → ชำนาญการพิเศษ → ชำนาญการ → ไม่มี
+  function rankOrder(s) {
+    const r = `${s.academic_rank || ""} ${s.position || ""}`.replace(/\s+/g, "");
+    if (/เชี่ยวชาญพิเศษ/.test(r)) return 0;
+    if (/เชี่ยวชาญ/.test(r)) return 1;
+    if (/ชำนาญการพิเศษ/.test(r)) return 2;
+    if (/ชำนาญการ/.test(r)) return 3;
+    return 4;
+  }
+  const byName = (a, b) => String(a.full_name || "").localeCompare(String(b.full_name || ""), "th");
+  function sortStaff(list) {
+    const mode = document.getElementById("sortSelect")?.value || "rank";
+    return [...list].sort(mode === "name" ? byName : (a, b) => positionOrder(a) - positionOrder(b) || rankOrder(a) - rankOrder(b) || byName(a, b));
+  }
+  document.getElementById("sortSelect").addEventListener("change", () => renderStaff(sortStaff(allStaff)));
   const EXPORT_FIELDS = [
     ["full_name","ชื่อ-นามสกุล",true],
     ["role","สิทธิ์ในระบบ",false,(s)=>s.role?(ROLE_LABELS[s.role]||s.role):""],
@@ -268,7 +303,8 @@
     errorBox.classList.remove("visible");
     try {
       const { staff } = await apiRequest("/api/staff");
-      renderStaff(staff);
+      allStaff = staff;
+      renderStaff(sortStaff(staff));
       const withLicense = staff.filter((person) => person.license_issue_date && person.license_expiry_date).length;
       document.getElementById("personnelSummary").textContent =
         `บุคลากร ${staff.length} คน · มีข้อมูลวันออกและวันหมดอายุใบประกอบครบ ${withLicense} คน`;
