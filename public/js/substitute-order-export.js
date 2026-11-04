@@ -16,14 +16,17 @@
  function causes(rows){const groups=new Map();for(const r of rows){const name=String(r.absent_name||'').trim();if(!name)continue;const why=String(r.leave_reason||r.absence_reason||'').trim().replace(/\s+/g,' ')||'ไม่อยู่ปฏิบัติหน้าที่';if(!groups.has(why))groups.set(why,new Set());groups.get(why).add(name);}
   return [...groups].map(([why,names])=>[...names].sort((a,b)=>a.localeCompare(b,'th')).join(', ')+' '+why);}
  const AUTHORITY='อาศัยอำนาจตามมาตรา ๓๙(๑) แห่งพระราชบัญญัติระเบียบบริหารราชการ กระทรวงศึกษาธิการ พ.ศ.๒๕๔๖ จึงแต่งตั้งข้าราชการครูและบุคลากรทางการศึกษาปฏิบัติหน้าที่สอนแทน ดังนี้';
+ // เลขไทยทั้งฟอร์ม
+ const thaiDigits=v=>String(v??'').replace(/\d/g,d=>'๐๑๒๓๔๕๖๗๘๙'[d]);
  function order(rows,meta){
   if(!rows.length)throw Error('ยังไม่มีรายการสอนแทนสำหรับส่งออก');
-  return {title:'คำสั่งโรงเรียนบ้านป่าเด็ง',number:'ที่ '+(meta.order_number?.trim()||'........ / ........'),subject:'เรื่อง แต่งตั้งครูเข้าสอนแทน',
+  const o={title:'คำสั่งโรงเรียนบ้านป่าเด็ง',number:'ที่ '+(meta.order_number?.trim()||'........ / ........'),subject:'เรื่อง แต่งตั้งครูเข้าสอนแทน',
    introduction:'ด้วย '+causes(rows).join(' และ ')+' ใน'+weekdayDate(meta.date)+' เพื่อให้การเรียนการสอนดำเนินไปด้วยความเรียบร้อย',
    authority:AUTHORITY,
    rows:[...rows].sort((a,b)=>Number(a.period)-Number(b.period)||String(a.grade_level).localeCompare(String(b.grade_level),'th')).map(r=>[String(r.period),[r.grade_level,r.classroom].filter(Boolean).join('/'),r.subject||'',r.absent_name||'',r.substitute_name||'']),
    effective:'ทั้งนี้ ตั้งแต่วันที่ '+thaiDate(meta.date)+' เป็นต้นไป',
    issued:'สั่ง ณ วันที่ '+thaiDate(meta.issue_date||meta.date),signature:'('+(meta.director_name?.trim()||'........................................')+')',position:'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'};
+  return Object.fromEntries(Object.entries(o).map(([k,v])=>[k,Array.isArray(v)?v.map(r=>r.map(thaiDigits)):thaiDigits(v)]));
  }
  // ลายเซ็นอิเล็กทรอนิกส์ ผอ. (PNG) — ไม่มีก็เว้นที่ว่างไว้เซ็นมือ
  function signaturePng(meta){const m=/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(meta.director_signature||'');if(!m)return null;
@@ -44,7 +47,7 @@
   if(sig){files['word/media/signature.png']={base64:sig.base64};files['word/_rels/document.xml.rels']=files['word/_rels/document.xml.rels'].replace('</Relationships>','<Relationship Id="rIdSignature" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/signature.png"/></Relationships>');}
   return files;
  }
- function pdfDefinition(rows,meta){const data=order(rows,meta),sig=signaturePng(meta);garuda(meta);return {pageSize:'A4',pageMargins:[50,50,50,50],defaultStyle:{font:'Sarabun',fontSize:16},content:[{image:meta.garuda_data_url,width:77.67,height:85.04,alignment:'center',margin:[0,0,0,8]},{text:data.title,bold:true,alignment:'center',fontSize:20},{text:data.number,alignment:'center'},{text:data.subject,bold:true,alignment:'center',margin:[0,6,0,18]},{text:data.introduction,leadingIndent:40,margin:[0,0,0,4]},{text:data.authority,leadingIndent:40,margin:[0,0,0,12]},{table:{headerRows:1,widths:[25,55,85,'*','*'],body:[headers,...data.rows].map((r,i)=>r.map(text=>({text,bold:i===0})))},layout:'lightHorizontalLines'},{text:data.effective,alignment:'center',margin:[0,20,0,0]},{text:data.issued,alignment:'center',margin:[0,0,0,6]},sig?{image:sig.data_url,width:sig.w,height:sig.h,alignment:'center'}:{text:' ',margin:[0,0,0,30]},{text:data.signature,alignment:'center'},{text:data.position,alignment:'center'}],footer:(p,n)=>({text:`หน้า ${p} / ${n}`,alignment:'center',fontSize:12})};}
+ function pdfDefinition(rows,meta){const data=order(rows,meta),sig=signaturePng(meta);garuda(meta);return {pageSize:'A4',pageMargins:[50,50,50,50],defaultStyle:{font:'Sarabun',fontSize:16},content:[{image:meta.garuda_data_url,width:77.67,height:85.04,alignment:'center',margin:[0,0,0,8]},{text:data.title,bold:true,alignment:'center',fontSize:20},{text:data.number,alignment:'center'},{text:data.subject,bold:true,alignment:'center',margin:[0,6,0,18]},{text:data.introduction,leadingIndent:40,margin:[0,0,0,4]},{text:data.authority,leadingIndent:40,margin:[0,0,0,12]},{table:{headerRows:1,widths:[25,55,85,'*','*'],body:[headers,...data.rows].map((r,i)=>r.map(text=>({text,bold:i===0})))},layout:'lightHorizontalLines'},{text:data.effective,alignment:'center',margin:[0,20,0,0]},{text:data.issued,alignment:'center',margin:[0,0,0,6]},sig?{image:sig.data_url,width:sig.w,height:sig.h,alignment:'center'}:{text:' ',margin:[0,0,0,30]},{text:data.signature,alignment:'center'},{text:data.position,alignment:'center'}],footer:(p,n)=>({text:thaiDigits(`หน้า ${p} / ${n}`),alignment:'center',fontSize:12})};}
  const loading=new Map();
  function library(name,url){if(root[name])return Promise.resolve(root[name]);if(!loading.has(name))loading.set(name,new Promise((resolve,reject)=>{const script=document.createElement('script');script.src=url;script.onload=()=>resolve(root[name]);script.onerror=()=>{loading.delete(name);script.remove();reject(Error('โหลดเครื่องมือส่งออกไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ต'));};document.head.append(script);}));return loading.get(name);}
  function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
