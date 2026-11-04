@@ -71,6 +71,9 @@ test("homeroom teacher can save only their own classroom and cannot import", asy
 
 test("import matches student codes, defaults to the active year and reports bad rows", async () => {
   const env = environment();
+  const denied = await api(env, 1, "/api/student-insurance/import", "POST", { rows: [] });
+  assert.equal(denied.status, 403);
+  env.db.exec("UPDATE users SET role='superadmin' WHERE id=1");
   const r = await api(env, 1, "/api/student-insurance/import", "POST", { rows: [
     { student_code: "0010", insured: "ทำ", premium: "300" },
     { student_code: "0011", academic_year: "2568", insured: "ไม่ทำ" },
@@ -100,7 +103,7 @@ test("export filters by insurance status for the chosen year", () => {
   assert.equal(e.groups(list, "insurance_status").length, 3);
 });
 
-test("insurance officer (ตั้งค่าผู้อนุมัติ) manages every classroom and can import", async () => {
+test("insurance officer (ตั้งค่าผู้อนุมัติ) manages every classroom but cannot import (superadmin only)", async () => {
   const env = environment();
   env.db.exec(`ALTER TABLE users ADD COLUMN deleted_at TEXT;
     INSERT INTO users(id,email,full_name,role,status,created_at) VALUES (3,'o@example.invalid','ครูงานประกัน','teacher','active','2026-01-01');
@@ -112,8 +115,9 @@ test("insurance officer (ตั้งค่าผู้อนุมัติ) ma
   assert.equal(r.status, 200);
   r = await api(env, 3, "/api/student-insurance");
   assert.equal(r.data.permissions.manage_all, true); assert.equal(r.data.officer.name, "ครูงานประกัน");
+  assert.equal(r.data.permissions.can_import, false);
   r = await api(env, 3, "/api/student-insurance/import", "POST", { rows: [{ student_code: "0011", insured: "ทำ" }] });
-  assert.equal(r.status, 200); assert.equal(r.data.saved, 1);
+  assert.equal(r.status, 403);
 });
 
 test("homeroom teacher cannot save or clear other years or other classrooms", async () => {

@@ -71,7 +71,7 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
   </section>
 
   <section id="tab-registry" hidden>
-    <div class="fc-head" style="margin-bottom:10px"><p id="regNote" style="margin:0"></p><div class="rg-act" id="regTools" hidden><button type="button" class="btn btn-primary" id="regAdd">+ เพิ่มอาคาร/ห้อง</button><a class="btn btn-ghost" href="/import-center.html?template=facilities">นำเข้าจาก Excel</a></div></div>
+    <div class="fc-head" style="margin-bottom:10px"><p id="regNote" style="margin:0"></p><div class="rg-act" id="regTools" hidden><button type="button" class="btn btn-primary" id="regAdd">+ เพิ่มอาคาร/ห้อง</button><a class="btn btn-ghost" id="regImport" style="display:none" href="/import-center.html?template=facilities">นำเข้าจาก Excel</a></div></div>
     <div id="registry"></div>
   </section>
 </main>
@@ -182,6 +182,7 @@ async function exportStats(){
   }catch(e){showErr(e.message)}finally{btn.disabled=false}
 }
 function renderRegistry(){
+  if(!renderRegistry.roleChecked){renderRegistry.roleChecked=1;apiRequest("/api/auth/me").then(m=>{if(m?.user?.role==="superadmin")$("regImport").style.display=""}).catch(()=>{})}
   $("regTools").hidden=!canManage;
   $("regNote").textContent=`${facilities.length} รายการ · งานซ่อมที่ยังไม่ปิดนับรวมทุกสถานะที่ยังไม่ตรวจรับ`;
   if(!facilities.length){$("registry").innerHTML='<div class="fc-panel empty">ยังไม่มีทะเบียนอาคาร/ห้อง</div>';return}

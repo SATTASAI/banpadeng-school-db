@@ -1924,7 +1924,7 @@ async function handleCreateProject(request, env, department) {
 async function handleImportProjects(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่นำเข้าโครงการได้" }, 403);
+  if (user.role !== "superadmin") return jsonResponse({ error: "นำเข้าข้อมูลได้เฉพาะผู้ดูแลระบบ (superadmin)" }, 403);
   const body = await request.json().catch(() => null);
   if (!Array.isArray(body?.rows) || !body.rows.length || body.rows.length > 500) {
     return jsonResponse({ error: "กรุณาส่งข้อมูลโครงการ 1–500 รายการ" }, 400);
@@ -4601,7 +4601,7 @@ async function handleImportStudents(request, env) {
 async function handleImportStaff(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
-  if (!isAdmin(user)) return jsonResponse({ error: "เฉพาะผู้บริหาร/ผู้ดูแลระบบเท่านั้นที่นำเข้าข้อมูลบุคลากรได้" }, 403);
+  if (user.role !== "superadmin") return jsonResponse({ error: "นำเข้าข้อมูลได้เฉพาะผู้ดูแลระบบ (superadmin)" }, 403);
 
   let body;
   try {
