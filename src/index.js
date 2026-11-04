@@ -1,4 +1,5 @@
 import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from './routes/student-transfers.js';
+import { handleThaiSchools } from './routes/thai-schools.js';
 import { RANK_CHOICES, rankChoiceToRecord, recordToRankChoice } from "./lib/rank-choice.js";
 import {handleEvaluationRead} from './evaluation/read.js';
 import {handleEvaluationLink} from './evaluation/link.js';
@@ -4734,6 +4735,9 @@ const app = {
         if (viewer?.role === "viewer" && !viewerMayAccess(method, pathname)) return jsonResponse(VIEWER_BLOCKED, 403);
       }
 
+      if (pathname.startsWith('/api/thai-schools')) {
+        return await handleThaiSchools(request,env,pathname,method);
+      }
       if (pathname.startsWith('/api/student-transfers')) {
         const actor = await getCurrentUser(request, env);
         if (!actor?.role) return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
