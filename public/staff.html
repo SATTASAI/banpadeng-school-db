@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ข้อมูลครู/บุคลากร — ระบบจัดการโรงเรียนบ้านป่าเด็ง</title>
 <link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   .staff-panel { margin-top:20px; }
   .staff-row { display:flex; justify-content:space-between; align-items:center; padding:14px 20px; border-bottom:1px solid var(--color-border); }
@@ -30,6 +31,9 @@
   .staff-acts { display:flex; gap:14px; align-items:center; flex-shrink:0; }
   .deleted-staff { margin-top:16px; padding:14px 18px; }
   .deleted-staff summary { cursor:pointer; font-weight:600; }
+  .export-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px 14px; margin:12px 0; }
+  .export-fields label { display:flex; gap:8px; align-items:center; font-size:14px; cursor:pointer; }
+  @media(max-width:640px){.export-fields{grid-template-columns:1fr}}
   .deleted-note { color:var(--color-text-muted); font-size:13px; margin:8px 0 4px; }
 </style>
 </head>
@@ -47,6 +51,7 @@
         <p style="color:var(--color-text-muted); margin:0;">ทะเบียนครูและบุคลากร ตำแหน่ง วิชาที่สอน และครูประจำชั้น</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" style="width:auto;" id="exportBtn" type="button">ดาวน์โหลด Excel</button>
         <a class="btn btn-ghost" style="width:auto;" href="/personnel.html">ศูนย์บริหารงานบุคคล</a>
       </div>
     </div>
@@ -115,6 +120,21 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="exportModal" style="display:none;">
+  <div class="modal" style="max-width:560px;">
+    <h2 style="margin-bottom:4px;">ดาวน์โหลดข้อมูลบุคลากร (Excel)</h2>
+    <p style="color:var(--color-text-muted);margin:0;font-size:14px;" id="exportCount"></p>
+    <div style="display:flex;gap:14px;margin-top:12px;font-size:13px;">
+      <a href="#" id="exportAll">เลือกทั้งหมด</a><a href="#" id="exportNone">ไม่เลือกเลย</a>
+    </div>
+    <div class="export-fields" id="exportFields"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="exportCancel" type="button">ยกเลิก</button>
+      <button class="btn btn-primary" id="exportGo" type="button">ดาวน์โหลด</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/api.js"></script>
 <script>
   if (window.parent && window.parent !== window) {
@@ -135,7 +155,60 @@
   const esc = (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   const requestedStaffId = Number(new URLSearchParams(window.location.search).get("staff"));
 
+  let shownStaff = [];
+  const EXPORT_FIELDS = [
+    ["full_name","ชื่อ-นามสกุล",true],
+    ["role","สิทธิ์ในระบบ",false,(s)=>s.role?(ROLE_LABELS[s.role]||s.role):""],
+    ["personnel_type","ประเภทบุคลากร",true,(s)=>PERSONNEL_TYPE_LABELS[s.personnel_type]||s.personnel_type||""],
+    ["position_number","เลขที่ตำแหน่ง",false],
+    ["position","ตำแหน่ง",true],
+    ["academic_rank","วิทยฐานะ/ระดับ",true],
+    ["employment_status","สถานะการปฏิบัติงาน",true,(s)=>EMPLOYMENT_STATUS_LABELS[s.employment_status||"working"]||s.employment_status],
+    ["appointment_date","วันที่บรรจุ/แต่งตั้ง",false],
+    ["service_start_date","วันที่เริ่มรับราชการ/เริ่มงาน",false],
+    ["retirement_date","วันเกษียณ",false],
+    ["education_level","วุฒิการศึกษาสูงสุด",false],
+    ["major","วิชาเอก",false],
+    ["institution","สถาบันการศึกษา",false],
+    ["subjects","วิชาที่สอน",true],
+    ["phone","เบอร์ติดต่อ",false],
+    ["homeroom_classroom","ครูประจำชั้น",true],
+    ["departments","ฝ่ายงาน",true],
+    ["responsible_projects","โครงการที่รับผิดชอบ",false],
+    ["teaching_periods","คาบสอน/สัปดาห์",false],
+    ["license_issue_date","วันออกใบประกอบวิชาชีพ",false],
+    ["license_expiry_date","วันหมดอายุใบประกอบวิชาชีพ",false],
+  ];
+
+  function openExport() {
+    if (!shownStaff.length) { alert("ยังไม่มีข้อมูลบุคลากร"); return; }
+    document.getElementById("exportCount").textContent = `บุคลากรที่แสดงอยู่ ${shownStaff.length} คน — เลือกข้อมูลที่ต้องการ`;
+    document.getElementById("exportFields").innerHTML = EXPORT_FIELDS.map(([k,l,d]) => `<label><input type="checkbox" value="${k}" ${d?"checked":""}> ${esc(l)}</label>`).join("");
+    document.getElementById("exportModal").style.display = "flex";
+  }
+  function setAllExport(on) { document.querySelectorAll("#exportFields input").forEach((c) => c.checked = on); }
+  function doExport() {
+    const picked = new Set([...document.querySelectorAll("#exportFields input:checked")].map((c) => c.value));
+    const cols = EXPORT_FIELDS.filter(([k]) => picked.has(k));
+    if (!cols.length) { alert("กรุณาเลือกข้อมูลอย่างน้อย 1 รายการ"); return; }
+    if (typeof XLSX === "undefined") { alert("โหลดตัวสร้างไฟล์ Excel ไม่สำเร็จ ลองรีเฟรชหน้า"); return; }
+    const rows = shownStaff.map((s, i) => [i + 1, ...cols.map(([k,,,fn]) => { const v = fn ? fn(s) : s[k]; return v ?? ""; })]);
+    const ws = XLSX.utils.aoa_to_sheet([["ลำดับ", ...cols.map(([,l]) => l)], ...rows]);
+    ws["!cols"] = [{ wch: 6 }, ...cols.map(([,l]) => ({ wch: Math.max(14, l.length + 4) }))];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "บุคลากร");
+    const d = new Date();
+    XLSX.writeFile(wb, `ข้อมูลบุคลากร_${d.getFullYear() + 543}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}.xlsx`);
+    document.getElementById("exportModal").style.display = "none";
+  }
+  document.getElementById("exportBtn").addEventListener("click", openExport);
+  document.getElementById("exportCancel").addEventListener("click", () => document.getElementById("exportModal").style.display = "none");
+  document.getElementById("exportGo").addEventListener("click", doExport);
+  document.getElementById("exportAll").addEventListener("click", (e) => { e.preventDefault(); setAllExport(true); });
+  document.getElementById("exportNone").addEventListener("click", (e) => { e.preventDefault(); setAllExport(false); });
+
   function renderStaff(staff) {
+    shownStaff = staff;
     const panel = document.getElementById("staffPanel");
     panel.innerHTML = staff
       .map((s) => {
