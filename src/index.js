@@ -13,6 +13,7 @@ import {handleLessonPlansRoute} from './routes/lesson-plans.js';
 import {handleProjectFilesRoute} from './routes/project-files.js';
 import {handleActivitySsoRoute} from './routes/activity-sso.js';
 import {handleTeachingMediaSsoRoute} from './routes/teachingmedia-sso.js';
+import {handlePublicServiceSsoRoute} from './routes/publicservice-sso.js';
 import {createSession,revokeSession,revokeAllSessions,listSessions,alertLockout,lockedNow,verifyTurnstile,TURNSTILE_ERROR,securityAlert,superadminIds,applySecurityHeaders,ensureSessionSchema} from './lib/auth-sessions.js';
 import {googleOAuthTokenError} from './lib/google-oauth-errors.js';
 import {databaseQuotaResponse} from './lib/database-errors.js';
@@ -4909,6 +4910,8 @@ const app = {
       if(activitySsoResponse)return activitySsoResponse;
       const tmSsoResponse=await handleTeachingMediaSsoRoute(request,env,pathname,method);
       if(tmSsoResponse)return tmSsoResponse;
+      const psSsoResponse=await handlePublicServiceSsoRoute(request,env,pathname,method);
+      if(psSsoResponse)return psSsoResponse;
       const lessonPlansResponse=await handleLessonPlansRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
       if(lessonPlansResponse)return lessonPlansResponse;
       const teachingWorksResponse=await handleTeachingWorksRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);

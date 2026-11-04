@@ -12,7 +12,7 @@ export const TABLE_LABELS={project_expenses:'รายการเบิกจ�
  work_records:'บันทึกงาน (ศูนย์ปฏิบัติงาน)',work_record_updates:'ความคืบหน้าบันทึกงาน',work_topics:'หัวข้องาน',school_bank_accounts:'บัญชีธนาคารโรงเรียน',school_bank_transactions:'รายการฝาก-ถอน',school_bank_loans:'เงินกู้ธนาคารโรงเรียน',school_bank_loan_repayments:'ชำระเงินกู้',notification_reads:'การอ่านแจ้งเตือน',personnel_imports:'ประวัติการนำเข้าบุคลากร',personnel_merges:'ประวัติรวมข้อมูลบุคลากร'};
 // ตารางระบบ / ข้อมูลหลักที่ใช้ร่วมกับระบบผลการเรียน — ไม่แสดงในหน้าล้างข้อมูล
 const PROTECTED=[/^users$/,/^viewer_accounts$/,/^personnel_accounts$/,/^personnel_records$/,/^staff_profiles$/,/^department_staff$/,/^students$/,/^student_details$/,/^student_enrollments$/,/^guardians$/,/^academic_(years|terms|period_audit)$/,/^gr_/,
- /^auth_/,/_sessions$/,/_throttles$/,/^audit_logs$/,/settings$/,/_counters$/,/_folders$/,/_guard$/,/^admin_/,/^backup_/,/^dashboard_/,/^usage_/,/^security_/,/^line_/,/^activity_sso/,/^evaluation_login/,/^budget_role_assignments$/,/^leave_reviewers$/,/^supervision_evaluators$/,/^timetable_(structure|auto_config)$/,/^submit_guard$/,/^schema/,/^_/];
+ /^auth_/,/_sessions$/,/_throttles$/,/^audit_logs$/,/settings$/,/_counters$/,/_folders$/,/_guard$/,/^admin_/,/^backup_/,/^dashboard_/,/^usage_/,/^security_/,/^line_/,/^activity_sso/,/^publicservice_sso/,/^evaluation_login/,/^budget_role_assignments$/,/^leave_reviewers$/,/^supervision_evaluators$/,/^timetable_(structure|auto_config)$/,/^submit_guard$/,/^schema/,/^_/];
 export const isProtectedTable=t=>PROTECTED.some(r=>r.test(t));
 const tableLabel=t=>TABLE_LABELS[t]||t;
 const ROOT_KEYS=Object.fromEntries(Object.entries(SCOPES).map(([k,[t]])=>[t,k]));
