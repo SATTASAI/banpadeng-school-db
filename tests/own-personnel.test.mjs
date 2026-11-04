@@ -47,4 +47,10 @@ test('teachers edit their own personnel record only from account (my personnel),
  assert.deepEqual({...row},{full_name:'ครู ก',position:'ครู',academic_rank:'ครูชำนาญการ',phone:'0811111111'});
  assert.equal(env.raw.prepare('SELECT phone FROM personnel_records WHERE id=11').get().phone,null);
  assert.equal((await req(env,'/api/staff/11',{method:'PATCH',cookie:admin,body:{position:'ครู',academic_rank:'ครูชำนาญการพิเศษ'}})).status,200);
+ // Superadmin แก้คำนำหน้า/ชื่อ/นามสกุลได้ · ผู้อื่นแก้ชื่อไม่ได้ · ชื่อซ้ำถูกปฏิเสธ
+ const rn=await req(env,'/api/staff/11',{method:'PATCH',cookie:admin,body:{position:'ครู',prefix:'นางสาว',first_name:'สมใจ',last_name:'ใจดี'}});
+ assert.equal(rn.status,200,await rn.clone().text());
+ assert.deepEqual({...env.raw.prepare('SELECT prefix,first_name,last_name,full_name,normalized_name FROM personnel_records WHERE id=11').get()},{prefix:'นางสาว',first_name:'สมใจ',last_name:'ใจดี',full_name:'นางสาว สมใจ ใจดี',normalized_name:'นางสาวสมใจใจดี'});
+ assert.equal((await req(env,'/api/staff/10',{method:'PATCH',cookie:admin,body:{position:'ครู',prefix:'นางสาว',first_name:'สมใจ',last_name:'ใจดี'}})).status,409);
+ assert.equal((await req(env,'/api/staff/11',{method:'PATCH',cookie:admin,body:{position:'ครู',first_name:'',last_name:'ใจดี'}})).status,400);
 });

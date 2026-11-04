@@ -1724,7 +1724,33 @@ async function handleUpdateStaff(request, env, targetId) {
   } catch {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
+  // Superadmin แก้คำนำหน้า/ชื่อ/นามสกุลในทะเบียนบุคลากร (ไม่เปลี่ยนชื่อบัญชีผู้ใช้)
+  if (body.first_name !== undefined || body.last_name !== undefined || body.prefix !== undefined) {
+    if (user.role !== "superadmin") return jsonResponse({ error: "แก้ชื่อ–นามสกุลได้เฉพาะ Superadmin" }, 403);
+    const renamed = await renameStaff(env, targetId, body, user, request);
+    if (renamed) return renamed;
+  }
   return updateStaffRecord(env, targetId, body, user, request);
+}
+
+async function renameStaff(env, id, body, user, request) {
+  const first = validateNamePart(body.first_name, "ชื่อ");
+  if (first.error) return jsonResponse({ error: first.error }, 400);
+  const last = validateNamePart(body.last_name, "นามสกุล");
+  if (last.error) return jsonResponse({ error: last.error }, 400);
+  const prefix = String(body.prefix ?? "").normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/\s+/g, " ").trim();
+  if (prefix.length > 30 || /[\u0000-\u001f<>]/.test(prefix)) return jsonResponse({ error: "คำนำหน้าต้องยาวไม่เกิน 30 ตัวอักษร และไม่มีอักขระ < >" }, 400);
+  const current = await env.DB.prepare("SELECT prefix, full_name FROM personnel_records WHERE id = ?").bind(id).first();
+  const old = splitName(current.full_name, current.prefix);
+  const fullName = joinName(prefix || null, first.value, last.value, hasSpacedPrefix(current.full_name, old.prefix));
+  if (fullName === current.full_name && (prefix || null) === (current.prefix || null)) return null;
+  const normalized = fullName.normalize("NFC").replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\s.]+/g, "").toLowerCase();
+  const clash = await env.DB.prepare("SELECT id FROM personnel_records WHERE normalized_name = ? AND id <> ?").bind(normalized, id).first();
+  if (clash) return jsonResponse({ error: "มีบุคลากรชื่อนี้ในทะเบียนอยู่แล้ว" }, 409);
+  await env.DB.prepare("UPDATE personnel_records SET prefix = ?, first_name = ?, last_name = ?, full_name = ?, normalized_name = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(prefix || null, first.value, last.value, fullName, normalized, id).run();
+  await writeAuditLog(env, user, "update", "personnel", id, { superadmin_rename: true, previous_full_name: current.full_name, full_name: fullName }, request);
+  return null;
 }
 
 async function updateStaffRecord(env, targetId, body, user, request) {

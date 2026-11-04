@@ -85,6 +85,10 @@
   <div class="modal">
     <h2 style="margin-bottom:16px;">แก้ไขข้อมูลบุคลากร</h2>
     <div class="profile-grid">
+    <div class="profile-section" id="nameSection" hidden>ชื่อ–นามสกุล (เฉพาะ Superadmin)</div>
+    <div class="field" id="nameFields" hidden><label>คำนำหน้า</label><input type="text" id="fPrefix" maxlength="30" placeholder="เช่น นาย นาง นางสาว" /></div>
+    <div class="field" id="firstNameField" hidden><label>ชื่อ</label><input type="text" id="fFirstName" maxlength="60" /></div>
+    <div class="field" id="lastNameField" hidden><label>นามสกุล</label><input type="text" id="fLastName" maxlength="60" /></div>
     <div class="profile-section">ข้อมูลตำแหน่งและสถานะ</div>
     <div class="field"><label>ประเภทบุคลากร</label><select class="plain" id="fPersonnelType"><option value="">— เลือกประเภท —</option><option value="executive">ผู้บริหาร</option><option value="teacher">ข้าราชการครู</option><option value="education_staff">บุคลากรทางการศึกษา</option><option value="employee">ลูกจ้าง/พนักงาน</option><option value="contractor">ครูอัตราจ้าง</option><option value="other">อื่น ๆ</option></select></div>
     <div class="field"><label>เลขที่ตำแหน่ง</label><input type="text" id="fPositionNumber" /></div>
@@ -361,8 +365,26 @@
     } catch { box.hidden = true; }
   }
 
+  // แยกคำนำหน้า/ชื่อ/นามสกุลจากชื่อเต็ม สำหรับช่องแก้ชื่อของ Superadmin
+  const NAME_PREFIXES = ["ว่าที่ร้อยตรีหญิง", "ว่าที่ร.ต.หญิง", "ว่าที่ร้อยตรี", "ว่าที่ร.ต.", "นางสาว", "นาง", "นาย", "ดร.", "น.ส."];
+  function splitStaffName(s) {
+    let rest = String(s.full_name || "").replace(/\s+/g, " ").trim(), prefix = String(s.prefix || "").trim();
+    if (prefix && rest.startsWith(prefix)) rest = rest.slice(prefix.length).trim();
+    else if (!prefix) { const hit = NAME_PREFIXES.find((p) => rest.startsWith(p) && rest.length > p.length); if (hit) { prefix = hit; rest = rest.slice(hit.length).trim(); } }
+    const i = rest.indexOf(" ");
+    return { prefix, first: i < 0 ? rest : rest.slice(0, i), last: i < 0 ? "" : rest.slice(i + 1) };
+  }
+
   function openModal(staffMember) {
     editingId = staffMember.id;
+    const superadmin = currentUser?.role === "superadmin";
+    for (const id of ["nameSection", "nameFields", "firstNameField", "lastNameField"]) document.getElementById(id).hidden = !superadmin;
+    if (superadmin) {
+      const name = splitStaffName(staffMember);
+      document.getElementById("fPrefix").value = name.prefix;
+      document.getElementById("fFirstName").value = name.first;
+      document.getElementById("fLastName").value = name.last;
+    }
     document.getElementById("fPersonnelType").value = staffMember.personnel_type || "";
     document.getElementById("fPositionNumber").value = staffMember.position_number || "";
     document.getElementById("fPosition").value = staffMember.position || "";
@@ -421,6 +443,11 @@
           teaching_periods: document.getElementById("fPeriods").value.trim(),
           license_issue_date: document.getElementById("fLicenseIssue").value || "",
           license_expiry_date: document.getElementById("fLicenseExpiry").value || "",
+          ...(currentUser?.role === "superadmin" ? {
+            prefix: document.getElementById("fPrefix").value.trim(),
+            first_name: document.getElementById("fFirstName").value.trim(),
+            last_name: document.getElementById("fLastName").value.trim(),
+          } : {}),
         },
       });
       document.getElementById("staffModal").style.display = "none";
