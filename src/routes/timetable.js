@@ -5,7 +5,8 @@ import {ensureAcademicData} from "../lib/academic-data.js";
 import {canManageTimetable,canViewAllTimetables} from "../lib/timetable-permissions.js";
 import {handleAuto} from "./timetable-auto.js";
 import {normalizeRoomName,roomNameKey} from "../lib/timetable-solver.js";
-import {ensureLeaveData} from "../lib/leave-data.js";
+import {ensureLeaveData,executives,isDirector} from "../lib/leave-data.js";
+import {signatureFor} from "../lib/signatures.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData, linkExistingAccounts } from "../lib/personnel-data.js";
@@ -340,9 +341,16 @@ async function assign(request,env,user){
   catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"คาบนี้มีการมอบหมายครูแล้ว กรุณารีเฟรช"},409);throw error;}
   return reply({ok:true});
 }
+// ลายเซ็นอิเล็กทรอนิกส์ของ ผอ. สำหรับคำสั่งสอนแทน
+async function orderSignature(env){
+  const director=(await executives(env)).filter(isDirector);
+  if(director.length!==1)return reply({signature:null});
+  for(const id of director[0].user_ids){const s=await signatureFor(env,id);if(s?.data_url)return reply({director_name:director[0].full_name,signature:s.data_url});}
+  return reply({director_name:director[0].full_name,signature:null});
+}
 async function assignments(env,date){
   if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
-  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.leave_request_id,r.status AS leave_status,e.subject,e.grade_level,e.classroom,
+  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.leave_request_id,r.status AS leave_status,r.reason AS leave_reason,e.subject,e.grade_level,e.classroom,
     absent.full_name AS absent_name,sub.full_name AS substitute_name,ab.teacher_id AS absent_teacher_id,ab.reason AS absence_reason,
     a.substitute_teacher_id,a.timetable_entry_id AS entry_id
     FROM substitute_assignments a LEFT JOIN leave_requests r ON r.id=a.leave_request_id JOIN substitute_absences ab ON ab.id=a.absence_id
@@ -507,6 +515,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term,user);
   }else{
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
+    if(pathname==="/api/substitutes/order-signature"&&method==="GET")return orderSignature(env);
     if(pathname==="/api/substitutes/leave-days"&&method==="GET")return leaveDays(env,url.searchParams.get("month"));
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
