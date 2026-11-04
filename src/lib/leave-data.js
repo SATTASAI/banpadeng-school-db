@@ -103,7 +103,8 @@ export async function leaveForm(env,row) {
   return {type,previous_count,previous_days,current_days,total_count:previous_count+(row.leave_type===type?1:0),total_days:round(previous_days+current_days)};
  });
  const people=await executives(env),directors=people.filter(isDirector);
- return {...row,position:row.position||person?.position||'',request_date:row.request_date||row.created_at?.slice(0,10)||today(),
+ const deputy=row.deputy_name?null:await designatedDeputy(env,people).catch(()=>null);
+ return {...row,deputy_name:row.deputy_name||deputy?.full_name||'',deputy_position:row.deputy_position||deputy?.position||'',position:row.position||person?.position||'',request_date:row.request_date||row.created_at?.slice(0,10)||today(),
   leave_days:Number(row.leave_days??calendarDays(row.start_date,row.end_date)),last_leave:history[0]||null,stats,
   statistics_period:{from,to,included_in_fiscal_year:row.leave_type!=='lenient'},director_name:row.director_name||(directors.length===1?directors[0].full_name:''),
   director_position:row.director_position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'};
