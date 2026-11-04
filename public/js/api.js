@@ -95,6 +95,7 @@ const ROLE_LABELS = {
   teacher: "ครู",
   executive: "ผู้บริหาร",
   staff: "เจ้าหน้าที่ธุรการ",
+  education_staff: "บุคลากรทางการศึกษา",
   superadmin: "ผู้ดูแลระบบ",
   viewer: "ผู้ชมภายนอก (ดูอย่างเดียว)",
 };
