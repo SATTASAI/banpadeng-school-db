@@ -124,7 +124,7 @@ function openBook(date,period,activityOk){
   catch(e){err.textContent=e.message;err.hidden=false;btn.disabled=false;if(/คาบเต็ม/.test(e.message)){btn.disabled=true;loadWeek().then(render).catch(()=>{});}}
  };
 }
-async function loadMine(){const d=await apiRequest('/api/supervision/requests?scope=mine');state.mine=d.requests;state.director=d.director||null;}
+async function loadMine(){const d=await apiRequest('/api/supervision/requests?scope=mine');state.mine=d.requests;state.director={...(d.director||{name:'',position:''}),signatures:d.signatures||{}};}
 function row(r){
  const owner=r.supervisor_name?`<span class="owner">ผู้นิเทศ: <b>${esc(r.supervisor_name)}</b></span>`:'<span class="owner">รอ ผอ. หรือรอง ผอ. รับนิเทศ</span>';
  return `<div class="sv-row${state.focus===r.id?' focus':''}" id="q-${r.id}"><div class="when"><b>${U.date(r.visit_date)}</b><small>คาบ ${r.period}</small></div>

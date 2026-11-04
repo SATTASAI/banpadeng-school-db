@@ -13,7 +13,7 @@
 <body>
 <main class="tw-page">
   <header class="tw-head">
-    <div><h1 id="title">ป่าเด็งโมเดล</h1><p id="lead">กรอกแบบรายงานผลการจัดกิจกรรมตามแบบฟอร์ม และแนบรูปประกอบ (ไม่เกิน 4 ภาพ) ของแต่ละวิชาที่สอน</p></div>
+    <div><h1 id="title">ป่าเด็งโมเดล</h1><p id="lead">ส่งภาคเรียนละ 2 ครั้ง ต่อวิชาที่สอน · แต่ละครั้งกรอกแบบรายงานผลการจัดกิจกรรมตามแบบฟอร์ม และแนบรูปประกอบ (ไม่เกิน 4 ภาพ)</p></div>
     <div class="tw-actions"><label class="tw-term">ภาคเรียน<select id="term"></select></label><span id="headActions"></span></div>
   </header>
   <div class="tw-error" id="error" role="alert"></div>
@@ -36,7 +36,7 @@
     </div>
     <label class="tw-field">1. เรื่องที่สอน *<input name="topic" maxlength="300" required></label>
     <label class="tw-field">2. ผลการจัดกิจกรรมการสอน (รายงานตามจุดประสงค์การเรียนรู้) *<textarea name="result" rows="8" maxlength="6000" required></textarea></label>
-    <p class="tw-muted">3. รูปประกอบการจัดกิจกรรม — แนบในการ์ดวิชา (ไม่เกิน 4 ภาพ) ระบบจัดเรียงในเอกสารให้อัตโนมัติ</p>
+    <p class="tw-muted">3. รูปประกอบการจัดกิจกรรม — แนบในการ์ดวิชา ช่องของครั้งนี้ (ไม่เกิน 4 ภาพ) ระบบจัดเรียงในเอกสารให้อัตโนมัติ</p>
     <div class="tw-sign">
       <div><b>ลายเซ็นครูผู้สอน *</b><small>ถ่ายรูปลายเซ็นบนกระดาษขาว เว้นที่ว่างรอบลายเซ็นเล็กน้อย ระบบตัดพื้นหลังและทำเส้นให้เข้มอัตโนมัติ · อัปครั้งเดียวใช้กับแบบรายงานทุกฉบับ</small></div>
       <div class="tw-sign-row">
@@ -79,22 +79,21 @@ function renderMine(){
   if(!data.term){$('body').innerHTML='<p class="tw-note">ยังไม่มีภาคเรียนในระบบ</p>';return;}
   if(!data.courses.length){$('body').innerHTML='<div class="tw-empty"><b>ยังไม่พบวิชาที่คุณสอนในภาคเรียนนี้</b><p>รายวิชาดึงจากข้อมูลครูผู้สอนที่ฝ่ายวัดผลกำหนดในระบบรายงานผลการเรียน หากไม่ถูกต้องให้แจ้งฝ่ายวัดผล</p></div>';$('cards').innerHTML='';return;}
   const done=data.courses.filter(c=>c.complete).length;
-  $('cards').innerHTML=`<div class="tw-card"><span>ส่งครบแล้ว</span><strong>${done} / ${data.courses.length} วิชา</strong>${progressBar(done,data.courses.length)}</div>
+  $('cards').innerHTML=`<div class="tw-card"><span>ส่งครบ 2 ครั้งแล้ว</span><strong>${done} / ${data.courses.length} วิชา</strong>${progressBar(done,data.courses.length)}</div>
     <div class="tw-card"><span>ลายเซ็น</span><strong class="sm">${data.signature?'✅ อัปโหลดแล้ว':'⚠️ ยังไม่อัปโหลด — อัปได้ในหน้ากรอกแบบรายงาน'}</strong></div>
-    <div class="tw-card"><span>เกณฑ์</span><strong class="sm">แบบรายงาน 1 ฉบับ + รูปประกอบ 1–${data.max_images} ภาพ ต่อวิชา·ห้อง</strong></div>`;
-  $('body').innerHTML=`<div class="tw-grid">${data.courses.map(c=>{
-    const left=data.max_images-c.images.length;
-    return `<article class="tw-course ${c.complete?'ok':''}">
-      <header><div><h2>${esc(c.subject)}</h2><small>${esc(c.subject_code||'')} · ชั้น ${room(c)}</small></div><span class="tw-badge ${c.complete?'ok':''}">${c.complete?'ส่งครบ':'ยังไม่ครบ'}</span></header>
-      <p class="tw-label">ภาพกิจกรรม ${c.images.length}/${data.max_images}</p>
-      <div class="tw-thumbs">${c.images.map(i=>`<figure><img src="${fileUrl('padeng',i.id)}" alt="${esc(i.file_name)}" loading="lazy" data-open="${i.id}">
+    <div class="tw-card"><span>เกณฑ์</span><strong class="sm">ภาคเรียนละ 2 ครั้ง · ครั้งละแบบรายงาน 1 ฉบับ + รูปประกอบ 1–${data.max_images} ภาพ ต่อวิชา·ห้อง</strong></div>`;
+  $('body').innerHTML=`<div class="tw-grid">${data.courses.map(c=>`<article class="tw-course ${c.complete?'ok':''}">
+      <header><div><h2>${esc(c.subject)}</h2><small>${esc(c.subject_code||'')} · ชั้น ${room(c)}</small></div><span class="tw-badge ${c.complete?'ok':c.rounds_done?'mid':''}">${c.complete?'ส่งครบ 2 ครั้ง':`ส่งแล้ว ${c.rounds_done}/2 ครั้ง`}</span></header>
+      ${c.rounds.map(r=>{const left=data.max_images-r.images.length,key=`${c.course_id}-${r.round}`;
+      return `<section class="tw-round ${r.complete?'ok':''}"><p class="tw-label"><b>ครั้งที่ ${r.round}</b> ${r.complete?'<span class="tw-badge ok">ครบ</span>':'<span class="tw-badge">ยังไม่ครบ</span>'}</p>
+      <p class="tw-label">ภาพกิจกรรม ${r.images.length}/${data.max_images}</p>
+      <div class="tw-thumbs">${r.images.map(i=>`<figure><img src="${fileUrl('padeng',i.id)}" alt="${esc(i.file_name)}" loading="lazy" data-open="${i.id}">
         ${closed?'':`<button class="tw-x" data-del="${i.id}" title="ลบภาพ" aria-label="ลบภาพ">×</button>`}</figure>`).join('')}
-        ${!closed&&left>0?`<label class="tw-add">+ เพิ่มภาพ<small>เหลือ ${left} ภาพ</small><input type="file" accept="image/*" multiple hidden data-images="${c.course_id}" data-left="${left}"></label>`:''}</div>
-      <p class="tw-label">แบบรายงานผลการจัดกิจกรรม</p>
-      <div class="tw-pdf">${c.reported?`<span>📝 ${esc(c.report.topic)}</span>`:'<span class="tw-muted">ยังไม่ได้กรอก</span>'}
-        <button type="button" class="btn ${c.reported?'btn-ghost':'btn-primary'} tw-sm" data-report="${c.course_id}">${closed?'ดูแบบรายงาน':c.reported?'แก้ไขแบบรายงาน':'กรอกแบบรายงาน'}</button></div>
-      <div class="tw-progress" id="up-${c.course_id}"></div>
-    </article>`;}).join('')}</div>${closed?'<p class="tw-note">ภาคเรียนนี้ปิดแล้ว ดูงานได้อย่างเดียว</p>':''}`;
+        ${!closed&&left>0?`<label class="tw-add">+ เพิ่มภาพ<small>เหลือ ${left} ภาพ</small><input type="file" accept="image/*" multiple hidden data-images="${c.course_id}" data-round="${r.round}" data-left="${left}"></label>`:''}</div>
+      <div class="tw-pdf">${r.reported?`<span>📝 ${esc(r.report.topic)}</span>`:'<span class="tw-muted">ยังไม่ได้กรอกแบบรายงาน</span>'}
+        <button type="button" class="btn ${r.reported?'btn-ghost':'btn-primary'} tw-sm" data-report="${c.course_id}" data-round="${r.round}">${closed?'ดูแบบรายงาน':r.reported?'แก้ไขแบบรายงาน':'กรอกแบบรายงาน'}</button></div>
+      <div class="tw-progress" id="up-${key}"></div></section>`;}).join('')}
+    </article>`).join('')}</div>${closed?'<p class="tw-note">ภาคเรียนนี้ปิดแล้ว ดูงานได้อย่างเดียว</p>':''}`;
 }
 
 // ---------- ฝ่ายวิชาการ: ความคืบหน้า ----------
@@ -104,10 +103,10 @@ function renderProgress(){
   $('headActions').innerHTML=`<label class="tw-term">รวมเล่ม<select id="bookGrade"><option value="">ทุกชั้น</option>${(data.grades||[]).map(g=>`<option>${esc(g)}</option>`).join('')}</select></label>
     <button type="button" class="btn btn-primary" data-book="pdf">รวมเล่ม PDF</button><button type="button" class="btn btn-ghost" data-book="docx">รวมเล่ม Word</button>
     <a class="btn btn-ghost" href="/api/teaching-works/padeng/zip?term_id=${data.term.id}">ภาพทั้งหมด (.zip)</a>`;
-  $('cards').innerHTML=`<div class="tw-card"><span>วิชา·ห้องที่ส่งครบ</span><strong>${done} / ${courses}</strong>${progressBar(done,courses)}</div>
+  $('cards').innerHTML=`<div class="tw-card"><span>วิชา·ห้องที่ส่งครบ 2 ครั้ง</span><strong>${done} / ${courses}</strong>${progressBar(done,courses)}</div>
     <div class="tw-card"><span>ครูที่ส่งครบทุกวิชา</span><strong>${allDone} / ${t.length} คน</strong>${progressBar(allDone,t.length)}</div>
     <div class="tw-card"><span>ภาพที่ส่งแล้ว</span><strong>${t.reduce((s,x)=>s+x.images,0)} ภาพ</strong></div>
-    <div class="tw-card"><span>แบบรายงานที่ส่งแล้ว</span><strong>${t.reduce((s,x)=>s+x.reports,0)} ฉบับ</strong></div>`;
+    <div class="tw-card"><span>แบบรายงานที่ส่งแล้ว</span><strong>${t.reduce((s,x)=>s+x.reports,0)} / ${t.reduce((s,x)=>s+x.report_total,0)} ฉบับ</strong></div>`;
   $('body').innerHTML=t.length?`<div class="tw-filter"><input id="search" type="search" placeholder="ค้นหาชื่อครู"><label><input type="checkbox" id="pending"> แสดงเฉพาะที่ยังไม่ครบ</label></div>
     <div class="tw-table"><table><thead><tr><th>ที่</th><th>ครู</th><th>ส่งครบ</th><th>ภาพ</th><th>แบบรายงาน</th><th>สถานะ</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>`
     :'<div class="tw-empty"><b>ยังไม่มีข้อมูลครูผู้สอนของภาคเรียนนี้</b><p>ฝ่ายวัดผลกำหนดครูผู้สอนในระบบรายงานผลการเรียน</p></div>';
@@ -116,12 +115,12 @@ function renderProgress(){
     const q=$('search').value.trim(),pending=$('pending').checked;
     $('rows').innerHTML=t.filter(x=>(!q||x.full_name.includes(q))&&(!pending||x.complete<x.total)).map((x,i)=>{
       const st=x.complete===x.total?'<span class="tw-badge ok">ครบ</span>':x.images||x.reports?'<span class="tw-badge mid">ส่งบางส่วน</span>':'<span class="tw-badge">ยังไม่ส่ง</span>';
-      return `<tr class="tw-row" data-u="${x.user_id}"><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td><td>${x.complete}/${x.total}${progressBar(x.complete,x.total)}</td><td>${x.images}</td><td>${x.reports}/${x.total}</td><td>${st}</td>
+      return `<tr class="tw-row" data-u="${x.user_id}"><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td><td>${x.complete}/${x.total}${progressBar(x.complete,x.total)}</td><td>${x.images}</td><td>${x.reports}/${x.report_total}</td><td>${st}</td>
         <td><button class="btn btn-ghost tw-sm" data-toggle="${x.user_id}">รายละเอียด</button></td></tr>
         <tr class="tw-detail" id="d-${x.user_id}" hidden><td colspan="7"><div class="tw-detail-head"><b>${esc(x.full_name)}</b>${x.signed?'':'<span class="tw-badge">ยังไม่อัปโหลดลายเซ็น</span>'}${x.images?`<a class="btn btn-ghost tw-sm" href="/api/teaching-works/padeng/zip?term_id=${data.term.id}&user_id=${x.user_id}">ภาพของครูคนนี้ (.zip)</a>`:''}</div>
-          ${x.courses.map(c=>`<div class="tw-detail-course"><div><b>${esc(c.subject)}</b> <small>${room(c)}</small></div>
-            <div class="tw-thumbs sm">${c.images.map(i=>`<figure><img src="${fileUrl('padeng',i.id)}" alt="" loading="lazy" data-open="${i.id}"><a class="tw-dl" href="${fileUrl('padeng',i.id,true)}" title="ดาวน์โหลด">⬇</a></figure>`).join('')||'<span class="tw-muted">ไม่มีภาพ</span>'}</div>
-            <div>${c.reported?`<span class="tw-muted">📝 ${esc(c.report.topic)}</span><div class="tw-doc-btns"><button type="button" class="btn btn-primary tw-sm" data-doc="pdf" data-u="${x.user_id}" data-c="${c.course_id}">PDF</button><button type="button" class="btn btn-ghost tw-sm" data-doc="docx" data-u="${x.user_id}" data-c="${c.course_id}">Word</button></div>`:'<span class="tw-muted">ยังไม่กรอกแบบรายงาน</span>'}</div></div>`).join('')}</td></tr>`;}).join('')||'<tr><td colspan="7">ไม่พบข้อมูล</td></tr>';
+          ${x.courses.map(c=>c.rounds.map(r=>`<div class="tw-detail-course"><div><b>${esc(c.subject)}</b> <small>${room(c)} · ครั้งที่ ${r.round}</small></div>
+            <div class="tw-thumbs sm">${r.images.map(i=>`<figure><img src="${fileUrl('padeng',i.id)}" alt="" loading="lazy" data-open="${i.id}"><a class="tw-dl" href="${fileUrl('padeng',i.id,true)}" title="ดาวน์โหลด">⬇</a></figure>`).join('')||'<span class="tw-muted">ไม่มีภาพ</span>'}</div>
+            <div>${r.reported?`<span class="tw-muted">📝 ${esc(r.report.topic)}</span><div class="tw-doc-btns"><button type="button" class="btn btn-primary tw-sm" data-doc="pdf" data-u="${x.user_id}" data-c="${c.course_id}" data-r="${r.round}">PDF</button><button type="button" class="btn btn-ghost tw-sm" data-doc="docx" data-u="${x.user_id}" data-c="${c.course_id}" data-r="${r.round}">Word</button></div>`:'<span class="tw-muted">ยังไม่กรอกแบบรายงาน</span>'}</div></div>`).join('')).join('')}</td></tr>`;}).join('')||'<tr><td colspan="7">ไม่พบข้อมูล</td></tr>';
   };
   $('search').oninput=rows;$('pending').onchange=rows;rows();
 }
@@ -134,12 +133,13 @@ function render(){
 // ---------- แบบรายงาน (ครู) ----------
 const FIELDS=['academic_year','term_no','teach_date','learning_area','subject','grade','teacher_name','topic','result'];
 let editing=null;
-function openReport(courseId){
+function openReport(courseId,round){
   const c=data.courses.find(x=>x.course_id===Number(courseId));if(!c)return;
-  editing=c;const f=$('reportForm'),closed=data.term?.status==='closed';
-  for(const k of FIELDS){f.elements[k].value=c.report[k]||'';f.elements[k].readOnly=closed;}
-  $('rfCourse').textContent=`${c.subject} · ชั้น ${c.grade_level}${c.classroom?'/'+c.classroom:''}`;
-  $('rfGradeLabel').textContent=c.report.kindergarten?'ชั้นอนุบาลปีที่':'ชั้นประถมศึกษาปีที่';
+  const r=c.rounds.find(x=>x.round===Number(round));if(!r)return;
+  editing={course_id:c.course_id,round:r.round};const f=$('reportForm'),closed=data.term?.status==='closed';
+  for(const k of FIELDS){f.elements[k].value=r.report[k]||'';f.elements[k].readOnly=closed;}
+  $('rfCourse').textContent=`${c.subject} · ชั้น ${c.grade_level}${c.classroom?'/'+c.classroom:''} · ครั้งที่ ${r.round}`;
+  $('rfGradeLabel').textContent=r.report.kindergarten?'ชั้นอนุบาลปีที่':'ชั้นประถมศึกษาปีที่';
   $('rfSave').hidden=closed;$('rfError').style.display='none';$('sigPick').hidden=closed;resetSig();paintSig();$('reportDialog').showModal();
 }
 $('rfClose').onclick=$('rfCancel').onclick=()=>{$('reportDialog').close();load();};
@@ -148,6 +148,7 @@ let sigDraft=null;
 function paintSig(){
   $('sigCurrent').innerHTML=data.signature?`<img src="${data.signature.data_url}" alt="ลายเซ็นปัจจุบัน">`:'<span class="tw-muted">ยังไม่มีลายเซ็น</span>';
   $('sigPick').firstChild.textContent=data.signature?'เปลี่ยนลายเซ็น':'อัปโหลดลายเซ็น';
+  if(data.signature?.locked){$('sigPick').hidden=true;$('sigCurrent').insertAdjacentHTML('beforeend','<small class="tw-muted">🔒 ลายเซ็นถูกล็อค หากต้องการเปลี่ยนกรุณาแจ้ง Superadmin</small>');}
 }
 function resetSig(){sigDraft=null;$('sigPreview').hidden=true;$('sigBefore').removeAttribute('src');$('sigAfter').removeAttribute('src');}
 $('sigFile').onchange=async e=>{
@@ -167,7 +168,7 @@ $('sigUse').onclick=async()=>{
 $('reportForm').onsubmit=async e=>{
   e.preventDefault();if(!editing)return;
   if(!data.signature){$('rfError').textContent='กรุณาอัปโหลดลายเซ็นก่อนบันทึกแบบรายงาน';$('rfError').style.display='block';return;}
-  const f=e.target,body={term_id:data.term.id,course_id:editing.course_id};for(const k of FIELDS)body[k]=f.elements[k].value;
+  const f=e.target,body={term_id:data.term.id,course_id:editing.course_id,round:editing.round};for(const k of FIELDS)body[k]=f.elements[k].value;
   $('rfSave').disabled=true;
   try{await apiRequest('/api/teaching-works/padeng/report',{method:'PUT',body:JSON.stringify(body)});$('reportDialog').close();
     try{window.parent?.postMessage?.({type:'school-data-changed'},location.origin);}catch{}
@@ -190,9 +191,9 @@ async function exportDocs(format,params,fileName){
 const safe=s=>String(s||'').replace(/[\\/:*?"<>|]/g,'-').replace(/\s+/g,' ').trim();
 
 document.addEventListener('click',async e=>{
-  const rep=e.target.closest('[data-report]');if(rep){openReport(rep.dataset.report);return;}
+  const rep=e.target.closest('[data-report]');if(rep){openReport(rep.dataset.report,rep.dataset.round);return;}
   const doc=e.target.closest('[data-doc]');
-  if(doc){exportDocs(doc.dataset.doc,{user_id:doc.dataset.u,course_id:doc.dataset.c},items=>safe(`ป่าเด็งโมเดล ${items[0].teacher_name} ${items[0].subject} ${items[0].grade}`));return;}
+  if(doc){exportDocs(doc.dataset.doc,{user_id:doc.dataset.u,course_id:doc.dataset.c,round:doc.dataset.r},items=>safe(`ป่าเด็งโมเดล ${items[0].teacher_name} ${items[0].subject} ${items[0].grade} ครั้งที่ ${items[0].round}`));return;}
   const book=e.target.closest('[data-book]');
   if(book){const g=$('bookGrade').value;exportDocs(book.dataset.book,g?{grade_level:g}:{},()=>safe(`ป่าเด็งโมเดล รวมเล่ม ${data.term.year_be} ภาคเรียนที่ ${data.term.term_number}${g?' '+g:''}`));return;}
   const open=e.target.closest('[data-open]');if(open){openImage(fileUrl('padeng',open.dataset.open));return;}
@@ -203,11 +204,11 @@ document.addEventListener('click',async e=>{
 document.addEventListener('change',async e=>{
   const img=e.target.closest('[data-images]');
   if(!img)return;
-  const course=img.dataset.images;
+  const course=img.dataset.images,round=img.dataset.round;
   let files=[...e.target.files];e.target.value='';
   let warn='';
   if(files.length>Number(img.dataset.left)){warn=`เลือกได้อีกไม่เกิน ${img.dataset.left} ภาพ — ส่งเฉพาะ ${img.dataset.left} ภาพแรก`;files=files.slice(0,Number(img.dataset.left));}
-  await uploadFiles('/api/teaching-works/padeng/upload',files,f=>({kind:'image',course_id:course,term_id:data.term.id,file:f}),$('up-'+course));
+  await uploadFiles('/api/teaching-works/padeng/upload',files,f=>({kind:'image',course_id:course,round,term_id:data.term.id,file:f}),$(`up-${course}-${round}`));
   await load();if(warn)showError(warn);
 });
 $('term').onchange=load;

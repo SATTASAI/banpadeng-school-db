@@ -2,6 +2,7 @@
 // ครูลงทะเบียนคาบของตนเอง → ผู้มีสิทธิ์ประเมิน (ผอ. รอง ผอ. และผู้ที่ฝ่ายวิชาการแต่งตั้ง) รับนิเทศ → ผู้รับนิเทศบันทึกคะแนน
 // ผลประเมิน: ครูเห็นเฉพาะของตนเอง ฝ่ายบริหารและฝ่ายวิชาการเห็นทั้งหมด
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
+import {signaturesFor} from '../lib/signatures.js';
 import {ensurePersonnelData} from '../lib/personnel-data.js';
 import {ensureDepartmentStaff,belongsToDepartment} from './department-staff.js';
 import {loadStructure,DEFAULT_STRUCTURE} from '../lib/timetable-structure.js';
@@ -373,16 +374,17 @@ async function createRequest(request,env,user){
 
 // ผอ. สำหรับช่องลงชื่อในแบบนิเทศ (ตำแหน่งมีคำว่า ผู้อำนวยการ แต่ไม่ใช่รอง/ผู้ช่วย)
 async function directorOf(env){
- const r=await env.DB.prepare(`SELECT p.full_name name,p.position FROM personnel_records p WHERE p.status='active'
+ const r=await env.DB.prepare(`SELECT p.full_name name,p.position,(SELECT a.user_id FROM personnel_accounts a WHERE a.personnel_id=p.id LIMIT 1) user_id FROM personnel_records p WHERE p.status='active'
   AND instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้อำนวยการ')>0 AND instr(REPLACE(COALESCE(p.position,''),' ',''),'รองผู้อำนวยการ')=0
   AND instr(REPLACE(COALESCE(p.position,''),' ',''),'ผู้ช่วยผู้อำนวยการ')=0 ORDER BY p.id LIMIT 1`).first().catch(()=>null);
- return r?{name:r.name,position:r.position}:null;
+ return r?{name:r.name,position:r.position,user_id:r.user_id?Number(r.user_id):null}:null;
 }
 async function listRequests(env,user,url,perms){
  const scope=url.searchParams.get('scope')==='all'?'all':'mine';
  if(scope==='mine'){
   const {results}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' ORDER BY r.visit_date DESC,r.period`).bind(user.id).all();
-  return reply({scope,director:await directorOf(env),requests:await withEvidence(env,results.map(r=>shape(r,{withResult:true})))});
+  const director=await directorOf(env),requests=await withEvidence(env,results.map(r=>shape(r,{withResult:true})));
+  return reply({scope,director,requests,signatures:await approverSignatures(env,requests,director)});
  }
  if(!perms.evaluate&&!perms.view_all)return fail('เฉพาะฝ่ายบริหาร ฝ่ายวิชาการ หรือผู้มีสิทธิ์ประเมิน',403);
  const {results}=await env.DB.prepare(`${SELECT} WHERE r.status<>'cancelled' ORDER BY r.visit_date,r.period,r.id`).all();
@@ -400,7 +402,15 @@ async function listRequests(env,user,url,perms){
   // รายการที่ตนเองถอนการรับแล้วและยังรอผู้รับใหม่ — ไม่ค้างในแท็บคำขอของผู้ที่ถอน
   out.released_by_me=out.status==='pending'&&released.has(out.id);
   out.hidden_for_me=out.released_by_me&&!out.overdue&&someoneElse(r);return out;});
- return reply({scope,director:await directorOf(env),requests:await withEvidence(env,list)});
+ const director=await directorOf(env),requests=await withEvidence(env,list);
+ return reply({scope,director,requests,signatures:await approverSignatures(env,requests,director)});
+}
+// ลายเซ็นผู้ลงนาม (ผู้นิเทศ + ผอ.) สำหรับพิมพ์แบบนิเทศ — เฉพาะรายการที่มีผลประเมินแล้ว
+async function approverSignatures(env,requests,director){
+ const ids=requests.filter(r=>r.evaluation).map(r=>r.evaluation.evaluator_user_id);
+ if(!ids.length)return {};
+ if(director?.user_id)ids.push(director.user_id);
+ return signaturesFor(env,ids).catch(()=>({}));
 }
 
 async function act(request,env,user,id,action,perms,services){

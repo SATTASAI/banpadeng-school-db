@@ -44,7 +44,7 @@ test('ป่าเด็งโมเดล: ครูกรอกแบบรา
  const env=await setup();
  const mine=await (await call(env,'/api/teaching-works/padeng/mine','GET',undefined,2)).json();
  assert.equal(mine.courses.length,2);assert.equal(mine.term.id,71);
- const r0=mine.courses[0].report;
+ const r0=mine.courses[0].rounds[0].report;assert.deepEqual(mine.courses[0].rounds.map(r=>r.round),[1,2]);
  assert.deepEqual([r0.academic_year,r0.term_no,r0.learning_area,r0.subject,r0.grade,r0.teacher_name],['2569','2','คณิตศาสตร์','คณิตศาสตร์','4/1','ครู ก']);
  for(let i=0;i<4;i++)assert.equal((await upload(env,'/api/teaching-works/padeng/upload',{kind:'image',course_id:'11',file:jpg()},2)).status,201);
  assert.equal((await upload(env,'/api/teaching-works/padeng/upload',{kind:'image',course_id:'11',file:jpg()},2)).status,409);
@@ -66,17 +66,24 @@ test('ป่าเด็งโมเดล: ครูกรอกแบบรา
  assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',{...body,topic:'การบวกเลขสองหลัก'},2)).status,200); // แก้ไขฉบับเดิม
  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM padeng_model_reports').get().n,1);
  const mine2=await (await call(env,'/api/teaching-works/padeng/mine','GET',undefined,2)).json();
- const c11=mine2.courses.find(c=>c.course_id===11);assert.equal(c11.complete,true);assert.equal(mine2.signature.data_url,png);assert.equal(c11.images.length,4);assert.equal(c11.report.result,'นักเรียนบวกเลขได้\nร้อยละ 80');
+ const c11=mine2.courses.find(c=>c.course_id===11);assert.equal(c11.complete,false);assert.equal(c11.rounds[0].complete,true);assert.equal(c11.rounds_done,1);assert.equal(mine2.signature.data_url,png);assert.equal(c11.images.length,4);assert.equal(c11.rounds[0].report.result,'นักเรียนบวกเลขได้\nร้อยละ 80');
+ // ครั้งที่ 2: ภาพแยกโควตา 4 ภาพ + แบบรายงานฉบับที่ 2 → วิชานี้ครบ
+ assert.equal((await upload(env,'/api/teaching-works/padeng/upload',{kind:'image',course_id:'11',round:'3',file:jpg()},2)).status,400);
+ assert.equal((await upload(env,'/api/teaching-works/padeng/upload',{kind:'image',course_id:'11',round:'2',file:jpg()},2)).status,201);
+ assert.equal((await call(env,'/api/teaching-works/padeng/report','PUT',{...body,round:2,topic:'การลบเลข'},2)).status,200);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM padeng_model_reports').get().n,2);
+ const mine3=await (await call(env,'/api/teaching-works/padeng/mine','GET',undefined,2)).json();
+ const c11b=mine3.courses.find(c=>c.course_id===11);assert.equal(c11b.complete,true);assert.equal(c11b.rounds[1].images.length,1);assert.equal(c11b.rounds[1].report.topic,'การลบเลข');
  // ความคืบหน้า: เฉพาะฝ่ายวิชาการ/ผู้ดูแล
  assert.equal((await call(env,'/api/teaching-works/padeng/progress','GET',undefined,3)).status,403);
  const prog=await (await call(env,'/api/teaching-works/padeng/progress')).json();
- const t2=prog.teachers.find(t=>t.user_id===2);assert.equal(t2.total,2);assert.equal(t2.complete,1);assert.equal(t2.images,4);assert.equal(t2.reports,1);assert.equal(t2.signed,true);
+ const t2=prog.teachers.find(t=>t.user_id===2);assert.equal(t2.total,2);assert.equal(t2.complete,1);assert.equal(t2.images,5);assert.equal(t2.reports,2);assert.equal(t2.report_total,4);assert.equal(t2.signed,true);
  assert.deepEqual(prog.grades,['ป.4']);
  // ข้อมูลเอกสาร: ฝ่ายวิชาการได้ทั้งหมด ครูได้เฉพาะของตนเอง
  const docs=await (await call(env,'/api/teaching-works/padeng/documents?term_id=71')).json();
- assert.equal(docs.items.length,1);assert.equal(docs.signatures[2],png);assert.equal(docs.items[0].topic,'การบวกเลขสองหลัก');assert.equal(docs.items[0].images.length,4);
+ assert.equal(docs.items.length,2);assert.deepEqual(docs.items.map(i=>i.round),[1,2]);assert.equal(docs.items[1].images.length,1);assert.equal(docs.signatures[2],png);assert.equal(docs.items[0].topic,'การบวกเลขสองหลัก');assert.equal(docs.items[0].images.length,4);
  assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71','GET',undefined,3)).status,403);
- assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71&user_id=2&course_id=11','GET',undefined,2)).status,200);
+ const one=await (await call(env,'/api/teaching-works/padeng/documents?term_id=71&user_id=2&course_id=11&round=2','GET',undefined,2)).json();assert.equal(one.items.length,1);assert.equal(one.items[0].topic,'การลบเลข');
  assert.equal((await call(env,'/api/teaching-works/padeng/documents?term_id=71&grade_level=ป.5')).status,404);
  // ดาวน์โหลดไฟล์เดี่ยว: เจ้าของ/ฝ่ายวิชาการได้ คนอื่นไม่ได้
  const id=env.raw.prepare("SELECT id FROM padeng_model_files WHERE kind='image' LIMIT 1").get().id;
@@ -101,4 +108,19 @@ test('วิจัยในชั้นเรียน: ครูส่ง PDF 1
  assert.equal(prog.teachers.find(t=>t.user_id===2).file,null);
  assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM classroom_research_files WHERE deleted_at IS NULL').get().n,1);
  const perms=await (await call(env,'/api/teaching-works/permissions','GET',undefined,2)).json();assert.equal(perms.academic,false);
+});
+
+test('ป่าเด็งโมเดล: ตารางเดิม (ไม่มี round) ถูกย้ายข้อมูล งานที่ส่งแล้วนับเป็นครั้งที่ 1',async()=>{
+ const env=await setup();
+ env.raw.exec(`CREATE TABLE padeng_model_reports (id INTEGER PRIMARY KEY AUTOINCREMENT, academic_term_id INTEGER NOT NULL, course_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+  academic_year TEXT, learning_area TEXT, subject TEXT, grade TEXT, term_no TEXT, teacher_name TEXT, teach_date TEXT, topic TEXT, result TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (academic_term_id, course_id, user_id));
+  CREATE TABLE padeng_model_files (id INTEGER PRIMARY KEY AUTOINCREMENT, academic_term_id INTEGER NOT NULL, course_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL, subject TEXT, subject_code TEXT, grade_level TEXT, classroom TEXT, drive_file_id TEXT NOT NULL, file_name TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT);
+  INSERT INTO padeng_model_reports(academic_term_id,course_id,user_id,topic,result) VALUES(71,11,2,'เดิม','ผลเดิม');
+  INSERT INTO padeng_model_files(academic_term_id,course_id,user_id,kind,drive_file_id,file_name,mime_type) VALUES(71,11,2,'image','x','x.jpg','image/jpeg');`);
+ const mine=await (await call(env,'/api/teaching-works/padeng/mine','GET',undefined,2)).json();
+ const c=mine.courses.find(c=>c.course_id===11);assert.equal(c.rounds[0].report.topic,'เดิม');assert.equal(c.rounds[0].images.length,1);assert.equal(c.rounds[1].reported,false);
+ assert.equal(env.raw.prepare('SELECT round FROM padeng_model_reports').get().round,1);
 });
