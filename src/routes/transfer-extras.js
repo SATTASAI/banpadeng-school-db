@@ -89,8 +89,8 @@ function importStatements(env, records, userId) {
     const chunk = records.slice(i, i + 8);
     statements.push(
       env.DB.prepare(
-        "INSERT INTO student_transfer_requests(client_ref,direction,student_code,student_name,grade_level,school_name,academic_year,term,move_date,reason,created_by) VALUES " +
-          chunk.map(() => "(?,?,?,?,?,?,?,?,?,?,?)").join(","),
+        "INSERT INTO student_transfer_requests(client_ref,direction,student_code,student_name,grade_level,school_name,school_code,academic_year,term,move_date,reason,created_by) VALUES " +
+          chunk.map(() => "(?,?,?,?,?,?,?,?,?,?,?,?)").join(","),
       ).bind(
         ...chunk.flatMap((r) => [
           r.client_ref,
@@ -99,6 +99,7 @@ function importStatements(env, records, userId) {
           r.student_name,
           r.grade_level,
           r.school_name,
+          r.school_code || "",
           r.academic_year,
           r.term,
           r.move_date,

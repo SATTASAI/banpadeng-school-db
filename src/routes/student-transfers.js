@@ -37,6 +37,11 @@ export async function ensureStudentTransfers(env) {
       action TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', user_id INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')))`),
   ]);
+  await env.DB.prepare(
+    "ALTER TABLE student_transfer_requests ADD COLUMN school_code TEXT NOT NULL DEFAULT ''",
+  )
+    .run()
+    .catch(() => {});
   ready.add(env.DB);
 }
 
@@ -55,6 +60,11 @@ export function normalizeTransfer(input) {
       return { error: "กรุณากรอกข้อมูลให้ครบและไม่เกินความยาวที่กำหนด" };
     record[key] = value;
   }
+  const schoolCode =
+    typeof input?.school_code === "string" ? input.school_code.trim() : "";
+  if (schoolCode && !/^\d{10}$/.test(schoolCode))
+    return { error: "รหัสสถานศึกษาต้องเป็นตัวเลข 10 หลัก" };
+  record.school_code = schoolCode;
   if (!["in", "out"].includes(input.direction))
     return { error: "กรุณาระบุย้ายเข้าหรือย้ายออก" };
   if (
@@ -99,7 +109,7 @@ const response = (data, status = 200) =>
   jsonResponse(data, status, { "Cache-Control": "no-store" });
 const mutable = (row) => ["pending", "needs_documents"].includes(row.status);
 const fields =
-  "id,direction,student_code,student_name,grade_level,school_name,academic_year,term,move_date,reason,status,note,version,created_at,updated_at,decided_at";
+  "id,direction,student_code,student_name,grade_level,school_name,school_code,academic_year,term,move_date,reason,status,note,version,created_at,updated_at,decided_at";
 const event = (env, id, action, note, userId, version) =>
   env.DB.prepare(
     `INSERT INTO student_transfer_events(request_id,action,note,user_id)
@@ -251,7 +261,7 @@ export async function handleStudentTransfers(
       );
     try {
       const inserted = await env.DB.prepare(
-        `INSERT INTO student_transfer_requests(client_ref,direction,student_code,student_name,grade_level,school_name,academic_year,term,move_date,reason,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT INTO student_transfer_requests(client_ref,direction,student_code,student_name,grade_level,school_name,school_code,academic_year,term,move_date,reason,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
         .bind(
           r.client_ref,
@@ -260,6 +270,7 @@ export async function handleStudentTransfers(
           r.student_name,
           r.grade_level,
           r.school_name,
+          r.school_code,
           r.academic_year,
           r.term,
           r.move_date,

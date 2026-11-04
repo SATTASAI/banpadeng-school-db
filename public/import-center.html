@@ -45,7 +45,18 @@ const TEMPLATES={
   facilities:{title:"อาคาร สถานที่ และห้องเรียน",description:"ข้อมูลสถานที่สำหรับการแจ้งซ่อมและบริหารอาคาร",fields:[FIELD("facility_code","รหัสสถานที่",true,"BLD-A-101"),FIELD("name","ชื่อสถานที่",true,"ห้องเรียน ป.4/1"),FIELD("facility_type","ประเภท",true,"classroom",["building","classroom","office","restroom","utility","grounds","other"]),FIELD("building_name","อาคาร",false,"อาคาร 1"),FIELD("floor","ชั้น",false,"1"),FIELD("location_detail","รายละเอียดตำแหน่ง"),FIELD("responsible_person","ผู้รับผิดชอบ"),FIELD("status","สถานะ",false,"active",["active","maintenance","closed"]),FIELD("notes","หมายเหตุ")],endpoint:"facilities"},
   insurance:{title:"ประกันอุบัติเหตุนักเรียน",description:"การทำประกันอุบัติเหตุรายปีการศึกษา อ้างอิงเลขประจำตัวนักเรียน — นำเข้าซ้ำจะอัปเดตข้อมูลปีเดียวกัน",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("academic_year","ปีการศึกษา (พ.ศ.)",false,"2569"),FIELD("insured","การทำประกัน",true,"ทำ",["ทำ","ไม่ทำ"]),FIELD("company","บริษัทประกัน",false,"บริษัท ตัวอย่างประกันภัย จำกัด"),FIELD("plan_name","แผน/ประเภทความคุ้มครอง",false,"อุบัติเหตุ 24 ชม."),FIELD("policy_no","เลขกรมธรรม์/เลขที่บัตร",false,"PA-0001"),FIELD("premium","เบี้ยประกัน (บาท)",false,250),FIELD("coverage_amount","วงเงินคุ้มครอง (บาท)",false,100000),FIELD("start_date","วันเริ่มคุ้มครอง",false,"2026-05-16"),FIELD("end_date","วันสิ้นสุดคุ้มครอง",false,"2027-05-15"),FIELD("notes","หมายเหตุ")],endpoint:"insurance"},
   support:{title:"ระบบดูแลช่วยเหลือนักเรียน",description:"คัดกรอง เยี่ยมบ้าน ทุน กลุ่มเสี่ยง พฤติกรรม การช่วยเหลือ และส่งต่อ",fields:[FIELD("student_code","เลขประจำตัวนักเรียน",true,"65001"),FIELD("case_type","ประเภทข้อมูล",true,"screening",["screening","home_visit","scholarship","risk","behavior","assistance","referral"]),FIELD("risk_level","ระดับความเสี่ยง",false,"normal",["normal","watch","high","urgent"]),FIELD("summary","สรุปข้อมูล",true,"ผลการคัดกรอง"),FIELD("action_taken","การช่วยเหลือ/การดำเนินการ"),FIELD("follow_up_date","วันติดตาม",false,"2026-06-30"),FIELD("status","สถานะ",false,"open",["open","monitoring","closed"]),FIELD("referred_to","ส่งต่อ/ประสานไปยัง")],endpoint:"support"}
+  thai_schools:{title:"รายชื่อโรงเรียน สพฐ. ทั้งประเทศ",endpoint:"thai_schools",description:"ใช้ไฟล์รายชื่อโรงเรียนสังกัด สพฐ. ที่ดาวน์โหลดจาก สพฐ./data.go.th ได้เลย — ระบบหาคอลัมน์รหัส 10 หลักให้เอง ใช้แสดงรหัสสถานศึกษาตอนเลือกโรงเรียนเดิม/ปลายทางในทะเบียนย้าย นำเข้าซ้ำจะอัปเดตข้อมูลเดิม",fields:[FIELD("school_code","รหัสโรงเรียน 10 หลัก",true,"1076300001"),FIELD("smis_code","รหัส SMIS 8 หลัก",false,"76010001"),FIELD("name","ชื่อโรงเรียน",true,"วัดช้างแทงกระจาด"),FIELD("subdistrict","ตำบล"),FIELD("district","อำเภอ"),FIELD("province","จังหวัด",false,"เพชรบุรี"),FIELD("area_name","สังกัดเขตพื้นที่",false,"สพป.เพชรบุรี เขต 1")]},
 };
+// รายชื่อโรงเรียน สพฐ.: ไฟล์ของหน่วยงานมักมีหัวกระดาษหลายบรรทัดและชื่อคอลัมน์ไม่ตายตัว
+const SCHOOL_ALIASES={name:["ชื่อโรงเรียน","ชื่อสถานศึกษา","โรงเรียน","สถานศึกษา","schoolname"],subdistrict:["ตำบล","แขวง","ตำบลแขวง"],district:["อำเภอ","เขต","อำเภอเขต"],province:["จังหวัด","province"],area_name:["สังกัดเขตพื้นที่","เขตพื้นที่","สำนักงานเขตพื้นที่การศึกษา","สพท","สังกัด"]};
+function schoolIndexes(matrix){
+  const headerIndex=Math.max(0,matrix.slice(0,30).findIndex(r=>r.some(c=>/โรงเรียน|สถานศึกษา/.test(String(c)))&&r.some(c=>/จังหวัด|อำเภอ|รหัส/.test(String(c)))));
+  const headers=(matrix[headerIndex]||[]).map(normalize),body=matrix.slice(headerIndex+1,headerIndex+400);
+  const byPattern=re=>{let best=-1,score=0;const width=Math.max(0,...body.map(r=>r.length));for(let c=0;c<width;c++){const n=body.filter(r=>re.test(String(r[c]??"").trim())).length;if(n>score){score=n;best=c}}return best};
+  const byHeader=key=>{const names=SCHOOL_ALIASES[key].map(normalize);let i=headers.findIndex(h=>names.includes(h));if(i<0)i=headers.findIndex(h=>!h.includes("รหัส")&&names.some(n=>h.includes(n)));return i};
+  const idx={school_code:byPattern(/^\d{10}$/),smis_code:byPattern(/^\d{8}$/)};for(const key of Object.keys(SCHOOL_ALIASES))idx[key]=byHeader(key);
+  return {headerIndex,idx};
+}
 // งานกรอกข้อมูลบนหน้าเว็บ (ไม่ต้องใช้ไฟล์ Excel) — ทุกอย่างที่นำข้อมูลเข้าระบบอยู่ที่หน้านี้
 const FORMS={
 };
@@ -71,10 +82,10 @@ function resetPreview(){$("totalCount").textContent=$("validCount").textContent=
 function downloadTemplate(){const t=TEMPLATES[selectedKey];if(!t)return;if(selectedKey==="staff"){const link=document.createElement("a");link.href="/templates/teacher-import.xlsx";link.download="template_teacher_import_banpadeng.xlsx";link.click();return}if(typeof XLSX==="undefined"){showResult("ไม่สามารถโหลดเครื่องมือสร้างไฟล์ Excel กรุณาลองใหม่อีกครั้ง",true);return}const headers=t.fields.map(f=>f.label);const dataSheet=XLSX.utils.aoa_to_sheet([headers]);dataSheet["!cols"]=t.fields.map(f=>({wch:Math.min(32,Math.max(14,f.label.length+5))}));const guide=[["ชื่อคอลัมน์","รหัสระบบ","จำเป็น","รูปแบบ/ค่าที่รองรับ","ตัวอย่าง"],...t.fields.map(f=>[f.label,f.key,f.required?"จำเป็น":"ไม่บังคับ",f.options.length?f.options.join(" / "):f.key.includes("date")||f.key.includes("expiry")?"YYYY-MM-DD":"ข้อความหรือตัวเลขตามหัวข้อ",f.example??""])];const guideSheet=XLSX.utils.aoa_to_sheet(guide);guideSheet["!cols"]=[{wch:30},{wch:28},{wch:12},{wch:54},{wch:35}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,dataSheet,"ข้อมูล");XLSX.utils.book_append_sheet(wb,guideSheet,"คำอธิบาย");XLSX.writeFile(wb,`Template-${selectedKey}-${t.title}.xlsx`)}
 function readFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>{try{const wb=XLSX.read(reader.result,{type:"array",cellDates:false});const sheet=wb.Sheets[wb.SheetNames[0]];resolve(XLSX.utils.sheet_to_json(sheet,{header:1,defval:"",raw:false}))}catch(e){reject(e)}};reader.onerror=()=>reject(new Error("อ่านไฟล์ไม่สำเร็จ"));reader.readAsArrayBuffer(file)})}
 function validateRows(matrix){
-  const t=TEMPLATES[selectedKey],headers=(matrix[0]||[]).map(normalize);
-  const indexes=t.fields.map(f=>{const candidates=[f.label,f.key].map(normalize);return headers.findIndex(h=>candidates.includes(h))});
+  const t=TEMPLATES[selectedKey],school=selectedKey==="thai_schools"?schoolIndexes(matrix):null,headerIndex=school?school.headerIndex:0,headers=(matrix[headerIndex]||[]).map(normalize);
+  const indexes=t.fields.map(f=>{const candidates=[f.label,f.key].map(normalize);const exact=headers.findIndex(h=>candidates.includes(h));return school&&exact<0?school.idx[f.key]:exact});
   const seenEmails=new Set();
-  parsedRows=matrix.slice(1).map((row,rowIndex)=>({row:rowIndex+2,cells:row}))
+  parsedRows=matrix.slice(headerIndex+1).map((row,rowIndex)=>({row:headerIndex+rowIndex+2,cells:row}))
     .filter(({cells})=>cells.some(v=>String(v??"").trim()!==""))
     .map(({row,cells})=>{
       const data={};t.fields.forEach((f,i)=>data[f.key]=String(cells[indexes[i]]??"").trim());
@@ -85,6 +96,10 @@ function validateRows(matrix){
         if(data.academic_year&&!/^\d{4}$/.test(data.academic_year))errors.push("ปีการศึกษาต้องเป็นตัวเลข 4 หลัก เช่น 2569");
         ["premium","coverage_amount"].forEach(k=>{const n=data[k].replace(/[,\s]/g,"");if(n&&(!Number.isFinite(Number(n))||Number(n)<0))errors.push(`${k==="premium"?"เบี้ยประกัน":"วงเงินคุ้มครอง"}ต้องเป็นตัวเลข`)});
         const key=`${data.student_code}|${data.academic_year}`;if(seenEmails.has(key))errors.push("เลขประจำตัวและปีซ้ำในไฟล์");seenEmails.add(key);
+      }
+      if(school){
+        if(data.school_code&&!/^\d{10}$/.test(data.school_code))errors.push("รหัสโรงเรียนต้องเป็นตัวเลข 10 หลัก");
+        if(data.school_code&&seenEmails.has(data.school_code))errors.push("รหัสซ้ำในไฟล์");seenEmails.add(data.school_code);
       }
       if(selectedKey==="staff"){
         const email=data.email.toLowerCase();
@@ -117,6 +132,13 @@ async function importData(){
       for(let i=0;i<rows.length;i+=50){
         const batch=rows.slice(i,i+50),result=await apiRequest("/api/staff/import",{method:"POST",body:{rows:batch}});
         created+=Number(result.created||0);updated+=Number(result.updated||0);
+        failed.push(...(result.skipped||[]).map(x=>`แถว ${valid[i+Number(x.row)-1]?.row||"?"}: ${x.reason}`));
+        $("progressBar").style.width=`${Math.min(100,(i+batch.length)/rows.length*100)}%`;
+      }
+    }else if(t.endpoint==="thai_schools"){
+      for(let i=0;i<rows.length;i+=500){
+        const batch=rows.slice(i,i+500),result=await apiRequest("/api/thai-schools/import",{method:"POST",body:{rows:batch}});
+        created+=Number(result.saved||0);
         failed.push(...(result.skipped||[]).map(x=>`แถว ${valid[i+Number(x.row)-1]?.row||"?"}: ${x.reason}`));
         $("progressBar").style.width=`${Math.min(100,(i+batch.length)/rows.length*100)}%`;
       }
