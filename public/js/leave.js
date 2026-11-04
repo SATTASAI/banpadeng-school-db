@@ -2,10 +2,11 @@
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const approvalView=new URLSearchParams(location.search).get('view')==='approval';
- if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;}
+ if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;$('leaveCategoryHint').hidden=true;}
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
  const quotaLabels={general:'ลาทั่วไป (ลากิจและอื่น ๆ — ลาป่วย ลาคลอดไม่จำกัดครั้ง)',lenient:'ลาอนุโลม'};
- let leaveCategory='real';
+ let leaveCategory=null;
+ const categoryTypes={real:['sick','personal','maternity','other'],lenient:['lenient']};
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
   const version=++allowanceVersion;
@@ -84,25 +85,34 @@
   $('lenientLeaveTotal').textContent=(totals?.lenient.times??lenient.length)+' ครั้ง · '+(totals?.lenient.days??lenient.reduce((n,r)=>n+Number(r.leave_days||0),0))+' วัน (แยกต่างหาก)';
   renderRegisters();
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
-  if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id)){setCategory(records.find(r=>r.id===id).leave_type==='lenient'?'lenient':'real');await details(id);}}
+  if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id)){setCategory(records.find(r=>r.id===id).leave_type==='lenient'?'lenient':'real',false);await details(id);}}
  }
  function renderRegisters(){
-  const visible=records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient'));
+  const visible=leaveCategory?records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient')):records;
   const pending=visible.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
   $('historyPanel').innerHTML=visible.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
  }
- function setCategory(category,changeForm=true){
+ // ต้องเลือกการ์ดลาจริง/ลาอนุโลมก่อน จึงแสดงฟอร์มยื่นใบลา ประเภทในฟอร์มกรองตามการ์ด
+ function setCategory(category,showForm=true){
   leaveCategory=category;$('detailSection').hidden=true;detailId=null;
   for(const [id,selected] of [['realLeaveCard',category==='real'],['lenientLeaveCard',category==='lenient']]){
    $(id).classList[selected?'add':'remove']('active');$(id).setAttribute('aria-pressed',String(selected));
   }
-  if(changeForm){if(category==='lenient')$('fType').value='lenient';else if($('fType').value==='lenient')$('fType').value='sick';}
+  const allowed=categoryTypes[category],current=$('fType').value;
+  $('fType').innerHTML=allowed.map(t=>`<option value="${t}">${esc(types[t])}</option>`).join('');
+  $('fType').value=allowed.includes(current)?current:allowed[0];
   $('substituteTeacherField').hidden=$('fType').value!=='lenient';$('fSubstitute').required=$('fType').value==='lenient';
+  if(!approvalView&&showForm){
+   $('newLeaveSection').hidden=false;$('leaveCategoryHint').hidden=true;
+   $('newLeaveTitle').textContent=category==='lenient'?'ยื่นใบลาอนุโลม':'ยื่นใบลาจริง';
+   $('newLeaveSection').classList.remove('real-leave','lenient-leave');$('newLeaveSection').classList.add(category==='lenient'?'lenient-leave':'real-leave');
+   days();
+  }
   renderRegisters();
  }
  $('realLeaveCard').onclick=()=>setCategory('real');$('lenientLeaveCard').onclick=()=>setCategory('lenient');
- $('fType').onchange=()=>{setCategory($('fType').value==='lenient'?'lenient':'real',false);days();};
+ $('fType').onchange=()=>{$('substituteTeacherField').hidden=$('fType').value!=='lenient';$('fSubstitute').required=$('fType').value==='lenient';days();};
  function showDeputyStatus(){
   const p=deputies.find(x=>x.id===Number($('deputyChoice').value));
   $('deputyLineStatus').textContent=!p?'ยังไม่ได้เลือกรอง ผอ. ผู้รับข้อมูลหลังรับทราบ':!lineConfigured?'ระบบยังไม่ได้ตั้งค่า LINE Channel Access Token':p.line_status==='active'?'บัญชี LINE เชื่อมต่อและพร้อมรับข้อความ':p.line_status==='blocked'?'บัญชี LINE บล็อก OA ของโรงเรียน กรุณาปลดบล็อกและเชื่อมใหม่':'รอง ผอ. ยังไม่ได้เชื่อมบัญชี LINE โปรดเชื่อมจากหน้าบัญชีหรือให้แอดมินจับคู่ที่ตั้งค่า LINE';

@@ -19,11 +19,12 @@
   <p id="leaveLoginPrompt" hidden><a class="btn btn-primary" href="/login.html">เข้าสู่ระบบเพื่อดูใบลา</a></p>
   <div id="successBox" class="leave-success" role="status" hidden></div>
   <div class="leave-category-cards" aria-label="ประเภทการลา">
-   <button type="button" class="leave-category-card active" id="realLeaveCard" aria-pressed="true"><strong>ลาจริง</strong><span>นับรวมสถิติปีงบประมาณ</span><b id="realLeaveTotal">—</b></button>
+   <button type="button" class="leave-category-card" id="realLeaveCard" aria-pressed="false"><strong>ลาจริง</strong><span>นับรวมสถิติปีงบประมาณ</span><b id="realLeaveTotal">—</b></button>
    <button type="button" class="leave-category-card" id="lenientLeaveCard" aria-pressed="false"><strong>ลาอนุโลม</strong><span>ไม่นับรวมสถิติปีงบประมาณ</span><b id="lenientLeaveTotal">—</b></button>
   </div>
-  <section class="panel leave-panel" id="newLeaveSection">
-   <h3>ยื่นใบลาใหม่</h3>
+  <p class="muted" id="leaveCategoryHint">กดเลือกการ์ด “ลาจริง” หรือ “ลาอนุโลม” เพื่อกรอกใบลา</p>
+  <section class="panel leave-panel" id="newLeaveSection" hidden>
+   <h3 id="newLeaveTitle">ยื่นใบลาใหม่</h3>
    <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
    <form id="leaveForm" novalidate>
     <div class="leave-fields">
