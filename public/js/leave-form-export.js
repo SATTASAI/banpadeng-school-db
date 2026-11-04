@@ -126,7 +126,7 @@
   const fixed=segs=>{const items=segs.map(x=>typeof x==='string'?{label:x}:x);return {widths:items.map(x=>x.label!=null?'auto':x.slot),body:[cells(items)]};};
   const date=fixed(L.date),subject=fixed(L.subject);
   const body=L.body.map(spec=>spec.choices?{table:{widths:[55,'*'],body:spec.choices.map((segs,i)=>[text(i===1?'ขอลา':''),line({segs},WIDTH-55)])},layout:'noBorders',margin:[0,0,0,0]}:line(spec,WIDTH));
-  const stats={table:{widths:[58,32,32,40,32,32],body:[[{text:'ประเภทลา',rowSpan:2},{text:'ลามาแล้ว',colSpan:2},{},{text:'ลาครั้งนี้'},{text:'รวมเป็น',colSpan:2},{}],['','(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'],...m.stats].map(row=>row.map((c,i)=>typeof c==='string'?text(c,{alignment:i?'center':'left'}):{alignment:'center',...c}))},fontSize:14,layout:{paddingLeft:()=>3,paddingRight:()=>3,paddingTop:()=>1,paddingBottom:()=>1}};
+  const stats={table:{widths:[58,32,32,40,32,32],body:[[{text:'ประเภทลา',rowSpan:2},{text:'ลามาแล้ว',colSpan:2},{},{text:'ลาครั้งนี้'},{text:'รวมเป็น',colSpan:2},{}],['','(ครั้ง)','(วัน)','(วัน)','(ครั้ง)','(วัน)'],...m.stats].map(row=>row.map((c,i)=>typeof c==='string'?text(c,{alignment:i?'center':'left'}):c.text?{alignment:'center',...c}:c))},fontSize:14,layout:{paddingLeft:()=>3,paddingRight:()=>3,paddingTop:()=>1,paddingBottom:()=>1}};
   const checker=[...(signatures.deputy?[image('deputy'),center('ผู้ตรวจสอบ')]:[center(m.checker[0])]),...m.checker.slice(1).map(center)];
   return {pageSize:'A4',pageMargins:[56.7,34,56.7,30],defaultStyle:{font:'Sarabun',fontSize:SIZE,lineHeight:0.92},content:[
    text(m.title,{bold:true,alignment:'center',fontSize:18,margin:[0,0,0,10]}),
