@@ -85,6 +85,26 @@ export function calendarDays(start,end) {return Math.round((Date.parse(end+'T00:
 export function today() {return new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});}
 // Additive subtype preserves existing D1 CHECK constraints and foreign-key history.
 export function leaveRecord(row) {return {...row,leave_type:row.leave_subtype||row.leave_type};}
+// ลายเซ็นผู้บริหารบนใบลา: รอง ผอ. (ผู้ตรวจสอบ) เมื่อหัวหน้าฝ่ายบุคลากรรับทราบ/ส่งต่อแล้ว, ผอ. เมื่ออนุญาตแล้ว
+// ใบลาที่ผ่านขั้นตอนไปก่อนมีลายเซ็นในระบบ → เติมจากลายเซ็นปัจจุบันแล้วบันทึกเป็นสำเนาถาวร
+async function backfillSignatures(env,row,people){
+ const done=row.status!=='cancelled'&&row.status!=='rejected'&&['forwarded','completed'].includes(row.workflow_stage);
+ const out={deputy_signature:done?row.deputy_signature||null:null,approver_signature:row.status==='approved'?row.approver_signature||null:null};
+ const {signatureFor}=await import('./signatures.js');
+ const sign=async ids=>{for(const id of ids)if(id){const s=await signatureFor(env,id).catch(()=>null);if(s)return s.data_url;}return null;};
+ const sets=[],binds=[];
+ if(done&&!out.deputy_signature){
+  const deputy=people.find(p=>p.id===Number(row.deputy_personnel_id))||(row.deputy_name&&people.find(p=>p.full_name===row.deputy_name))||null;
+  out.deputy_signature=await sign(deputy?.user_ids||[]);
+  if(out.deputy_signature){sets.push('deputy_signature=?');binds.push(out.deputy_signature);}
+ }
+ if(row.status==='approved'&&!out.approver_signature){
+  out.approver_signature=await sign([row.approved_by]);
+  if(out.approver_signature){sets.push('approver_signature=?');binds.push(out.approver_signature);}
+ }
+ if(sets.length)await env.DB.prepare(`UPDATE leave_requests SET ${sets.join(',')} WHERE id=?`).bind(...binds,row.id).run().catch(()=>{});
+ return out;
+}
 export async function leaveForm(env,row) {
  row=leaveRecord((await normalizeLeaves(env,[row]))[0]);
  const person=await env.DB.prepare(`SELECT p.* FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(row.user_id).first();
@@ -104,6 +124,7 @@ export async function leaveForm(env,row) {
  });
  const people=await executives(env),directors=people.filter(isDirector);
  const deputy=row.deputy_name?null:await designatedDeputy(env,people).catch(()=>null);
+ Object.assign(row,await backfillSignatures(env,row,people));
  return {...row,deputy_name:row.deputy_name||deputy?.full_name||'',deputy_position:row.deputy_position||deputy?.position||'',position:row.position||person?.position||'',request_date:row.request_date||row.created_at?.slice(0,10)||today(),
   leave_days:Number(row.leave_days??calendarDays(row.start_date,row.end_date)),last_leave:history[0]||null,stats,
   statistics_period:{from,to,included_in_fiscal_year:row.leave_type!=='lenient'},director_name:row.director_name||(directors.length===1?directors[0].full_name:''),
