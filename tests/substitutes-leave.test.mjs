@@ -183,3 +183,11 @@ test('publishing a new timetable remaps future substitutes to the same lesson an
  const cov=await (await call(env,path+'coverage?date='+date+'&teacher_id='+absent,'GET',undefined,3)).json();
  const moved=cov.lessons.find(l=>l.period===3);assert(moved&&!moved.assignment_id&&moved.proposed_teacher_id);
 });
+
+test('leave-days lists weekdays with pending/approved leave for the calendar dots',async()=>{
+ const {env}=await setup();
+ const res=await call(env,'/api/substitutes/leave-days?month=2026-10','GET',undefined,3);assert.equal(res.status,200);
+ const {dates}=await res.json();assert.deepEqual(dates,['2026-10-05','2026-10-06','2026-10-07']);
+ assert.equal((await call(env,'/api/substitutes/leave-days?month=2026-13','GET',undefined,3)).status,400);
+ assert.equal((await call(env,'/api/substitutes/leave-days?month=2026-10','GET',undefined,2)).status,403);
+});
