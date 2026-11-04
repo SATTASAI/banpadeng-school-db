@@ -225,7 +225,7 @@ export async function handleStudentTransfers(
       if (
         !student ||
         student.status !== "enrolled" ||
-        student.full_name.trim() !== r.student_name
+        comparableName(student.full_name) !== comparableName(r.student_name)
       )
         return response(
           {
@@ -234,6 +234,7 @@ export async function handleStudentTransfers(
           },
           400,
         );
+      r.student_name = student.full_name.trim();
     }
     const duplicate = await env.DB.prepare(
       `SELECT id FROM student_transfer_requests WHERE student_code=? AND direction=? AND academic_year=? AND term=? AND status NOT IN ('rejected','cancelled')`,
@@ -468,4 +469,11 @@ export async function handleStudentTransfers(
       : { error: "ข้อมูลเปลี่ยนแล้ว กรุณาโหลดใหม่" },
     results[0].meta.changes ? 200 : 409,
   );
+}
+
+function comparableName(value) {
+  return String(value || "")
+    .normalize("NFC")
+    .replace(/[\s\u200b]+/g, "")
+    .replace(/^(เด็กหญิง|เด็กชาย|ด\.ญ\.|ด\.ช\.|นางสาว|น\.ส\.|นาย|นาง)/, "");
 }
