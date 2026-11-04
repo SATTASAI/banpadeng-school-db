@@ -40,3 +40,13 @@ test('export refreshes the director from the current roster instead of an editab
  await new Promise(resolve=>setImmediate(resolve));node('directorName').value='ชื่อที่แก้ในหน้า';
  await node('exportDocx').onclick();assert.equal(staffReads,2);assert.equal(exported.director_name,'ชื่อปัจจุบัน');
 });
+test('orders state leave reasons, cite the statute, and embed the director e-signature',()=>{
+ const sigPng=fs.readFileSync('public/assets/garuda.png').toString('base64');
+ const list=[{...rows[0],leave_reason:'ไปราชการ'},{...rows[1],leave_reason:'ไปราชการ'},{...rows[0],absent_name:'ครู จ',leave_reason:null,absence_reason:'ลาป่วย'}];
+ const o=e.order(list,meta);assert.match(o.introduction,/^ด้วย ครู ก, ครู ค ไปราชการ และ ครู จ ลาป่วย ในวันจันทร์ที่ 5 ตุลาคม พ\.ศ\. 2569 เพื่อให้การเรียนการสอนดำเนินไปด้วยความเรียบร้อย$/);
+ assert.match(o.authority,/มาตรา ๓๙\(๑\)/);assert.equal(o.subject,'เรื่อง แต่งตั้งครูเข้าสอนแทน');assert.match(o.effective,/ตั้งแต่วันที่ 5 ตุลาคม 2569 เป็นต้นไป/);
+ const withSig={...meta,director_signature:'data:image/png;base64,'+sigPng},files=e.docxFiles(list,withSig);
+ assert.equal(files['word/media/signature.png'].base64,sigPng);assert.match(files['word/_rels/document.xml.rels'],/rIdSignature/);assert.match(files['word/document.xml'],/r:embed="rIdSignature"/);
+ assert(e.pdfDefinition(list,withSig).content.some(x=>x.image===withSig.director_signature));
+ assert(!e.docxFiles(list,meta)['word/media/signature.png']);
+});
