@@ -13,3 +13,8 @@ test('lenient leave exports its title reason and separate statistics in both Wor
  const m=e.model(leave);assert.equal(m.title,'แบบใบลาอนุโลม');assert.match(m.subject,/ขอลาอนุโลม/);assert.match(m.other,/อนุโลม.*ติดต่อราชการ/);assert.match(m.last,/อนุโลม/);assert.equal(m.stats[0][0],'อนุโลม');
  const xml=e.docxFiles(leave)['word/document.xml'];assert.match(xml,/แบบใบลาอนุโลม/);assert.match(xml,/มอบหมายคาบสอนแทนให้แก่/);const pdf=JSON.stringify(e.pdfDefinition(leave));assert.match(pdf,/แบบใบลาอนุโลม/);assert.match(pdf,/อนุโลม/);
 });
+
+test('data lines sit on dotted fields and use Thai distribute to the right margin in Word; PDF fields stretch to the edge',()=>{
+ const xml=e.docxFiles(r)['word/document.xml'];assert.match(xml,/w:jc w:val="thaiDistribute"/);assert.match(xml,/w:u w:val="dotted"/);assert.match(xml,/ไปติดต่อ|ติดต่อราชการ/);assert.match(xml,/เบอร์โทรที่สามารถติดต่อได้/);
+ const pdf=e.pdfDefinition(r),lines=pdf.content.filter(x=>x.table&&x.table.widths.includes('*'));assert(lines.length>=5);assert(JSON.stringify(pdf).includes('ขอลา'));
+});
