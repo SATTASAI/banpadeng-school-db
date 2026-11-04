@@ -34,6 +34,15 @@ export async function ensureViewerTable(env) {
     created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
   viewerTableReady.add(env.DB);
 }
+// บุคลากรทางการศึกษา: users.role = 'staff' (สิทธิ์เท่าเจ้าหน้าที่ธุรการทุกอย่าง) + ป้ายชื่อในตาราง education_staff_accounts
+const eduTableReady = new WeakSet();
+export async function ensureEducationStaffTable(env) {
+  if (!env?.DB || eduTableReady.has(env.DB)) return;
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS education_staff_accounts (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id), created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')))`).run();
+  eduTableReady.add(env.DB);
+}
 export function applyViewer(user) {
   if (!user) return user;
   if (Number(user.is_viewer) === 1) user.role = "viewer";

@@ -33,7 +33,7 @@ import {
   buildSessionCookie,
   buildClearCookie,
 } from "./lib/crypto.js";
-import { getCurrentUser, jsonResponse, isAdmin, viewerMayAccess, viewerExpired, VIEWER_BLOCKED, VIEWER_COLUMNS, applyViewer, ensureViewerTable, forgetCurrentUser } from "./lib/auth.js";
+import { getCurrentUser, jsonResponse, isAdmin, viewerMayAccess, viewerExpired, VIEWER_BLOCKED, VIEWER_COLUMNS, applyViewer, ensureViewerTable, ensureEducationStaffTable, forgetCurrentUser } from "./lib/auth.js";
 import { VIEW_AS_BLOCKED, endViewAs, viewAsMayWrite } from "./lib/view-as.js";
 import { handleViewAsRoute, viewAsState } from "./routes/view-as.js";
 import { canManageAllStudents, homeroomRooms, canSeeStudentPrivate, basicStudent, roomKey } from "./lib/student-access.js";
@@ -759,12 +759,14 @@ async function handleAdminListUsers(request, env) {
   }
 
   await ensureViewerTable(env);
+  await ensureEducationStaffTable(env);
   await ensurePersonnelData(env);
   const { results } = await env.DB.prepare(
-    `SELECT u.id, u.email, CASE WHEN va.user_id IS NOT NULL THEN 'viewer' ELSE u.role END AS role, u.full_name, u.status, u.created_at, u.approved_at, va.expires_at AS access_expires_at,
+    `SELECT u.id, u.email, CASE WHEN va.user_id IS NOT NULL THEN 'viewer' WHEN u.role='staff' AND es.user_id IS NOT NULL THEN 'education_staff' ELSE u.role END AS role, u.full_name, u.status, u.created_at, u.approved_at, va.expires_at AS access_expires_at,
             p.position, p.phone, p.departments
      FROM users u
      LEFT JOIN viewer_accounts va ON va.user_id=u.id
+     LEFT JOIN education_staff_accounts es ON es.user_id=u.id
      LEFT JOIN personnel_accounts pa ON pa.user_id=u.id
      LEFT JOIN personnel_records p ON p.id=pa.personnel_id AND p.status='active'
      WHERE u.deleted_at IS NULL
@@ -783,7 +785,7 @@ async function isLastActiveSuperadmin(env, userId) {
 }
 
 // ---------- /api/admin/users/:id (PATCH) ----------
-const VALID_ROLES = ["teacher", "executive", "staff", "superadmin", "viewer"];
+const VALID_ROLES = ["teacher", "executive", "staff", "education_staff", "superadmin", "viewer"];
 const VALID_STATUSES = ["active", "disabled"];
 
 export async function handleAdminUpdateUser(request, env, targetId) {
@@ -792,6 +794,7 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     return jsonResponse({ error: "ไม่มีสิทธิ์เข้าถึงส่วนนี้" }, 403);
   }
   await ensureViewerTable(env);
+  await ensureEducationStaffTable(env);
 
   if (!targetId) {
     return jsonResponse({ error: "รหัสผู้ใช้ไม่ถูกต้อง" }, 400);
@@ -828,7 +831,8 @@ export async function handleAdminUpdateUser(request, env, targetId) {
     }
     // viewer เก็บในตาราง viewer_accounts และตั้ง users.role = NULL (CHECK เดิมของตาราง users)
     updates.push("role = ?");
-    values.push(body.role === "viewer" ? null : body.role);
+    // บุคลากรทางการศึกษา เก็บเป็น staff + education_staff_accounts (CHECK เดิมของตาราง users)
+    values.push(body.role === "viewer" ? null : body.role === "education_staff" ? "staff" : body.role);
     if (body.role !== null) {
       updates.push("approved_at = ?", "approved_by = ?");
       values.push(new Date().toISOString(), admin.id);
@@ -847,7 +851,9 @@ export async function handleAdminUpdateUser(request, env, targetId) {
   }
 
   // วันหมดอายุของบัญชีผู้ชมภายนอก (YYYY-MM-DD หรือ null = ไม่หมดอายุ) — เฉพาะผู้ดูแลระบบ
-  const before = applyViewer(await env.DB.prepare("SELECT role, status, " + VIEWER_COLUMNS + " FROM users WHERE id = ?").bind(targetId).first());
+  const before = applyViewer(await env.DB.prepare("SELECT role, status, " + VIEWER_COLUMNS + ", EXISTS(SELECT 1 FROM education_staff_accounts e WHERE e.user_id = users.id) AS is_edu FROM users WHERE id = ?").bind(targetId).first());
+  if (before && before.role === "staff" && Number(before.is_edu) === 1) before.role = "education_staff";
+  if (before) delete before.is_edu;
   let viewerExpiry;
   if (body.access_expires_at !== undefined) {
     if (admin.role !== "superadmin") return jsonResponse({ error: "กำหนดวันหมดอายุได้เฉพาะผู้ดูแลระบบ" }, 403);
@@ -884,10 +890,12 @@ export async function handleAdminUpdateUser(request, env, targetId) {
   if (body.role !== undefined) {
     if (body.role === "viewer") await env.DB.prepare("INSERT OR IGNORE INTO viewer_accounts(user_id, created_by) VALUES (?, ?)").bind(targetId, admin.id).run();
     else await env.DB.prepare("DELETE FROM viewer_accounts WHERE user_id = ?").bind(targetId).run();
+    if (body.role === "education_staff") await env.DB.prepare("INSERT OR IGNORE INTO education_staff_accounts(user_id, created_by) VALUES (?, ?)").bind(targetId, admin.id).run();
+    else await env.DB.prepare("DELETE FROM education_staff_accounts WHERE user_id = ?").bind(targetId).run();
   }
   if (viewerExpiry !== undefined) await env.DB.prepare("UPDATE viewer_accounts SET expires_at = ? WHERE user_id = ?").bind(viewerExpiry, targetId).run();
   // แจ้งเตือนความปลอดภัยเมื่อสิทธิ์หรือสถานะบัญชีเปลี่ยน: เจ้าของบัญชี + ผู้ดูแลระบบคนอื่น
-  const ROLE_TH = { superadmin: "ผู้ดูแลระบบ", executive: "ผู้บริหาร", teacher: "ครู", staff: "เจ้าหน้าที่", viewer: "ผู้ชมภายนอก" };
+  const ROLE_TH = { superadmin: "ผู้ดูแลระบบ", executive: "ผู้บริหาร", teacher: "ครู", staff: "เจ้าหน้าที่", education_staff: "บุคลากรทางการศึกษา", viewer: "ผู้ชมภายนอก" };
   const roleText = (r) => (r ? ROLE_TH[r] || r : "ไม่มีบทบาท");
   const changes = [];
   if (body.role !== undefined && (before?.role ?? null) !== (body.role ?? null)) changes.push(`บทบาท ${roleText(before?.role)} → ${roleText(body.role)}`);
@@ -919,6 +927,7 @@ export async function handleAdminUpdateUser(request, env, targetId) {
   )
     .bind(targetId)
     .first());
+  if (updated?.role === "staff" && body.role === "education_staff") updated.role = "education_staff";
 
   await writeAuditLog(env, admin, "update", "user", targetId, {
     fields: Object.keys(body), role: updated.role, status: updated.status,
@@ -1587,6 +1596,7 @@ async function handleListStaff(request, env) {
   }
 
   await ensurePersonnelData(env);
+  await ensureEducationStaffTable(env);
   // ครูประจำชั้นมาจากระบบรายงานผลการเรียน (gr_homerooms ของปีที่เปิดใช้) — ข้อความเดิมในทะเบียนบุคลากรใช้เมื่อยังไม่มีข้อมูล
   const hasGrade = await env.DB.prepare("SELECT 1 AS x FROM sqlite_master WHERE type='table' AND name='gr_homerooms'").first().catch(() => null);
   const homeroomSql = hasGrade
@@ -1595,7 +1605,8 @@ async function handleListStaff(request, env) {
     : "p.homeroom_classroom";
 
   const { results } = await env.DB.prepare(
-    `SELECT p.id, p.user_id, p.full_name, u.role,
+    `SELECT p.id, p.user_id, p.full_name,
+            CASE WHEN u.role='staff' AND EXISTS(SELECT 1 FROM education_staff_accounts e WHERE e.user_id=u.id) THEN 'education_staff' ELSE u.role END AS role,
             EXISTS(SELECT 1 FROM personnel_accounts pa WHERE pa.personnel_id=p.id AND pa.user_id=?) AS can_edit,
             p.personnel_type, p.position_number, p.position, p.academic_rank,
             p.subjects, p.phone, ${homeroomSql} AS homeroom_classroom,
