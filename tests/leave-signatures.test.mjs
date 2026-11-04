@@ -96,7 +96,7 @@ test('Word and PDF embed snapshot images in their correct blocks and omit manage
  const files=ctx.LeaveFormExport.docxFiles(row),xml=files['word/document.xml'];
  for(const key of ['teacher','deputy','approver'])assert(files['word/media/'+key+'.png'] instanceof Uint8Array);
  assert.match(xml,/w:tblW w:w="9638"/);assert.match(xml,/ครูผู้รับมอบหมาย/);assert.match(xml,/หมายเหตุของครู/);assert.match(xml,/ไม่นับรวมปีงบประมาณ/);
- const pending=ctx.LeaveFormExport.docxFiles({...row,status:'pending'});assert(!pending['word/media/approver.png']);assert(!pending['word/media/deputy.png']);
+ const pending=ctx.LeaveFormExport.docxFiles({...row,status:'pending',deputy_signature:null});assert(!pending['word/media/approver.png']);assert(!pending['word/media/deputy.png']);
  const pdf=ctx.LeaveFormExport.pdfDefinition(row);assert.equal(pdf.pageMargins[0],pdf.pageMargins[2]);assert(JSON.stringify(pdf).includes(png));
 });
 
@@ -128,4 +128,16 @@ test('approver settings shows a signature button on each assigned card for super
  const ctx2=vm.createContext({esc:s=>s,data:{permissions:{role:'admin'}},document:{querySelectorAll:()=>[]}});
  vm.runInContext(source.slice(start,end)+';globalThis.btn=sigButton(4,"x");',ctx2);assert.equal(ctx2.btn,'');
  assert.match(source,/endpoint:'\/api\/signatures\?user_id='\+uid/);
+});
+
+test('previously approved leave without signature snapshots gets the deputy and director signatures backfilled and stored',async()=>{
+ const env=await setup();
+ for(const id of [2,4,5])assert.equal((await call(env,'/api/signatures?user_id='+id,'PUT',{data_url:png},id===2?2:1)).status,200);
+ const response=await call(env,'/api/leave-requests','POST',form,2);const {id}=await response.json();
+ const deputy=env.raw.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=5').get().personnel_id;
+ env.raw.prepare("UPDATE leave_requests SET status='approved',workflow_stage='completed',approved_by=4,deputy_personnel_id=?,deputy_signature=NULL,approver_signature=NULL WHERE id=?").run(deputy,id);
+ const r=(await (await call(env,'/api/leave-requests/'+id,'GET',undefined,2)).json()).leave_request;
+ assert.equal(r.deputy_signature,png);assert.equal(r.approver_signature,png);
+ const row=env.raw.prepare('SELECT deputy_signature,approver_signature FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.deputy_signature,png);assert.equal(row.approver_signature,png);
 });
