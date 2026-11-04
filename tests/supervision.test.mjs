@@ -420,7 +420,7 @@ test('switching to the school form clears old-form results; requests go back to 
 test('request lists include the director (not deputy) for the print form signature',async()=>{
  const {env}=await school();
  const mine=await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2);
- assert.deepEqual(mine.director,{name:'ผอ. ทดสอบ',position:'ผู้อำนวยการโรงเรียน'});
+ assert.equal(mine.director.name,'ผอ. ทดสอบ');assert.equal(mine.director.position,'ผู้อำนวยการโรงเรียน');assert.ok('signatures' in mine);
  assert.equal((await ok(env,'/api/supervision/requests?scope=all','GET',undefined,6)).director.name,'ผอ. ทดสอบ');
 });
 

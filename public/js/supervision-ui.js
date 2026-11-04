@@ -111,7 +111,10 @@ table.list th,table.list td{font-size:13px}table.wk td{height:58px;font-size:12.
   const sum3=rate.reduce((a,x)=>a+Number(x.score),0),max3=rate.reduce((a,x)=>a+Number(x.max),0),sum4=env.reduce((a,x)=>a+Number(x.score),0),max4=env.reduce((a,x)=>a+Number(x.max),0);
   const d=parse(r.visit_date).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
   const levels=[['90 – 100','ดีเยี่ยม'],['80 – 89','ดีมาก'],['70 – 79','ดี'],['60 – 69','พอใช้'],['ต่ำกว่า 60','ปรับปรุง']];
-  const sameDir=director&&director.name===e.evaluator_name;
+  const sameDir=!!director?.name&&director.name===e.evaluator_name;
+  // ลายเซ็นผู้ลงนาม (ล็อคจากหน้าตั้งค่าผู้อนุมัติ) วางบนเส้นลงชื่อ
+  const sigs=director?.signatures||{},DOTS='.................................';
+  const sign=uid=>{const d=uid&&sigs[uid];return d&&/^data:image\/png;base64,/.test(d)?`<img class="sig" src="${d}" alt="ลายเซ็น" style="height:38px;max-width:150px;vertical-align:bottom">`:DOTS;};
   return `<h1>แบบนิเทศการสอน${round?` ครั้งที่ ${TH(round)}`:''}</h1>
 <div class="c">ภาคเรียนที่ <span class="u">${r.term_number?TH(r.term_number):'&nbsp;&nbsp;&nbsp;'}</span> ปีการศึกษา <span class="u">${r.year_be?TH(r.year_be):'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span></div>
 <div class="info">ชื่อผู้รับการนิเทศการสอน <span class="u">${esc(r.teacher_name)}</span><br>
@@ -127,8 +130,8 @@ ${BRK}
 <table class="crit"><tr><td><b>เกณฑ์</b></td>${levels.map(([a,b])=>`<td>${TH(a)} = ${b}${b===e.level?' ✓':''}</td>`).join('')}</tr></table>
 <p style="margin:8px 0 2px"><b>ข้อเสนอแนะของผู้นิเทศ</b></p><div class="sugg">${e.suggestion?esc(e.suggestion):''}</div>
 <table class="sign"><tr><td>ลงชื่อ .................................<br>(${esc(r.teacher_name)})<br>ผู้รับการนิเทศ${r.teacher_position?` · ${esc(r.teacher_position)}`:''}</td>
-<td>ลงชื่อ .................................<br>(${esc(e.evaluator_name)})<br>ผู้นิเทศ${e.evaluator_position?` · ${esc(e.evaluator_position)}`:''}</td>
-${sameDir?'':`<td>ลงชื่อ .................................<br>(${director?esc(director.name):'.................................'})<br>${esc(director?.position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง')}</td>`}</tr></table>`;
+<td>ลงชื่อ ${sign(e.evaluator_user_id)}<br>(${esc(e.evaluator_name)})<br>ผู้นิเทศ${e.evaluator_position?` · ${esc(e.evaluator_position)}`:''}</td>
+${sameDir?'':`<td>ลงชื่อ ${sign(director?.user_id)}<br>(${director?.name?esc(director.name):'.................................'})<br>${esc(director?.position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง')}</td>`}</tr></table>`;
  }
  function printForm(r,opts={},kind='pdf'){
   if(!r?.evaluation)return;

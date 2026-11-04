@@ -24,7 +24,7 @@ function renderTabs(){
  const mineOpen=state.list.filter(r=>r.status==='confirmed'&&r.supervisor_user_id===me()).length,pend=visible().filter(r=>r.status==='pending').length;
  $('tabs').innerHTML=allowed().map(([k,l])=>`<button type="button" role="tab" data-tab="${k}" aria-selected="${state.view===k}">${l}${k==='requests'&&pend?`<span class="count">${pend}</span>`:''}${k==='evaluate'&&mineOpen?`<span class="count">${mineOpen}</span>`:''}</button>`).join('');
 }
-async function load(){if(state.perm.evaluate||state.perm.view_all){const d=await apiRequest('/api/supervision/requests?scope=all');state.list=d.requests;state.director=d.director||null;}}
+async function load(){if(state.perm.evaluate||state.perm.view_all){const d=await apiRequest('/api/supervision/requests?scope=all');state.list=d.requests;state.director=d.director?{...d.director,signatures:d.signatures||{}}:{name:'',position:'',signatures:d.signatures||{}};}}
 async function render(reload=true){
  try{
   if(reload)await load();renderTabs();

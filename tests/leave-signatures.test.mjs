@@ -40,6 +40,17 @@ test('shared signature API validates images, isolates own signatures and allows 
  assert.equal((await call(env,'/api/signatures?user_id=3','PUT',{data_url:png},1)).status,403);
  assert.equal((await call(env,'/api/signatures?user_id=4','PUT',{data_url:png},1)).status,200);
  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM audit_logs WHERE resource='signature'").get().n,2);
+ // อัปโหลดโดย Superadmin จากหน้าตั้งค่าผู้อนุมัติ = ล็อค เจ้าของเปลี่ยนเองไม่ได้
+ assert.equal((await (await call(env,'/api/signatures','GET',undefined,4)).json()).signature.locked,1);
+ assert.equal((await call(env,'/api/signatures','PUT',{data_url:png},4)).status,423);
+ assert.equal((await call(env,'/api/signatures?user_id=4','PUT',{data_url:png},4)).status,423);
+ assert.equal((await call(env,'/api/signatures?user_id=4','PUT',{data_url:png},1)).status,200);
+ assert.equal((await call(env,'/api/signatures','PUT',{data_url:png},2)).status,200); // ของครูทั่วไปยังไม่ล็อค
+ // การ์ดผู้ลงนามใบลา/นิเทศ เฉพาะ Superadmin
+ assert.equal((await call(env,'/api/signatures/signers','GET',undefined,4)).status,403);
+ const signers=await (await call(env,'/api/signatures/signers','GET',undefined,1)).json();
+ assert(signers.signers.some(x=>x.user_id===4&&x.task==='ผู้อำนวยการ'));assert(signers.signers.some(x=>x.user_id===5&&/ใบลา/.test(x.task)));
+ assert.equal(signers.signed[4].locked,true);assert.equal(signers.signed[2].locked,false);
 });
 
 test('leave stores teacher and approver signature snapshots at their transitions, hides unsigned approval and keeps old signed copies',async()=>{
@@ -109,11 +120,12 @@ test('teacher sees the new-leave form only after choosing a real or lenient card
  node('realLeaveCard').onclick();assert.equal(node('newLeaveTitle').textContent,'ยื่นใบลาจริง');
 });
 
-test('approver settings offers assigned users and mounts the upload against the selected identity',()=>{
- const source=fs.readFileSync('public/budget.html','utf8'),start=source.indexOf('function renderApproverSignatures(){'),end=source.indexOf('function renderRoles(){',start);
- const nodes=new Map(),calls=[],$=id=>{if(!nodes.has(id))nodes.set(id,{value:'',innerHTML:''});return nodes.get(id);};
- const ctx=vm.createContext({$,esc:s=>s,SignatureUpload:{mount:(node,options)=>calls.push(options)},data:{role_assignments:[{user_id:4},{user_id:5}],assignable_users:[{id:2,full_name:'ครูทั่วไป'},{id:4,full_name:'ผู้อำนวยการ'},{id:5,full_name:'รองฝ่ายบุคคล'}]}});
- vm.runInContext(source.slice(start,end)+'renderApproverSignatures();',ctx);
- assert.match($('approverSignatureUser').innerHTML,/ผู้อำนวยการ/);assert.doesNotMatch($('approverSignatureUser').innerHTML,/ครูทั่วไป/);
- $('approverSignatureUser').value='5';$('approverSignatureUser').onchange();assert.equal(calls[0].endpoint,'/api/signatures?user_id=5');
+test('approver settings shows a signature button on each assigned card for superadmin only, mounting a locked upload for that user',()=>{
+ const source=fs.readFileSync('public/budget.html','utf8'),start=source.indexOf('let sigState='),end=source.indexOf('async function renderApproverSignatures(){',start);
+ const ctx=vm.createContext({esc:s=>s,data:{permissions:{role:'superadmin'}},document:{querySelectorAll:()=>[]}});
+ vm.runInContext(source.slice(start,end)+';globalThis.btn=sigButton(4,"ผู้อำนวยการ");globalThis.none=sigButton(null,"x");',ctx);
+ assert.match(ctx.btn,/data-sig-user="4"/);assert.equal(ctx.none,'');
+ const ctx2=vm.createContext({esc:s=>s,data:{permissions:{role:'admin'}},document:{querySelectorAll:()=>[]}});
+ vm.runInContext(source.slice(start,end)+';globalThis.btn=sigButton(4,"x");',ctx2);assert.equal(ctx2.btn,'');
+ assert.match(source,/endpoint:'\/api\/signatures\?user_id='\+uid/);
 });

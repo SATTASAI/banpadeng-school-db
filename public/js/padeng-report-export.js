@@ -12,7 +12,7 @@
       title1: 'แบบรายงานผลการจัดการเรียนจัดกิจกรรมกระบวนการพัฒนาการศึกษา เพื่อยกระดับผลสัมฤทธิ์ทางการเรียน',
       title2: `ป่าเด็งโมเดล (PADENG MODEL) ปีการศึกษา ${val(it.academic_year)}`,
       box: [`กลุ่มสาระการเรียนรู้ ${val(it.learning_area)}   รายวิชา ${val(it.subject)}`,
-        `${it.kindergarten ? 'ชั้นอนุบาลปีที่' : 'ชั้นประถมศึกษาปีที่'} ${val(it.grade)}   ภาคเรียนที่ ${val(it.term_no)}   วันที่ ${thaiDate(it.teach_date) || DOT}`,
+        `${it.kindergarten ? 'ชั้นอนุบาลปีที่' : 'ชั้นประถมศึกษาปีที่'} ${val(it.grade)}   ภาคเรียนที่ ${val(it.term_no)}${it.round ? `   ครั้งที่ ${it.round}` : ''}   วันที่ ${thaiDate(it.teach_date) || DOT}`,
         `ครูผู้สอน ${val(it.teacher_name)}`],
       heading: 'ผลการจัดกิจกรรมกระบวนการพัฒนาการศึกษา ป่าเด็งโมเดล (PADENG MODEL)',
       topic: `1. เรื่องที่สอน ${val(it.topic)}`,

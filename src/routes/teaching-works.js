@@ -1,5 +1,5 @@
 // งานส่งของครู (ระบบสนับสนุน) + ติดตามความคืบหน้า (ฝ่ายวิชาการ)
-// 1) ป่าเด็งโมเดล: ต่อภาคเรียน · ต่อวิชา×ห้องที่ครูสอน (จากฝ่ายวัดผล) → กรอกแบบรายงานตามแบบฟอร์ม + ภาพไม่เกิน 4 ภาพ
+// 1) ป่าเด็งโมเดล: ต่อภาคเรียน · ต่อวิชา×ห้องที่ครูสอน (จากฝ่ายวัดผล) ส่ง 2 ครั้ง → แต่ละครั้งกรอกแบบรายงานตามแบบฟอร์ม + ภาพไม่เกิน 4 ภาพ
 //    (เลิกใช้การอัปโหลด PDF แล้ว — ไฟล์ PDF เดิมถูกซ่อน) ฝ่ายวิชาการดาวน์โหลดเป็นเอกสาร PDF/Word ทั้งรายฉบับและรวมเล่ม
 //    Drive: PADENG MODEL / <ปี ภาค> / ภาพ / <ครู - วิชา ห้อง> / ภาพ
 // 2) วิจัยในชั้นเรียน: ต่อภาคเรียน · ครู 1 คน 1 ไฟล์ PDF (ส่งใหม่ = แทนไฟล์เดิม)
@@ -10,6 +10,7 @@ import { ensurePersonnelData } from '../lib/personnel-data.js';
 import { ensureDepartmentStaff, belongsToDepartment } from './department-staff.js';
 import { teachingMaster } from '../lib/teaching-master.js';
 import { zipStream, uniqueNames } from '../lib/zip-stream.js';
+import { ensureSignatures, signatureLocked, LOCKED_MESSAGE } from '../lib/signatures.js';
 
 // โฟลเดอร์หลักใน Drive (แก้ได้ด้วยตัวแปร PADENG_MODEL_PARENT_ID / RESEARCH_FOLDER_ID)
 const SCHOOL_FOLDER_ID = '1ZvfJvwRf0sf_k_hcZwNR0lXLdYZlgFI3'; // โฟลเดอร์ที่มี "วิจัยในชั้นเรียน", "กิจกรรมโรงเรียน"
@@ -28,7 +29,7 @@ export function ensureTeachingWorksSchema(env) {
       id INTEGER PRIMARY KEY AUTOINCREMENT, academic_term_id INTEGER NOT NULL, course_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
       kind TEXT NOT NULL CHECK (kind IN ('image','pdf')), subject TEXT, subject_code TEXT, grade_level TEXT, classroom TEXT,
       drive_file_id TEXT NOT NULL, file_name TEXT NOT NULL, mime_type TEXT NOT NULL, file_size INTEGER,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)`),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT, round INTEGER NOT NULL DEFAULT 1)`),
     env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_padeng_model_files_term ON padeng_model_files(academic_term_id, user_id, course_id, deleted_at)'),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS classroom_research_files (
       id INTEGER PRIMARY KEY AUTOINCREMENT, academic_term_id INTEGER NOT NULL, user_id INTEGER NOT NULL, title TEXT NOT NULL,
@@ -41,13 +42,34 @@ export function ensureTeachingWorksSchema(env) {
       academic_year TEXT, learning_area TEXT, subject TEXT, grade TEXT, term_no TEXT, teacher_name TEXT,
       teach_date TEXT, topic TEXT, result TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE (academic_term_id, course_id, user_id))`),
+      round INTEGER NOT NULL DEFAULT 1, UNIQUE (academic_term_id, course_id, user_id, round))`),
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS teacher_signatures (
-      user_id INTEGER PRIMARY KEY, data_url TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')))`),
-  ]).catch((e) => { ready.delete(env.DB); throw e; });
+      user_id INTEGER PRIMARY KEY, data_url TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT (datetime('now')), locked INTEGER NOT NULL DEFAULT 0)`),
+  ]).then(() => migratePadengRounds(env)).then(() => ensureSignatures(env)).catch((e) => { ready.delete(env.DB); throw e; });
   ready.set(env.DB, p);
   return p;
 }
+
+// ป่าเด็งโมเดลส่งภาคเรียนละ 2 ครั้ง: เพิ่มคอลัมน์ round ให้ตารางเดิม (งานที่ส่งไปแล้ว = ครั้งที่ 1)
+const REPORT_COLS = 'id, academic_term_id, course_id, user_id, academic_year, learning_area, subject, grade, term_no, teacher_name, teach_date, topic, result, created_at, updated_at';
+async function migratePadengRounds(env) {
+  const has = async (table) => (await env.DB.prepare(`PRAGMA table_info(${table})`).all()).results.some((c) => c.name === 'round');
+  if (!(await has('padeng_model_files'))) await env.DB.prepare('ALTER TABLE padeng_model_files ADD COLUMN round INTEGER NOT NULL DEFAULT 1').run().catch(() => {});
+  if (await has('padeng_model_reports')) return;
+  await env.DB.batch([
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS padeng_model_reports_r2 (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, academic_term_id INTEGER NOT NULL, course_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+      academic_year TEXT, learning_area TEXT, subject TEXT, grade TEXT, term_no TEXT, teacher_name TEXT,
+      teach_date TEXT, topic TEXT, result TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      round INTEGER NOT NULL DEFAULT 1, UNIQUE (academic_term_id, course_id, user_id, round))`),
+    env.DB.prepare(`INSERT OR IGNORE INTO padeng_model_reports_r2 (${REPORT_COLS}, round) SELECT ${REPORT_COLS}, 1 FROM padeng_model_reports`),
+    env.DB.prepare('DROP TABLE padeng_model_reports'),
+    env.DB.prepare('ALTER TABLE padeng_model_reports_r2 RENAME TO padeng_model_reports'),
+  ]);
+}
+export const PM_ROUNDS = [1, 2];
+const roundOf = (v) => (PM_ROUNDS.includes(Number(v)) ? Number(v) : null);
 
 // ---------- สิทธิ์ ----------
 export async function teachingWorkPermissions(env, user) {
@@ -148,7 +170,7 @@ const extOf = (name, mime) => (String(name).match(/\.[a-z0-9]{2,5}$/i)?.[0] || (
 
 // ---------- ป่าเด็งโมเดล ----------
 async function padengRows(env, termId, userId = null) {
-  const sql = `SELECT id, course_id, user_id, kind, file_name, file_size, created_at FROM padeng_model_files
+  const sql = `SELECT id, course_id, user_id, round, kind, file_name, file_size, created_at FROM padeng_model_files
     WHERE academic_term_id = ? AND kind = 'image' AND deleted_at IS NULL ${userId ? 'AND user_id = ?' : ''} ORDER BY id`;
   return (await env.DB.prepare(sql).bind(...(userId ? [termId, userId] : [termId])).all()).results;
 }
@@ -179,7 +201,7 @@ function mergeReport(defaults, saved) {
 // ลายเซ็นครู (PNG พื้นใส ระบบตัดพื้นหลัง/ทำเส้นเข้มในเบราว์เซอร์ก่อนส่ง) — อัปครั้งเดียวใช้ทุกฉบับ
 const SIGNATURE_MAX = 400 * 1024;
 async function signatureOf(env, userId) {
-  return (await env.DB.prepare('SELECT data_url, updated_at FROM teacher_signatures WHERE user_id = ?').bind(userId).first()) || null;
+  return (await env.DB.prepare('SELECT data_url, updated_at, locked FROM teacher_signatures WHERE user_id = ?').bind(userId).first()) || null;
 }
 async function signedUsers(env) {
   return new Set((await env.DB.prepare('SELECT user_id FROM teacher_signatures').all()).results.map((r) => r.user_id));
@@ -192,18 +214,24 @@ async function saveSignature(request, env, user) {
   if (dataUrl.length > SIGNATURE_MAX) return jsonResponse({ error: 'ไฟล์ลายเซ็นใหญ่เกินไป' }, 400);
   const head = atob(m[1].slice(0, 12));
   if (!head.startsWith('\x89PNG')) return jsonResponse({ error: 'ไฟล์ลายเซ็นไม่ใช่ภาพ PNG' }, 400);
+  if (await signatureLocked(env, user.id)) return jsonResponse({ error: LOCKED_MESSAGE }, 423);
   await env.DB.prepare(`INSERT INTO teacher_signatures (user_id, data_url) VALUES (?, ?)
     ON CONFLICT (user_id) DO UPDATE SET data_url = excluded.data_url, updated_at = datetime('now')`).bind(user.id, dataUrl).run();
   return jsonResponse({ ok: true });
 }
 
+// ต่อวิชา×ห้อง: 2 ครั้ง (round) แต่ละครั้ง = แบบรายงาน 1 ฉบับ + ภาพ 1–4 ภาพ · ครบเมื่อส่งครบทั้ง 2 ครั้ง
 function attachFiles(courses, rows, userId, reports = [], term = null, teacherName = '', signed = false) {
   return courses.map((c) => {
-    const images = rows.filter((r) => r.course_id === c.course_id && r.user_id === userId);
-    const saved = reports.find((r) => r.course_id === c.course_id && r.user_id === userId) || null;
-    const report = term ? mergeReport(reportDefaults(term, c, teacherName), saved) : null;
+    const rounds = PM_ROUNDS.map((round) => {
+      const images = rows.filter((r) => r.course_id === c.course_id && r.user_id === userId && Number(r.round || 1) === round);
+      const saved = reports.find((r) => r.course_id === c.course_id && r.user_id === userId && Number(r.round || 1) === round) || null;
+      const report = term ? mergeReport(reportDefaults(term, c, teacherName), saved) : null;
+      return { round, images, report, reported: reportDone(saved), complete: images.length > 0 && reportDone(saved) && signed };
+    });
     return { course_id: c.course_id, subject: c.subject, subject_code: c.subject_code, grade_level: c.grade_level, classroom: c.classroom,
-      images, report, reported: reportDone(saved), complete: images.length > 0 && reportDone(saved) && signed };
+      rounds, images: rounds.flatMap((r) => r.images), reported: rounds.filter((r) => r.reported).length,
+      rounds_done: rounds.filter((r) => r.complete).length, complete: rounds.every((r) => r.complete) };
   });
 }
 
@@ -212,7 +240,7 @@ async function padengMine(env, user, url) {
   if (!term) return jsonResponse({ term: null, terms, courses: [] });
   const courses = (await coursesOf(env, term)).filter((c) => c.teachers.some((t) => t.user_id === user.id));
   const signature = await signatureOf(env, user.id);
-  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES, signature,
+  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES, rounds: PM_ROUNDS.length, signature,
     courses: attachFiles(courses, await padengRows(env, term.id, user.id), user.id, await reportRows(env, term.id, user.id), term, user.full_name, !!signature) });
 }
 
@@ -226,23 +254,25 @@ async function padengUpload(request, env, user, drive) {
   if (term.status === 'closed') return jsonResponse({ error: 'ภาคเรียนนี้ปิดแล้ว ส่งงานไม่ได้' }, 409);
   const course = (await coursesOf(env, term)).find((c) => c.course_id === Number(form.get('course_id')));
   if (!course || !course.teachers.some((t) => t.user_id === user.id)) return jsonResponse({ error: 'คุณไม่ได้เป็นครูผู้สอนวิชานี้ (ตามข้อมูลฝ่ายวัดผล)' }, 403);
+  const round = roundOf(form.get('round') ?? 1);
+  if (!round) return jsonResponse({ error: 'ครั้งที่ส่งไม่ถูกต้อง (1 หรือ 2)' }, 400);
   const file = form.get('file');
   const checked = await checkFile(file, kind);
   if (checked.error) return jsonResponse({ error: checked.error }, 400);
-  const existing = (await padengRows(env, term.id, user.id)).filter((r) => r.course_id === course.course_id);
+  const existing = (await padengRows(env, term.id, user.id)).filter((r) => r.course_id === course.course_id && Number(r.round || 1) === round);
   if (kind === 'image' && existing.filter((r) => r.kind === 'image').length >= PM_MAX_IMAGES) {
-    return jsonResponse({ error: `ส่งภาพได้ไม่เกิน ${PM_MAX_IMAGES} ภาพต่อวิชา ลบภาพเดิมก่อนถ้าต้องการเปลี่ยน` }, 409);
+    return jsonResponse({ error: `ส่งภาพได้ไม่เกิน ${PM_MAX_IMAGES} ภาพต่อวิชาต่อครั้ง ลบภาพเดิมก่อนถ้าต้องการเปลี่ยน` }, 409);
   }
   const driveError = drive.ready(env);
   if (driveError) return jsonResponse({ error: driveError }, 503);
   const token = await drive.token(env);
   const root = await findOrCreateFolder(env, drive, token, env.PADENG_MODEL_PARENT_ID || SCHOOL_FOLDER_ID, PADENG_ROOT_NAME);
   const label = safeName(`${user.full_name} - ${courseLabel(course)}`);
-  const folderId = await folderPath(env, drive, token, root, [termLabel(term), 'ภาพ', label]);
-  const name = `${label} ภาพที่ ${existing.length + 1}${extOf(file.name, checked.mimeType)}`;
+  const folderId = await folderPath(env, drive, token, root, [termLabel(term), 'ภาพ', label, `ครั้งที่ ${round}`]);
+  const name = `${label} ครั้งที่ ${round} ภาพที่ ${existing.length + 1}${extOf(file.name, checked.mimeType)}`;
   const up = await uploadFile(drive, token, folderId, name, checked.mimeType, new Uint8Array(await file.arrayBuffer()));
-  await env.DB.prepare(`INSERT INTO padeng_model_files (academic_term_id, course_id, user_id, kind, subject, subject_code, grade_level, classroom, drive_file_id, file_name, mime_type, file_size)
-    VALUES (?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?)`).bind(term.id, course.course_id, user.id, course.subject, course.subject_code, course.grade_level, course.classroom, up.id, name, checked.mimeType, file.size).run();
+  await env.DB.prepare(`INSERT INTO padeng_model_files (academic_term_id, course_id, user_id, round, kind, subject, subject_code, grade_level, classroom, drive_file_id, file_name, mime_type, file_size)
+    VALUES (?, ?, ?, ?, 'image', ?, ?, ?, ?, ?, ?, ?, ?)`).bind(term.id, course.course_id, user.id, round, course.subject, course.subject_code, course.grade_level, course.classroom, up.id, name, checked.mimeType, file.size).run();
   return jsonResponse({ ok: true }, 201);
 }
 
@@ -255,6 +285,8 @@ async function padengSaveReport(request, env, user) {
   if (term.status === 'closed') return jsonResponse({ error: 'ภาคเรียนนี้ปิดแล้ว ส่งงานไม่ได้' }, 409);
   const course = (await coursesOf(env, term)).find((c) => c.course_id === Number(body.course_id));
   if (!course || !course.teachers.some((t) => t.user_id === user.id)) return jsonResponse({ error: 'คุณไม่ได้เป็นครูผู้สอนวิชานี้ (ตามข้อมูลฝ่ายวัดผล)' }, 403);
+  const round = roundOf(body.round ?? 1);
+  if (!round) return jsonResponse({ error: 'ครั้งที่ส่งไม่ถูกต้อง (1 หรือ 2)' }, 400);
   const v = {};
   for (const [k, max] of Object.entries(REPORT_FIELDS)) {
     const raw = String(body[k] ?? '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
@@ -266,10 +298,10 @@ async function padengSaveReport(request, env, user) {
   if (!v.result) return jsonResponse({ error: 'กรุณากรอกผลการจัดกิจกรรมการสอน' }, 400);
   if (!(await signatureOf(env, user.id))) return jsonResponse({ error: 'กรุณาอัปโหลดลายเซ็นก่อนบันทึกแบบรายงาน' }, 400);
   const keys = Object.keys(REPORT_FIELDS);
-  await env.DB.prepare(`INSERT INTO padeng_model_reports (academic_term_id, course_id, user_id, ${keys.join(', ')})
-    VALUES (?, ?, ?, ${keys.map(() => '?').join(', ')})
-    ON CONFLICT (academic_term_id, course_id, user_id) DO UPDATE SET ${keys.map((k) => `${k} = excluded.${k}`).join(', ')}, updated_at = datetime('now')`)
-    .bind(term.id, course.course_id, user.id, ...keys.map((k) => v[k] || null)).run();
+  await env.DB.prepare(`INSERT INTO padeng_model_reports (academic_term_id, course_id, user_id, round, ${keys.join(', ')})
+    VALUES (?, ?, ?, ?, ${keys.map(() => '?').join(', ')})
+    ON CONFLICT (academic_term_id, course_id, user_id, round) DO UPDATE SET ${keys.map((k) => `${k} = excluded.${k}`).join(', ')}, updated_at = datetime('now')`)
+    .bind(term.id, course.course_id, user.id, round, ...keys.map((k) => v[k] || null)).run();
   return jsonResponse({ ok: true });
 }
 
@@ -278,24 +310,25 @@ async function padengDocuments(env, user, perms, url) {
   const { term } = await resolveTerm(env, url.searchParams.get('term_id'));
   if (!term) return jsonResponse({ error: 'ไม่พบภาคเรียน' }, 404);
   const userId = Number(url.searchParams.get('user_id')) || null, courseId = Number(url.searchParams.get('course_id')) || null;
-  const grade = url.searchParams.get('grade_level') || '';
+  const grade = url.searchParams.get('grade_level') || '', onlyRound = roundOf(url.searchParams.get('round'));
   if (!perms.academic && userId !== user.id) return jsonResponse({ error: 'เฉพาะฝ่ายวิชาการเท่านั้น' }, 403);
   const courses = await coursesOf(env, term);
   const [reports, images] = await Promise.all([reportRows(env, term.id, userId), padengRows(env, term.id, userId)]);
   const names = new Map(); for (const c of courses) for (const t of c.teachers) names.set(t.user_id, t.full_name);
   const items = [];
   for (const r of reports) {
-    if (!reportDone(r) || (courseId && r.course_id !== courseId)) continue;
+    const round = Number(r.round || 1);
+    if (!reportDone(r) || (courseId && r.course_id !== courseId) || (onlyRound && round !== onlyRound)) continue;
     const c = courses.find((x) => x.course_id === r.course_id);
     if (!c || (grade && c.grade_level !== grade)) continue;
     const doc = mergeReport(reportDefaults(term, c, names.get(r.user_id) || ''), r);
-    items.push({ ...doc, user_id: r.user_id, course_id: r.course_id, grade_level: c.grade_level, classroom: c.classroom, subject_code: c.subject_code,
-      images: images.filter((i) => i.course_id === r.course_id && i.user_id === r.user_id).slice(0, PM_MAX_IMAGES).map((i) => i.id) });
+    items.push({ ...doc, round, user_id: r.user_id, course_id: r.course_id, grade_level: c.grade_level, classroom: c.classroom, subject_code: c.subject_code,
+      images: images.filter((i) => i.course_id === r.course_id && i.user_id === r.user_id && Number(i.round || 1) === round).slice(0, PM_MAX_IMAGES).map((i) => i.id) });
   }
   const gradeOrder = (g) => [/^(อ\.|อนุบาล)/.test(g) ? 0 : 1, g];
   items.sort((a, b) => { const [x, y] = [gradeOrder(a.grade_level), gradeOrder(b.grade_level)];
     return x[0] - y[0] || x[1].localeCompare(y[1], 'th') || String(a.classroom || '').localeCompare(String(b.classroom || ''), 'th', { numeric: true })
-      || String(a.subject_code || '').localeCompare(String(b.subject_code || ''), 'th') || a.teacher_name.localeCompare(b.teacher_name, 'th'); });
+      || String(a.subject_code || '').localeCompare(String(b.subject_code || ''), 'th') || a.teacher_name.localeCompare(b.teacher_name, 'th') || a.round - b.round; });
   if (!items.length) return jsonResponse({ error: 'ยังไม่มีแบบรายงานที่ส่งแล้ว' }, 404);
   const ids = [...new Set(items.map((i) => i.user_id))], signatures = {};
   for (let i = 0; i < ids.length; i += 50) {
@@ -319,10 +352,11 @@ async function padengProgress(env, url) {
   const teachers = [...byTeacher.values()].map((t) => {
     const list = attachFiles(t.courses, rows, t.user_id, reports, term, t.full_name, signed.has(t.user_id));
     return { user_id: t.user_id, full_name: t.full_name, signed: signed.has(t.user_id), total: list.length, complete: list.filter((c) => c.complete).length,
-      images: list.reduce((s, c) => s + c.images.length, 0), reports: list.filter((c) => c.reported).length, courses: list };
+      images: list.reduce((s, c) => s + c.images.length, 0), reports: list.reduce((s, c) => s + c.reported, 0), report_total: list.length * PM_ROUNDS.length,
+      rounds_done: list.reduce((s, c) => s + c.rounds_done, 0), courses: list };
   }).sort((a, b) => a.full_name.localeCompare(b.full_name, 'th'));
   const grades = [...new Set(courses.map((c) => c.grade_level))];
-  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES, teachers, grades });
+  return jsonResponse({ term, terms, max_images: PM_MAX_IMAGES, rounds: PM_ROUNDS.length, teachers, grades });
 }
 
 // ---------- วิจัยในชั้นเรียน ----------
@@ -409,9 +443,9 @@ async function zipDownload(env, kind, url, drive) {
   let entries;
   if (kind === 'padeng') {
     const rows = (await env.DB.prepare(`SELECT f.*, u.full_name FROM padeng_model_files f LEFT JOIN users u ON u.id = f.user_id
-      WHERE f.academic_term_id = ? AND f.kind = 'image' AND f.deleted_at IS NULL ${userId ? 'AND f.user_id = ?' : ''} ORDER BY u.full_name, f.grade_level, f.classroom, f.id`)
+      WHERE f.academic_term_id = ? AND f.kind = 'image' AND f.deleted_at IS NULL ${userId ? 'AND f.user_id = ?' : ''} ORDER BY u.full_name, f.grade_level, f.classroom, f.round, f.id`)
       .bind(...(userId ? [term.id, userId] : [term.id])).all()).results;
-    const names = uniqueNames(rows.map((r) => `ภาพ/${safeName(`${r.full_name} - ${courseLabel(r)}`)}/${r.file_name}`));
+    const names = uniqueNames(rows.map((r) => `ภาพ/${safeName(`${r.full_name} - ${courseLabel(r)}`)}/ครั้งที่ ${r.round || 1}/${r.file_name}`));
     entries = rows.map((r, i) => ({ name: names[i], id: r.drive_file_id }));
   } else {
     const rows = (await env.DB.prepare(`SELECT f.* FROM classroom_research_files f WHERE f.academic_term_id = ? AND f.deleted_at IS NULL ${userId ? 'AND f.user_id = ?' : ''} ORDER BY f.file_name`)

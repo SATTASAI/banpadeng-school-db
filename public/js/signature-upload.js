@@ -14,7 +14,7 @@
   if(ink<8)throw Error('ไม่พบเส้นลายเซ็น กรุณาใช้ภาพที่เห็นเส้นชัด หรือปรับความไว');
   return {pixels:out,left:Math.max(0,left-12),top:Math.max(0,top-12),right:Math.min(width-1,right+12),bottom:Math.min(height-1,bottom+12)};
  }
- function mount(container,{endpoint='/api/signatures',label='ลายเซ็นของฉัน'}={}){
+ function mount(container,{endpoint='/api/signatures',label='ลายเซ็นของฉัน',onSaved=null}={}){
   container.innerHTML=`<h4></h4><p class="muted">อัปโหลดภาพลายเซ็นบนกระดาษสีขาว ระบบตัดพื้นหลังและเก็บเป็น PNG พื้นใส ใช้ซ้ำในงานต่าง ๆ ได้ ตรวจตัวอย่างก่อนบันทึก</p><input class="signature-file" type="file" accept="image/png,image/jpeg,image/webp"><label>ความไวในการตัดพื้นหลัง <input class="signature-threshold" type="range" min="140" max="245" value="205"></label><div style="background:repeating-conic-gradient(#e8edf2 0% 25%,#fff 0% 50%) 0/20px 20px;border:1px solid #ccd5df;border-radius:10px;padding:12px;min-height:90px"><img class="signature-preview" alt="ตัวอย่างลายเซ็นพื้นใส" style="max-width:100%;height:85px;object-fit:contain" hidden></div><p class="signature-message muted" role="status"></p><button class="btn btn-primary signature-save" type="button" disabled>บันทึกลายเซ็นพื้นใส</button>`;
   container.querySelector('h4').textContent=label;
   const q=s=>container.querySelector(s),message=q('.signature-message'),preview=q('.signature-preview'),save=q('.signature-save');
@@ -49,10 +49,10 @@
   };
   save.onclick=async()=>{
    if(!processed)return;save.disabled=true;
-   try{await apiRequest(endpoint,{method:'PUT',body:{data_url:processed}});message.textContent='บันทึกลายเซ็นพื้นใสแล้ว พร้อมใช้ในงานต่าง ๆ';}
+   try{await apiRequest(endpoint,{method:'PUT',body:{data_url:processed}});message.textContent=/user_id=/.test(endpoint)?'บันทึกและล็อคลายเซ็นพื้นใสแล้ว ใช้กับใบลา ป่าเด็งโมเดล นิเทศ ได้ทันที':'บันทึกลายเซ็นพื้นใสแล้ว พร้อมใช้ในงานต่าง ๆ';if(typeof onSaved==='function')onSaved();}
    catch(e){message.textContent=e.message;save.disabled=false;}
   };
-  apiRequest(endpoint).then(data=>{if(version===0&&data.signature){preview.src=data.signature.data_url;preview.hidden=false;message.textContent='มีลายเซ็นที่บันทึกไว้แล้ว อัปโหลดใหม่เพื่อเปลี่ยนสำหรับเอกสารครั้งต่อไป';}}).catch(e=>{message.textContent=e.message;});
+  apiRequest(endpoint).then(data=>{if(version===0&&data.signature){preview.src=data.signature.data_url;preview.hidden=false;message.textContent='มีลายเซ็นที่บันทึกไว้แล้ว อัปโหลดใหม่เพื่อเปลี่ยนสำหรับเอกสารครั้งต่อไป';}if(version===0&&data.signature?.locked){if(/user_id=/.test(endpoint))message.textContent='🔒 ลายเซ็นล็อคแล้ว ใช้กับเอกสารทุกฉบับ (อัปโหลดใหม่เพื่อเปลี่ยน)';else{q('.signature-file').disabled=true;q('.signature-threshold').disabled=true;save.hidden=true;message.textContent='🔒 ลายเซ็นถูกล็อคโดยผู้ดูแลระบบ หากต้องการเปลี่ยนกรุณาแจ้ง Superadmin';}}}).catch(e=>{message.textContent=e.message;});
  }
  root.SignatureUpload={removeBackground,mount};
 })(typeof window==='undefined'?globalThis:window);

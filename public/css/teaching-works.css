@@ -64,3 +64,4 @@ body{background:inherit}
 .tw-sign-box img{max-width:220px;max-height:62px;display:block}
 .tw-sign-preview{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.tw-sign-preview>div>img{max-width:200px;max-height:90px;border-radius:8px;border:1px solid var(--color-border);display:block}
 .tw-sign-acts{display:flex;gap:6px}
+.tw-round{margin-top:12px;padding:10px 12px;border:1px dashed var(--color-border);border-radius:12px;background:#fafcff}.tw-round.ok{border-color:#9fd8c2;background:#f6fffa}.tw-round .tw-label:first-child{display:flex;gap:8px;align-items:center;margin-top:0}
