@@ -66,7 +66,9 @@ test('new and existing leave requests notify the personnel head and their linked
  assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{status:'approved'},3)).status,403);
  await call(env,'/api/department-staff/personnel','POST',{personnel_id:person.id,is_head:false});
  const revoked=await (await call(env,'/api/notifications','GET',undefined,4)).json();assert(!revoked.notifications.some(n=>n.message_key===key));
- const hidden=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(hidden.can_view_pending,false);assert.equal(hidden.leave_requests.length,0);
+ // ยังเป็นครูฝ่ายบุคคล: เห็นคำร้องขอลาได้อย่างเดียว แต่รับทราบ/แก้ไขไม่ได้
+ const viewOnly=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();assert.equal(viewOnly.can_view_pending,true);assert.equal(viewOnly.is_personnel_head,false);
+ assert(viewOnly.leave_requests.some(r=>r.id===id&&!r.can_acknowledge&&!r.can_edit));assert.equal((await call(env,'/api/leave-requests/'+id,'GET',undefined,4)).status,200);
  // Final decision alerts are independent of how the workflow reached that decision.
  env.raw.prepare("UPDATE leave_requests SET status='approved',approved_at=datetime('now') WHERE id=?").run(id);
  assert((await (await call(env,'/api/notifications','GET',undefined,2)).json()).notifications.some(n=>n.message_key==='leave:'+id+':approved'));

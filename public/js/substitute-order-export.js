@@ -9,10 +9,12 @@
  }
  function garuda(meta){const match=/^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(meta.garuda_data_url||'');if(!match)throw Error('ไม่พบตราครุฑสำหรับคำสั่ง');return match[1];}
  function thaiDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return '........................';return new Date(value+'T12:00:00Z').toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Bangkok'});}
+ // รายชื่อครูที่ไม่อยู่ทั้งหมดของวัน (ไม่ซ้ำ) — คำสั่งไฟล์เดียวรวมทุกคน
+ function absentNames(rows){return [...new Set(rows.map(r=>String(r.absent_name||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
  function order(rows,meta){
   if(!rows.length)throw Error('ยังไม่มีรายการสอนแทนสำหรับส่งออก');
   return {title:'คำสั่งโรงเรียนบ้านป่าเด็ง',number:'ที่ '+(meta.order_number?.trim()||'........ / ........'),subject:'เรื่อง มอบหมายให้ปฏิบัติหน้าที่สอนแทน',
-   introduction:'เพื่อให้การจัดการเรียนการสอนดำเนินไปอย่างต่อเนื่อง โรงเรียนบ้านป่าเด็งจึงมอบหมายให้ครูปฏิบัติหน้าที่สอนแทนในวันที่ '+thaiDate(meta.date)+' ตามรายละเอียดดังต่อไปนี้',
+   introduction:'เนื่องจากในวันที่ '+thaiDate(meta.date)+' มีครูไม่อยู่ปฏิบัติหน้าที่ '+absentNames(rows).length+' คน ได้แก่ '+absentNames(rows).join(', ')+' เพื่อให้การจัดการเรียนการสอนดำเนินไปอย่างต่อเนื่อง โรงเรียนบ้านป่าเด็งจึงมอบหมายให้ครูปฏิบัติหน้าที่สอนแทน ตามรายละเอียดดังต่อไปนี้',
    rows:[...rows].sort((a,b)=>Number(a.period)-Number(b.period)||String(a.grade_level).localeCompare(String(b.grade_level),'th')).map(r=>[String(r.period),[r.grade_level,r.classroom].filter(Boolean).join('/'),r.subject||'',r.absent_name||'',r.substitute_name||'']),
    issued:'สั่ง ณ วันที่ '+thaiDate(meta.issue_date||meta.date),signature:'('+(meta.director_name?.trim()||'........................................')+')',position:'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'};
  }
@@ -36,7 +38,7 @@
   order(rows,meta);if(!meta.director_name?.trim())throw Error('ไม่พบชื่อผู้อำนวยการ กรุณาตรวจสอบทะเบียนบุคลากร');
   const response=await fetch('/assets/garuda.png');if(!response.ok)throw Error('โหลดตราครุฑไม่สำเร็จ กรุณาลองใหม่');
   const bytes=new Uint8Array(await response.arrayBuffer());let binary='';for(let i=0;i<bytes.length;i+=8192)binary+=String.fromCharCode(...bytes.subarray(i,i+8192));
-  meta={...meta,garuda_data_url:'data:image/png;base64,'+btoa(binary)};const name='คำสั่งสอนแทน-'+meta.date;
+  meta={...meta,garuda_data_url:'data:image/png;base64,'+btoa(binary)};const name='คำสั่งสอนแทนรวม-'+meta.date;
   if(format==='docx'){const Zip=await library('JSZip','https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'),zip=new Zip();for(const [path,text] of Object.entries(docxFiles(rows,meta)))typeof text==='object'?zip.file(path,text.base64,{base64:true}):zip.file(path,text);download(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}),name+'.docx');}
   else if(format==='pdf'||format==='print'){const pdf=await library('pdfMake','https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/pdfmake.min.js');let fonts=root.SubstituteOrderFonts;
    if(!fonts){fonts=Object.fromEntries(await Promise.all(['THSarabunPSK-Regular.ttf','THSarabunPSK-Bold.ttf'].map(async name=>{const r=await fetch('/fonts/'+name);if(!r.ok)throw Error('โหลดฟอนต์ภาษาไทยไม่สำเร็จ');const bytes=new Uint8Array(await r.arrayBuffer());let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));return [name,btoa(text)];})));}
@@ -45,5 +47,5 @@
    const blob=await new Promise((resolve,reject)=>{try{pdf.createPdf(pdfDefinition(rows,meta)).getBlob(resolve);}catch(e){reject(e);}});download(blob,name+'.pdf');
   }else throw Error('รูปแบบไฟล์ไม่ถูกต้อง');
  }
- root.SubstituteOrderExport={director,order,docxFiles,pdfDefinition,exportFile};
+ root.SubstituteOrderExport={absentNames,director,order,docxFiles,pdfDefinition,exportFile};
 })(typeof window==='undefined'?globalThis:window);

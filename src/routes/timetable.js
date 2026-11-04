@@ -227,6 +227,20 @@ async function syncSubstitutes(env,oldPlanId,newPlanId,user){
 
 function weekday(date){const day=new Date(`${date}T12:00:00Z`).getUTCDay();return day>=1&&day<=5?day:null;}
 // Canonical personnel accounts include prior accounts merged into the same teacher.
+// วันที่มีใบลา (รอพิจารณา/อนุมัติ) ในเดือนที่เลือก — ใช้แสดงจุดบนปฏิทินหน้าจัดสอนแทน (ข้ามเสาร์-อาทิตย์)
+async function leaveDays(env,month){
+  if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month||""))return reply({error:"เลือกเดือนให้ถูกต้อง"},400);
+  const [y,m]=month.split("-").map(Number),first=`${month}-01`,last=`${month}-${String(new Date(Date.UTC(y,m,0)).getUTCDate()).padStart(2,"0")}`;
+  const {results}=await env.DB.prepare(`SELECT r.start_date,r.end_date FROM leave_requests r JOIN personnel_accounts a ON a.user_id=r.user_id
+    JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
+    WHERE r.status IN ('pending','approved') AND r.start_date<=? AND r.end_date>=?`).bind(last,first).all();
+  const dates=new Set();
+  for(const r of results){
+    const from=r.start_date>first?r.start_date:first,to=r.end_date<last?r.end_date:last;
+    for(let d=new Date(from+"T12:00:00Z");d.toISOString().slice(0,10)<=to;d.setUTCDate(d.getUTCDate()+1)){const w=d.getUTCDay();if(w!==0&&w!==6)dates.add(d.toISOString().slice(0,10));}
+  }
+  return reply({month,dates:[...dates].sort()});
+}
 async function leaveAbsences(env,date){
   if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
   const {results}=await env.DB.prepare(`SELECT r.id AS leave_request_id,p.id AS teacher_id,p.full_name,
@@ -493,6 +507,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term,user);
   }else{
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
+    if(pathname==="/api/substitutes/leave-days"&&method==="GET")return leaveDays(env,url.searchParams.get("month"));
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
 
