@@ -89,20 +89,24 @@ export function leaveRecord(row) {return {...row,leave_type:row.leave_subtype||r
 // ใบลาที่ผ่านขั้นตอนไปก่อนมีลายเซ็นในระบบ → เติมจากลายเซ็นปัจจุบันแล้วบันทึกเป็นสำเนาถาวร
 async function backfillSignatures(env,row,people){
  const done=row.status!=='cancelled'&&row.status!=='rejected'&&['forwarded','completed'].includes(row.workflow_stage);
- const out={deputy_signature:done?row.deputy_signature||null:null,approver_signature:row.status==='approved'?row.approver_signature||null:null};
- const {signatureFor}=await import('./signatures.js');
- const sign=async ids=>{for(const id of ids)if(id){const s=await signatureFor(env,id).catch(()=>null);if(s)return s.data_url;}return null;};
+ const out={teacher_signature:row.teacher_signature||null,deputy_signature:done?row.deputy_signature||null:null,approver_signature:row.status==='approved'?row.approver_signature||null:null};
+ const {signatureSql,ensureSignatures}=await import('./signatures.js');
+ // คัดลอกลายเซ็นในฐานข้อมูลด้วยซับคิวรี ไม่ส่งข้อมูลภาพไปในคำสั่ง (กันเกินเพดาน D1 100 KB ต่อคำสั่ง)
  const sets=[],binds=[];
+ if(!out.teacher_signature&&row.user_id){sets.push(`teacher_signature=${signatureSql}`);binds.push(row.user_id,row.user_id,row.user_id);}
  if(done&&!out.deputy_signature){
   const deputy=people.find(p=>p.id===Number(row.deputy_personnel_id))||(row.deputy_name&&people.find(p=>p.full_name===row.deputy_name))||null;
-  out.deputy_signature=await sign(deputy?.user_ids||[]);
-  if(out.deputy_signature){sets.push('deputy_signature=?');binds.push(out.deputy_signature);}
+  const id=Number(deputy?.user_ids?.[0]);
+  if(id){sets.push(`deputy_signature=${signatureSql}`);binds.push(id,id,id);}
  }
- if(row.status==='approved'&&!out.approver_signature){
-  out.approver_signature=await sign([row.approved_by]);
-  if(out.approver_signature){sets.push('approver_signature=?');binds.push(out.approver_signature);}
- }
- if(sets.length)await env.DB.prepare(`UPDATE leave_requests SET ${sets.join(',')} WHERE id=?`).bind(...binds,row.id).run().catch(()=>{});
+ if(row.status==='approved'&&!out.approver_signature&&row.approved_by){sets.push(`approver_signature=${signatureSql}`);binds.push(row.approved_by,row.approved_by,row.approved_by);}
+ if(!sets.length)return out;
+ try{
+  await ensureSignatures(env);
+  await env.DB.prepare(`UPDATE leave_requests SET ${sets.join(',')} WHERE id=?`).bind(...binds,row.id).run();
+  const saved=await env.DB.prepare('SELECT teacher_signature,deputy_signature,approver_signature FROM leave_requests WHERE id=?').bind(row.id).first();
+  if(saved){out.teacher_signature=saved.teacher_signature||null;if(done)out.deputy_signature=saved.deputy_signature||null;if(row.status==='approved')out.approver_signature=saved.approver_signature||null;}
+ }catch(e){console.error('leave signature backfill failed',row.id,e?.message||e);}
  return out;
 }
 export async function leaveForm(env,row) {

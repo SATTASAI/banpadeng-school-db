@@ -27,6 +27,12 @@ export async function signaturesFor(env,userIds){
 }
 const LOCKED_MESSAGE='ลายเซ็นนี้ถูกล็อคโดยผู้ดูแลระบบ หากต้องการเปลี่ยน กรุณาแจ้ง Superadmin';
 export {LOCKED_MESSAGE};
+// ขนาดลายเซ็นสูงสุด: D1 จำกัดคำสั่ง SQL (รวมค่าที่ส่งเข้าไป) ไว้ 100 KB ต่อคำสั่ง เก็บให้ต่ำกว่ามากเพื่อให้มีที่เหลือ
+export const SIGNATURE_MAX_BYTES=60*1024;
+// ซับคิวรีลายเซ็นของบัญชี (รวมบัญชีที่ผูกบุคลากรเดียวกัน) — ให้ D1 คัดลอกลายเซ็นเองโดยไม่ต้องส่งข้อมูลภาพในคำสั่ง ใช้ค่าผูก 3 ตัว (userId ซ้ำ 3 ครั้ง)
+export const signatureSql=`(SELECT s.data_url FROM teacher_signatures s WHERE s.user_id=? OR s.user_id IN
+ (SELECT b.user_id FROM personnel_accounts a JOIN personnel_accounts b ON b.personnel_id=a.personnel_id WHERE a.user_id=?)
+ ORDER BY (s.user_id=?) DESC,s.updated_at DESC LIMIT 1)`;
 export async function signatureFor(env,userId){
  await ensureSignatures(env);
  return (await env.DB.prepare(`SELECT data_url,updated_at,locked FROM teacher_signatures WHERE user_id=? OR user_id IN
@@ -34,7 +40,7 @@ export async function signatureFor(env,userId){
   ORDER BY (user_id=?) DESC,updated_at DESC LIMIT 1`).bind(userId,userId,userId).first())||null;
 }
 export function validSignature(value){
- if(typeof value!=='string'||value.length>400*1024||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value))return false;
+ if(typeof value!=='string'||value.length>SIGNATURE_MAX_BYTES||!/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(value))return false;
  try{
   const bytes=Uint8Array.from(atob(value.split(',')[1]),c=>c.charCodeAt(0));
   if(bytes.length<45||![137,80,78,71,13,10,26,10].every((n,i)=>bytes[i]===n)||String.fromCharCode(...bytes.slice(12,16))!=='IHDR')return false;
@@ -94,7 +100,7 @@ export async function handleSignatureRoute(request,env,pathname,method){
  if(method==='GET')return reply({signature:await signatureFor(env,target)});
  if(method!=='PUT')return reply({error:'Method not allowed'},405);
  const body=await request.json().catch(()=>null);
- if(!validSignature(body?.data_url))return reply({error:'ลายเซ็นต้องเป็นภาพ PNG ขนาดไม่เกิน 400 KB และกว้าง/สูงไม่เกิน 2,000 พิกเซล'},400);
+ if(!validSignature(body?.data_url))return reply({error:'ลายเซ็นต้องเป็นภาพ PNG ขนาดไม่เกิน 60 KB และกว้าง/สูงไม่เกิน 2,000 พิกเซล'},400);
  await ensureSignatures(env);
  if(!byAdmin&&await signatureLocked(env,target))return reply({error:LOCKED_MESSAGE},423);
  await env.DB.batch([

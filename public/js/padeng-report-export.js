@@ -138,12 +138,12 @@ const boxOf = (n, word = false) => n === 1 ? (word ? { w: 310, h: 232 } : { w: 3
     g.clearRect(0, 0, W, H); g.putImageData(img, 0, 0);
     const pad = 10; minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad); maxX = Math.min(W - 1, maxX + pad); maxY = Math.min(H - 1, maxY + pad);
     const cw = maxX - minX + 1, ch = maxY - minY + 1;
-    for (let max = 700; max >= 200; max -= 100) {
+    for (let max = 700; max >= 150; max -= 50) {
       const k = Math.min(1, max / cw, (max * 0.4) / ch), out = document.createElement('canvas');
       out.width = Math.max(1, Math.round(cw * k)); out.height = Math.max(1, Math.round(ch * k));
       out.getContext('2d').drawImage(c, minX, minY, cw, ch, 0, 0, out.width, out.height);
       const dataUrl = out.toDataURL('image/png');
-      if (dataUrl.length < 380 * 1024) return dataUrl;
+      if (dataUrl.length <= 60 * 1024) return dataUrl; // ต้องต่ำกว่าเพดานฐานข้อมูล 100 KB ต่อคำสั่ง
     }
     throw Error('ภาพลายเซ็นมีรายละเอียดมากเกินไป กรุณาครอปให้เหลือเฉพาะลายเซ็น');
   }

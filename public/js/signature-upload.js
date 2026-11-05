@@ -28,8 +28,15 @@
     image.data.set(mask.pixels);ctx.putImageData(image,0,0);
     const cropped=document.createElement('canvas');cropped.width=mask.right-mask.left+1;cropped.height=mask.bottom-mask.top+1;
     cropped.getContext('2d').drawImage(canvas,mask.left,mask.top,cropped.width,cropped.height,0,0,cropped.width,cropped.height);
-    processed=cropped.toDataURL('image/png');
-    if(processed.length>400*1024)throw Error('ภาพใหญ่เกินไป กรุณาครอบเฉพาะลายเซ็นก่อนอัปโหลด');
+    // ย่อจนไฟล์ไม่เกิน 60 KB (ต้องต่ำกว่าเพดานฐานข้อมูล 100 KB ต่อคำสั่ง ไม่งั้นอนุมัติเอกสารไม่ได้)
+    processed=null;
+    for(let max=900;max>=150;max-=75){
+     const k=Math.min(1,max/cropped.width,(max*0.45)/cropped.height),out=document.createElement('canvas');
+     out.width=Math.max(1,Math.round(cropped.width*k));out.height=Math.max(1,Math.round(cropped.height*k));
+     out.getContext('2d').drawImage(cropped,0,0,out.width,out.height);
+     const url=out.toDataURL('image/png');if(url.length<=60*1024){processed=url;break;}
+    }
+    if(!processed)throw Error('ภาพลายเซ็นมีรายละเอียดมากเกินไป กรุณาครอบเฉพาะลายเซ็นก่อนอัปโหลด');
     preview.src=processed;preview.hidden=false;save.disabled=false;message.textContent='ตรวจเส้นลายเซ็นและพื้นใสก่อนกดบันทึก';
    }catch(e){preview.hidden=true;message.textContent=e.message;processed=null;}
   }

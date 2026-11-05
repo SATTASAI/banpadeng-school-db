@@ -199,7 +199,7 @@ function mergeReport(defaults, saved) {
 }
 
 // ลายเซ็นครู (PNG พื้นใส ระบบตัดพื้นหลัง/ทำเส้นเข้มในเบราว์เซอร์ก่อนส่ง) — อัปครั้งเดียวใช้ทุกฉบับ
-const SIGNATURE_MAX = 400 * 1024;
+const SIGNATURE_MAX = 60 * 1024; // ต้องต่ำกว่าเพดาน D1 100 KB ต่อคำสั่ง (ดู SIGNATURE_MAX_BYTES ใน lib/signatures.js)
 async function signatureOf(env, userId) {
   return (await env.DB.prepare('SELECT data_url, updated_at, locked FROM teacher_signatures WHERE user_id = ?').bind(userId).first()) || null;
 }
