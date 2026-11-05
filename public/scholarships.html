@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ทุนการศึกษา — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+.sc-info{font-size:13px;color:var(--color-text-muted);margin:-6px 0 14px}
+.sc-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.sc-tab{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;cursor:pointer;color:var(--color-forest-900)}
+.sc-tab[aria-selected="true"]{background:#1E5FC0;border-color:#1E5FC0;color:#fff}
+.sc-sub{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:-2px 0 12px}
+.sc-chip{border:1px solid var(--color-border);background:#f6f9fc;border-radius:10px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.sc-chip[aria-selected="true"]{border-color:#2D7FD3;background:#e8f2fd;color:#1a4f8f;font-weight:600}
+.sc-section{margin-top:14px}.sc-section h2{font-size:17px;margin:0 0 10px;color:var(--color-forest-900)}
+.sc-cols{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,7fr);gap:16px;align-items:start}@media(max-width:900px){.sc-cols{grid-template-columns:1fr}}
+.sc-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff}.sc-scroll{max-height:62vh}
+.sc-table{width:100%;border-collapse:collapse}.sc-table th,.sc-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}
+.sc-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0;z-index:1}.sc-table tr:last-child td{border-bottom:0}
+.sc-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.sc-table tfoot td{font-weight:700;background:#fafcfe}
+.sc-table .btn{width:auto;padding:4px 10px;font-size:12px;min-height:0;line-height:1.4;box-shadow:none}
+#rooms tr{cursor:pointer}#rooms tr:hover td{background:#f2f8ff}#rooms tr.sel td{background:#e8f2fd}
+.sc-filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}.sc-filters input,.sc-filters select{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}.sc-filters input{flex:1;min-width:180px}
+.sc-muted{color:var(--color-text-muted)}.sc-name small{display:block;color:var(--color-text-muted);font-size:12px}
+.sc-modal{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;z-index:60;background:rgba(21,35,50,.35);overflow:auto}
+.sc-modal>div{width:100%;max-width:980px;padding:22px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(20,40,70,.22)}
+.sc-modal.sm>div{max-width:460px}
+.sc-modal h2{margin:0 0 12px;font-size:19px}.sc-modal .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end}.sc-modal .acts .btn{width:auto}
+.sc-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}.sc-form label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}
+.sc-form input,.sc-form select,.sc-modal input,.sc-modal select{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}
+.sc-drop{border:2px dashed #b9cde3;border-radius:14px;padding:22px;text-align:center;background:#f7fbff;margin:12px 0;cursor:pointer}
+.sc-drop.over{border-color:#2D7FD3;background:#e8f2fd}
+.sc-progress{font-size:13px;color:#1a4f8f;margin:6px 0;min-height:18px}
+.sc-map th select{font-size:12px;padding:4px 6px;max-width:150px}.sc-map th small{display:block;font-weight:400;color:var(--color-text-muted);margin-bottom:4px;white-space:normal}
+.sc-st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+.sc-st.ok{background:rgba(46,157,106,.13);color:#1f7a50}.sc-st.warn{background:#fff4d6;color:#8a5a00}.sc-st.bad{background:rgba(196,80,95,.12);color:#a33a49}
+.sc-preview select{max-width:240px;font-size:12px;padding:4px 6px}
+.sc-sum{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:8px 0}
+</style>
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1>ทุนการศึกษา</h1><p>รายชื่อนักเรียนที่ได้รับทุน แยกตามหัวข้อทุน — ข้อมูลนักเรียนอ้างอิงจากระบบรายงานผลการเรียน</p></div>
+    <div class="tw-actions">
+      <label class="tw-term">ปีการศึกษา<select id="year" style="min-width:130px"></select></label>
+      <label class="tw-term">ภาคเรียน<select id="term" style="min-width:110px"><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
+      <span id="headActions" class="tw-actions"></span>
+    </div>
+  </header>
+  <p class="sc-info" id="info"></p>
+  <div class="tw-error" id="error" role="alert"></div>
+  <nav class="sc-tabs" id="tabs" role="tablist"></nav>
+  <div class="sc-sub" id="sub"></div>
+  <section id="cards" class="tw-cards"></section>
+  <div class="sc-cols">
+    <section class="sc-section"><h2>สรุปรายห้อง</h2>
+      <div class="sc-wrap sc-scroll"><table class="sc-table"><thead><tr><th>ห้อง</th><th class="num">ได้รับทุน</th><th class="num">ยอดเงิน (บาท)</th></tr></thead><tbody id="rooms"></tbody><tfoot id="roomsFoot"></tfoot></table></div>
+    </section>
+    <section class="sc-section"><h2 id="listTitle">รายชื่อนักเรียนที่ได้รับทุน</h2>
+      <div class="sc-filters"><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหา: ชื่อ เลขประจำตัว" autocomplete="off"></div>
+      <div class="sc-wrap sc-scroll"><table class="sc-table"><thead><tr><th style="width:36px">#</th><th>ชื่อ–นามสกุล</th><th>ชั้น/ห้อง</th><th class="num">ยอดเงิน (บาท)</th><th>หมายเหตุ</th><th id="actHead"></th></tr></thead><tbody id="list"></tbody></table></div>
+    </section>
+  </div>
+</main>
+
+<div class="sc-modal" id="importModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <h2 id="importTitle">นำเข้ารายชื่อผู้ได้รับทุนจากไฟล์ PDF</h2>
+  <div class="sc-form">
+    <label>หัวข้อทุน<select id="imType"></select></label>
+    <label>ปีการศึกษา<input id="imYear" inputmode="numeric" maxlength="4"></label>
+    <label>ภาคเรียน<select id="imTerm"><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
+    <label>ยอดเงินต่อคน (ใช้เมื่อไฟล์ไม่มีคอลัมน์ยอดเงิน)<input id="imDefault" inputmode="decimal" placeholder="เช่น 1000"></label>
+  </div>
+  <div class="sc-drop" id="drop" tabindex="0" role="button">เลือกไฟล์ PDF หรือลากไฟล์มาวาง<br><small class="sc-muted">รองรับ PDF ข้อความ และ PDF สแกน (อ่านด้วย OCR ภาษาไทย) · ระบบหาหัวตารางและแยกคอลัมน์เอง ไม่ต้องจัดตารางใหม่</small><input type="file" id="file" accept="application/pdf,.pdf" hidden></div>
+  <div class="sc-progress" id="progress" aria-live="polite"></div>
+  <div id="mapBox" hidden>
+    <h3 style="font-size:15px;margin:10px 0 6px">คอลัมน์ที่ระบบจับได้ <small class="sc-muted" style="font-weight:400">— ตรวจ/เปลี่ยนความหมายของแต่ละคอลัมน์ได้</small></h3>
+    <div class="sc-wrap" style="max-height:220px"><table class="sc-table sc-map"><thead id="mapHead"></thead><tbody id="mapBody"></tbody></table></div>
+  </div>
+  <div id="previewBox" hidden>
+    <h3 style="font-size:15px;margin:14px 0 6px">ตรวจรายชื่อก่อนบันทึก</h3>
+    <div class="sc-sum" id="previewSum"></div>
+    <div class="sc-wrap" style="max-height:46vh"><table class="sc-table sc-preview"><thead><tr><th style="width:30px"><input type="checkbox" id="checkAll" checked aria-label="เลือกทั้งหมด"></th><th>ชื่อในไฟล์</th><th>นักเรียนในระบบ</th><th class="num">ยอดเงิน</th><th>สถานะ</th></tr></thead><tbody id="previewBody"></tbody></table></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px"><input type="checkbox" id="imReplace"> แทนที่รายชื่อเดิมของทุนนี้ในภาคเรียนนี้ทั้งหมด (ไม่เลือก = เพิ่ม/อัปเดตเฉพาะรายชื่อในไฟล์)</label>
+  </div>
+  <div class="tw-error" id="imError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="imClose">ปิด</button><button class="btn btn-primary" type="button" id="imSave" disabled>บันทึกรายชื่อ</button></div>
+</div></div>
+
+<div class="sc-modal sm" id="editModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="editTitle">
+  <h2 id="editTitle">เพิ่มนักเรียนที่ได้รับทุน</h2>
+  <div class="sc-form" style="grid-template-columns:1fr">
+    <label id="edStudentWrap">นักเรียน<input id="edSearch" list="edList" placeholder="พิมพ์ชื่อหรือเลขประจำตัว" autocomplete="off"><datalist id="edList"></datalist></label>
+    <label>ยอดเงิน (บาท)<input id="edAmount" inputmode="decimal"></label>
+    <label>หมายเหตุ<input id="edNotes" maxlength="300"></label>
+  </div>
+  <div class="tw-error" id="edError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="edClose">ยกเลิก</button><button class="btn btn-primary" type="button" id="edSave">บันทึก</button></div>
+</div></div>
+
+<div class="sc-modal sm" id="typeModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="typeTitle">
+  <h2 id="typeTitle">หัวข้อทุนอื่น ๆ</h2>
+  <div id="typeList" style="display:grid;gap:8px;margin-bottom:12px"></div>
+  <div style="display:flex;gap:8px"><input id="typeName" placeholder="ชื่อหัวข้อทุนใหม่ เช่น ทุนมูลนิธิ…" maxlength="150" style="flex:1"><button class="btn btn-primary" type="button" id="typeAdd" style="width:auto">เพิ่ม</button></div>
+  <div class="tw-error" id="tyError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="tyClose">ปิด</button></div>
+</div></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/scholarship-pdf.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
+const money=n=>n==null||n===''?'–':Number(n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+const key=s=>`${String(s.grade_level??'').trim()}|${String(s.classroom??'').trim()}`;
+const label=k=>{const [g,r]=k.split('|');return `${g||'ไม่ระบุชั้น'}${r?' / '+r:''}`};
+const showErr=(id,msg)=>{const el=$(id);el.textContent=msg||'';el.style.display=msg?'block':'none'};
+let data=null,students=new Map(),tab='eef',typeId=null,room='',version=0;
+const params=new URLSearchParams(location.search);
+
+const typesOf=t=>(data?.types||[]).filter(x=>t==='other'?!x.fixed:x.code===t);
+const currentType=()=>(data?.types||[]).find(t=>t.id===typeId);
+const manage=()=>!!data?.permissions?.manage;
+
+async function load(){
+  const v=++version;showErr('error','');
+  const y=data?$('year').value:(params.get('academic_year')||''),t=data?$('term').value:(params.get('term')||'');
+  try{
+    const d=await apiRequest(`/api/scholarships?${new URLSearchParams({...(y?{academic_year:y}:{}),...(t?{term:t}:{})})}`);
+    if(v!==version)return;
+    data=d;students=new Map((d.students||[]).map(s=>[s.id,s]));
+    $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current.year?' (ปีปัจจุบัน)':''}</option>`).join('');
+    $('year').value=String(d.academic_year);$('term').value=String(d.term);
+    pickType();render();
+  }catch(e){if(v===version)showErr('error',e.message)}
+}
+function pickType(){
+  const list=typesOf(tab);
+  if(!list.some(t=>t.id===typeId))typeId=list[0]?.id??null;
+}
+function awardsOf(id){return (data.awards||[]).filter(a=>a.type_id===id&&students.has(a.student_id))}
+function render(){
+  const p=data.permissions||{};
+  $('info').innerHTML=`ผู้รับผิดชอบงานทุนการศึกษา: <b>${esc(data.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage?'นำเข้า/แก้ไขได้ทุกห้อง':p.view_all?'ดูได้ทุกห้อง':'ครูประจำชั้น ดูได้เฉพาะห้อง '+(p.homerooms||[]).map(label).join(', ')}`;
+  $('headActions').innerHTML=p.manage?'<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button>':'';
+  if(p.manage){$('openImport').onclick=openImport;$('openAdd').onclick=()=>openEdit(null)}
+  // แท็บหัวข้อทุน
+  const tabs=[['eef','ทุนปัจจัยพื้นฐานนักเรียนยากจน (กสศ.)'],['subsidy','ทุนอุดหนุน'],['other','ทุนอื่น ๆ']];
+  $('tabs').innerHTML=tabs.map(([k,l])=>{const ids=k==='other'?typesOf('other').map(t=>t.id):typesOf(k).map(t=>t.id);const n=new Set((data.awards||[]).filter(a=>ids.includes(a.type_id)&&students.has(a.student_id)).map(a=>a.student_id)).size;return `<button class="sc-tab" role="tab" type="button" data-tab="${k}" aria-selected="${tab===k}">${esc(l)} <span class="sc-muted" style="color:inherit;opacity:.75">(${n})</span></button>`}).join('');
+  $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;room='';pickType();render()});
+  const others=typesOf('other');
+  $('sub').innerHTML=tab!=='other'?'':(others.length?others.map(t=>`<button class="sc-chip" type="button" data-type="${t.id}" aria-selected="${t.id===typeId}">${esc(t.name)}</button>`).join(''):'<span class="sc-muted">ยังไม่มีหัวข้อทุนอื่น</span>')+(p.manage?' <button class="sc-chip" type="button" id="manageTypes">+ สร้าง/แก้ไขหัวข้อทุน</button>':'');
+  $('sub').querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{typeId=Number(b.dataset.type);room='';render()});
+  if($('manageTypes'))$('manageTypes').onclick=openTypes;
+  const t=currentType(),list=t?awardsOf(t.id):[];
+  // การ์ดสรุป
+  const total=list.reduce((s,a)=>s+(Number(a.amount)||0),0);
+  const allTotal=(data.awards||[]).filter(a=>students.has(a.student_id)).reduce((s,a)=>s+(Number(a.amount)||0),0);
+  const allKids=new Set((data.awards||[]).filter(a=>students.has(a.student_id)).map(a=>a.student_id)).size;
+  $('cards').innerHTML=t?`<div class="tw-card"><span>${esc(t.name)}</span><strong>${list.length} คน</strong></div><div class="tw-card"><span>ยอดเงินทุนนี้ (บาท)</span><strong style="color:#1f7a50">${money(total)}</strong></div><div class="tw-card"><span>เฉลี่ยต่อคน (บาท)</span><strong>${list.length?money(total/list.length):'–'}</strong></div><div class="tw-card"><span>ทุกทุนรวม ภาค ${data.term}/${data.academic_year}</span><strong class="sm" style="font-size:15px">${allKids} คน · ${money(allTotal)} บาท</strong></div>`:'<div class="tw-card"><span>ยังไม่มีหัวข้อทุน</span><strong>–</strong></div>';
+  // สรุปรายห้อง
+  const rooms=new Map();list.forEach(a=>{const k=key(students.get(a.student_id));const r=rooms.get(k)||{n:0,sum:0};r.n++;r.sum+=Number(a.amount)||0;rooms.set(k,r)});
+  const keys=[...rooms.keys()].sort((a,b)=>{const [ga,ra]=a.split('|'),[gb,rb]=b.split('|');return cmp(ga,gb)||cmp(ra,rb)});
+  if(room&&!rooms.has(room))room='';
+  $('rooms').innerHTML=keys.length?keys.map(k=>`<tr data-room="${esc(k)}" class="${k===room?'sel':''}"><td>${esc(label(k))}</td><td class="num">${rooms.get(k).n}</td><td class="num">${money(rooms.get(k).sum)}</td></tr>`).join(''):'<tr><td colspan="3" class="sc-muted">ยังไม่มีรายชื่อ</td></tr>';
+  $('roomsFoot').innerHTML=keys.length?`<tr><td>รวม</td><td class="num">${list.length}</td><td class="num">${money(total)}</td></tr>`:'';
+  $('rooms').querySelectorAll('tr[data-room]').forEach(tr=>tr.onclick=()=>{room=room===tr.dataset.room?'':tr.dataset.room;render()});
+  $('fRoom').innerHTML='<option value="">ทุกห้อง</option>'+keys.map(k=>`<option value="${esc(k)}">${esc(label(k))}</option>`).join('');$('fRoom').value=room;
+  renderList(list);
+}
+function renderList(list){
+  const q=$('q').value.trim().toLowerCase();
+  const rows=list.map(a=>({a,s:students.get(a.student_id)})).filter(({s})=>(!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code}`.toLowerCase().includes(q)))
+    .sort((x,y)=>cmp(x.s.grade_level,y.s.grade_level)||cmp(x.s.classroom,y.s.classroom)||cmp(x.s.student_code,y.s.student_code));
+  $('listTitle').textContent=`รายชื่อนักเรียนที่ได้รับทุน${room?' · '+label(room):''}`;
+  $('actHead').textContent=manage()?'จัดการ':'';
+  $('list').innerHTML=rows.length?rows.map(({a,s},i)=>`<tr><td>${i+1}</td><td class="sc-name">${esc(s.full_name)}<small>${esc(s.student_code||'')}${s.status&&s.status!=='enrolled'?' · ย้าย/จำหน่าย':''}</small></td><td>${esc(label(key(s)))}</td><td class="num">${money(a.amount)}</td><td>${esc(a.notes||'')}</td><td>${manage()?`<button class="btn btn-ghost" type="button" data-edit="${a.id}">แก้ไข</button> <button class="btn btn-ghost" type="button" data-del="${a.id}">ลบ</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="sc-muted">ไม่มีรายชื่อ</td></tr>';
+  $('list').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openEdit((data.awards||[]).find(a=>a.id===Number(b.dataset.edit))));
+  $('list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{const a=(data.awards||[]).find(x=>x.id===Number(b.dataset.del));if(!confirm(`ลบ ${students.get(a.student_id)?.full_name} ออกจากทุนนี้?`))return;
+    try{await apiRequest('/api/scholarships/awards/'+a.id,{method:'DELETE'});await load()}catch(e){showErr('error',e.message)}});
+}
+$('q').oninput=()=>data&&render();
+$('fRoom').onchange=()=>{room=$('fRoom').value;render()};
+$('year').onchange=load;$('term').onchange=load;
+
+// ---------- เพิ่ม/แก้ไขรายคน ----------
+let editing=null;
+function studentLabel(s){return `${s.full_name} (${s.student_code||'-'}) ${label(key(s))}`}
+function openEdit(a){
+  if(!currentType())return alert('กรุณาเลือก/สร้างหัวข้อทุนก่อน');
+  editing=a;showErr('edError','');
+  $('editTitle').textContent=a?`แก้ไขยอดเงิน · ${students.get(a.student_id)?.full_name}`:`เพิ่มนักเรียน · ${currentType().name}`;
+  $('edStudentWrap').hidden=!!a;
+  $('edList').innerHTML=[...students.values()].filter(s=>!s.status||s.status==='enrolled').map(s=>`<option value="${esc(studentLabel(s))}">`).join('');
+  $('edSearch').value='';$('edAmount').value=a?.amount??'';$('edNotes').value=a?.notes||'';
+  $('editModal').hidden=false;(a?$('edAmount'):$('edSearch')).focus();
+}
+$('edClose').onclick=()=>$('editModal').hidden=true;
+$('edSave').onclick=async()=>{
+  showErr('edError','');
+  try{
+    if(editing){await apiRequest('/api/scholarships/awards/'+editing.id,{method:'PATCH',body:{amount:$('edAmount').value,notes:$('edNotes').value}})}
+    else{const s=[...students.values()].find(x=>studentLabel(x)===$('edSearch').value.trim());if(!s)return showErr('edError','กรุณาเลือกนักเรียนจากรายการ');
+      await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:typeId,academic_year:data.academic_year,term:data.term,mode:'merge',records:[{student_id:s.id,amount:$('edAmount').value,notes:$('edNotes').value}]}})}
+    $('editModal').hidden=true;await load();
+  }catch(e){showErr('edError',e.message)}
+};
+
+// ---------- หัวข้อทุนอื่น ๆ ----------
+function openTypes(){showErr('tyError','');renderTypes();$('typeModal').hidden=false}
+function renderTypes(){
+  const list=typesOf('other');
+  $('typeList').innerHTML=list.length?list.map(t=>`<div style="display:flex;gap:6px"><input value="${esc(t.name)}" data-name="${t.id}" maxlength="150" style="flex:1"><button class="btn btn-ghost" type="button" data-save="${t.id}" style="width:auto">บันทึกชื่อ</button><button class="btn btn-ghost" type="button" data-remove="${t.id}" style="width:auto">ลบ</button></div>`).join(''):'<p class="sc-muted" style="margin:0">ยังไม่มีหัวข้อทุนอื่น</p>';
+  $('typeList').querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>typeCall('/api/scholarships/types/'+b.dataset.save,'PATCH',{name:$('typeList').querySelector(`[data-name="${b.dataset.save}"]`).value}));
+  $('typeList').querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const t=list.find(x=>x.id===Number(b.dataset.remove));if(confirm(`ลบหัวข้อ "${t.name}" และรายชื่อผู้ได้รับทุนนี้ทุกปี/ทุกภาคเรียน?`))typeCall('/api/scholarships/types/'+t.id,'DELETE')});
+}
+async function typeCall(path,method,body){showErr('tyError','');try{const r=await apiRequest(path,{method,body});await load();if(method==='POST'&&r?.id){tab='other';typeId=r.id;render()}renderTypes()}catch(e){showErr('tyError',e.message)}}
+$('typeAdd').onclick=()=>{const name=$('typeName').value.trim();if(!name)return showErr('tyError','กรุณาระบุชื่อหัวข้อทุน');$('typeName').value='';typeCall('/api/scholarships/types','POST',{name})};
+$('tyClose').onclick=()=>$('typeModal').hidden=true;
+
+// ---------- นำเข้า PDF ----------
+const FIELDS=[['','— ไม่ใช้ —'],['name','ชื่อ–สกุล'],['prefix','คำนำหน้า'],['first','ชื่อ'],['last','นามสกุล'],['national_id','เลขบัตรประชาชน'],['student_code','เลขประจำตัวนักเรียน'],['amount','ยอดเงิน'],['notes','หมายเหตุ']];
+let parsed=null,mapping=[],preview=[],matchStudents=new Map();
+function openImport(){
+  $('imType').innerHTML=(data.types||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  $('imType').value=String(typeId||data.types[0]?.id||'');$('imYear').value=data.academic_year;$('imTerm').value=String(data.term);
+  parsed=null;preview=[];$('mapBox').hidden=true;$('previewBox').hidden=true;$('progress').textContent='';$('imSave').disabled=true;$('imReplace').checked=false;showErr('imError','');$('file').value='';
+  $('importModal').hidden=false;
+}
+$('imClose').onclick=()=>$('importModal').hidden=true;
+$('drop').onclick=()=>$('file').click();$('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' ')$('file').click()};
+$('drop').ondragover=e=>{e.preventDefault();$('drop').classList.add('over')};$('drop').ondragleave=()=>$('drop').classList.remove('over');
+$('drop').ondrop=e=>{e.preventDefault();$('drop').classList.remove('over');if(e.dataTransfer.files[0])readFile(e.dataTransfer.files[0])};
+$('file').onchange=()=>{if($('file').files[0])readFile($('file').files[0])};
+async function readFile(file){
+  showErr('imError','');$('mapBox').hidden=true;$('previewBox').hidden=true;$('imSave').disabled=true;
+  if(!/pdf$/i.test(file.type)&&!/\.pdf$/i.test(file.name))return showErr('imError','กรุณาเลือกไฟล์ PDF');
+  try{
+    parsed=await ScholarshipPdf.read(file,{onProgress:m=>$('progress').textContent=m});
+    parsed.fileName=file.name;
+    if(!parsed.rows.length)throw new Error('ไม่พบแถวข้อมูลใต้หัวตาราง');
+    mapping=ScholarshipPdf.guessMapping(parsed.columns);
+    $('progress').textContent=`อ่านแล้ว ${parsed.pages} หน้า${parsed.ocrPages?` (OCR ${parsed.ocrPages} หน้า — โปรดตรวจชื่อและยอดเงินให้ละเอียด)`:''} · ${parsed.rows.length} แถว`;
+    renderMap();await rematch();
+  }catch(e){$('progress').textContent='';showErr('imError',e.message)}
+}
+function renderMap(){
+  $('mapHead').innerHTML='<tr>'+parsed.columns.map((c,i)=>`<th><small>${esc(c.label)}</small><select data-col="${i}">${FIELDS.map(([v,l])=>`<option value="${v}"${mapping[i]===v?' selected':''}>${l}</option>`).join('')}</select></th>`).join('')+'</tr>';
+  $('mapBody').innerHTML=parsed.rows.slice(0,5).map(r=>'<tr>'+r.map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join('');
+  $('mapHead').querySelectorAll('select').forEach(s=>s.onchange=async()=>{mapping[Number(s.dataset.col)]=s.value;await rematch()});
+  $('mapBox').hidden=false;
+}
+async function rematch(){
+  const recs=ScholarshipPdf.toRecords(parsed.rows,mapping);
+  if(!recs.length){preview=[];renderPreview();return showErr('imError','ยังไม่พบคอลัมน์ชื่อหรือเลขประจำตัว — กรุณาเลือกความหมายของคอลัมน์ด้านบน')}
+  showErr('imError','');$('progress').textContent+=' · กำลังจับคู่กับทะเบียนนักเรียน…';
+  try{
+    const r=await apiRequest('/api/scholarships/match',{method:'POST',body:{rows:recs.map(x=>({name:x.name,national_id:x.national_id,student_code:x.student_code}))}});
+    (r.students||[]).forEach(s=>{matchStudents.set(s.id,s)});
+    preview=recs.map((x,i)=>({...x,...r.matches[i],include:!!r.matches[i].student_id}));
+    $('progress').textContent=$('progress').textContent.replace(' · กำลังจับคู่กับทะเบียนนักเรียน…','');
+    renderPreview();
+  }catch(e){showErr('imError',e.message)}
+}
+const METHOD={national_id:['ok','ตรงเลขบัตร'],student_code:['ok','ตรงเลขประจำตัว'],name:['ok','ตรงชื่อ'],manual:['ok','เลือกเอง'],ambiguous:['warn','ชื่อซ้ำ เลือกคน'],suggest:['warn','ชื่อใกล้เคียง ตรวจสอบ'],none:['bad','ไม่พบในทะเบียน']};
+function optionsFor(row){
+  const ids=[...new Set([row.student_id,...(row.candidates||[])].filter(Boolean))];
+  const cand=ids.map(id=>matchStudents.get(id)||students.get(id)).filter(Boolean);
+  const all=[...new Map([...matchStudents.values(),...students.values()].map(s=>[s.id,s])).values()].filter(s=>!ids.includes(s.id)&&(!s.status||s.status==='enrolled')).sort((a,b)=>cmp(a.full_name,b.full_name));
+  return `<option value="">— เลือกนักเรียน —</option>${cand.length?`<optgroup label="แนะนำ">${cand.map(s=>`<option value="${s.id}"${s.id===row.student_id?' selected':''}>${esc(studentLabel(s))}</option>`).join('')}</optgroup>`:''}${all.length?`<optgroup label="ทั้งหมด">${all.map(s=>`<option value="${s.id}">${esc(studentLabel(s))}</option>`).join('')}</optgroup>`:''}`;
+}
+function renderPreview(){
+  const def=$('imDefault').value.trim();
+  $('previewBody').innerHTML=preview.map((r,i)=>{const [cls,txt]=METHOD[r.method]||METHOD.none;return `<tr><td><input type="checkbox" data-inc="${i}"${r.include?' checked':''}></td><td class="sc-name">${esc(r.name||'-')}<small>${esc([r.national_id,r.student_code].filter(Boolean).join(' · '))}</small></td><td><select data-pick="${i}">${optionsFor(r)}</select></td><td class="num"><input data-amt="${i}" value="${esc(r.amount??def)}" inputmode="decimal" style="width:100px;text-align:right"></td><td><span class="sc-st ${cls}">${txt}</span></td></tr>`}).join('');
+  $('previewBody').querySelectorAll('[data-inc]').forEach(c=>c.onchange=()=>{preview[c.dataset.inc].include=c.checked;summary()});
+  $('previewBody').querySelectorAll('[data-pick]').forEach(s=>s.onchange=()=>{const r=preview[s.dataset.pick];r.student_id=Number(s.value)||null;r.method=r.student_id?'manual':'none';r.include=!!r.student_id;renderPreview()});
+  $('previewBody').querySelectorAll('[data-amt]').forEach(inp=>inp.oninput=()=>{preview[inp.dataset.amt].amount=inp.value;summary()});
+  $('previewBox').hidden=!preview.length;summary();
+}
+function rowsToSave(){
+  const def=$('imDefault').value.trim(),seen=new Set(),out=[];
+  for(const r of preview){if(!r.include||!r.student_id||seen.has(r.student_id))continue;seen.add(r.student_id);out.push({student_id:r.student_id,amount:r.amount===null||r.amount===''?def:r.amount})}
+  return out;
+}
+function summary(){
+  const save=rowsToSave(),miss=preview.filter(r=>!r.student_id).length,dup=preview.filter(r=>r.include&&r.student_id).length-save.length;
+  const sum=save.reduce((s,r)=>s+(Number(String(r.amount??'').replace(/,/g,''))||0),0);
+  $('previewSum').innerHTML=`<span>ทั้งหมด <b>${preview.length}</b> แถว</span><span>จะบันทึก <b style="color:#1f7a50">${save.length}</b> คน</span><span>ยอดรวม <b>${money(sum)}</b> บาท</span>${miss?`<span style="color:#a33a49">ไม่พบในทะเบียน ${miss} แถว (เลือกนักเรียนเองได้)</span>`:''}${dup>0?`<span style="color:#8a5a00">ซ้ำ ${dup} แถว (บันทึกครั้งเดียว)</span>`:''}`;
+  $('imSave').disabled=!save.length&&!$('imReplace').checked;
+  $('checkAll').checked=preview.length>0&&preview.every(r=>r.include||!r.student_id);
+}
+$('imDefault').oninput=()=>preview.length&&renderPreview();
+$('imReplace').onchange=summary;
+$('checkAll').onchange=()=>{preview.forEach(r=>{if(r.student_id)r.include=$('checkAll').checked});renderPreview()};
+$('imSave').onclick=async()=>{
+  showErr('imError','');
+  const records=rowsToSave(),replace=$('imReplace').checked;
+  const tname=$('imType').selectedOptions[0]?.textContent||'';
+  if(replace&&!confirm(`แทนที่รายชื่อเดิมทั้งหมดของ "${tname}" ภาคเรียน ${$('imTerm').value}/${$('imYear').value} ด้วย ${records.length} คนจากไฟล์นี้?`))return;
+  try{
+    await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:Number($('imType').value),academic_year:$('imYear').value,term:$('imTerm').value,mode:replace?'replace':'merge',source:parsed?.fileName||'',records}});
+    const t=(data.types||[]).find(x=>x.id===Number($('imType').value));
+    $('importModal').hidden=true;
+    if(t){tab=t.fixed?t.code:'other';typeId=t.id}
+    $('year').innerHTML=`<option value="${esc($('imYear').value)}">${esc($('imYear').value)}</option>`;$('year').value=$('imYear').value;$('term').value=$('imTerm').value;
+    await load();
+  }catch(e){showErr('imError',e.message)}
+};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')['importModal','editModal','typeModal'].forEach(id=>$(id).hidden=true)});
+load();
+})();
+</script>
+</body></html>

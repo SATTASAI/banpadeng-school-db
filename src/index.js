@@ -24,6 +24,7 @@ import { handleUsageRoute } from './routes/usage.js';
 import { handleNotifications } from './routes/notifications.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
+import { handleScholarshipRoute, handleScholarshipVendor } from './routes/scholarships.js';
 import { handleStaffDeletionRoute } from './routes/staff-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
@@ -4693,6 +4694,9 @@ const app = {
           else if (!writeMethod || !viewAsMayWrite(pathname)) return jsonResponse(VIEW_AS_BLOCKED, 403);
         }
       }
+      // ไลบรารีอ่าน PDF/OCR ของหน้าทุนการศึกษา (ไฟล์จาก CDN เสิร์ฟผ่านโดเมนเดียวกัน)
+      const vendorResponse = await handleScholarshipVendor(request, pathname, method);
+      if (vendorResponse) return vendorResponse;
       if (pathname === "/api/admin/view-as" || pathname === "/api/admin/view-as/candidates") return await handleViewAsRoute(request, env, pathname, method);
 
       // The independent evaluatesystem Worker owns evaluation screens and mutations.
@@ -4881,6 +4885,8 @@ const app = {
 
       const studentInsuranceResponse = await handleStudentInsuranceRoute(request, env, pathname, method);
       if (studentInsuranceResponse) return studentInsuranceResponse;
+      const scholarshipResponse = await handleScholarshipRoute(request, env, pathname, method);
+      if (scholarshipResponse) return scholarshipResponse;
       const studentDeletionResponse = await handleStudentDeletionRoute(request, env, pathname, method);
       if (studentDeletionResponse) return studentDeletionResponse;
       if (pathname === "/api/students/export" && method === "GET") return await handleListStudents(request, env, true);
