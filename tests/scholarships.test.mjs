@@ -136,3 +136,22 @@ test("export builds PDF table with totals and xlsx sheets", () => {
   assert.equal(body.length, 4); assert.equal(body[3][4].text, (4100).toLocaleString("th-TH", { minimumFractionDigits: 2 }));
   const s = E.sheets(rep); assert.equal(s.list.at(-1)[4], 4100); assert.deepEqual(JSON.parse(JSON.stringify(s.rooms.at(-1))), ["รวม", 2, 4100]);
 });
+
+test("reads the สพฐ. subsidy allocation form (ปัจจัยพื้นฐานนักเรียนยากจน) as ทุนอุดหนุน, not กสศ.", () => {
+  const ctx = vm.createContext({ window: {} }); vm.runInContext(fs.readFileSync("public/js/scholarship-pdf.js", "utf8"), ctx); const P = ctx.window.ScholarshipPdf;
+  const w = (str, x0, y, x1) => ({ str, x: x0, y, w: x1 - x0, h: 12 });
+  const items = [w("บัญชีจัดสรรงบประมาณปี 2569 แผนงานพื้นฐานด้านการพัฒนาและเสริมสร้างศักยภาพคน", 102, 40, 493),
+    w("โครงการสนับสนุนค่าใช้จ่ายในการจัดการศึกษา งบเงินอุดหนุน เงินอุดหนุนทั่วไป", 28, 57.6, 567),
+    w("รายการค่าจัดการเรียนการสอน (ปัจจัยพื้นฐานสำหรับนักเรียนยากจน ภาคเรียนที่ 1 ปีการศึกษา 2569 )", 75, 75.2, 520),
+    w("ที่", 40, 123.4, 45), w("เลขประจำตัว", 78, 123.4, 120), w("ประชาชน", 83, 136.6, 115), w("ชื่อ - นามสกุล", 186, 123.4, 230), w("ชั้นปี", 307, 123.4, 322), w("ห้อง", 359, 123.4, 373),
+    w("ผลการตัดเกณฑ์ PMT", 400, 123.4, 469), w("งบ.นร.ยากจนที่ได้", 520, 123.4, 575), w("ผ่านเกณฑ์", 392, 140, 425), w("ผ่านเกณฑ์", 440, 140, 473), w("รับจัดสรร", 527, 140, 567),
+    w("ยากจน", 396, 153, 420), w("ยากจนพิเศษ", 440, 153, 475),
+    ...[[1, "1000000000001", "/", 412], [2, "G660000000002", "/", 460]].flatMap(([n, id, m, mx], i) => { const y = 173 + i * 18;
+      return [w(String(n), 51, y, 55), w(id, 71, y, 127), w("เด็กชายทดสอบ " + n, 143, y, 229), w("ประถมศึกษาปีที่ 1", 282, y, 340), w("4", 372, y, 376), w(m, mx, y, mx + 3), w("500", 540, y, 553)]; }),
+    w("รวม", 230, 220, 245), w("1", 410, 220, 415), w("1", 458, 220, 463), w("1,000", 540, 220, 562)];
+  const res = P.parsePages([{ items }]);
+  assert.equal(res.meta.kind, "subsidy"); assert.equal(res.meta.total, 1000);
+  const map = P.guessMapping(res.columns, res.rows);
+  const recs = JSON.parse(JSON.stringify(P.toRecords(res.rows, map, res.columns)));
+  assert.deepEqual(recs.map((r) => [r.national_id, r.room, r.amount, r.notes]), [["1000000000001", "ป.1/4", 500, "ผ่านเกณฑ์ ยากจน"], ["G660000000002", "ป.1/4", 500, "ผ่านเกณฑ์ ยากจนพิเศษ"]]);
+});

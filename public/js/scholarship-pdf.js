@@ -54,6 +54,7 @@
   ['national_id',/(ประชาชน|บัตร|ปชช|citizen)/i],
   ['student_code',/(ประจำตัวนักเรียน|รหัสนักเรียน|student\s*id)/i],
   ['fail',/ไม่สำเร็จ/],
+  ['mark',/ผ่านเกณฑ์/],
   ['amount',/(จัดสรร|จำนวนเงิน|ยอดเงิน|งบประมาณ|จำนวน\s*\(?บาท|amount)/i],
   ['notes',/(หมายเหตุ|สาเหตุ|note)/i],
   ['prefix',/^(คำนำหน้า|คำนำหน้าชื่อ)$/],
@@ -87,7 +88,8 @@
  function metaOf(lines){
   const text=lines.map(l=>l.map(c=>c.str).join(' ')).join(' ');
   const term=text.match(/ภาคเรียนที่\s*([12])/)?.[1],year=text.match(/ปีการศึกษา\s*(25\d\d)/)?.[1];
-  const kind=/กสศ|ยากจนพิเศษ|ปัจจัยพื้นฐาน/.test(text)?'eef':/อุดหนุน/.test(text)?'subsidy':'';
+  // กสศ. = มีคำว่า กสศ. ในหัวเอกสาร · ทุนอุดหนุน = บัญชีจัดสรรงบเงินอุดหนุน (ปัจจัยพื้นฐานสำหรับนักเรียนยากจน ของ สพฐ.)
+  const kind=/กสศ/.test(text)?'eef':/อุดหนุน|ค่าจัดการเรียนการสอน|ปัจจัยพื้นฐาน/.test(text)?'subsidy':'';
   return {term:term?Number(term):null,year:year?Number(year):null,kind,title:fix(lines[0]?.map(c=>c.str).join(' ')||'')};
  }
 
@@ -100,7 +102,7 @@
    if(!meta&&lines.length)meta=metaOf(hi>0?lines.slice(0,hi):lines.slice(0,1));
    let start=0,headers=[];
    if(hi>=0){
-    let end=hi+1;const lim=lines[hi].cy+lines[hi].mh*3.2;
+    let end=hi+1;const lim=lines[hi].cy+lines[hi].mh*6;
     while(end<lines.length&&!isData(lines[end])&&lines[end].cy<=lim)end++;
     headers=lines.slice(hi,end);start=end;
    }
@@ -159,7 +161,7 @@
   const used=new Set();
   const map=columns.map(c=>{const t=fix(c.label);
    for(const [key,re] of HEAD){if(!re.test(t))continue;if(key==='skip')return '';
-    if(['notes','fail'].includes(key))return key;
+    if(['notes','fail','mark','room'].includes(key))return key;
     if(!used.has(key)){used.add(key);return key}return ''}
    return ''});
   // เดาจากข้อมูลเมื่อหัวตารางไม่ชัด: คอลัมน์เลข 13 หลัก = เลขบัตร, คอลัมน์ตัวเลขมีจุลภาค/≥100 = ยอดเงิน, ข้อความไทยยาว = ชื่อ
@@ -170,15 +172,19 @@
   return map;
  }
  const digits=v=>String(v??'').replace(/\D/g,'');
- function toRecords(rows,mapping){
+ function toRecords(rows,mapping,columns=[]){
   return rows.map(r=>{const vals=k=>mapping.map((m,i)=>m===k?r[i]:'').filter(v=>v&&v!=='-');const get=k=>vals(k).join(' ').trim();
    let name=get('name');const parts=[get('prefix'),get('first'),get('last')].filter(Boolean);if(parts.length>1||!name)name=[name,...parts].filter(Boolean).join(' ').trim();
    name=name.replace(/\s+-$/,'');
    let nid=idOf(get('national_id'));if(nid.length!==13)nid=findId(r.join(' '))||'';
    const code=digits(get('student_code'));
    const amtRaw=get('amount').replace(/[^\d.,]/g,'').replace(/,/g,'');const amount=amtRaw&&Number.isFinite(Number(amtRaw))?Number(amtRaw):null;
-   const notes=[vals('fail').length?'โอนไม่สำเร็จ':'',...vals('notes')].filter(Boolean).join(' · ');
-   return {name:fix(name),national_id:nid,student_code:code.length&&code.length<=10?code:'',room:get('room'),amount,notes,raw:r};
+   // ช่องเครื่องหมาย (เช่น ผ่านเกณฑ์ยากจน / ยากจนพิเศษ): ใส่ชื่อคอลัมน์ไว้ในหมายเหตุ
+   const marks=mapping.map((m,i)=>m==='mark'&&r[i]&&r[i]!=='-'?fix(String(columns[i]?.label||'').replace(/.*ผ่านเกณฑ์/,'ผ่านเกณฑ์')):'').filter(Boolean);
+   const notes=[...marks,vals('fail').length?'โอนไม่สำเร็จ':'',...vals('notes')].filter(Boolean).join(' · ');
+   const rv=vals('room').map(v=>fix(v).replace(/ประถมศึกษาปีที่\s*/,'ป.').replace(/อนุบาล(ปีที่)?\s*/,'อ.').replace(/\.\s+/,'.'));
+   const room=rv.length===2&&/^\d+$/.test(rv[1])?`${rv[0]}/${rv[1]}`:rv.join(' ');
+   return {name:fix(name),national_id:nid,student_code:code.length&&code.length<=10?code:'',room,amount,notes,raw:r};
   }).filter(x=>x.name||x.national_id||x.student_code);
  }
  root.ScholarshipPdf={read,parsePages,guessMapping,toRecords,_linesOf:linesOf,_isHeader:isHeader};
