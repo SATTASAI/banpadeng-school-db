@@ -2,6 +2,7 @@ import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from 
 import { handleThaiSchools } from './routes/thai-schools.js';
 import { RANK_CHOICES, rankChoiceToRecord, recordToRankChoice } from "./lib/rank-choice.js";
 import {handleEvaluationRead} from './evaluation/read.js';
+import {handlePaDirectory} from './evaluation/pa-directory.js';
 import {handleEvaluationLink} from './evaluation/link.js';
 import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
@@ -4700,6 +4701,8 @@ const app = {
         await ensureAuthSecuritySchema(env);
         return await handleEvaluationLink(request,env);
       }
+      const paDirectoryResponse=await handlePaDirectory(request,env,pathname,method);
+      if(paDirectoryResponse)return paDirectoryResponse;
       if (pathname.startsWith("/api/evaluation/")) {
         await ensureAuthSecuritySchema(env);
         const evaluationRead=await handleEvaluationRead(request,env,pathname,method);

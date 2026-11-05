@@ -16,6 +16,29 @@ async function start(env){const r=await handleEvaluationLogin(new Request(EVALUA
 const authorize=(env,state,user=1,origin=SCHOOL_ORIGIN)=>school(env,'/api/evaluation-link/authorize',user,'POST',{state},origin);
 const finish=(env,location,cookie)=>handleEvaluationLogin(new Request(location,{headers:{Cookie:cookie}}),env);
 
+test('school PA directory shares photos and restricts photo changes',async()=>{
+ const env=await fixture();
+ assert.equal((await school(env,'/api/pa-directory',null)).status,401);
+ let list=await(await school(env,'/api/pa-directory',2)).json();assert.equal(list.teachers.length,39);assert.equal(list.manage,false);
+ const token=await signJWT({sub:1,sv:1},env.JWT_SECRET),teacherToken=await signJWT({sub:2,sv:1},env.JWT_SECRET);
+ const update=(cookie,photo,origin=SCHOOL_ORIGIN)=>worker.fetch(new Request(SCHOOL_ORIGIN+'/api/pa-directory/1/photo',{method:'PUT',headers:{Cookie:'bpd_session='+cookie,Origin:origin,'Content-Type':'application/json'},body:JSON.stringify({photo})}),env,{});
+ assert.equal((await update(teacherToken,'data:image/jpeg;base64,YWJj')).status,403);
+ assert.equal((await update(token,'data:image/jpeg;base64,YWJj','https://other.example')).status,403);
+ assert.equal((await update(token,'data:image/svg+xml;base64,YWJj')).status,400);
+ assert.equal((await update(token,'data:image/jpeg;base64,YWJj')).status,200);
+ list=await(await school(env,'/api/pa-directory',2)).json();assert.equal(list.teachers[0].photo,'data:image/jpeg;base64,YWJj');
+ assert.equal(env.raw.prepare('SELECT image_data FROM evaluation_pa_photos WHERE teacher_id=1').get().image_data,'data:image/jpeg;base64,YWJj');
+ assert.equal((await update(token,'')).status,200);
+});
+
+test('support menu opens the PA directory inside the school workspace',()=>{
+ const dashboard=readFileSync(new URL('../public/dashboard.html',import.meta.url),'utf8');
+ const support=dashboard.slice(dashboard.indexOf('ระบบสนับสนุน</div>'),dashboard.indexOf('บริหารระบบ</div>'));
+ assert.match(support,/href="\/pa-directory\.html" data-page="pa-directory"/);
+ const nav=readFileSync(new URL('../public/js/navigation-catalog.js',import.meta.url),'utf8');
+ assert.match(nav,/routes\['pa-directory'\]='\/pa-directory\.html'/);
+});
+
 test('school login authorizes a one-time code and creates a separate evaluatesystem session without sharing passwords or JWT',async()=>{
  const env=await fixture(),s=await start(env);assert.equal(s.location.origin,SCHOOL_ORIGIN);assert.match(s.cookie,new RegExp('^'+LOGIN_COOKIE+'='));
  const page=await school(env,s.location.pathname+s.location.search);assert.equal(page.status,200);const html=await page.text();assert.match(html,/document.getElementById\('evaluation-connect'\).submit\(\)/);assert.doesNotMatch(html,/ยืนยันและเข้าสู่ระบบประเมิน/);const nonce=html.match(/<script nonce="([0-9a-f]+)"/)[1];assert.ok(page.headers.get('content-security-policy').includes("script-src 'nonce-"+nonce+"'"));
