@@ -102,6 +102,12 @@ async function canManageAll(env, user) {
   return Number((await insuranceOfficer(env))?.id) === Number(user.id);
 }
 
+// นำเข้าจาก Excel: Superadmin หรือครูผู้รับผิดชอบงานประกัน
+async function canImport(env, user) {
+  if (user?.role === "superadmin") return true;
+  return Number((await insuranceOfficer(env))?.id) === Number(user?.id);
+}
+
 async function activeYear(env) {
   const row = await env.DB.prepare("SELECT id, year_be FROM academic_years WHERE status = 'active' ORDER BY year_be DESC LIMIT 1").first().catch(() => null);
   if (row?.year_be) return { id: row.id, year_be: Number(row.year_be) };
@@ -163,7 +169,7 @@ async function handleList(request, env, user) {
   return jsonResponse({
     academic_year: all ? null : year, current_year: current.year_be, years,
     records: (results || []).map(cleanRecord),
-    permissions: { manage_all: manageAll, homerooms, can_import: user?.role === "superadmin", is_admin: isAdmin(user) },
+    permissions: { manage_all: manageAll, homerooms, can_import: user?.role === "superadmin" || Number(officer?.id) === Number(user?.id), is_admin: isAdmin(user) },
     officer: officer ? { name: officer.name } : null,
   });
 }
@@ -233,7 +239,7 @@ async function handleClear(request, env, user, studentId) {
 
 // POST /api/student-insurance/import — { rows:[{student_code, academic_year, insured, ...}] } อ้างอิงเลขประจำตัวนักเรียน
 async function handleImport(request, env, user) {
-  if (user?.role !== "superadmin") return jsonResponse({ error: "นำเข้าข้อมูลได้เฉพาะผู้ดูแลระบบ (superadmin)" }, 403);
+  if (!(await canImport(env, user))) return jsonResponse({ error: "นำเข้าข้อมูลได้เฉพาะ Superadmin และครูผู้รับผิดชอบงานประกัน" }, 403);
   const body = await readJson(request);
   if (!body || !Array.isArray(body.rows)) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   if (body.rows.length > MAX_BATCH) return jsonResponse({ error: `นำเข้าได้ครั้งละไม่เกิน ${MAX_BATCH} แถว` }, 400);
