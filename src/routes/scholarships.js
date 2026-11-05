@@ -64,6 +64,8 @@ export function parseAmount(value) {
   return Number.isFinite(n) && n >= 0 && n < 1e8 ? Math.round(n * 100) / 100 : undefined;
 }
 const digits = (v) => String(v ?? "").replace(/\D/g, "");
+// เลขบัตรประชาชน 13 หลัก หรือเลขประจำตัว G… ของนักเรียนไม่มีสัญชาติ
+const idKey = (v) => String(v ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
 const PREFIX = /^(เด็กชาย|เด็กหญิง|ด\.?\s?ช\.?|ด\.?\s?ญ\.?|นางสาว|น\.?\s?ส\.?|นาย|นาง|master|miss|mr\.?|mrs\.?|ms\.?)\s*/i;
 // ชื่อสำหรับเทียบ: ตัดคำนำหน้า ช่องว่าง จุด และอักขระล่องหน
 export function normalizeName(value) {
@@ -89,7 +91,7 @@ export function matchRows(rows, students) {
   const byNid = new Map(), byCode = new Map(), byName = new Map();
   const enrolledFirst = [...students].sort((a, b) => (a.status === "enrolled" ? 0 : 1) - (b.status === "enrolled" ? 0 : 1));
   for (const s of enrolledFirst) {
-    const nid = digits(s.national_id);
+    const nid = idKey(s.national_id);
     if (nid.length === 13 && !byNid.has(nid)) byNid.set(nid, s);
     const code = String(s.student_code ?? "").trim();
     if (code && !byCode.has(code)) byCode.set(code, s);
@@ -99,7 +101,7 @@ export function matchRows(rows, students) {
   }
   const names = [...byName.entries()];
   return rows.map((row) => {
-    const nid = digits(row?.national_id);
+    const nid = idKey(row?.national_id);
     if (nid.length === 13 && byNid.has(nid)) return { student_id: byNid.get(nid).id, method: "national_id" };
     const code = String(row?.student_code ?? "").trim();
     if (code && (byCode.has(code) || byCode.has(code.replace(/^0+/, "")))) return { student_id: (byCode.get(code) || byCode.get(code.replace(/^0+/, ""))).id, method: "student_code" };

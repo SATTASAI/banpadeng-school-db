@@ -41,6 +41,7 @@
 .sc-st{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
 .sc-st.ok{background:rgba(46,157,106,.13);color:#1f7a50}.sc-st.warn{background:#fff4d6;color:#8a5a00}.sc-st.bad{background:rgba(196,80,95,.12);color:#a33a49}
 .sc-preview select{max-width:240px;font-size:12px;padding:4px 6px}
+.sc-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}.sc-bar .btn{width:auto}.sc-bar small{color:var(--color-text-muted)}
 .sc-sum{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin:8px 0}
 </style>
 </head>
@@ -58,6 +59,7 @@
   <div class="tw-error" id="error" role="alert"></div>
   <nav class="sc-tabs" id="tabs" role="tablist"></nav>
   <div class="sc-sub" id="sub"></div>
+  <div class="sc-bar" id="tabActions"></div>
   <section id="cards" class="tw-cards"></section>
   <div class="sc-cols">
     <section class="sc-section"><h2>สรุปรายห้อง</h2>
@@ -151,8 +153,7 @@ function awardsOf(id){return (data.awards||[]).filter(a=>a.type_id===id&&student
 function render(){
   const p=data.permissions||{};
   $('info').innerHTML=`ผู้รับผิดชอบงานทุนการศึกษา: <b>${esc(data.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage?'นำเข้า/แก้ไขได้ทุกห้อง':p.view_all?'ดูได้ทุกห้อง':'ครูประจำชั้น ดูได้เฉพาะห้อง '+(p.homerooms||[]).map(label).join(', ')}`;
-  $('headActions').innerHTML=p.manage?'<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button>':'';
-  if(p.manage){$('openImport').onclick=openImport;$('openAdd').onclick=()=>openEdit(null)}
+  $('headActions').innerHTML='';
   // แท็บหัวข้อทุน
   const tabs=[['eef','ทุนปัจจัยพื้นฐานนักเรียนยากจน (กสศ.)'],['subsidy','ทุนอุดหนุน'],['other','ทุนอื่น ๆ']];
   $('tabs').innerHTML=tabs.map(([k,l])=>{const ids=k==='other'?typesOf('other').map(t=>t.id):typesOf(k).map(t=>t.id);const n=new Set((data.awards||[]).filter(a=>ids.includes(a.type_id)&&students.has(a.student_id)).map(a=>a.student_id)).size;return `<button class="sc-tab" role="tab" type="button" data-tab="${k}" aria-selected="${tab===k}">${esc(l)} <span class="sc-muted" style="color:inherit;opacity:.75">(${n})</span></button>`}).join('');
@@ -162,6 +163,9 @@ function render(){
   $('sub').querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>{typeId=Number(b.dataset.type);room='';render()});
   if($('manageTypes'))$('manageTypes').onclick=openTypes;
   const t=currentType(),list=t?awardsOf(t.id):[];
+  // ปุ่มนำเข้าแยกตามทุน: แต่ละทุนใช้แบบฟอร์มของตนเอง
+  $('tabActions').innerHTML=p.manage&&t?`<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF · ${esc(t.name)}</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button><small>${esc(profileOf(t).hint)}</small>`:'';
+  if(p.manage&&t){$('openImport').onclick=()=>openImport(t);$('openAdd').onclick=()=>openEdit(null)}
   // การ์ดสรุป
   const total=list.reduce((s,a)=>s+(Number(a.amount)||0),0);
   const allTotal=(data.awards||[]).filter(a=>students.has(a.student_id)).reduce((s,a)=>s+(Number(a.amount)||0),0);
@@ -228,11 +232,23 @@ $('typeAdd').onclick=()=>{const name=$('typeName').value.trim();if(!name)return 
 $('tyClose').onclick=()=>$('typeModal').hidden=true;
 
 // ---------- นำเข้า PDF ----------
-const FIELDS=[['','— ไม่ใช้ —'],['name','ชื่อ–สกุล'],['prefix','คำนำหน้า'],['first','ชื่อ'],['last','นามสกุล'],['national_id','เลขบัตรประชาชน'],['student_code','เลขประจำตัวนักเรียน'],['amount','ยอดเงิน'],['notes','หมายเหตุ']];
-let parsed=null,mapping=[],preview=[],matchStudents=new Map();
-function openImport(){
-  $('imType').innerHTML=(data.types||[]).map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
-  $('imType').value=String(typeId||data.types[0]?.id||'');$('imYear').value=data.academic_year;$('imTerm').value=String(data.term);
+const FIELDS=[['','— ไม่ใช้ —'],['name','ชื่อ–สกุล'],['prefix','คำนำหน้า'],['first','ชื่อ'],['last','นามสกุล'],['national_id','เลขบัตรประชาชน'],['student_code','เลขประจำตัวนักเรียน'],['amount','ยอดเงิน'],['room','ชั้น/ห้อง'],['notes','หมายเหตุ/สาเหตุ'],['fail','โอนไม่สำเร็จ (ใส่หมายเหตุ)']];
+let parsed=null,mapping=[],preview=[],matchStudents=new Map(),importType=null;
+// แบบฟอร์มของแต่ละทุน: kind = ชนิดเอกสารที่อ่านได้จากหัวเอกสาร, need = คอลัมน์ที่ต้องมี
+const PROFILES={
+  eef:{label:'แบบฟอร์ม กสศ.',hint:'ใช้ไฟล์ "รายชื่อนักเรียนที่มีสิทธิ์ได้รับเงินอุดหนุนยากจนพิเศษ กสศ." (PDF จากระบบ กสศ.)',kind:'eef',strict:true,need:['national_id','amount']},
+  subsidy:{label:'แบบฟอร์มทุนอุดหนุน',hint:'ใช้ไฟล์ PDF รายชื่อนักเรียนที่ได้รับเงินอุดหนุน ระบบจับหัวตารางเอง',kind:'subsidy',need:[]},
+  other:{label:'แบบฟอร์มทั่วไป',hint:'ใช้ไฟล์ PDF ตารางรายชื่อที่มีหัวตาราง (ชื่อ–สกุล / เลขประจำตัว / ยอดเงิน)',kind:'',need:[]}
+};
+const profileOf=t=>PROFILES[t?.code]||PROFILES.other;
+const KIND_NAME={eef:'แบบฟอร์ม กสศ.',subsidy:'แบบฟอร์มทุนอุดหนุน'};
+function openImport(t){
+  importType=t;const pf=profileOf(t);
+  $('importTitle').textContent=`นำเข้า PDF · ${t.name}`;
+  $('imType').innerHTML=`<option value="${t.id}">${esc(t.name)}</option>`;$('imType').value=String(t.id);$('imType').disabled=true;
+  $('drop').innerHTML=`เลือกไฟล์ PDF (${esc(pf.label)}) หรือลากไฟล์มาวาง<br><small class="sc-muted">${esc(pf.hint)} · รองรับ PDF ข้อความ และ PDF สแกน (OCR ภาษาไทย) · ระบบหาหัวตารางและแยกคอลัมน์เอง ไม่ต้องจัดตารางใหม่</small><input type="file" id="file" accept="application/pdf,.pdf" hidden>`;
+  $('file').onchange=()=>{if($('file').files[0])readFile($('file').files[0])};
+  $('imYear').value=data.academic_year;$('imTerm').value=String(data.term);
   parsed=null;preview=[];$('mapBox').hidden=true;$('previewBox').hidden=true;$('progress').textContent='';$('imSave').disabled=true;$('imReplace').checked=false;showErr('imError','');$('file').value='';
   $('importModal').hidden=false;
 }
@@ -248,8 +264,18 @@ async function readFile(file){
     parsed=await ScholarshipPdf.read(file,{onProgress:m=>$('progress').textContent=m});
     parsed.fileName=file.name;
     if(!parsed.rows.length)throw new Error('ไม่พบแถวข้อมูลใต้หัวตาราง');
-    mapping=ScholarshipPdf.guessMapping(parsed.columns);
-    $('progress').textContent=`อ่านแล้ว ${parsed.pages} หน้า${parsed.ocrPages?` (OCR ${parsed.ocrPages} หน้า — โปรดตรวจชื่อและยอดเงินให้ละเอียด)`:''} · ${parsed.rows.length} แถว`;
+    mapping=ScholarshipPdf.guessMapping(parsed.columns,parsed.rows);
+    // หัวเอกสาร เช่น "…กสศ. ภาคเรียนที่ 1 ปีการศึกษา 2569" → ตั้งหัวข้อทุน/ภาคเรียน/ปีให้อัตโนมัติ (แก้ได้)
+    const m=parsed.meta||{},auto=[];
+    const pf=profileOf(importType);
+    if(pf.strict&&m.kind!==pf.kind)throw new Error(`ไฟล์นี้ไม่ใช่${pf.label} — หัวเอกสารที่อ่านได้: "${m.title||'-'}" กรุณาใช้ไฟล์ของ${importType.name}`);
+    if(m.kind&&m.kind!==pf.kind)throw new Error(`ไฟล์นี้เป็น${KIND_NAME[m.kind]} — กรุณานำเข้าที่แท็บ ${(data.types||[]).find(x=>x.code===m.kind)?.name||KIND_NAME[m.kind]}`);
+    const lack=pf.need.filter(k=>!mapping.includes(k));
+    if(lack.length)throw new Error(`ไม่พบคอลัมน์ ${lack.map(k=>({national_id:'เลขประจำตัวประชาชน',amount:'งบประมาณที่ได้รับจัดสรร/ยอดเงิน'}[k])).join(' และ ')} ในไฟล์ — ไม่ตรงกับ${pf.label}`);
+    if(m.term&&$('imTerm').value!==String(m.term)){$('imTerm').value=String(m.term);auto.push('ภาคเรียนที่ '+m.term)}
+    if(m.year&&$('imYear').value!==String(m.year)){$('imYear').value=String(m.year);auto.push('ปีการศึกษา '+m.year)}
+    parsed.autoNote=auto.length?'ตั้งค่าตามหัวเอกสาร: '+auto.join(', '):'';
+    $('progress').textContent=`${m.title?m.title+' · ':''}อ่านแล้ว ${parsed.pages} หน้า${parsed.ocrPages?` (OCR ${parsed.ocrPages} หน้า — โปรดตรวจชื่อและยอดเงินให้ละเอียด)`:''} · ${parsed.rows.length} แถว${parsed.autoNote?' · '+parsed.autoNote:''}`;
     renderMap();await rematch();
   }catch(e){$('progress').textContent='';showErr('imError',e.message)}
 }
@@ -280,7 +306,7 @@ function optionsFor(row){
 }
 function renderPreview(){
   const def=$('imDefault').value.trim();
-  $('previewBody').innerHTML=preview.map((r,i)=>{const [cls,txt]=METHOD[r.method]||METHOD.none;return `<tr><td><input type="checkbox" data-inc="${i}"${r.include?' checked':''}></td><td class="sc-name">${esc(r.name||'-')}<small>${esc([r.national_id,r.student_code].filter(Boolean).join(' · '))}</small></td><td><select data-pick="${i}">${optionsFor(r)}</select></td><td class="num"><input data-amt="${i}" value="${esc(r.amount??def)}" inputmode="decimal" style="width:100px;text-align:right"></td><td><span class="sc-st ${cls}">${txt}</span></td></tr>`}).join('');
+  $('previewBody').innerHTML=preview.map((r,i)=>{const [cls,txt]=METHOD[r.method]||METHOD.none;return `<tr><td><input type="checkbox" data-inc="${i}"${r.include?' checked':''}></td><td class="sc-name">${esc(r.name||'-')}<small>${esc([r.national_id,r.student_code,r.room,r.notes].filter(Boolean).join(' · '))}</small></td><td><select data-pick="${i}">${optionsFor(r)}</select></td><td class="num"><input data-amt="${i}" value="${esc(r.amount??def)}" inputmode="decimal" style="width:100px;text-align:right"></td><td><span class="sc-st ${cls}">${txt}</span></td></tr>`}).join('');
   $('previewBody').querySelectorAll('[data-inc]').forEach(c=>c.onchange=()=>{preview[c.dataset.inc].include=c.checked;summary()});
   $('previewBody').querySelectorAll('[data-pick]').forEach(s=>s.onchange=()=>{const r=preview[s.dataset.pick];r.student_id=Number(s.value)||null;r.method=r.student_id?'manual':'none';r.include=!!r.student_id;renderPreview()});
   $('previewBody').querySelectorAll('[data-amt]').forEach(inp=>inp.oninput=()=>{preview[inp.dataset.amt].amount=inp.value;summary()});
@@ -288,13 +314,13 @@ function renderPreview(){
 }
 function rowsToSave(){
   const def=$('imDefault').value.trim(),seen=new Set(),out=[];
-  for(const r of preview){if(!r.include||!r.student_id||seen.has(r.student_id))continue;seen.add(r.student_id);out.push({student_id:r.student_id,amount:r.amount===null||r.amount===''?def:r.amount})}
+  for(const r of preview){if(!r.include||!r.student_id||seen.has(r.student_id))continue;seen.add(r.student_id);out.push({student_id:r.student_id,amount:r.amount===null||r.amount===''?def:r.amount,notes:r.notes||''})}
   return out;
 }
 function summary(){
   const save=rowsToSave(),miss=preview.filter(r=>!r.student_id).length,dup=preview.filter(r=>r.include&&r.student_id).length-save.length;
   const sum=save.reduce((s,r)=>s+(Number(String(r.amount??'').replace(/,/g,''))||0),0);
-  $('previewSum').innerHTML=`<span>ทั้งหมด <b>${preview.length}</b> แถว</span><span>จะบันทึก <b style="color:#1f7a50">${save.length}</b> คน</span><span>ยอดรวม <b>${money(sum)}</b> บาท</span>${miss?`<span style="color:#a33a49">ไม่พบในทะเบียน ${miss} แถว (เลือกนักเรียนเองได้)</span>`:''}${dup>0?`<span style="color:#8a5a00">ซ้ำ ${dup} แถว (บันทึกครั้งเดียว)</span>`:''}`;
+  $('previewSum').innerHTML=`<span>ทั้งหมด <b>${preview.length}</b> แถว</span><span>จะบันทึก <b style="color:#1f7a50">${save.length}</b> คน</span><span>ยอดรวม <b>${money(sum)}</b> บาท</span>${miss?`<span style="color:#a33a49">ไม่พบในทะเบียน ${miss} แถว (เลือกนักเรียนเองได้)</span>`:''}${dup>0?`<span style="color:#8a5a00">ซ้ำ ${dup} แถว (บันทึกครั้งเดียว)</span>`:''}${parsed?.meta?.total!=null?(()=>{const all=preview.reduce((s,r)=>s+(Number(String(r.amount??'').replace(/,/g,''))||0),0);return Math.abs(all-parsed.meta.total)<0.01?`<span style="color:#1f7a50">✓ ยอดในไฟล์ตรงกับยอดรวมท้ายเอกสาร ${money(parsed.meta.total)} บาท</span>`:`<span style="color:#a33a49">ยอดในไฟล์ ${money(all)} ไม่ตรงกับยอดรวมท้ายเอกสาร ${money(parsed.meta.total)} บาท — ตรวจแถวที่อ่านไม่ครบ</span>`})():''}`;
   $('imSave').disabled=!save.length&&!$('imReplace').checked;
   $('checkAll').checked=preview.length>0&&preview.every(r=>r.include||!r.student_id);
 }
