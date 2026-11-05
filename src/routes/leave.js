@@ -44,7 +44,49 @@ async function personnelIdOf(env,userId){
  const row=await env.DB.prepare('SELECT personnel_id FROM personnel_accounts WHERE user_id=?').bind(userId).first();
  return row?.personnel_id==null?null:Number(row.personnel_id);
 }
-export async function handleLeaveRoute(request,env,pathname,method) {
+// ใบลาที่พิจารณาแล้ว (อนุญาต/ไม่อนุญาต) เก็บเป็น PDF ใน Google Drive: ใบลา > ปีงบประมาณ > ชื่อครู
+// PDF สร้างในเบราว์เซอร์ (ฟอนต์ไทยชุดเดียวกับปุ่มดาวน์โหลด) แล้วส่งมาเก็บครั้งเดียวต่อใบ
+const LEAVE_PDF_MAX=5*1024*1024;
+const driveQuote=v=>String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+async function driveFolder(drive,token,parent,name){
+ const q=encodeURIComponent(`'${driveQuote(parent)}' in parents and name='${driveQuote(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+ const found=await drive.request(token,`/files?q=${q}&pageSize=1&fields=files(id)`).then(r=>r.json());
+ if(found.files?.[0]?.id)return found.files[0].id;
+ return (await drive.request(token,'/files?fields=id',{method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({name,mimeType:'application/vnd.google-apps.folder',parents:[parent]})}).then(r=>r.json())).id;
+}
+export function leaveFiscalYearBE(date){const y=Number(String(date).slice(0,4)),m=Number(String(date).slice(5,7));return (m>=10?y+1:y)+543;}
+async function saveLeavePdf(request,env,id,drive){
+ const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
+ if(user.view_as?.read_only)return fail('โหมดดูบัญชีอื่นอ่านได้อย่างเดียว',403);
+ await ensureLeaveData(env);
+ const row=await env.DB.prepare(`SELECT r.id,r.user_id,r.status,r.workflow_stage,r.start_date,r.approved_by,r.drive_file_id,u.full_name
+  FROM leave_requests r JOIN users u ON u.id=r.user_id WHERE r.id=?`).bind(id).first();
+ if(!row)return fail('ไม่พบคำขอลา',404);
+ if(!['approved','rejected'].includes(row.status))return fail('เก็บใบลาได้เมื่อพิจารณาแล้วเท่านั้น',409);
+ if(row.drive_file_id)return json({ok:true,already:true});
+ const people=await executives(env),person=people.find(p=>p.user_ids.includes(user.id));
+ const allowed=user.role==='superadmin'||Number(row.approved_by)===Number(user.id)||await isPersonnelHead(env,user)||(!!person&&(isDirector(person)||isDeputy(person)));
+ if(!allowed)return fail('ไม่มีสิทธิ์เก็บใบลานี้',403);
+ if(!drive||drive.ready(env))return fail('ยังไม่ได้ตั้งค่า Google Drive',503);
+ const bytes=new Uint8Array(await request.arrayBuffer());
+ if(bytes.length<100||bytes.length>LEAVE_PDF_MAX||String.fromCharCode(...bytes.slice(0,5))!=='%PDF-')return fail('ไฟล์ใบลาต้องเป็น PDF ขนาดไม่เกิน 5 MB');
+ const token=await drive.token(env);
+ let parent=String(env.GOOGLE_DRIVE_FOLDER_ID);
+ for(const name of ['ใบลา',`ปีงบประมาณ ${leaveFiscalYearBE(row.start_date)}`,String(row.full_name||'ไม่ระบุชื่อ').trim().slice(0,120)])parent=await driveFolder(drive,token,parent,name);
+ const boundary=`leave_${crypto.randomUUID()}`,name=`ใบลา-${row.id}-${row.start_date}.pdf`;
+ const body=new Blob([`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({name,mimeType:'application/pdf',parents:[parent]})}\r\n`,
+  `--${boundary}\r\nContent-Type: application/pdf\r\n\r\n`,bytes,`\r\n--${boundary}--`]);
+ const file=await drive.request(token,'/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{method:'POST',headers:{'Content-Type':`multipart/related; boundary=${boundary}`},body}).then(r=>r.json());
+ const saved=await env.DB.prepare("UPDATE leave_requests SET drive_file_id=?,drive_web_url=?,drive_saved_at=datetime('now') WHERE id=? AND drive_file_id IS NULL").bind(file.id,file.webViewLink||null,id).run();
+ // อีกเครื่องเก็บไปก่อนแล้ว → ลบไฟล์ซ้ำทิ้ง
+ if(!saved.meta.changes){await drive.request(token,`/files/${encodeURIComponent(file.id)}`,{method:'DELETE'}).catch(()=>{});return json({ok:true,already:true});}
+ await env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) VALUES(?,'drive_save','leave_request',?,?)").bind(user.id,id,JSON.stringify({drive_file_id:file.id})).run().catch(()=>{});
+ return json({ok:true,drive_web_url:file.webViewLink||null});
+}
+export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
+ const drivePdf=pathname.match(/^\/api\/leave-requests\/(\d+)\/drive-pdf$/);
+ if(drivePdf)return method==='POST'?saveLeavePdf(request,env,Number(drivePdf[1]),drive):fail('Method not allowed',405);
  const signatureResponse=await handleSignatureRoute(request,env,pathname,method);if(signatureResponse)return signatureResponse;
  if(pathname==='/api/leave-working-days'&&method==='GET'){
   const user=await getCurrentUser(request,env);if(!user?.role)return fail('กรุณาเข้าสู่ระบบ',401);
@@ -221,6 +263,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   const profile=await env.DB.prepare(`SELECT p.position,p.phone FROM personnel_records p JOIN personnel_accounts a ON a.personnel_id=p.id WHERE a.user_id=? AND p.status='active'`).bind(user.id).first();
   const setting=await designatedDeputy(env,people);
   return json({fiscal_statistics:await leaveFiscalSummary(env,results.filter(own)),leave_requests:(await normalizeLeaves(env,results)).map(({teacher_signature,deputy_signature,approver_signature,...r})=>leaveRecord(r)).map(r=>({...r,can_acknowledge:canAcknowledgeRow(r)&&r.status==='pending'&&['submitted','acknowledged'].includes(r.workflow_stage),can_edit:canEditRow(r),
+   drive_saved:!!r.drive_file_id,can_store_drive:['approved','rejected'].includes(r.status)&&!r.drive_file_id&&(admin||head||management||Number(r.approved_by)===Number(user.id)),
    can_record:false,can_forward:false,
    can_review:false,
    // ต้องผ่านการรับทราบของหัวหน้าฝ่ายบุคลากรก่อนเสมอ

@@ -53,8 +53,23 @@
     ${!approvalView&&r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
+ // ใบลาที่พิจารณาแล้วเก็บเป็น PDF ใน Google Drive อัตโนมัติ (รวมใบเดิมที่ยังไม่ได้เก็บ) ทำเบื้องหลังทีละใบ
+ const driveQueue=new Set(),driveFailed=new Set();let driveRunning=false;
+ async function storeOnDrive(id){
+  const {leave_request}=await apiRequest('/api/leave-requests/'+id);
+  const blob=await LeaveFormExport.pdfBlob(leave_request);
+  const res=await fetch('/api/leave-requests/'+id+'/drive-pdf',{method:'POST',headers:{'Content-Type':'application/pdf'},body:blob,credentials:'same-origin',cache:'no-store'});
+  if(!res.ok){const d=await res.json().catch(()=>({}));throw Error(d.error||'เก็บใบลาลง Google Drive ไม่สำเร็จ');}
+ }
+ async function runDriveQueue(){
+  if(driveRunning||user?.view_as?.read_only)return;driveRunning=true;
+  try{for(const id of [...driveQueue]){driveQueue.delete(id);try{await storeOnDrive(id);}catch(e){driveFailed.add(id);console.warn('leave drive',id,e);}}}
+  finally{driveRunning=false;}
+ }
  async function load(){
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
+  for(const r of records)if(r.can_store_drive&&!driveFailed.has(Number(r.id)))driveQueue.add(Number(r.id));
+  if(driveQueue.size)setTimeout(()=>runDriveQueue(),1500);
   if(approvalView){if(!data.can_view_all_leave)records=[];}
   else await loadAllowance();
   $('approvalAccess').hidden=!approvalView;

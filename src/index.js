@@ -4934,7 +4934,7 @@ const app = {
       if (topicMatch && method === "PATCH") return await handleUpdateTopic(request, env, Number(topicMatch[1]));
       if (topicMatch && method === "DELETE") return await handleDeleteTopic(request, env, Number(topicMatch[1]));
 
-      const leaveResponse=await handleLeaveRoute(request,env,pathname,method);
+      const leaveResponse=await handleLeaveRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
       if(leaveResponse)return leaveResponse;
       const activitySsoResponse=await handleActivitySsoRoute(request,env,pathname,method);
       if(activitySsoResponse)return activitySsoResponse;
