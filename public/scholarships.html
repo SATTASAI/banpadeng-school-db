@@ -117,6 +117,7 @@
 
 <script src="/js/api.js"></script>
 <script src="/js/scholarship-pdf.js"></script>
+<script src="/js/scholarship-export.js"></script>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
@@ -164,8 +165,9 @@ function render(){
   if($('manageTypes'))$('manageTypes').onclick=openTypes;
   const t=currentType(),list=t?awardsOf(t.id):[];
   // ปุ่มนำเข้าแยกตามทุน: แต่ละทุนใช้แบบฟอร์มของตนเอง
-  $('tabActions').innerHTML=p.manage&&t?`<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF · ${esc(t.name)}</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button><small>${esc(profileOf(t).hint)}</small>`:'';
+  $('tabActions').innerHTML=t?`${p.manage?`<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF · ${esc(t.name)}</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button>`:''}<button class="btn btn-ghost" type="button" id="exPdf">ส่งออก PDF</button><button class="btn btn-ghost" type="button" id="exXlsx">ส่งออก Excel (.xlsx)</button>${p.manage?`<small>${esc(profileOf(t).hint)}</small>`:''}`:'';
   if(p.manage&&t){$('openImport').onclick=()=>openImport(t);$('openAdd').onclick=()=>openEdit(null)}
+  if(t){$('exPdf').onclick=()=>doExport('pdf');$('exXlsx').onclick=()=>doExport('xlsx')}
   // การ์ดสรุป
   const total=list.reduce((s,a)=>s+(Number(a.amount)||0),0);
   const allTotal=(data.awards||[]).filter(a=>students.has(a.student_id)).reduce((s,a)=>s+(Number(a.amount)||0),0);
@@ -195,6 +197,23 @@ function renderList(list){
 $('q').oninput=()=>data&&render();
 $('fRoom').onchange=()=>{room=$('fRoom').value;render()};
 $('year').onchange=load;$('term').onchange=load;
+
+// ---------- ส่งออก PDF / Excel: ทุนที่เลือก ภาค/ปีที่เลือก (ถ้าเลือกห้องไว้ = เฉพาะห้องนั้น) ----------
+function report(){
+  const t=currentType(),q=$('q').value.trim().toLowerCase();
+  const rows=awardsOf(t.id).map(a=>({a,s:students.get(a.student_id)})).filter(({s})=>(!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code}`.toLowerCase().includes(q)))
+    .sort((x,y)=>cmp(x.s.grade_level,y.s.grade_level)||cmp(x.s.classroom,y.s.classroom)||cmp(x.s.student_code,y.s.student_code))
+    .map(({a,s})=>({student_code:s.student_code,full_name:s.full_name,room:label(key(s)),amount:a.amount,notes:a.notes||'',k:key(s)}));
+  const rooms=[];for(const r of rows){let x=rooms.find(v=>v.k===r.k);if(!x)rooms.push(x={k:r.k,room:r.room,count:0,sum:0});x.count++;x.sum+=Number(r.amount)||0}
+  const period=`ภาคเรียนที่ ${data.term} ปีการศึกษา ${data.academic_year}`;
+  return {title:`รายชื่อนักเรียนที่ได้รับ${t.name}`,subtitle:period+(room?` · ${label(room)}`:''),fileName:`${t.name} ${data.term}-${data.academic_year}${room?' '+label(room).replace('/','-'):''}`,rows,rooms};
+}
+async function doExport(kind){
+  const btn=$(kind==='pdf'?'exPdf':'exXlsx'),text=btn.textContent;
+  const rep=report();if(!rep.rows.length)return alert('ไม่มีรายชื่อให้ส่งออก');
+  btn.disabled=true;btn.textContent='กำลังสร้างไฟล์…';
+  try{await ScholarshipExport[kind](rep)}catch(e){showErr('error',e.message)}finally{btn.disabled=false;btn.textContent=text}
+}
 
 // ---------- เพิ่ม/แก้ไขรายคน ----------
 let editing=null;

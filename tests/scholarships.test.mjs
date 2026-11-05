@@ -128,3 +128,11 @@ test("server matches G-prefixed ids", () => {
   const m = matchRows([{ national_id: "g660000000002" }], [{ id: 7, student_code: "1", full_name: "x", national_id: "G660000000002", status: "enrolled" }]);
   assert.deepEqual([m[0].student_id, m[0].method], [7, "national_id"]);
 });
+
+test("export builds PDF table with totals and xlsx sheets", () => {
+  const ctx = vm.createContext({ window: {} }); vm.runInContext(fs.readFileSync("public/js/scholarship-export.js", "utf8"), ctx); const E = ctx.window.ScholarshipExport;
+  const rep = { title: "รายชื่อนักเรียนที่ได้รับทุน", subtitle: "ภาคเรียนที่ 1 ปีการศึกษา 2569", rows: [{ student_code: "1", full_name: "ก", room: "ป.1 / 1", amount: 2000 }, { student_code: "2", full_name: "ข", room: "ป.1 / 1", amount: 2100 }], rooms: [{ room: "ป.1 / 1", count: 2, sum: 4100 }] };
+  const doc = E.pdfDoc(rep); const body = doc.content[3].table.body;
+  assert.equal(body.length, 4); assert.equal(body[3][4].text, (4100).toLocaleString("th-TH", { minimumFractionDigits: 2 }));
+  const s = E.sheets(rep); assert.equal(s.list.at(-1)[4], 4100); assert.deepEqual(JSON.parse(JSON.stringify(s.rooms.at(-1))), ["รวม", 2, 4100]);
+});
