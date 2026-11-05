@@ -256,7 +256,7 @@
  });
  $('closeDetail').onclick=()=>{$('detailSection').hidden=true;detailId=null;};
  $('backHomeLink').onclick=e=>{if(window.parent!==window&&window.parent.showOverview){e.preventDefault();window.parent.showOverview();}};
- (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(typeof SignatureUpload!=='undefined'&&!approvalView&&user&&!user.view_as?.read_only)SignatureUpload.mount($('teacherSignatureUpload'),{label:'อัปโหลดลายเซ็นครู'});if(!user)throw Error('กรุณาเข้าสู่ระบบ');$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
+ (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(typeof SignatureUpload!=='undefined'&&!approvalView&&user&&!user.view_as?.read_only)SignatureUpload.mount($('teacherSignatureUpload'),{label:'อัปโหลดลายเซ็นครู'});if(!user){const req=new URLSearchParams(location.search).get('request');if(/^\d+$/.test(req||'')){location.href='/login.html?next='+encodeURIComponent('/leave.html?request='+req);return;}throw Error('กรุณาเข้าสู่ระบบ');}$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
   setInterval(()=>{if(!document.hidden&&!busy&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||''))load().catch(error);},15000);
  }catch(e){error(e);$('submitBtn').disabled=true;$('leaveLoginPrompt').hidden=false;}})();
 })();

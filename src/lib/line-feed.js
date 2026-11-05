@@ -63,6 +63,13 @@ function leaveDate(value) {
   return match?`${Number(match[3])}/${Number(match[2])}/${Number(match[1])+543}`:'—';
 }
 
+async function leaveApprover(env,leaveId,userId){
+  const row=await env.DB.prepare(`SELECT MAX(CASE WHEN user_id=? AND kind='director' THEN 1 ELSE 0 END) mine_director,
+    MAX(CASE WHEN user_id=? AND kind='deputy' THEN 1 ELSE 0 END) mine_deputy,MAX(CASE WHEN kind='director' THEN 1 ELSE 0 END) has_director
+    FROM leave_reviewers WHERE leave_id=?`).bind(userId,userId,leaveId).first();
+  return !!row&&(row.mine_director===1||(row.mine_deputy===1&&row.has_director===0));
+}
+
 export function buildLineDigest(items, origin = DEFAULT_ORIGIN, leaveTemplate = DEFAULT_LEAVE_LINE_TEMPLATE) {
   const base = String(origin || DEFAULT_ORIGIN).replace(/\/$/, "");
   const lines = items.slice(0, MAX_LINES).map((item) => {
@@ -238,6 +245,8 @@ async function deliverToPerson({ env, origin, leaveTemplate, enabled, reserve, q
     const linked=await Promise.all(mine.map(async r=>{
       const leaveId=String(r.message_key).match(/^leave:(\d+):/)?.[1];
       const details=leaveId?await env.DB.prepare('SELECT reason,start_date,end_date,contact_phone FROM leave_requests WHERE id=?').bind(Number(leaveId)).first():null;
+      // ผู้มีสิทธิ์อนุมัติ (ผอ. หรือรอง ผอ. ที่รับมอบสิทธิ์สำหรับใบลาของ ผอ.) ได้ลิงก์ตรงไปหน้ากดอนุมัติใบนั้น
+      if(leaveId&&/:forwarded$/.test(String(r.message_key))&&await leaveApprover(env,Number(leaveId),Number(person.user_id)))return {...r,...details,url:'/leave.html?request='+Number(leaveId)};
       return {...r,...details,url:await createLeaveAccessUrl(env,r.message_key,Number(person.user_id))||r.url};
     }));
     result = await push(env, person.line_user_id, buildLineDigest(linked, origin, leaveTemplate), await retryKeyFor(person.line_user_id, mine.map((r) => r.message_key)));

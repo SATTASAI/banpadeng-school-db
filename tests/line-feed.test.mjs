@@ -158,6 +158,9 @@ test("a new leave notifies head first, then director and deputy after acknowledg
   assert(line.pushes.every(p=>p.messages[0].text.includes('วันที่ลา: 19/10/2569 ถึง 20/10/2569')));
   assert(line.pushes.every(p=>p.messages[0].text.includes('เหตุผล: ไม่สบาย')));
   assert(line.pushes.every(p=>p.messages[0].text.includes('โทร: 0000000000')));
+  const directorText=line.pushes.find(p=>p.to==='U-director').messages[0].text;
+  assert(directorText.includes(`/leave.html?request=${id}`),'the director gets a direct link to the approval page');
+  assert(!directorText.includes('/leave-view.html'));
   const deputyText=line.pushes.find(p=>p.to==='U-deputy').messages[0].text;
   const token=deputyText.match(/leave-view\.html\?token=([a-f0-9]{64})/)?.[1];
   assert(token,'the deputy receives an unguessable view link');
