@@ -1,4 +1,4 @@
-import {handleSignatureRoute,signatureFor} from '../lib/signatures.js';
+import {handleSignatureRoute,signatureSql,ensureSignatures} from '../lib/signatures.js';
 import {leaveSpanDays,leaveCalendar,normalizeLeaves,leaveFiscalSummary} from '../lib/leave-working-days.js';
 import {getCurrentUser,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead,isPersonnelMember} from '../lib/leave-permissions.js';
@@ -17,6 +17,15 @@ const select=`SELECT r.*,u.full_name,ap.full_name approver_name,ack.full_name ac
  (SELECT personnel_id FROM personnel_accounts WHERE user_id=r.user_id LIMIT 1) applicant_personnel_id
  FROM leave_requests r JOIN users u ON u.id=r.user_id LEFT JOIN users ap ON ap.id=r.approved_by
  LEFT JOIN users ack ON ack.id=r.acknowledged_by`;
+// รายการลาไม่ดึงข้อมูลภาพลายเซ็น (ใบละหลายสิบ KB) — ใช้เฉพาะตอนเปิดใบลาเดี่ยว/ส่งออกเอกสาร
+const heavyColumns=new Set(['teacher_signature','deputy_signature','approver_signature','forward_token']);
+const listSelectCache=new WeakMap();
+async function listSelect(env){
+ if(listSelectCache.has(env.DB))return listSelectCache.get(env.DB);
+ const {results}=await env.DB.prepare('PRAGMA table_info(leave_requests)').all();
+ const cols=results.map(c=>c.name).filter(n=>!heavyColumns.has(n)&&/^[a-z_]+$/.test(n));
+ const sql=select.replace('SELECT r.*,',`SELECT ${cols.map(c=>'r.'+c).join(',')},`);listSelectCache.set(env.DB,sql);return sql;
+}
 const leaveInputTypes=['sick','personal','maternity','lenient','other'];
 const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
 const spanError=type=>type==='maternity'?'จำนวนวันลาคลอดต้องมากกว่า 0 ไม่เกินจำนวนวันตามปฏิทิน (นับรวมวันหยุด) และระบุได้ทีละครึ่งวัน':'จำนวนวันลาต้องมากกว่า 0 ไม่เกินจำนวนวันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด) และระบุได้ทีละครึ่งวัน';
@@ -201,7 +210,7 @@ export async function handleLeaveRoute(request,env,pathname,method) {
  // แก้ไข/ลบใบลาได้ทุกสถานะ: หัวหน้าฝ่ายบุคลากรหรือ superadmin ยกเว้นใบลาของตนเอง
  const canEditRow=r=>!own(r)&&(head||admin);
  if(!id&&method==='GET') {
-  const {results}=await env.DB.prepare(`${select} WHERE ?=1 OR ?=1 OR ?=1 OR r.user_id=? OR
+  const {results}=await env.DB.prepare(`${await listSelect(env)} WHERE ?=1 OR ?=1 OR ?=1 OR r.user_id=? OR
    (?=1 AND EXISTS(SELECT 1 FROM leave_reviewers v WHERE v.leave_id=r.id AND v.user_id=?)) OR
    (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
    SELECT 1 FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id
@@ -248,14 +257,14 @@ export async function handleLeaveRoute(request,env,pathname,method) {
   if(!period)return fail('ไม่พบภาคเรียนที่ตรงกับวันเริ่มลา หรือช่วงภาคเรียนซ้อนกัน กรุณาให้ผู้รับผิดชอบตรวจปฏิทินปีการศึกษา');
   const applicantNote=text(body.applicant_note,2000),substituteTeacher=body.leave_type==='lenient'?text(body.substitute_teacher,500):'';
   if(body.leave_type==='lenient'&&!substituteTeacher)return fail('กรุณาระบุผู้ที่ได้รับมอบหมายคาบสอนแทน');
-  const teacherSignature=(await signatureFor(env,user.id))?.data_url||null;
+  await ensureSignatures(env);
   const quotaGroup=quotaGroupOf(body.leave_type);
   const results=await env.DB.batch([
    env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id,applicant_note,substitute_teacher,teacher_signature)
-    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,${signatureSql} WHERE
     (SELECT max_count FROM leave_term_limits WHERE leave_type=?) IS NULL OR
     (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved')
-    < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null,applicantNote,substituteTeacher,teacherSignature,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
+    < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null,applicantNote,substituteTeacher,user.id,user.id,user.id,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) SELECT last_insert_rowid(),?,'submitted' WHERE changes()>0").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid() AND changes()>0").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);
@@ -329,14 +338,24 @@ export async function handleLeaveRoute(request,env,pathname,method) {
    const enforce=approving&&quota.max!=null;
    const applicantIsDirector=people.some(p=>isDirector(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
    const signingDeputy=applicantIsDirector?null:people.find(p=>isDeputy(p)&&p.id===row.deputy_personnel_id)||await designatedDeputy(env,people);
-   const approverSignature=approving?(await signatureFor(env,user.id))?.data_url||null:null;
-   const deputySignature=approving&&signingDeputy?(await signatureFor(env,signingDeputy.user_ids[0]))?.data_url||null:null;
-   return change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,approver_signature=?,deputy_signature=?,deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?)
+   // ลายเซ็นคัดลอกในฐานข้อมูลด้วยซับคิวรี — ไม่ส่งข้อมูลภาพไปในคำสั่ง (เดิมลายเซ็น ผอ.+รอง ผอ. ทำให้คำสั่งเกินเพดาน D1 100 KB จนอนุมัติไม่ได้)
+   await ensureSignatures(env);
+   const deputySigner=approving&&signingDeputy?Number(signingDeputy.user_ids[0]):null;
+   const approverSql=approving?signatureSql:'NULL',deputySql=deputySigner?signatureSql:'NULL';
+   const signatureBinds=[...(approving?[user.id,user.id,user.id]:[]),...(deputySigner?[deputySigner,deputySigner,deputySigner]:[])];
+   try{
+   return await change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,approver_signature=${approverSql},deputy_signature=${deputySql},deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?)
     WHERE id=? AND status='pending' AND workflow_stage='forwarded'
     AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))
     AND (?=0 OR (SELECT COUNT(*) FROM leave_requests q WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved' AND id<>?)<?)`,
-    [body.status,user.id,now,note,person.full_name,person.position,approverSignature,deputySignature,signingDeputy?.full_name??null,signingDeputy?.position??null,id,director?1:0,person.id,
+    [body.status,user.id,now,note,person.full_name,person.position,...signatureBinds,signingDeputy?.full_name??null,signingDeputy?.position??null,id,director?1:0,person.id,
      enforce?1:0,row.user_id,row.user_id,quota.group??'',quota.period?.from??'',quota.period?.to??'',id,quota.max??0],body.status);
+   }catch(e){
+    // บันทึกความล้มเหลวไว้ตรวจย้อนหลัง (เดิมล้มแบบเงียบ ไม่มีร่องรอยว่าเคยกด)
+    await env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) VALUES(?,'decide_failed','leave_request',?,?)")
+     .bind(user.id,id,JSON.stringify({status:body.status,error:String(e?.message||e).slice(0,300)})).run().catch(()=>{});
+    return fail('บันทึกผลพิจารณาไม่สำเร็จ ระบบบันทึกข้อผิดพลาดไว้แล้ว กรุณาลองใหม่หรือแจ้งผู้ดูแลระบบ',500);
+   }
   }
   if(action==='edit') {
    if(!canEditRow(row))return fail(own(row)?'ไม่สามารถแก้ไขใบลาของตนเองได้':'เฉพาะหัวหน้าฝ่ายบุคลากรหรือผู้ดูแลระบบ',403);
