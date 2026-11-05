@@ -100,3 +100,31 @@ test("pdf parser groups items into rows and maps columns to records", () => {
   const recs = P.toRecords([lines[1].map((c) => c.str)], mapping);
   assert.equal(recs[0].name, "ด.ช.สมชาย ใจดี"); assert.equal(recs[0].national_id, "1234567890123"); assert.equal(recs[0].amount, 1600);
 });
+
+test("reads the กสศ. eligible-student form: 2-line header, G ids, total row, title meta", () => {
+  const ctx = vm.createContext({ window: {} }); vm.runInContext(fs.readFileSync("public/js/scholarship-pdf.js", "utf8"), ctx); const P = ctx.window.ScholarshipPdf;
+  const w = (str, x0, y, x1) => ({ str, x: x0, y, w: x1 - x0, h: 12 });
+  const header = [w("รายชื่อนักเรียนที่มีสิทธิ์ได้รับเงินอุดหนุนยากจนพิเศษ กสศ. ภาคเรียนที่ 1 ปีการศึกษา 2569", 225, 40, 617),
+    w("ที่", 27, 70.6, 33), w("เลขประจำตัว", 61, 70.6, 102), w("ประชาชน", 66, 83.8, 97), w("ชื่อ - นามสกุล", 168, 70.6, 213), w("ชั้นปี", 275, 70.6, 289),
+    w("วิธีการรับเงิน", 336, 70.6, 376), w("สถานะ", 453, 70.6, 476), w("โอนสำเร็จ", 422, 88.8, 453), w("โอนไม่สำเร็จ", 472, 88.8, 511),
+    w("รอบ งบประมาณที่", 524, 70.6, 591), w("ที่ ได้รับจัดสรร", 528, 83.8, 589), w("สาเหตุ", 646, 70.6, 666), w("หมายเหตุ", 760, 70.6, 790)];
+  const row = (n, id, name, cls, amt, y, fail) => [w(String(n), 33, y, 40), w(id, 53, y, 110), w(name, 123, y, 203), w(cls, 267, y, 288),
+    w("รับเงินสดที่โรงเรียน", 306, y, 366), fail ? w("/", 490, y, 493) : w("/", 436, y, 439), w("1", 528, y, 533), w(amt, 573, y, 592), w(fail ? "บัญชีปิด" : "-", 650, y, 680), w("-", 774, y, 776)];
+  const page1 = [...header, ...row(1, "1000000000001", "เด็กชายทดสอบ หนึ่ง", "อ. 3/1", "2,000", 107),
+    ...row(2, "G660000000002", "เด็กหญิงทดสอบ สอง", "ป. 2/4", "2,100", 125, true)];
+  const page2 = [...header.slice(1), ...row(3, "1000000000003", "เด็กหญิงทดสอบ -", "ป. 6/4", "2,100", 107),
+    w("รวม", 230, 140, 245), w("2", 440, 140, 446), w("1", 495, 140, 500), w("6,200", 560, 140, 592)];
+  const res = P.parsePages([{ items: page1 }, { items: page2 }]);
+  assert.equal(res.meta.term, 1); assert.equal(res.meta.year, 2569); assert.equal(res.meta.kind, "eef"); assert.equal(res.meta.total, 6200);
+  const map = P.guessMapping(res.columns, res.rows);
+  const field = (k) => res.columns[map.indexOf(k)]?.label;
+  assert.match(field("national_id"), /ประชาชน/); assert.match(field("amount"), /จัดสรร/); assert.match(field("name"), /ชื่อ/); assert.match(field("fail"), /ไม่สำเร็จ/);
+  const recs = P.toRecords(res.rows, map);
+  assert.deepEqual(JSON.parse(JSON.stringify(recs.map((r) => [r.name, r.national_id, r.amount]))), [["เด็กชายทดสอบ หนึ่ง", "1000000000001", 2000], ["เด็กหญิงทดสอบ สอง", "G660000000002", 2100], ["เด็กหญิงทดสอบ", "1000000000003", 2100]]);
+  assert.match(recs[1].notes, /โอนไม่สำเร็จ.*บัญชีปิด/); assert.equal(recs[0].notes, "");
+});
+
+test("server matches G-prefixed ids", () => {
+  const m = matchRows([{ national_id: "g660000000002" }], [{ id: 7, student_code: "1", full_name: "x", national_id: "G660000000002", status: "enrolled" }]);
+  assert.deepEqual([m[0].student_id, m[0].method], [7, "national_id"]);
+});
