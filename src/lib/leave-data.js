@@ -13,7 +13,8 @@ export function ensureLeaveData(env) {
    personnel_note:'TEXT',forwarded_by:'INTEGER',forwarded_at:'TEXT',forward_token:'TEXT',deputy_personnel_id:'INTEGER',
    deputy_name:'TEXT',deputy_position:'TEXT',director_name:'TEXT',director_position:'TEXT',
    reviewer_name:'TEXT',reviewer_position:'TEXT',reviewer_comment:'TEXT',reviewer_at:'TEXT',
-   decision_note:'TEXT',decision_name:'TEXT',decision_position:'TEXT',applicant_note:'TEXT',substitute_teacher:'TEXT',teacher_signature:'TEXT',deputy_signature:'TEXT',approver_signature:'TEXT'
+   decision_note:'TEXT',decision_name:'TEXT',decision_position:'TEXT',applicant_note:'TEXT',substitute_teacher:'TEXT',teacher_signature:'TEXT',deputy_signature:'TEXT',approver_signature:'TEXT',
+   drive_file_id:'TEXT',drive_web_url:'TEXT',drive_saved_at:'TEXT'
   };
   for (const [name,type] of Object.entries(columns)) if (!results.some(c=>c.name===name)) {
    try {await env.DB.prepare(`ALTER TABLE leave_requests ADD COLUMN ${name} ${type}`).run();}

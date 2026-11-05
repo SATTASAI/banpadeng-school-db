@@ -334,3 +334,21 @@ test('lenient leave remains distinct from other leave through notifications, app
  const other=await call(env,'/api/leave-requests','POST',{...form,leave_type:'other'},2);assert.equal(other.status,201);
  summary=await dashboardActivitySummary(env,2570);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='other').total,1);assert.equal(summary.leave_summary.by_type.find(r=>r.key==='lenient').total,2);
 });
+
+test('decided leave forms are stored on Google Drive once, only by approvers/personnel head/admin',async()=>{
+ const {env}=await setup();
+ const {id}=await (await call(env,'/api/leave-requests','POST',form,2)).json(),path='/api/leave-requests/'+id;
+ assert.equal((await call(env,path+'/drive-pdf','POST',undefined,1)).status,409);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,4)).json();
+ const row=list.leave_requests.find(r=>r.id===id);
+ assert.equal(row.can_store_drive,true);assert.equal(row.drive_saved,false);
+ assert.equal('teacher_signature' in row||'forward_token' in row,false);
+ const teacher=(await (await call(env,'/api/leave-requests','GET',undefined,2)).json()).leave_requests.find(r=>r.id===id);
+ assert.equal(teacher.can_store_drive,false);
+ assert.equal((await call(env,path+'/drive-pdf','POST',undefined,2)).status,403);
+ // ฟิกซ์เจอร์ไม่มีการตั้งค่า Google Drive → ผู้มีสิทธิ์ได้ 503 (ไม่ใช่ 403)
+ assert.equal((await call(env,path+'/drive-pdf','POST',undefined,4)).status,503);
+ assert.equal((await call(env,path+'/drive-pdf','GET',undefined,4)).status,405);
+});

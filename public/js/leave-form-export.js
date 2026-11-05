@@ -185,8 +185,12 @@
  function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
  async function exportFile(format,r){
   const name='ใบลา-'+r.id+'-'+r.start_date;
+  if(format==='pdf'){download(await pdfBlob(r),name+'.pdf');return;}
   if(format==='docx'){const Zip=await library('JSZip','https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'),zip=new Zip();for(const [path,text] of Object.entries(docxFiles(r)))zip.file(path,text);download(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}),name+'.docx');return;}
-  if(format!=='pdf')throw Error('รูปแบบไฟล์ไม่ถูกต้อง');
+  throw Error('รูปแบบไฟล์ไม่ถูกต้อง');
+ }
+ // PDF ใบลาเป็น Blob (ใช้ทั้งปุ่มดาวน์โหลดและการเก็บลง Google Drive)
+ async function pdfBlob(r){
   const pdf=await library('pdfMake','https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.12/pdfmake.min.js');
   const fonts=Object.fromEntries(await Promise.all(['THSarabunPSK-Regular.ttf','THSarabunPSK-Bold.ttf'].map(async name=>{const response=await fetch('/fonts/'+name);if(!response.ok)throw Error('โหลดฟอนต์ภาษาไทยไม่สำเร็จ');const bytes=new Uint8Array(await response.arrayBuffer());let text='';for(let i=0;i<bytes.length;i+=8192)text+=String.fromCharCode(...bytes.subarray(i,i+8192));return [name,btoa(text)];})));
   pdf.vfs={...(pdf.vfs||{}),...fonts};pdf.fonts={...(pdf.fonts||{}),Sarabun:{normal:'THSarabunPSK-Regular.ttf',bold:'THSarabunPSK-Bold.ttf'}};
@@ -197,7 +201,7 @@
    blob=await new Promise((resolve,reject)=>{try{pdf.createPdf(def).getBlob(resolve);}catch(e){reject(e);}});
    if(pages<=1||size<=10)break;size-=0.5;
   }
-  download(blob,name+'.pdf');
+  return blob;
  }
- root.LeaveFormExport={model,docxFiles,pdfDefinition,exportFile};
+ root.LeaveFormExport={model,docxFiles,pdfDefinition,exportFile,pdfBlob};
 })(typeof window==='undefined'?globalThis:window);
