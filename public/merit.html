@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>บันทึกความดี — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+[hidden]{display:none!important}
+.mr-info{font-size:13px;color:var(--color-text-muted);margin:-6px 0 14px}
+.mr-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+.mr-tab{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 18px;font:inherit;font-size:14px;cursor:pointer;color:var(--color-forest-900)}
+.mr-tab[aria-selected="true"]{background:#1E5FC0;border-color:#1E5FC0;color:#fff}
+.mr-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}.mr-bar .btn{width:auto}.mr-bar small{color:var(--color-text-muted)}
+.mr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start;margin-top:6px}
+.mr-section h2{font-size:16px;margin:0 0 8px;color:var(--color-forest-900)}
+.mr-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff}.mr-scroll{max-height:60vh}
+.mr-table{width:100%;border-collapse:collapse}.mr-table th,.mr-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}
+.mr-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0;z-index:1}.mr-table tr:last-child td{border-bottom:0}
+.mr-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.mr-table .btn{width:auto;padding:4px 10px;font-size:12px;min-height:0;box-shadow:none}
+.mr-rank{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#eef3f8;font-weight:700;font-size:12px}.mr-rank.g1{background:#ffe8a3}.mr-rank.g2{background:#e6eaef}.mr-rank.g3{background:#f6d5bd}
+.mr-filters{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 10px}.mr-filters input,.mr-filters select{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}.mr-filters input{flex:1;min-width:180px}
+.mr-muted{color:var(--color-text-muted)}.mr-name small{display:block;color:var(--color-text-muted);font-size:12px}
+.mr-chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:#eef2f7;white-space:nowrap}.mr-chip.ok{background:rgba(46,157,106,.13);color:#1f7a50}
+.mr-thumbs{display:flex;gap:4px}.mr-thumbs img{width:44px;height:44px;object-fit:cover;border-radius:8px;cursor:zoom-in;background:#eef3f8}
+.mr-modal{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:center;padding:24px 14px;z-index:60;background:rgba(21,35,50,.35);overflow:auto}
+.mr-modal>div{width:100%;max-width:620px;padding:22px;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(20,40,70,.22)}
+.mr-modal h2{margin:0 0 12px;font-size:19px}.mr-modal .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;justify-content:flex-end}.mr-modal .acts .btn{width:auto}
+.mr-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.mr-form label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.mr-form .full{grid-column:1/-1}
+.mr-form input,.mr-form select,.mr-form textarea{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}
+.mr-pick{max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:10px;padding:6px 10px;display:grid;gap:2px}.mr-pick label{display:flex;gap:8px;align-items:center;color:inherit;font-size:13px}
+.mr-big{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;cursor:zoom-out}.mr-big img{max-width:94vw;max-height:92vh;border-radius:10px}
+</style>
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1 id="pageTitle">บันทึกความดี</h1><p id="pageSub"></p></div>
+    <div class="tw-actions">
+      <label class="tw-term">ปีการศึกษา<select id="year" style="min-width:130px"></select></label>
+      <label class="tw-term">ภาคเรียน<select id="term" style="min-width:120px"><option value="all">ทั้งปีการศึกษา</option><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
+    </div>
+  </header>
+  <nav class="mr-tabs" role="tablist"><button class="mr-tab" type="button" data-tab="good" role="tab">บันทึกความดี</button><button class="mr-tab" type="button" data-tab="money" role="tab">บันทึกการเจอเงิน</button></nav>
+  <p class="mr-info" id="info"></p>
+  <div class="tw-error" id="error" role="alert"></div>
+  <div class="mr-bar" id="actions"></div>
+  <section id="cards" class="tw-cards"></section>
+  <div class="mr-grid" id="stats"></div>
+  <div class="mr-filters"><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหา: ชื่อ เลขประจำตัว รายละเอียด" autocomplete="off"></div>
+  <section class="mr-section"><h2 id="listTitle">รายการ</h2><div class="mr-wrap mr-scroll"><table class="mr-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div></section>
+</main>
+
+<div class="mr-modal" id="goodModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="goodTitle">
+  <h2 id="goodTitle">บันทึกความดี</h2>
+  <div class="mr-form">
+    <label>ห้อง<select id="gRoom"></select></label>
+    <label>วันที่<input type="date" id="gDate"></label>
+    <label>ประเภทความดี<select id="gCat"></select></label>
+    <label class="full">รายละเอียด<textarea id="gDetail" rows="2" maxlength="500" placeholder="เช่น ช่วยครูยกโต๊ะ เก็บกระเป๋าตังค์ได้ส่งคืน"></textarea></label>
+    <div class="full" id="gPickWrap"><div style="display:flex;justify-content:space-between;font-size:13px;color:var(--color-text-muted);margin-bottom:4px"><span>นักเรียน (เลือกได้หลายคน — ความดีเดียวกัน)</span><label style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="gAll"> เลือกทั้งห้อง</label></div><div class="mr-pick" id="gPick"></div></div>
+  </div>
+  <div class="tw-error" id="gError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="gClose">ยกเลิก</button><button class="btn btn-primary" type="button" id="gSave">บันทึก</button></div>
+</div></div>
+
+<div class="mr-modal" id="moneyModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="moneyTitle">
+  <h2 id="moneyTitle">บันทึกการเจอเงิน</h2>
+  <div class="mr-form">
+    <label class="full" id="mStudentWrap">นักเรียน<input id="mStudent" list="mList" placeholder="พิมพ์ชื่อหรือเลขประจำตัว" autocomplete="off"><datalist id="mList"></datalist></label>
+    <label>วันที่เจอ<input type="date" id="mDate"></label>
+    <label>จำนวนเงิน (บาท)<input id="mAmount" inputmode="decimal"></label>
+    <label class="full">สถานที่เจอ<input id="mPlace" maxlength="200" placeholder="เช่น สนามหน้าเสาธง โรงอาหาร"></label>
+    <label class="full">รายละเอียด<textarea id="mDetail" rows="2" maxlength="500"></textarea></label>
+    <label class="full" id="mPhotoWrap">ภาพถ่าย (ไม่เกิน 4 ภาพ เก็บใน Google Drive โฟลเดอร์ "บันทึกเจอเงิน")<input type="file" id="mPhotos" accept="image/*" multiple></label>
+  </div>
+  <div class="tw-error" id="mError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="mClose">ยกเลิก</button><button class="btn btn-primary" type="button" id="mSave">บันทึก</button></div>
+</div></div>
+
+<div class="mr-modal" id="importModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <h2 id="importTitle">อัปโหลดบันทึกความดี (xlsx)</h2>
+  <p class="mr-muted" style="font-size:13px;margin-top:0">1) ดาวน์โหลดแม่แบบ (มีรายชื่อนักเรียนห้องของท่านให้แล้ว) 2) กรอก วันที่ ประเภท รายละเอียด — แถวที่ไม่กรอกจะถูกข้าม 3) อัปโหลดไฟล์ · ทำความดีหลายครั้ง ให้เพิ่มแถวนักเรียนคนเดิมได้</p>
+  <div class="mr-bar"><button class="btn btn-ghost" type="button" id="tplBtn">ดาวน์โหลดแม่แบบ (.xlsx)</button><input type="file" id="xlsxFile" accept=".xlsx,.xls"></div>
+  <div id="importPreview"></div>
+  <div class="tw-error" id="iError" role="alert"></div>
+  <div class="acts"><button class="btn btn-ghost" type="button" id="iClose">ปิด</button><button class="btn btn-primary" type="button" id="iSave" disabled>นำเข้า</button></div>
+</div></div>
+
+<script src="/js/api.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
+const money=n=>Number(n||0).toLocaleString('th-TH',{minimumFractionDigits:0,maximumFractionDigits:2});
+const key=s=>`${String(s?.grade_level??'').trim()}|${String(s?.classroom??'').trim()}`;
+const label=k=>{const [g,r]=k.split('|');return `${g||'ไม่ระบุชั้น'}${r?' / '+r:''}`};
+const band=g=>{g=String(g||'');if(/^อ/.test(g))return 'อนุบาล';const n=Number((g.match(/\d+/)||[])[0]);return n>=1&&n<=3?'ป.1–3 (ประถมต้น)':n>=4&&n<=6?'ป.4–6 (ประถมปลาย)':'อื่น ๆ'};
+const thDate=d=>{if(!d)return '';const [y,m,dd]=d.split('-').map(Number);return `${dd} ${['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m-1]} ${y+543}`};
+const showErr=(id,msg)=>{const el=$(id);el.textContent=msg||'';el.style.display=msg?'block':'none'};
+const params=new URLSearchParams(location.search);
+let tab=params.get('tab')==='money'?'money':'good',data=null,students=new Map(),room='',version=0,selected=new Set();
+
+async function load(){
+  const v=++version;showErr('error','');
+  const y=data&&data.kind===tab?$('year').value:'';
+  try{
+    const d=await apiRequest(`/api/merit/${tab}${y?'?academic_year='+encodeURIComponent(y):''}`);
+    if(v!==version)return;
+    data=d;students=new Map((d.students||[]).map(s=>[s.id,s]));selected.clear();
+    $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current_year?' (ปีปัจจุบัน)':''}</option>`).join('');$('year').value=String(d.academic_year);
+    render();
+  }catch(e){if(v===version){data=null;['actions','cards','stats','list','listHead'].forEach(id=>$(id).innerHTML='');showErr('error',e.message)}}
+}
+const termOk=r=>$('term').value==='all'||String(r.term)===$('term').value;
+const records=()=>(data.records||[]).filter(r=>students.has(r.student_id)&&termOk(r));
+const canWriteRoom=k=>data.permissions.manage_all||(data.permissions.homerooms||[]).includes(k);
+function topBy(list,valueOf){const m=new Map();for(const r of list){const x=m.get(r.student_id)||{id:r.student_id,n:0,sum:0};x.n++;x.sum+=valueOf(r);m.set(r.student_id,x)}return [...m.values()]}
+
+function render(){
+  document.querySelectorAll('.mr-tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
+  const money_=tab==='money',p=data.permissions;
+  $('pageTitle').textContent=money_?'บันทึกการเจอเงิน':'บันทึกความดี';
+  $('pageSub').textContent=money_?'นักเรียนเจอเงินแล้วนำส่งคืน — สถิติ ยอดรวมรายภาคเรียน/ปีการศึกษา และอันดับผู้เจอเงิน':'บันทึกการทำความดีของนักเรียน แยกรายห้อง สายชั้น และสถิตินักเรียนที่ทำความดีบ่อยที่สุด';
+  $('info').innerHTML=`ผู้รับผิดชอบงาน: <b>${esc(data.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage_all?'บันทึก/แก้ไขได้ทุกห้อง':p.view_all?'ดูได้ทุกห้อง':'ครูประจำชั้น ห้อง '+(p.homerooms||[]).map(label).join(', ')}`;
+  $('actions').innerHTML=p.can_write?(money_?'<button class="btn btn-primary" type="button" id="addBtn">+ บันทึกการเจอเงิน</button>':'<button class="btn btn-primary" type="button" id="addBtn">+ บันทึกความดี</button><button class="btn btn-ghost" type="button" id="impBtn">อัปโหลด xlsx / แม่แบบ</button>')+'<button class="btn btn-ghost" type="button" id="ptsBtn" disabled>ใช้เพิ่มคะแนนพฤติกรรม (+1/รายการ)</button><small>เลือกรายการในตารางด้านล่าง · ป.1–6 · ใช้ได้รายการละครั้ง</small>':'';
+  if(p.can_write){$('addBtn').onclick=money_?()=>openMoney(null):()=>openGood();if($('impBtn'))$('impBtn').onclick=openImport;$('ptsBtn').onclick=addPoints}
+  const list=records();
+  const termLabel=$('term').value==='all'?`ปีการศึกษา ${data.academic_year}`:`ภาคเรียนที่ ${$('term').value}/${data.academic_year}`;
+  if(money_){
+    const sum=l=>l.reduce((s,r)=>s+(Number(r.amount)||0),0);const all=(data.records||[]).filter(r=>students.has(r.student_id));
+    const t1=all.filter(r=>r.term===1),t2=all.filter(r=>r.term===2);
+    $('cards').innerHTML=`<div class="tw-card"><span>ยอดเงินที่เจอ · ภาคเรียนที่ 1</span><strong>${money(sum(t1))} บาท</strong><small class="mr-muted">${t1.length} ครั้ง</small></div><div class="tw-card"><span>ยอดเงินที่เจอ · ภาคเรียนที่ 2</span><strong>${money(sum(t2))} บาท</strong><small class="mr-muted">${t2.length} ครั้ง</small></div><div class="tw-card"><span>รวมทั้งปีการศึกษา ${data.academic_year}</span><strong style="color:#1f7a50">${money(sum(all))} บาท</strong><small class="mr-muted">${all.length} ครั้ง · ${new Set(all.map(r=>r.student_id)).size} คน</small></div>`;
+    const top=topBy(list,r=>Number(r.amount)||0);
+    const rank=(rows,val)=>rows.length?rows.slice(0,10).map((x,i)=>{const s=students.get(x.id);return `<tr><td><span class="mr-rank ${i<3?'g'+(i+1):''}">${i+1}</span></td><td class="mr-name">${esc(s.full_name)}<small>${esc(label(key(s)))}</small></td><td class="num">${val(x)}</td></tr>`}).join(''):'<tr><td colspan="3" class="mr-muted">ยังไม่มีข้อมูล</td></tr>';
+    $('stats').innerHTML=`<section class="mr-section"><h2>อันดับเจอเงินเยอะที่สุด · ${termLabel}</h2><div class="mr-wrap"><table class="mr-table"><thead><tr><th style="width:40px">#</th><th>นักเรียน</th><th class="num">ยอดรวม (บาท)</th></tr></thead><tbody>${rank([...top].sort((a,b)=>b.sum-a.sum||b.n-a.n),x=>money(x.sum))}</tbody></table></div></section>
+      <section class="mr-section"><h2>อันดับเจอเงินบ่อยที่สุด · ${termLabel}</h2><div class="mr-wrap"><table class="mr-table"><thead><tr><th style="width:40px">#</th><th>นักเรียน</th><th class="num">ครั้ง</th></tr></thead><tbody>${rank([...top].sort((a,b)=>b.n-a.n||b.sum-a.sum),x=>x.n+' ครั้ง')}</tbody></table></div></section>
+      ${groupTable('สรุปรายห้อง',list,r=>key(students.get(r.student_id)),label,true)}`;
+  }else{
+    const kids=new Set(list.map(r=>r.student_id)).size;
+    $('cards').innerHTML=`<div class="tw-card"><span>ความดีทั้งหมด · ${termLabel}</span><strong>${list.length} ครั้ง</strong></div><div class="tw-card"><span>นักเรียนที่ทำความดี</span><strong>${kids} คน</strong></div><div class="tw-card"><span>เฉลี่ยต่อคน</span><strong>${kids?(list.length/kids).toFixed(1):'–'} ครั้ง</strong></div><div class="tw-card"><span>ใช้เพิ่มคะแนนพฤติกรรมแล้ว</span><strong>${list.filter(r=>r.points_used).length} รายการ</strong></div>`;
+    const top=topBy(list,()=>1).sort((a,b)=>b.n-a.n);
+    $('stats').innerHTML=`<section class="mr-section"><h2>นักเรียนทำความดีบ่อยที่สุด · ${termLabel}</h2><div class="mr-wrap"><table class="mr-table"><thead><tr><th style="width:40px">#</th><th>นักเรียน</th><th class="num">ครั้ง</th></tr></thead><tbody>${top.length?top.slice(0,10).map((x,i)=>{const s=students.get(x.id);return `<tr><td><span class="mr-rank ${i<3?'g'+(i+1):''}">${i+1}</span></td><td class="mr-name">${esc(s.full_name)}<small>${esc(label(key(s)))}</small></td><td class="num">${x.n}</td></tr>`}).join(''):'<tr><td colspan="3" class="mr-muted">ยังไม่มีข้อมูล</td></tr>'}</tbody></table></div></section>
+      ${groupTable('สรุปตามสายชั้น',list,r=>band(students.get(r.student_id).grade_level),x=>x)}
+      ${groupTable('สรุปรายห้อง',list,r=>key(students.get(r.student_id)),label)}
+      ${groupTable('สรุปตามประเภทความดี',list,r=>r.category,x=>x)}`;
+  }
+  $('stats').querySelectorAll('tr[data-room]').forEach(tr=>tr.onclick=()=>{room=room===tr.dataset.room?'':tr.dataset.room;render()});
+  const rooms=[...new Set([...students.values()].map(key))].sort((a,b)=>{const [ga,ra]=a.split('|'),[gb,rb]=b.split('|');return cmp(ga,gb)||cmp(ra,rb)});
+  $('fRoom').innerHTML='<option value="">ทุกห้อง</option>'+rooms.map(k=>`<option value="${esc(k)}">${esc(label(k))}</option>`).join('');$('fRoom').value=room;
+  renderList(list);
+}
+// ตารางสรุปตามกลุ่ม (ห้อง/สายชั้น/ประเภท): ครั้ง และจำนวนคน (หรือยอดเงิน)
+function groupTable(title,list,keyOf,name,withMoney=false){
+  const m=new Map();for(const r of list){const k=keyOf(r);const x=m.get(k)||{n:0,kids:new Set(),sum:0};x.n++;x.kids.add(r.student_id);x.sum+=Number(r.amount)||0;m.set(k,x)}
+  const keys=[...m.keys()].sort((a,b)=>title==='สรุปรายห้อง'?cmp(a,b):m.get(b).n-m.get(a).n);
+  const isRoom=title==='สรุปรายห้อง';
+  return `<section class="mr-section"><h2>${title}</h2><div class="mr-wrap" style="max-height:340px"><table class="mr-table"><thead><tr><th>${isRoom?'ห้อง':title.replace('สรุปตาม','')}</th><th class="num">ครั้ง</th><th class="num">นักเรียน</th>${withMoney?'<th class="num">บาท</th>':''}</tr></thead><tbody>${keys.length?keys.map(k=>`<tr ${isRoom?`data-room="${esc(k)}" style="cursor:pointer;${k===room?'background:#e8f2fd':''}"`:''}><td>${esc(name(k))}</td><td class="num">${m.get(k).n}</td><td class="num">${m.get(k).kids.size}</td>${withMoney?`<td class="num">${money(m.get(k).sum)}</td>`:''}</tr>`).join(''):`<tr><td colspan="${withMoney?4:3}" class="mr-muted">ยังไม่มีข้อมูล</td></tr>`}</tbody></table></div></section>`;
+}
+function renderList(list){
+  const q=$('q').value.trim().toLowerCase(),money_=tab==='money',p=data.permissions;
+  const rows=list.filter(r=>{const s=students.get(r.student_id);return (!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code} ${r.detail||''} ${r.category||''} ${r.place||''}`.toLowerCase().includes(q))});
+  $('listTitle').textContent=`${money_?'รายการเจอเงิน':'รายการความดี'}${room?' · '+label(room):''} (${rows.length})`;
+  $('listHead').innerHTML=`<tr><th style="width:30px">${p.can_write?'<input type="checkbox" id="selAll" aria-label="เลือกทั้งหมด">':''}</th><th>วันที่</th><th>นักเรียน</th>${money_?'<th class="num">จำนวนเงิน</th><th>สถานที่ / รายละเอียด</th><th>ภาพ</th>':'<th>ประเภท</th><th>รายละเอียด</th>'}<th>คะแนนพฤติกรรม</th><th></th></tr>`;
+  $('list').innerHTML=rows.length?rows.map(r=>{const s=students.get(r.student_id),w=canWriteRoom(key(s));return `<tr><td>${w&&!r.points_used?`<input type="checkbox" data-sel="${r.id}"${selected.has(r.id)?' checked':''}>`:''}</td><td style="white-space:nowrap">${thDate(r.date)}<small class="mr-muted" style="display:block">ภาค ${r.term}</small></td><td class="mr-name">${esc(s.full_name)}<small>${esc(s.student_code||'')} · ${esc(label(key(s)))}</small></td>${money_?`<td class="num"><b>${money(r.amount)}</b></td><td>${esc(r.place||'')}${r.detail?`<small class="mr-muted" style="display:block">${esc(r.detail)}</small>`:''}</td><td><div class="mr-thumbs">${(r.photos||[]).map(id=>`<img src="/api/merit/money/photos/${id}" loading="lazy" alt="ภาพ" data-big="${id}">`).join('')}</div></td>`:`<td>${esc(r.category)}</td><td>${esc(r.detail||'')}</td>`}<td>${r.points_used?'<span class="mr-chip ok">+1 แล้ว</span>':'<span class="mr-muted">–</span>'}</td><td style="white-space:nowrap">${w?`${money_?`<button class="btn btn-ghost" type="button" data-edit="${r.id}">แก้ไข</button> `:''}<button class="btn btn-ghost" type="button" data-del="${r.id}"${r.points_used?' disabled title="ใช้เพิ่มคะแนนแล้ว"':''}>ลบ</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="${money_?8:7}" class="mr-muted">ยังไม่มีรายการ</td></tr>`;
+  $('list').querySelectorAll('[data-sel]').forEach(c=>c.onchange=()=>{c.checked?selected.add(Number(c.dataset.sel)):selected.delete(Number(c.dataset.sel));syncPts()});
+  if($('selAll'))$('selAll').onchange=()=>{$('list').querySelectorAll('[data-sel]').forEach(c=>{c.checked=$('selAll').checked;c.checked?selected.add(Number(c.dataset.sel)):selected.delete(Number(c.dataset.sel))});syncPts()};
+  $('list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('ลบรายการนี้?'))return;try{await apiRequest(`/api/merit/${tab}/${b.dataset.del}`,{method:'DELETE'});await load()}catch(e){showErr('error',e.message)}});
+  $('list').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openMoney((data.records||[]).find(r=>r.id===Number(b.dataset.edit))));
+  $('list').querySelectorAll('[data-big]').forEach(img=>img.onclick=()=>{const d=document.createElement('div');d.className='mr-big';d.innerHTML=`<img src="${img.src}" alt="">`;d.onclick=()=>d.remove();document.body.append(d)});
+  syncPts();
+}
+function syncPts(){if($('ptsBtn')){$('ptsBtn').disabled=!selected.size;$('ptsBtn').textContent=`ใช้เพิ่มคะแนนพฤติกรรม (+1/รายการ)${selected.size?` · ${selected.size} รายการ`:''}`}}
+async function addPoints(){
+  if(!selected.size)return;
+  if(!confirm(`เพิ่มคะแนนพฤติกรรมรายการละ +1 คะแนน รวม ${selected.size} รายการ ในระบบคะแนนพฤติกรรม?\n(แต่ละรายการใช้ได้ครั้งเดียว)`))return;
+  try{const r=await apiRequest(`/api/merit/${tab}/points`,{method:'POST',body:{ids:[...selected]}});
+    alert(`เพิ่มคะแนนแล้ว ${r.added} รายการ${r.skipped?.length?`\nข้าม ${r.skipped.length} รายการ:\n`+r.skipped.slice(0,8).map(x=>'• '+x.reason).join('\n'):''}`);await load()}
+  catch(e){showErr('error',e.message)}
+}
+document.querySelectorAll('.mr-tab').forEach(b=>b.onclick=()=>{if(tab===b.dataset.tab)return;tab=b.dataset.tab;room='';data=null;history.replaceState(null,'',tab==='money'?'?tab=money':location.pathname);load()});
+$('year').onchange=load;$('term').onchange=()=>data&&render();
+$('q').oninput=()=>data&&renderList(records());$('fRoom').onchange=()=>{room=$('fRoom').value;render()};
+
+// ---------- บันทึกความดี (เลือกหลายคนได้) ----------
+const writableRooms=()=>[...new Set([...students.values()].filter(s=>!s.status||s.status==='enrolled').map(key))].filter(canWriteRoom).sort(cmp);
+function openGood(){
+  showErr('gError','');const rooms=writableRooms();
+  $('gRoom').innerHTML=rooms.map(k=>`<option value="${esc(k)}">${esc(label(k))}</option>`).join('');if(room&&rooms.includes(room))$('gRoom').value=room;
+  $('gCat').innerHTML=data.categories.map(c=>`<option>${esc(c)}</option>`).join('');
+  $('gDate').value=data.today;$('gDate').max=data.today;$('gDetail').value='';$('gAll').checked=false;fillPick();$('goodModal').hidden=false;
+}
+function fillPick(){
+  const k=$('gRoom').value,list=[...students.values()].filter(s=>key(s)===k&&(!s.status||s.status==='enrolled')).sort((a,b)=>cmp(a.student_code,b.student_code));
+  $('gPick').innerHTML=list.map(s=>`<label><input type="checkbox" value="${s.id}"> ${esc(s.full_name)} <span class="mr-muted">${esc(s.student_code||'')}</span></label>`).join('')||'<span class="mr-muted">ไม่มีนักเรียน</span>';
+}
+$('gRoom').onchange=fillPick;$('gAll').onchange=()=>$('gPick').querySelectorAll('input').forEach(c=>c.checked=$('gAll').checked);
+$('gClose').onclick=()=>$('goodModal').hidden=true;
+$('gSave').onclick=async()=>{
+  showErr('gError','');const ids=[...$('gPick').querySelectorAll('input:checked')].map(c=>Number(c.value));
+  if(!ids.length)return showErr('gError','กรุณาเลือกนักเรียนอย่างน้อย 1 คน');
+  try{await apiRequest('/api/merit/good',{method:'POST',body:{records:ids.map(student_id=>({student_id,deed_date:$('gDate').value,category:$('gCat').value,detail:$('gDetail').value}))}});$('goodModal').hidden=true;await load()}
+  catch(e){showErr('gError',e.message)}
+};
+
+// ---------- บันทึกการเจอเงิน ----------
+let editingMoney=null;
+const sLabel=s=>`${s.full_name} (${s.student_code||'-'}) ${label(key(s))}`;
+function openMoney(r){
+  editingMoney=r;showErr('mError','');
+  $('moneyTitle').textContent=r?`แก้ไขการเจอเงิน · ${students.get(r.student_id)?.full_name}`:'บันทึกการเจอเงิน';
+  $('mStudentWrap').hidden=!!r;
+  $('mList').innerHTML=[...students.values()].filter(s=>(!s.status||s.status==='enrolled')&&canWriteRoom(key(s))).map(s=>`<option value="${esc(sLabel(s))}">`).join('');
+  $('mStudent').value='';$('mDate').value=r?.date||data.today;$('mDate').max=data.today;$('mAmount').value=r?.amount??'';$('mPlace').value=r?.place||'';$('mDetail').value=r?.detail||'';$('mPhotos').value='';
+  $('mPhotoWrap').firstChild.textContent=r?`เพิ่มภาพ (มีแล้ว ${(r.photos||[]).length} ภาพ รวมไม่เกิน ${data.max_photos})`:`ภาพถ่าย (ไม่เกิน ${data.max_photos} ภาพ เก็บใน Google Drive โฟลเดอร์ "บันทึกเจอเงิน")`;
+  $('moneyModal').hidden=false;
+}
+$('mClose').onclick=()=>$('moneyModal').hidden=true;
+$('mSave').onclick=async()=>{
+  showErr('mError','');const files=[...$('mPhotos').files];
+  try{
+    if(editingMoney){
+      await apiRequest('/api/merit/money/'+editingMoney.id,{method:'PATCH',body:{found_date:$('mDate').value,amount:$('mAmount').value,place:$('mPlace').value,detail:$('mDetail').value}});
+      if(files.length){const fd=new FormData();files.forEach(f=>fd.append('photos',f));await apiRequest(`/api/merit/money/${editingMoney.id}/photos`,{method:'POST',body:fd})}
+    }else{
+      const s=[...students.values()].find(x=>sLabel(x)===$('mStudent').value.trim());if(!s)return showErr('mError','กรุณาเลือกนักเรียนจากรายการ');
+      if(files.length>data.max_photos)return showErr('mError',`แนบภาพได้ไม่เกิน ${data.max_photos} ภาพ`);
+      const fd=new FormData();fd.append('student_id',s.id);fd.append('found_date',$('mDate').value);fd.append('amount',$('mAmount').value);fd.append('place',$('mPlace').value);fd.append('detail',$('mDetail').value);files.forEach(f=>fd.append('photos',f));
+      const r=await apiRequest('/api/merit/money',{method:'POST',body:fd});if(r?.warning)alert(r.warning);
+    }
+    $('moneyModal').hidden=true;await load();
+  }catch(e){showErr('mError',e.message)}
+};
+
+// ---------- แม่แบบ / อัปโหลด xlsx ----------
+let XLSXlib=null,importRows=[];
+function xlsx(){return XLSXlib||=new Promise((ok,no)=>{if(window.XLSX)return ok(window.XLSX);const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=()=>ok(window.XLSX);s.onerror=()=>{XLSXlib=null;no(new Error('โหลดเครื่องมือ Excel ไม่สำเร็จ'))};document.head.append(s)})}
+const HEAD=['เลขประจำตัวนักเรียน','ชื่อ – นามสกุล','ชั้น/ห้อง','วันที่ (วว/ดด/ปปปป)','ประเภทความดี','รายละเอียด'];
+function openImport(){importRows=[];$('importPreview').innerHTML='';$('xlsxFile').value='';$('iSave').disabled=true;showErr('iError','');$('importModal').hidden=false}
+$('iClose').onclick=()=>$('importModal').hidden=true;
+$('tplBtn').onclick=async()=>{
+  try{const X=await xlsx(),book=X.utils.book_new();
+    const list=[...students.values()].filter(s=>(!s.status||s.status==='enrolled')&&canWriteRoom(key(s))).sort((a,b)=>cmp(key(a),key(b))||cmp(a.student_code,b.student_code));
+    const ws=X.utils.aoa_to_sheet([HEAD,...list.map(s=>[s.student_code||'',s.full_name,label(key(s)),'','',''])]);ws['!cols']=[{wch:16},{wch:32},{wch:12},{wch:18},{wch:26},{wch:40}];
+    X.utils.book_append_sheet(book,ws,'บันทึกความดี');
+    X.utils.book_append_sheet(book,X.utils.aoa_to_sheet([['ประเภทความดี (คัดลอกไปใส่ได้ ถ้าไม่ตรงจะบันทึกเป็น "อื่น ๆ")'],...data.categories.map(c=>[c]),[],['วันที่ใส่แบบ 5/11/2569 หรือ 2026-11-05 ก็ได้'],['ทำความดีหลายครั้ง ให้คัดลอกแถวนักเรียนเพิ่ม']]),'ประเภทความดี');
+    const blob=new Blob([X.write(book,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`แม่แบบบันทึกความดี ${data.academic_year}.xlsx`;document.body.append(a);a.click();a.remove();
+  }catch(e){showErr('iError',e.message)}
+};
+const cellDate=v=>{if(v instanceof Date&&!isNaN(v))return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;return String(v??'').trim()};
+$('xlsxFile').onchange=async()=>{
+  showErr('iError','');const f=$('xlsxFile').files[0];if(!f)return;
+  try{const X=await xlsx(),wb=X.read(await f.arrayBuffer(),{cellDates:true});const ws=wb.Sheets[wb.SheetNames[0]];
+    const aoa=X.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+    const h=(aoa[0]||[]).map(x=>String(x).trim());const col=re=>h.findIndex(x=>re.test(x));
+    const c={code:col(/เลขประจำตัว|รหัส/),name:col(/ชื่อ/),date:col(/วันที่/),cat:col(/ประเภท/),detail:col(/รายละเอียด/)};
+    if(c.date<0||c.cat<0||(c.code<0&&c.name<0))throw new Error('หัวคอลัมน์ไม่ตรงแม่แบบ (ต้องมี เลขประจำตัว/ชื่อ, วันที่, ประเภทความดี)');
+    importRows=aoa.slice(1).map(r=>({student_code:String(r[c.code]??'').trim(),full_name:String(r[c.name]??'').trim(),deed_date:cellDate(r[c.date]),category:String(r[c.cat]??'').trim(),detail:c.detail>=0?String(r[c.detail]??'').trim():''}))
+      .filter(r=>r.deed_date||r.category||r.detail);
+    $('importPreview').innerHTML=`<p style="font-size:13px">พบ <b>${importRows.length}</b> แถวที่กรอกข้อมูล</p><div class="mr-wrap" style="max-height:240px"><table class="mr-table"><thead><tr><th>เลขประจำตัว</th><th>ชื่อ</th><th>วันที่</th><th>ประเภท</th><th>รายละเอียด</th></tr></thead><tbody>${importRows.slice(0,50).map(r=>`<tr><td>${esc(r.student_code)}</td><td>${esc(r.full_name)}</td><td>${esc(r.deed_date)}</td><td>${esc(r.category)}</td><td>${esc(r.detail)}</td></tr>`).join('')}</tbody></table></div>`;
+    $('iSave').disabled=!importRows.length;
+  }catch(e){showErr('iError',e.message)}
+};
+$('iSave').onclick=async()=>{
+  showErr('iError','');
+  try{let saved=0;const skipped=[];
+    for(let i=0;i<importRows.length;i+=300){const r=await apiRequest('/api/merit/good/import',{method:'POST',body:{rows:importRows.slice(i,i+300)}});saved+=r.saved;(r.skipped||[]).forEach(x=>skipped.push({...x,row:x.row+i+1}))}
+    $('importModal').hidden=true;alert(`นำเข้าแล้ว ${saved} รายการ${skipped.length?`\nข้าม ${skipped.length} แถว:\n`+skipped.slice(0,10).map(x=>`• แถว ${x.row}: ${x.reason}`).join('\n'):''}`);await load();
+  }catch(e){showErr('iError',e.message)}
+};
+document.addEventListener('keydown',e=>{if(e.key==='Escape')['goodModal','moneyModal','importModal'].forEach(id=>$(id).hidden=true)});
+load();
+})();
+</script>
+</body></html>
