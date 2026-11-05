@@ -48,10 +48,10 @@
 <body>
 <main class="tw-page">
   <header class="tw-head">
-    <div><h1>ทุนการศึกษา</h1><p>รายชื่อนักเรียนที่ได้รับทุน แยกตามหัวข้อทุน — ข้อมูลนักเรียนอ้างอิงจากระบบรายงานผลการเรียน</p></div>
+    <div><h1>ทุนการศึกษา</h1><p>รายชื่อนักเรียนที่ได้รับทุน แยกตามหัวข้อทุน ปีละไม่เกิน 3 ครั้ง — ข้อมูลนักเรียนอ้างอิงจากระบบรายงานผลการเรียน · ข้อมูลปีก่อนถูกล้างอัตโนมัติเมื่อขึ้นปีการศึกษาใหม่</p></div>
     <div class="tw-actions">
       <label class="tw-term">ปีการศึกษา<select id="year" style="min-width:130px"></select></label>
-      <label class="tw-term">ภาคเรียน<select id="term" style="min-width:110px"><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
+      <label class="tw-term">ครั้งที่ได้รับทุน<select id="round" style="min-width:130px"><option value="1">ครั้งที่ 1</option><option value="2">ครั้งที่ 2</option><option value="3">ครั้งที่ 3</option><option value="all">รวมทั้งปี</option></select></label>
       <span id="headActions" class="tw-actions"></span>
     </div>
   </header>
@@ -67,7 +67,7 @@
     </section>
     <section class="sc-section"><h2 id="listTitle">รายชื่อนักเรียนที่ได้รับทุน</h2>
       <div class="sc-filters"><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหา: ชื่อ เลขประจำตัว" autocomplete="off"></div>
-      <div class="sc-wrap sc-scroll"><table class="sc-table"><thead><tr><th style="width:36px">#</th><th>ชื่อ–นามสกุล</th><th>ชั้น/ห้อง</th><th class="num">ยอดเงิน (บาท)</th><th>หมายเหตุ</th><th id="actHead"></th></tr></thead><tbody id="list"></tbody></table></div>
+      <div class="sc-wrap sc-scroll"><table class="sc-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div>
     </section>
   </div>
 </main>
@@ -77,7 +77,7 @@
   <div class="sc-form">
     <label>หัวข้อทุน<select id="imType"></select></label>
     <label>ปีการศึกษา<input id="imYear" inputmode="numeric" maxlength="4"></label>
-    <label>ภาคเรียน<select id="imTerm"><option value="1">ภาคเรียนที่ 1</option><option value="2">ภาคเรียนที่ 2</option></select></label>
+    <label>ครั้งที่ได้รับทุน<select id="imTerm"><option value="1">ครั้งที่ 1</option><option value="2">ครั้งที่ 2</option><option value="3">ครั้งที่ 3</option></select></label>
     <label>ยอดเงินต่อคน (ใช้เมื่อไฟล์ไม่มีคอลัมน์ยอดเงิน)<input id="imDefault" inputmode="decimal" placeholder="เช่น 1000"></label>
   </div>
   <div class="sc-drop" id="drop" tabindex="0" role="button">เลือกไฟล์ PDF หรือลากไฟล์มาวาง<br><small class="sc-muted">รองรับ PDF ข้อความ และ PDF สแกน (อ่านด้วย OCR ภาษาไทย) · ระบบหาหัวตารางและแยกคอลัมน์เอง ไม่ต้องจัดตารางใหม่</small><input type="file" id="file" accept="application/pdf,.pdf" hidden></div>
@@ -90,7 +90,7 @@
     <h3 style="font-size:15px;margin:14px 0 6px">ตรวจรายชื่อก่อนบันทึก</h3>
     <div class="sc-sum" id="previewSum"></div>
     <div class="sc-wrap" style="max-height:46vh"><table class="sc-table sc-preview"><thead><tr><th style="width:30px"><input type="checkbox" id="checkAll" checked aria-label="เลือกทั้งหมด"></th><th>ชื่อในไฟล์</th><th>นักเรียนในระบบ</th><th class="num">ยอดเงิน</th><th>สถานะ</th></tr></thead><tbody id="previewBody"></tbody></table></div>
-    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px"><input type="checkbox" id="imReplace"> แทนที่รายชื่อเดิมของทุนนี้ในภาคเรียนนี้ทั้งหมด (ไม่เลือก = เพิ่ม/อัปเดตเฉพาะรายชื่อในไฟล์)</label>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px"><input type="checkbox" id="imReplace"> แทนที่รายชื่อเดิมของทุนนี้ในครั้งนี้ทั้งหมด (ไม่เลือก = เพิ่ม/อัปเดตเฉพาะรายชื่อในไฟล์)</label>
   </div>
   <div class="tw-error" id="imError" role="alert"></div>
   <div class="acts"><button class="btn btn-ghost" type="button" id="imClose">ปิด</button><button class="btn btn-primary" type="button" id="imSave" disabled>บันทึกรายชื่อ</button></div>
@@ -129,6 +129,8 @@ const label=k=>{const [g,r]=k.split('|');return `${g||'ไม่ระบุช�
 const showErr=(id,msg)=>{const el=$(id);el.textContent=msg||'';el.style.display=msg?'block':'none'};
 let data=null,students=new Map(),tab='eef',typeId=null,room='',version=0;
 const params=new URLSearchParams(location.search);
+let round=['1','2','3','all'].includes(params.get('round'))?params.get('round'):'1';
+const roundText=()=>round==='all'?'รวมทั้งปี':'ครั้งที่ '+round;
 
 const typesOf=t=>(data?.types||[]).filter(x=>t==='other'?!x.fixed:x.code===t);
 const currentType=()=>(data?.types||[]).find(t=>t.id===typeId);
@@ -136,13 +138,13 @@ const manage=()=>!!data?.permissions?.manage;
 
 async function load(){
   const v=++version;showErr('error','');
-  const y=data?$('year').value:(params.get('academic_year')||''),t=data?$('term').value:(params.get('term')||'');
+  const y=data?$('year').value:(params.get('academic_year')||'');
   try{
-    const d=await apiRequest(`/api/scholarships?${new URLSearchParams({...(y?{academic_year:y}:{}),...(t?{term:t}:{})})}`);
+    const d=await apiRequest(`/api/scholarships?${new URLSearchParams(y?{academic_year:y}:{})}`);
     if(v!==version)return;
     data=d;students=new Map((d.students||[]).map(s=>[s.id,s]));
     $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current.year?' (ปีปัจจุบัน)':''}</option>`).join('');
-    $('year').value=String(d.academic_year);$('term').value=String(d.term);
+    $('year').value=String(d.academic_year);$('round').value=round;
     pickType();render();
   }catch(e){if(v===version)showErr('error',e.message)}
 }
@@ -150,14 +152,22 @@ function pickType(){
   const list=typesOf(tab);
   if(!list.some(t=>t.id===typeId))typeId=list[0]?.id??null;
 }
-function awardsOf(id){return (data.awards||[]).filter(a=>a.type_id===id&&students.has(a.student_id))}
+// รายครั้ง: รายการของครั้งนั้น · รวมทั้งปี: รวมยอดของแต่ละคนทุกครั้ง (by[ครั้ง] = ยอดครั้งนั้น)
+function awardsOf(id){
+  const list=(data.awards||[]).filter(a=>a.type_id===id&&students.has(a.student_id));
+  if(round!=='all')return list.filter(a=>String(a.round)===round);
+  const by=new Map();
+  for(const a of list){const x=by.get(a.student_id)||{student_id:a.student_id,amount:0,by:{},notes:[]};x.by[a.round]=(x.by[a.round]||0)+(Number(a.amount)||0);x.amount+=Number(a.amount)||0;if(a.notes)x.notes.push(`ครั้งที่ ${a.round}: ${a.notes}`);by.set(a.student_id,x)}
+  return [...by.values()].map(x=>({...x,notes:x.notes.join(' · ')}));
+}
+const inRound=a=>round==='all'||String(a.round)===round;
 function render(){
   const p=data.permissions||{};
   $('info').innerHTML=`ผู้รับผิดชอบงานทุนการศึกษา: <b>${esc(data.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage?'นำเข้า/แก้ไขได้ทุกห้อง':p.view_all?'ดูได้ทุกห้อง':'ครูประจำชั้น ดูได้เฉพาะห้อง '+(p.homerooms||[]).map(label).join(', ')}`;
   $('headActions').innerHTML='';
   // แท็บหัวข้อทุน
   const tabs=[['eef','ทุนปัจจัยพื้นฐานนักเรียนยากจน (กสศ.)'],['subsidy','ทุนอุดหนุน'],['other','ทุนอื่น ๆ']];
-  $('tabs').innerHTML=tabs.map(([k,l])=>{const ids=k==='other'?typesOf('other').map(t=>t.id):typesOf(k).map(t=>t.id);const n=new Set((data.awards||[]).filter(a=>ids.includes(a.type_id)&&students.has(a.student_id)).map(a=>a.student_id)).size;return `<button class="sc-tab" role="tab" type="button" data-tab="${k}" aria-selected="${tab===k}">${esc(l)} <span class="sc-muted" style="color:inherit;opacity:.75">(${n})</span></button>`}).join('');
+  $('tabs').innerHTML=tabs.map(([k,l])=>{const ids=k==='other'?typesOf('other').map(t=>t.id):typesOf(k).map(t=>t.id);const n=new Set((data.awards||[]).filter(a=>ids.includes(a.type_id)&&students.has(a.student_id)&&inRound(a)).map(a=>a.student_id)).size;return `<button class="sc-tab" role="tab" type="button" data-tab="${k}" aria-selected="${tab===k}">${esc(l)} <span class="sc-muted" style="color:inherit;opacity:.75">(${n})</span></button>`}).join('');
   $('tabs').querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;room='';pickType();render()});
   const others=typesOf('other');
   $('sub').innerHTML=tab!=='other'?'':(others.length?others.map(t=>`<button class="sc-chip" type="button" data-type="${t.id}" aria-selected="${t.id===typeId}">${esc(t.name)}</button>`).join(''):'<span class="sc-muted">ยังไม่มีหัวข้อทุนอื่น</span>')+(p.manage?' <button class="sc-chip" type="button" id="manageTypes">+ สร้าง/แก้ไขหัวข้อทุน</button>':'');
@@ -165,14 +175,15 @@ function render(){
   if($('manageTypes'))$('manageTypes').onclick=openTypes;
   const t=currentType(),list=t?awardsOf(t.id):[];
   // ปุ่มนำเข้าแยกตามทุน: แต่ละทุนใช้แบบฟอร์มของตนเอง
-  $('tabActions').innerHTML=t?`${p.manage?`<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF · ${esc(t.name)}</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button>`:''}<button class="btn btn-ghost" type="button" id="exPdf">ส่งออก PDF</button><button class="btn btn-ghost" type="button" id="exXlsx">ส่งออก Excel (.xlsx)</button>${p.manage?`<small>${esc(profileOf(t).hint)}</small>`:''}`:'';
-  if(p.manage&&t){$('openImport').onclick=()=>openImport(t);$('openAdd').onclick=()=>openEdit(null)}
+  const canWrite=p.manage&&round!=='all';
+  $('tabActions').innerHTML=t?`${canWrite?`<button class="btn btn-primary" type="button" id="openImport">นำเข้า PDF · ${esc(t.name)} · ${roundText()}</button><button class="btn btn-ghost" type="button" id="openAdd">เพิ่มรายคน</button>`:''}${p.manage&&!canWrite?'<small>เลือกครั้งที่ 1–3 เพื่อนำเข้า/แก้ไข</small>':''}<button class="btn btn-ghost" type="button" id="exPdf">ส่งออก PDF</button><button class="btn btn-ghost" type="button" id="exXlsx">ส่งออก Excel (.xlsx)</button>${p.manage?`<small>${esc(profileOf(t).hint)}</small>`:''}`:'';
+  if(canWrite&&t){$('openImport').onclick=()=>openImport(t);$('openAdd').onclick=()=>openEdit(null)}
   if(t){$('exPdf').onclick=()=>doExport('pdf');$('exXlsx').onclick=()=>doExport('xlsx')}
   // การ์ดสรุป
   const total=list.reduce((s,a)=>s+(Number(a.amount)||0),0);
-  const allTotal=(data.awards||[]).filter(a=>students.has(a.student_id)).reduce((s,a)=>s+(Number(a.amount)||0),0);
-  const allKids=new Set((data.awards||[]).filter(a=>students.has(a.student_id)).map(a=>a.student_id)).size;
-  $('cards').innerHTML=t?`<div class="tw-card"><span>${esc(t.name)}</span><strong>${list.length} คน</strong></div><div class="tw-card"><span>ยอดเงินทุนนี้ (บาท)</span><strong style="color:#1f7a50">${money(total)}</strong></div><div class="tw-card"><span>เฉลี่ยต่อคน (บาท)</span><strong>${list.length?money(total/list.length):'–'}</strong></div><div class="tw-card"><span>ทุกทุนรวม ภาค ${data.term}/${data.academic_year}</span><strong class="sm" style="font-size:15px">${allKids} คน · ${money(allTotal)} บาท</strong></div>`:'<div class="tw-card"><span>ยังไม่มีหัวข้อทุน</span><strong>–</strong></div>';
+  const allTotal=(data.awards||[]).filter(a=>students.has(a.student_id)&&inRound(a)).reduce((s,a)=>s+(Number(a.amount)||0),0);
+  const allKids=new Set((data.awards||[]).filter(a=>students.has(a.student_id)&&inRound(a)).map(a=>a.student_id)).size;
+  $('cards').innerHTML=t?`<div class="tw-card"><span>${esc(t.name)}</span><strong>${list.length} คน</strong></div><div class="tw-card"><span>ยอดเงินทุนนี้ · ${roundText()} (บาท)</span><strong style="color:#1f7a50">${money(total)}</strong></div><div class="tw-card"><span>เฉลี่ยต่อคน (บาท)</span><strong>${list.length?money(total/list.length):'–'}</strong></div><div class="tw-card"><span>ทุกทุนรวม · ${roundText()} ปี ${data.academic_year}</span><strong class="sm" style="font-size:15px">${allKids} คน · ${money(allTotal)} บาท</strong></div>`:'<div class="tw-card"><span>ยังไม่มีหัวข้อทุน</span><strong>–</strong></div>';
   // สรุปรายห้อง
   const rooms=new Map();list.forEach(a=>{const k=key(students.get(a.student_id));const r=rooms.get(k)||{n:0,sum:0};r.n++;r.sum+=Number(a.amount)||0;rooms.set(k,r)});
   const keys=[...rooms.keys()].sort((a,b)=>{const [ga,ra]=a.split('|'),[gb,rb]=b.split('|');return cmp(ga,gb)||cmp(ra,rb)});
@@ -184,29 +195,31 @@ function render(){
   renderList(list);
 }
 function renderList(list){
-  const q=$('q').value.trim().toLowerCase();
+  const q=$('q').value.trim().toLowerCase(),all=round==='all',max=data.max_rounds||3,canWrite=manage()&&!all;
   const rows=list.map(a=>({a,s:students.get(a.student_id)})).filter(({s})=>(!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code}`.toLowerCase().includes(q)))
     .sort((x,y)=>cmp(x.s.grade_level,y.s.grade_level)||cmp(x.s.classroom,y.s.classroom)||cmp(x.s.student_code,y.s.student_code));
-  $('listTitle').textContent=`รายชื่อนักเรียนที่ได้รับทุน${room?' · '+label(room):''}`;
-  $('actHead').textContent=manage()?'จัดการ':'';
-  $('list').innerHTML=rows.length?rows.map(({a,s},i)=>`<tr><td>${i+1}</td><td class="sc-name">${esc(s.full_name)}<small>${esc(s.student_code||'')}${s.status&&s.status!=='enrolled'?' · ย้าย/จำหน่าย':''}</small></td><td>${esc(label(key(s)))}</td><td class="num">${money(a.amount)}</td><td>${esc(a.notes||'')}</td><td>${manage()?`<button class="btn btn-ghost" type="button" data-edit="${a.id}">แก้ไข</button> <button class="btn btn-ghost" type="button" data-del="${a.id}">ลบ</button>`:''}</td></tr>`).join(''):'<tr><td colspan="6" class="sc-muted">ไม่มีรายชื่อ</td></tr>';
+  $('listTitle').textContent=`รายชื่อนักเรียนที่ได้รับทุน · ${roundText()}${room?' · '+label(room):''}`;
+  const rc=[...Array(max)].map((_,i)=>i+1);
+  $('listHead').innerHTML=`<tr><th style="width:36px">#</th><th>ชื่อ–นามสกุล</th><th>ชั้น/ห้อง</th>${all?rc.map(r=>`<th class="num">ครั้งที่ ${r}</th>`).join('')+'<th class="num">รวม (บาท)</th>':'<th class="num">ยอดเงิน (บาท)</th>'}<th>หมายเหตุ</th><th>${canWrite?'จัดการ':''}</th></tr>`;
+  const cols=all?max+5:6;
+  $('list').innerHTML=rows.length?rows.map(({a,s},i)=>`<tr><td>${i+1}</td><td class="sc-name">${esc(s.full_name)}<small>${esc(s.student_code||'')}${s.status&&s.status!=='enrolled'?' · ย้าย/จำหน่าย':''}</small></td><td>${esc(label(key(s)))}</td>${all?rc.map(r=>`<td class="num">${a.by[r]!=null?money(a.by[r]):'–'}</td>`).join('')+`<td class="num"><b>${money(a.amount)}</b></td>`:`<td class="num">${money(a.amount)}</td>`}<td>${esc(a.notes||'')}</td><td>${canWrite?`<button class="btn btn-ghost" type="button" data-edit="${a.id}">แก้ไข</button> <button class="btn btn-ghost" type="button" data-del="${a.id}">ลบ</button>`:''}</td></tr>`).join(''):`<tr><td colspan="${cols}" class="sc-muted">ไม่มีรายชื่อ</td></tr>`;
   $('list').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>openEdit((data.awards||[]).find(a=>a.id===Number(b.dataset.edit))));
-  $('list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{const a=(data.awards||[]).find(x=>x.id===Number(b.dataset.del));if(!confirm(`ลบ ${students.get(a.student_id)?.full_name} ออกจากทุนนี้?`))return;
+  $('list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{const a=(data.awards||[]).find(x=>x.id===Number(b.dataset.del));if(!confirm(`ลบ ${students.get(a.student_id)?.full_name} ออกจากทุนนี้ (${roundText()})?`))return;
     try{await apiRequest('/api/scholarships/awards/'+a.id,{method:'DELETE'});await load()}catch(e){showErr('error',e.message)}});
 }
 $('q').oninput=()=>data&&render();
 $('fRoom').onchange=()=>{room=$('fRoom').value;render()};
-$('year').onchange=load;$('term').onchange=load;
+$('year').onchange=load;$('round').onchange=()=>{round=$('round').value;render()};
 
 // ---------- ส่งออก PDF / Excel: ทุนที่เลือก ภาค/ปีที่เลือก (ถ้าเลือกห้องไว้ = เฉพาะห้องนั้น) ----------
 function report(){
   const t=currentType(),q=$('q').value.trim().toLowerCase();
   const rows=awardsOf(t.id).map(a=>({a,s:students.get(a.student_id)})).filter(({s})=>(!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code}`.toLowerCase().includes(q)))
     .sort((x,y)=>cmp(x.s.grade_level,y.s.grade_level)||cmp(x.s.classroom,y.s.classroom)||cmp(x.s.student_code,y.s.student_code))
-    .map(({a,s})=>({student_code:s.student_code,full_name:s.full_name,room:label(key(s)),amount:a.amount,notes:a.notes||'',k:key(s)}));
+    .map(({a,s})=>({student_code:s.student_code,full_name:s.full_name,room:label(key(s)),amount:a.amount,by:a.by,notes:a.notes||'',k:key(s)}));
   const rooms=[];for(const r of rows){let x=rooms.find(v=>v.k===r.k);if(!x)rooms.push(x={k:r.k,room:r.room,count:0,sum:0});x.count++;x.sum+=Number(r.amount)||0}
-  const period=`ภาคเรียนที่ ${data.term} ปีการศึกษา ${data.academic_year}`;
-  return {title:`รายชื่อนักเรียนที่ได้รับ${t.name}`,subtitle:period+(room?` · ${label(room)}`:''),fileName:`${t.name} ${data.term}-${data.academic_year}${room?' '+label(room).replace('/','-'):''}`,rows,rooms};
+  const period=`${roundText()} ปีการศึกษา ${data.academic_year}`;
+  return {title:`รายชื่อนักเรียนที่ได้รับ${t.name}`,subtitle:period+(room?` · ${label(room)}`:''),fileName:`${t.name} ${round==='all'?'รวมทั้งปี':'ครั้งที่'+round} ${data.academic_year}${room?' '+label(room).replace('/','-'):''}`,rows,rooms,roundCols:round==='all'?[...Array(data.max_rounds||3)].map((_,i)=>i+1):null};
 }
 async function doExport(kind){
   const btn=$(kind==='pdf'?'exPdf':'exXlsx'),text=btn.textContent;
@@ -221,7 +234,7 @@ function studentLabel(s){return `${s.full_name} (${s.student_code||'-'}) ${label
 function openEdit(a){
   if(!currentType())return alert('กรุณาเลือก/สร้างหัวข้อทุนก่อน');
   editing=a;showErr('edError','');
-  $('editTitle').textContent=a?`แก้ไขยอดเงิน · ${students.get(a.student_id)?.full_name}`:`เพิ่มนักเรียน · ${currentType().name}`;
+  $('editTitle').textContent=a?`แก้ไขยอดเงิน · ${students.get(a.student_id)?.full_name} · ${roundText()}`:`เพิ่มนักเรียน · ${currentType().name} · ${roundText()}`;
   $('edStudentWrap').hidden=!!a;
   $('edList').innerHTML=[...students.values()].filter(s=>!s.status||s.status==='enrolled').map(s=>`<option value="${esc(studentLabel(s))}">`).join('');
   $('edSearch').value='';$('edAmount').value=a?.amount??'';$('edNotes').value=a?.notes||'';
@@ -233,7 +246,7 @@ $('edSave').onclick=async()=>{
   try{
     if(editing){await apiRequest('/api/scholarships/awards/'+editing.id,{method:'PATCH',body:{amount:$('edAmount').value,notes:$('edNotes').value}})}
     else{const s=[...students.values()].find(x=>studentLabel(x)===$('edSearch').value.trim());if(!s)return showErr('edError','กรุณาเลือกนักเรียนจากรายการ');
-      await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:typeId,academic_year:data.academic_year,term:data.term,mode:'merge',records:[{student_id:s.id,amount:$('edAmount').value,notes:$('edNotes').value}]}})}
+      await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:typeId,academic_year:data.academic_year,round:Number(round),mode:'merge',records:[{student_id:s.id,amount:$('edAmount').value,notes:$('edNotes').value}]}})}
     $('editModal').hidden=true;await load();
   }catch(e){showErr('edError',e.message)}
 };
@@ -267,7 +280,7 @@ function openImport(t){
   $('imType').innerHTML=`<option value="${t.id}">${esc(t.name)}</option>`;$('imType').value=String(t.id);$('imType').disabled=true;
   $('drop').innerHTML=`เลือกไฟล์ PDF (${esc(pf.label)}) หรือลากไฟล์มาวาง<br><small class="sc-muted">${esc(pf.hint)} · รองรับ PDF ข้อความ และ PDF สแกน (OCR ภาษาไทย) · ระบบหาหัวตารางและแยกคอลัมน์เอง ไม่ต้องจัดตารางใหม่</small><input type="file" id="file" accept="application/pdf,.pdf" hidden>`;
   $('file').onchange=()=>{if($('file').files[0])readFile($('file').files[0])};
-  $('imYear').value=data.academic_year;$('imTerm').value=String(data.term);
+  $('imYear').value=data.academic_year;$('imTerm').value=round==='all'?'1':round;
   parsed=null;preview=[];$('mapBox').hidden=true;$('previewBox').hidden=true;$('progress').textContent='';$('imSave').disabled=true;$('imReplace').checked=false;showErr('imError','');$('file').value='';
   $('importModal').hidden=false;
 }
@@ -284,14 +297,13 @@ async function readFile(file){
     parsed.fileName=file.name;
     if(!parsed.rows.length)throw new Error('ไม่พบแถวข้อมูลใต้หัวตาราง');
     mapping=ScholarshipPdf.guessMapping(parsed.columns,parsed.rows);
-    // หัวเอกสาร เช่น "…กสศ. ภาคเรียนที่ 1 ปีการศึกษา 2569" → ตั้งหัวข้อทุน/ภาคเรียน/ปีให้อัตโนมัติ (แก้ได้)
+    // หัวเอกสาร เช่น "…กสศ. ภาคเรียนที่ 1 ปีการศึกษา 2569" → ตรวจชนิดแบบฟอร์มและตั้งปีการศึกษาอัตโนมัติ (ครั้งที่ ผู้ใช้เลือกเอง)
     const m=parsed.meta||{},auto=[];
     const pf=profileOf(importType);
     if(pf.strict&&m.kind!==pf.kind)throw new Error(`ไฟล์นี้ไม่ใช่${pf.label} — หัวเอกสารที่อ่านได้: "${m.title||'-'}" กรุณาใช้ไฟล์ของ${importType.name}`);
     if(m.kind&&m.kind!==pf.kind)throw new Error(`ไฟล์นี้เป็น${KIND_NAME[m.kind]} — กรุณานำเข้าที่แท็บ ${(data.types||[]).find(x=>x.code===m.kind)?.name||KIND_NAME[m.kind]}`);
     const lack=pf.need.filter(k=>!mapping.includes(k));
     if(lack.length)throw new Error(`ไม่พบคอลัมน์ ${lack.map(k=>({national_id:'เลขประจำตัวประชาชน',amount:'งบประมาณที่ได้รับจัดสรร/ยอดเงิน'}[k])).join(' และ ')} ในไฟล์ — ไม่ตรงกับ${pf.label}`);
-    if(m.term&&$('imTerm').value!==String(m.term)){$('imTerm').value=String(m.term);auto.push('ภาคเรียนที่ '+m.term)}
     if(m.year&&$('imYear').value!==String(m.year)){$('imYear').value=String(m.year);auto.push('ปีการศึกษา '+m.year)}
     parsed.autoNote=auto.length?'ตั้งค่าตามหัวเอกสาร: '+auto.join(', '):'';
     $('progress').textContent=`${m.title?m.title+' · ':''}อ่านแล้ว ${parsed.pages} หน้า${parsed.ocrPages?` (OCR ${parsed.ocrPages} หน้า — โปรดตรวจชื่อและยอดเงินให้ละเอียด)`:''} · ${parsed.rows.length} แถว${parsed.autoNote?' · '+parsed.autoNote:''}`;
@@ -350,13 +362,13 @@ $('imSave').onclick=async()=>{
   showErr('imError','');
   const records=rowsToSave(),replace=$('imReplace').checked;
   const tname=$('imType').selectedOptions[0]?.textContent||'';
-  if(replace&&!confirm(`แทนที่รายชื่อเดิมทั้งหมดของ "${tname}" ภาคเรียน ${$('imTerm').value}/${$('imYear').value} ด้วย ${records.length} คนจากไฟล์นี้?`))return;
+  if(replace&&!confirm(`แทนที่รายชื่อเดิมทั้งหมดของ "${tname}" ครั้งที่ ${$('imTerm').value} ปี ${$('imYear').value} ด้วย ${records.length} คนจากไฟล์นี้?`))return;
   try{
-    await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:Number($('imType').value),academic_year:$('imYear').value,term:$('imTerm').value,mode:replace?'replace':'merge',source:parsed?.fileName||'',records}});
+    await apiRequest('/api/scholarships/awards',{method:'PUT',body:{type_id:Number($('imType').value),academic_year:$('imYear').value,round:Number($('imTerm').value),mode:replace?'replace':'merge',source:parsed?.fileName||'',records}});
     const t=(data.types||[]).find(x=>x.id===Number($('imType').value));
     $('importModal').hidden=true;
     if(t){tab=t.fixed?t.code:'other';typeId=t.id}
-    $('year').innerHTML=`<option value="${esc($('imYear').value)}">${esc($('imYear').value)}</option>`;$('year').value=$('imYear').value;$('term').value=$('imTerm').value;
+    $('year').innerHTML=`<option value="${esc($('imYear').value)}">${esc($('imYear').value)}</option>`;$('year').value=$('imYear').value;round=$('imTerm').value;
     await load();
   }catch(e){showErr('imError',e.message)}
 };

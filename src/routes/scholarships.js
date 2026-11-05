@@ -1,4 +1,5 @@
-// ทุนการศึกษา (ระบบสนับสนุน) — รายชื่อนักเรียนที่ได้รับทุน แยกตามหัวข้อทุน ปีการศึกษา และภาคเรียน
+// ทุนการศึกษา (ระบบสนับสนุน) — รายชื่อนักเรียนที่ได้รับทุน แยกตามหัวข้อทุน ปีการศึกษา และครั้งที่ได้รับ (สูงสุด 3 ครั้งต่อปี)
+// คอลัมน์ term ในตาราง = ครั้งที่ 1–3 · ข้อมูลปีการศึกษาก่อนปีที่เปิดใช้ถูกลบอัตโนมัติเมื่อขึ้นปีใหม่
 // หัวข้อทุนคงที่: กสศ. (ทุนปัจจัยพื้นฐานนักเรียนยากจน) และ ทุนอุดหนุน · หัวข้อ "ทุนอื่น ๆ" สร้างเพิ่มได้เอง
 // ดู: ผู้รับผิดชอบงานทุน, ผู้บริหาร/ผู้ดูแลระบบ (ทุกห้อง) และครูประจำชั้น (เฉพาะห้องของตน)
 // นำเข้า/แก้ไข: ผู้รับผิดชอบงานทุน (budget_role_assignments role_key 'scholarship_officer') และ superadmin
@@ -29,7 +30,7 @@ export async function ensureScholarshipSchema(env) {
     type_id INTEGER NOT NULL REFERENCES scholarship_types(id) ON DELETE CASCADE,
     student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
     academic_year INTEGER NOT NULL CHECK (academic_year BETWEEN 2500 AND 2700),
-    term INTEGER NOT NULL CHECK (term IN (1,2)),
+    term INTEGER NOT NULL CHECK (term BETWEEN 1 AND 3),
     amount REAL,
     notes TEXT,
     source TEXT,
@@ -37,6 +38,26 @@ export async function ensureScholarshipSchema(env) {
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (type_id, student_id, academic_year, term)
   )`).run();
+  // ตารางรุ่นแรกจำกัดภาคเรียน 1–2: สร้างใหม่ให้รับครั้งที่ 1–3 (ข้อมูลเดิมย้ายตามเลขเดิม)
+  const def = await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='scholarship_awards'").first().catch(() => null);
+  if (def?.sql && /term IN \(1,\s*2\)/.test(def.sql)) {
+    // ทีละคำสั่ง (ตารางใหม่ต้องมีอยู่ก่อนเตรียมคำสั่งคัดลอก) · เริ่มจากล้างตารางชั่วคราวที่ค้างจากรอบที่ล้มเหลว
+    await env.DB.prepare("DROP TABLE IF EXISTS scholarship_awards_v2").run();
+    for (const sql of [
+      `CREATE TABLE scholarship_awards_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type_id INTEGER NOT NULL REFERENCES scholarship_types(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        academic_year INTEGER NOT NULL CHECK (academic_year BETWEEN 2500 AND 2700),
+        term INTEGER NOT NULL CHECK (term BETWEEN 1 AND 3),
+        amount REAL, notes TEXT, source TEXT, updated_by INTEGER,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (type_id, student_id, academic_year, term))`,
+      "INSERT INTO scholarship_awards_v2 SELECT id, type_id, student_id, academic_year, term, amount, notes, source, updated_by, updated_at FROM scholarship_awards",
+      "DROP TABLE scholarship_awards",
+      "ALTER TABLE scholarship_awards_v2 RENAME TO scholarship_awards",
+    ]) await env.DB.prepare(sql).run();
+  }
   await env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_scholarship_awards_period ON scholarship_awards(academic_year, term, type_id)").run();
   for (const t of FIXED_TYPES) {
     await env.DB.prepare("INSERT OR IGNORE INTO scholarship_types (code, name, sort_order) VALUES (?,?,?)").bind(t.code, t.name, t.sort).run();
@@ -51,10 +72,13 @@ export function parseYear(value) {
   const be = n < 2500 ? n + 543 : n;
   return be >= 2500 && be <= 2700 ? be : null;
 }
-export function parseTerm(value) {
+// ครั้งที่ได้รับทุน 1–3
+export const MAX_ROUNDS = 3;
+export function parseRound(value) {
   const n = Number(String(value ?? "").trim());
-  return n === 1 || n === 2 ? n : null;
+  return Number.isInteger(n) && n >= 1 && n <= MAX_ROUNDS ? n : null;
 }
+const parseTerm = (v) => { const n = Number(String(v ?? "").trim()); return n === 1 || n === 2 ? n : null; };
 // "1,500.00 บาท" → 1500 · ว่าง → null · ผิด → undefined
 export function parseAmount(value) {
   if (value === null || value === undefined) return null;
@@ -164,26 +188,38 @@ async function typeById(env, id) {
 }
 
 // ---------- handlers ----------
+// ขึ้นปีการศึกษาใหม่ (มีปีที่เปิดใช้ในระบบ) → ลบข้อมูลทุนของปีก่อนหน้าทั้งหมด ทำครั้งเดียวต่อปีต่อ isolate
+const purged = new WeakMap();
+async function purgeOldYears(env, user) {
+  const row = await env.DB.prepare("SELECT year_be FROM academic_years WHERE status = 'active' ORDER BY year_be DESC LIMIT 1").first().catch(() => null);
+  const year = Number(row?.year_be);
+  if (!year || purged.get(env.DB) === year) return;
+  const r = await env.DB.prepare("DELETE FROM scholarship_awards WHERE academic_year < ?").bind(year).run();
+  purged.set(env.DB, year);
+  if (r?.meta?.changes) await audit(env, user, "purge_old_years", { before_year: year, deleted: r.meta.changes });
+}
+
+// GET /api/scholarships?academic_year=2569 — ทุกครั้ง (1–3) ของปีนั้น; client แยกรายครั้ง/รวมทั้งปี
 async function handleList(request, env, user, access) {
   if (!access.view) return jsonResponse({ error: "ไม่มีสิทธิ์ดูข้อมูลทุนการศึกษา" }, 403);
+  await purgeOldYears(env, user);
   const url = new URL(request.url);
   const current = await activePeriod(env);
   const year = parseYear(url.searchParams.get("academic_year")) || current.year;
-  const term = parseTerm(url.searchParams.get("term")) || current.term;
   const { results: types } = await env.DB.prepare("SELECT id, code, name, sort_order FROM scholarship_types ORDER BY sort_order, id").all();
-  const { results: awards } = await env.DB.prepare(`SELECT id, type_id, student_id, amount, notes, updated_at FROM scholarship_awards
-    WHERE academic_year = ? AND term = ? ORDER BY type_id, student_id`).bind(year, term).all();
+  const { results: awards } = await env.DB.prepare(`SELECT id, type_id, student_id, term AS round, amount, notes, updated_at FROM scholarship_awards
+    WHERE academic_year = ? ORDER BY type_id, term, student_id`).bind(year).all();
   const all = await studentRows(env, false);
   const rooms = new Set(access.homerooms);
   const visible = access.view_all ? all : all.filter((s) => rooms.has(roomKey(s.grade_level, s.classroom)));
   const ids = new Set(visible.map((s) => s.id));
   const awarded = new Set((awards || []).map((a) => a.student_id));
-  // นักเรียนที่กำลังศึกษา + นักเรียนที่ย้าย/จำหน่ายแล้วแต่มีรายการทุนในภาคนี้
+  // นักเรียนที่กำลังศึกษา + นักเรียนที่ย้าย/จำหน่ายแล้วแต่มีรายการทุนในปีนี้
   const students = visible.filter((s) => !s.status || s.status === "enrolled" || awarded.has(s.id));
   const { results: yearRows } = await env.DB.prepare("SELECT DISTINCT academic_year FROM scholarship_awards ORDER BY academic_year DESC").all();
   const years = [...new Set([current.year, current.year + 1, ...yearRows.map((r) => Number(r.academic_year))])].sort((a, b) => b - a);
   return jsonResponse({
-    academic_year: year, term, current, years,
+    academic_year: year, max_rounds: MAX_ROUNDS, current, years,
     types: (types || []).map((t) => ({ ...t, fixed: !!t.code })),
     awards: (awards || []).filter((a) => ids.has(a.student_id)),
     students,
@@ -243,13 +279,15 @@ async function handleMatch(request, env) {
   });
 }
 
-// PUT /api/scholarships/awards { type_id, academic_year, term, mode:'merge'|'replace', source, records:[{student_id, amount, notes}] }
+// PUT /api/scholarships/awards { type_id, academic_year, round (1–3), mode:'merge'|'replace', source, records:[{student_id, amount, notes}] }
 async function handleSaveAwards(request, env, user) {
   const body = await readJson(request);
   if (!body || !Array.isArray(body.records)) return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
-  const typeId = Number(body.type_id), year = parseYear(body.academic_year), term = parseTerm(body.term);
+  const typeId = Number(body.type_id), year = parseYear(body.academic_year), term = parseRound(body.round ?? body.term);
   if (!year) return jsonResponse({ error: "กรุณาระบุปีการศึกษา (พ.ศ.)" }, 400);
-  if (!term) return jsonResponse({ error: "กรุณาเลือกภาคเรียน 1 หรือ 2" }, 400);
+  if (!term) return jsonResponse({ error: `กรุณาเลือกครั้งที่ 1–${MAX_ROUNDS}` }, 400);
+  const current = await activePeriod(env);
+  if (year < current.year) return jsonResponse({ error: `ข้อมูลปีการศึกษาก่อน ${current.year} ถูกล้างเมื่อขึ้นปีใหม่ บันทึกย้อนหลังไม่ได้` }, 400);
   if (!Number.isInteger(typeId) || !(await typeById(env, typeId))) return jsonResponse({ error: "ไม่พบหัวข้อทุน" }, 404);
   if (body.records.length > MAX_BATCH) return jsonResponse({ error: `บันทึกได้ครั้งละไม่เกิน ${MAX_BATCH} คน` }, 400);
   const replace = body.mode === "replace";
@@ -278,7 +316,7 @@ async function handleSaveAwards(request, env, user) {
       .bind(typeId, Number(r.student_id), year, term, amount, notes, source, user.id));
   }
   await env.DB.batch(statements);
-  await audit(env, user, replace ? "import_replace" : "save", { type_id: typeId, academic_year: year, term, count: body.records.length, source });
+  await audit(env, user, replace ? "import_replace" : "save", { type_id: typeId, academic_year: year, round: term, count: body.records.length, source });
   return jsonResponse({ ok: true, saved: body.records.length });
 }
 
