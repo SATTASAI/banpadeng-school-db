@@ -251,12 +251,12 @@ $('typeAdd').onclick=()=>{const name=$('typeName').value.trim();if(!name)return 
 $('tyClose').onclick=()=>$('typeModal').hidden=true;
 
 // ---------- นำเข้า PDF ----------
-const FIELDS=[['','— ไม่ใช้ —'],['name','ชื่อ–สกุล'],['prefix','คำนำหน้า'],['first','ชื่อ'],['last','นามสกุล'],['national_id','เลขบัตรประชาชน'],['student_code','เลขประจำตัวนักเรียน'],['amount','ยอดเงิน'],['room','ชั้น/ห้อง'],['notes','หมายเหตุ/สาเหตุ'],['fail','โอนไม่สำเร็จ (ใส่หมายเหตุ)']];
+const FIELDS=[['','— ไม่ใช้ —'],['name','ชื่อ–สกุล'],['prefix','คำนำหน้า'],['first','ชื่อ'],['last','นามสกุล'],['national_id','เลขบัตรประชาชน'],['student_code','เลขประจำตัวนักเรียน'],['amount','ยอดเงิน'],['room','ชั้น/ห้อง'],['notes','หมายเหตุ/สาเหตุ'],['fail','โอนไม่สำเร็จ (ใส่หมายเหตุ)'],['mark','เครื่องหมาย (ชื่อคอลัมน์ลงหมายเหตุ)']];
 let parsed=null,mapping=[],preview=[],matchStudents=new Map(),importType=null;
 // แบบฟอร์มของแต่ละทุน: kind = ชนิดเอกสารที่อ่านได้จากหัวเอกสาร, need = คอลัมน์ที่ต้องมี
 const PROFILES={
   eef:{label:'แบบฟอร์ม กสศ.',hint:'ใช้ไฟล์ "รายชื่อนักเรียนที่มีสิทธิ์ได้รับเงินอุดหนุนยากจนพิเศษ กสศ." (PDF จากระบบ กสศ.)',kind:'eef',strict:true,need:['national_id','amount']},
-  subsidy:{label:'แบบฟอร์มทุนอุดหนุน',hint:'ใช้ไฟล์ PDF รายชื่อนักเรียนที่ได้รับเงินอุดหนุน ระบบจับหัวตารางเอง',kind:'subsidy',need:[]},
+  subsidy:{label:'แบบฟอร์มทุนอุดหนุน',hint:'ใช้ไฟล์ "บัญชีจัดสรรงบประมาณ … ปัจจัยพื้นฐานสำหรับนักเรียนยากจน" (งบเงินอุดหนุน)',kind:'subsidy',strict:true,need:['national_id','amount']},
   other:{label:'แบบฟอร์มทั่วไป',hint:'ใช้ไฟล์ PDF ตารางรายชื่อที่มีหัวตาราง (ชื่อ–สกุล / เลขประจำตัว / ยอดเงิน)',kind:'',need:[]}
 };
 const profileOf=t=>PROFILES[t?.code]||PROFILES.other;
@@ -305,7 +305,7 @@ function renderMap(){
   $('mapBox').hidden=false;
 }
 async function rematch(){
-  const recs=ScholarshipPdf.toRecords(parsed.rows,mapping);
+  const recs=ScholarshipPdf.toRecords(parsed.rows,mapping,parsed.columns);
   if(!recs.length){preview=[];renderPreview();return showErr('imError','ยังไม่พบคอลัมน์ชื่อหรือเลขประจำตัว — กรุณาเลือกความหมายของคอลัมน์ด้านบน')}
   showErr('imError','');$('progress').textContent+=' · กำลังจับคู่กับทะเบียนนักเรียน…';
   try{
