@@ -372,6 +372,7 @@
       <a href="/support.html" data-page="student-support"><span class="nav-number">08</span>ดูแลนักเรียน</a>
       <a href="/insurance.html" data-page="insurance"><span class="nav-number">ปกภ.</span>ประกันอุบัติเหตุ</a>
       <a href="/scholarships.html" data-page="scholarships" data-scholarship-only hidden style="display:none;"><span class="nav-number">ทุน</span>ทุนการศึกษา</a>
+      <a href="/merit.html" data-page="merit" data-merit-only hidden style="display:none;"><span class="nav-number">ดี</span>บันทึกความดี</a>
       <a href="/leave.html" data-page="leave"><span class="nav-number">ลา</span>การลา</a>
       <a href="/my-substitutes.html" data-page="my-substitutes"><span class="nav-number">แทน</span>คาบสอนแทนของฉัน</a>
       <a href="/supervision.html" data-page="supervision"><span class="nav-number">นิเทศ</span>ลงทะเบียนนิเทศ</a>
@@ -636,6 +637,7 @@
   const departmentNavNodes=()=>DEPARTMENT_NAV_KEYS.map(key=>document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`)).filter(Boolean);
   departmentNavNodes().forEach(node=>{node.hidden=true;node.style.display='none';});
   loadNavigationPermission('/api/navigation/departments',v=>{const allowed=new Set(v.departments||[]);DEPARTMENT_NAV_KEYS.forEach(key=>{const node=document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`);if(!node)return;const ok=allowed.has(key);node.hidden=!ok;node.style.display=ok?'':'none';});const label=[...document.querySelectorAll('.sidebar nav > .nav-label')].find(l=>/ฝ่ายงาน/.test(l.textContent));if(label){if(!allowed.size)label.style.display='none';else label.textContent=v.all?'6 ฝ่ายงาน':'ฝ่ายงานของฉัน';}});
+  loadNavigationPermission('/api/merit/permissions',p=>{const link=document.querySelector('.sidebar nav a[data-page="merit"]');const group=document.querySelector('.sidebar nav [data-nav-group="merit"]');[link,group].filter(Boolean).forEach(el=>{el.hidden=!p.view;el.style.display=p.view?'':'none'});document.querySelectorAll('.sidebar nav [data-parent-page="merit"]').forEach(c=>{const ok=c.dataset.url.includes('tab=money')?p.money?.view:p.good?.view;c.hidden=!ok;c.style.display=ok?'':'none'});});
   loadNavigationPermission('/api/scholarships/permissions',p=>document.querySelectorAll('[data-scholarship-only]').forEach(link=>{link.hidden=!p.view;link.style.display=p.view?'':'none';}));
   loadNavigationPermission('/api/evaluation/permissions',p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';}));
 
@@ -781,6 +783,8 @@
     {title:"งานมอบหมาย",subtitle:"งานที่ได้รับมอบหมาย",page_key:"tasks",url:"/tasks.html",keywords:"งาน มอบหมาย กำหนดส่ง"},
     {title:"การลา",subtitle:"ยื่นและอนุมัติคำขอลา",page_key:"leave",url:"/leave.html",keywords:"ลา ป่วย กิจ อนุมัติ"},
     {title:"ป่าเด็งโมเดล",subtitle:"ระบบสนับสนุน · ส่งแบบรายงาน + ภาพกิจกรรม ภาคเรียนละ 2 ครั้ง ต่อวิชา",page_key:"padeng-model",url:"/padeng-model.html",keywords:"ป่าเด็งโมเดล padeng model ส่งงาน ภาพกิจกรรม pdf"},
+    {title:"บันทึกความดี",subtitle:"ระบบสนับสนุน · บันทึกการทำความดีของนักเรียน สถิติรายห้อง/สายชั้น",page_key:"merit",url:"/merit.html",keywords:"ความดี บันทึกความดี คุณธรรม จิตอาสา"},
+    {title:"บันทึกการเจอเงิน",subtitle:"ระบบสนับสนุน · นักเรียนเจอเงินส่งคืน ยอดเงินและภาพถ่าย",page_key:"merit",url:"/merit.html?tab=money",keywords:"เจอเงิน เก็บเงินได้ ส่งคืน ซื่อสัตย์"},
     {title:"ทุนการศึกษา",subtitle:"ระบบสนับสนุน · นักเรียนที่ได้รับทุน กสศ. ทุนอุดหนุน และทุนอื่น ๆ พร้อมยอดเงิน",page_key:"scholarships",url:"/scholarships.html",keywords:"ทุน ทุนการศึกษา กสศ ยากจน อุดหนุน ปัจจัยพื้นฐาน"},
     {title:"ประกันอุบัติเหตุ",subtitle:"ระบบสนับสนุน · กรอก/แก้ไขข้อมูลประกันนักเรียนรายคนและทั้งห้อง",page_key:"insurance",url:"/insurance.html",keywords:"ประกัน อุบัติเหตุ กรมธรรม์ เบี้ย insurance"},
     {title:"วิจัยในชั้นเรียน",subtitle:"ระบบสนับสนุน · ส่งไฟล์วิจัยในชั้นเรียน (PDF)",page_key:"classroom-research",url:"/classroom-research.html",keywords:"วิจัย วิจัยในชั้นเรียน ส่งงาน pdf"},
