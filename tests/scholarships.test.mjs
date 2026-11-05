@@ -51,7 +51,7 @@ test("matches by national id, code, exact name and suggests close names", () => 
 test("fixed types exist; officer imports, replaces and edits; homeroom sees own room only", async () => {
   const env = environment();
   let r = await api(env, 1, "/api/scholarships");
-  assert.equal(r.status, 200); assert.equal(r.data.term, 2); assert.equal(r.data.academic_year, 2569);
+  assert.equal(r.status, 200); assert.equal(r.data.max_rounds, 3); assert.equal(r.data.academic_year, 2569);
   assert.deepEqual(r.data.types.filter((t) => t.fixed).map((t) => t.code), ["eef", "subsidy"]);
   const eef = r.data.types.find((t) => t.code === "eef").id;
   r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2569, term: 2, records: [{ student_id: 10, amount: "1,600" }, { student_id: 12, amount: "1600" }] });
@@ -59,7 +59,7 @@ test("fixed types exist; officer imports, replaces and edits; homeroom sees own 
   r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2569, term: 2, mode: "replace", records: [{ student_id: 10, amount: "1500" }, { student_id: 11, amount: "1500" }] });
   assert.equal(r.status, 200);
   r = await api(env, 3, "/api/scholarships");
-  assert.deepEqual(r.data.awards.map((a) => [a.student_id, a.amount]), [[10, 1500], [11, 1500]]);
+  assert.deepEqual(r.data.awards.map((a) => [a.student_id, a.amount, a.round]), [[10, 1500, 2], [11, 1500, 2]]);
   r = await api(env, 2, "/api/scholarships");
   assert.equal(r.status, 200); assert.deepEqual(r.data.students.map((s) => s.id).sort(), [10, 11]); assert.equal(r.data.permissions.manage, false);
   r = await api(env, 2, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2569, term: 2, records: [{ student_id: 10, amount: 1 }] });
@@ -154,4 +154,46 @@ test("reads the สพฐ. subsidy allocation form (ปัจจัยพื้�
   const map = P.guessMapping(res.columns, res.rows);
   const recs = JSON.parse(JSON.stringify(P.toRecords(res.rows, map, res.columns)));
   assert.deepEqual(recs.map((r) => [r.national_id, r.room, r.amount, r.notes]), [["1000000000001", "ป.1/4", 500, "ผ่านเกณฑ์ ยากจน"], ["G660000000002", "ป.1/4", 500, "ผ่านเกณฑ์ ยากจนพิเศษ"]]);
+});
+
+test("rounds 1–3 per year, rejects round 4 and past years, purges old years when a new year is active", async () => {
+  const env = environment();
+  let r = await api(env, 1, "/api/scholarships");
+  const eef = r.data.types.find((t) => t.code === "eef").id;
+  for (const round of [1, 2, 3]) {
+    r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2569, round, records: [{ student_id: 10, amount: 1000 * round }] });
+    assert.equal(r.status, 200);
+  }
+  r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2569, round: 4, records: [{ student_id: 10, amount: 1 }] });
+  assert.equal(r.status, 400);
+  r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2568, round: 1, records: [{ student_id: 10, amount: 1 }] });
+  assert.equal(r.status, 400);
+  r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: eef, academic_year: 2570, round: 1, records: [{ student_id: 11, amount: 700 }] });
+  assert.equal(r.status, 200, "next year can be prepared early");
+  r = await api(env, 1, "/api/scholarships?academic_year=2569");
+  assert.deepEqual(r.data.awards.map((a) => [a.round, a.amount]), [[1, 1000], [2, 2000], [3, 3000]]);
+  env.db.exec("UPDATE academic_years SET status='closed'; INSERT INTO academic_years VALUES (6,2570,'active');");
+  r = await api(env, 1, "/api/scholarships?academic_year=2569");
+  assert.equal(r.data.awards.length, 0);
+  assert.deepEqual(env.db.prepare("SELECT academic_year, amount FROM scholarship_awards").all().map((x) => [x.academic_year, x.amount]), [[2570, 700]]);
+});
+
+test("migrates the first table version (term IN (1,2)) to allow round 3", async () => {
+  const env = environment();
+  env.db.exec(`CREATE TABLE scholarship_types (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE, name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 100, created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')));
+    INSERT INTO scholarship_types (code,name,sort_order) VALUES ('eef','กสศ',1);
+    CREATE TABLE scholarship_awards (id INTEGER PRIMARY KEY AUTOINCREMENT, type_id INTEGER NOT NULL, student_id INTEGER NOT NULL, academic_year INTEGER NOT NULL, term INTEGER NOT NULL CHECK (term IN (1,2)), amount REAL, notes TEXT, source TEXT, updated_by INTEGER, updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (type_id, student_id, academic_year, term));
+    INSERT INTO scholarship_awards (type_id,student_id,academic_year,term,amount) VALUES (1,10,2569,2,500);`);
+  let r = await api(env, 1, "/api/scholarships/awards", "PUT", { type_id: 1, academic_year: 2569, round: 3, records: [{ student_id: 10, amount: 900 }] });
+  assert.equal(r.status, 200);
+  r = await api(env, 1, "/api/scholarships");
+  assert.deepEqual(r.data.awards.map((a) => [a.round, a.amount]), [[2, 500], [3, 900]]);
+});
+
+test("export supports whole-year view with per-round columns", () => {
+  const ctx = vm.createContext({ window: {} }); vm.runInContext(fs.readFileSync("public/js/scholarship-export.js", "utf8"), ctx); const E = ctx.window.ScholarshipExport;
+  const rep = { title: "t", subtitle: "รวมทั้งปี", roundCols: [1, 2, 3], rows: [{ full_name: "ก", amount: 3000, by: { 1: 1000, 2: 2000 } }], rooms: [] };
+  const body = E.pdfDoc(rep).content[3].table.body;
+  assert.equal(body[0].length, 8); assert.equal(body[1][6].text, "-");
+  const s = E.sheets(rep); assert.deepEqual(JSON.parse(JSON.stringify(s.list.at(-1).slice(4, 8))), [1000, 2000, 0, 3000]);
 });
