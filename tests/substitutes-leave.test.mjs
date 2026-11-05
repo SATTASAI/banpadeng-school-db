@@ -191,3 +191,35 @@ test('leave-days lists weekdays with pending/approved leave for the calendar dot
  assert.equal((await call(env,'/api/substitutes/leave-days?month=2026-13','GET',undefined,3)).status,400);
  assert.equal((await call(env,'/api/substitutes/leave-days?month=2026-10','GET',undefined,2)).status,403);
 });
+test('day plan covers several absent teachers at once without double-booking substitutes, then saves in one batch',async()=>{
+ const {env,absent,free}=await setup();
+ const person=user=>env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=?').get(user).id;
+ for(const [id,name] of [[7,'ครูไปราชการ'],[8,'ครูว่างสอง']]){
+  env.raw.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(?,?,'x','x',?,'teacher')").run(id,'test'+id,name);
+  env.raw.prepare("INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(?,?,?,'ครู')").run(id,name,'test-person-'+id);
+ }
+ const away=person(7),spare=person(8);
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(20,99,'ป.4','2',2,1,'วิทยาศาสตร์',?)").run(away);
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(21,99,'ป.1','1',3,1,'ศิลปะ',?)").run(spare);
+ const extras=[{teacher_id:away,reason:'ไปราชการ'}];
+ const res=await call(env,path+'day-plan','POST',{date:'2026-10-06',extras},3);assert.equal(res.status,200,await res.clone().text());
+ const plan=await res.json(),lessons=plan.teachers.flatMap(t=>t.lessons.map(l=>({...l,teacher_id:t.teacher_id})));
+ assert.deepEqual(plan.teachers.map(t=>t.teacher_id).sort(),[absent,away,person(5)].sort());
+ assert.equal(lessons.length,3);assert(lessons.every(l=>l.proposed_teacher_id));assert.equal(plan.unfilled,0);
+ const p1=lessons.filter(l=>l.period===1).map(l=>l.proposed_teacher_id);assert.equal(new Set(p1).size,2);assert(p1.includes(free)&&p1.includes(spare));
+ assert(lessons.find(l=>l.proposed_teacher_id===spare).cross_band);
+ assert.equal((await call(env,path+'day-plan','POST',{date:'2026-10-06',extras},2)).status,403);
+ // เลือกครูซ้ำคาบเดียวกัน → ปฏิเสธทั้งชุด
+ const clash=lessons.filter(l=>l.period===1).map(l=>({teacher_id:l.teacher_id,entry_id:l.entry_id,substitute_teacher_id:free}));
+ assert.equal((await call(env,path+'day-plan/save','POST',{date:'2026-10-06',items:clash,extras},3)).status,409);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments').get().n,0);
+ // ครูไม่มีใบลาต้องมีเหตุ
+ const items=lessons.map(l=>({teacher_id:l.teacher_id,entry_id:l.entry_id,substitute_teacher_id:l.proposed_teacher_id}));
+ assert.equal((await call(env,path+'day-plan/save','POST',{date:'2026-10-06',items,extras:[{teacher_id:away,reason:''}]},3)).status,409);
+ const ok=await call(env,path+'day-plan/save','POST',{date:'2026-10-06',items,extras},3);assert.equal(ok.status,200,await ok.clone().text());assert.equal((await ok.json()).saved,3);
+ const saved=(await (await call(env,path+'assignments?date=2026-10-06','GET',undefined,3)).json()).assignments;
+ assert.equal(saved.length,3);assert.equal(saved.find(a=>a.absent_teacher_id===away).absence_reason,'ไปราชการ');assert(saved.filter(a=>a.absent_teacher_id===absent).every(a=>a.leave_request_id===80));
+ assert.equal((await call(env,path+'day-plan/save','POST',{date:'2026-10-06',items,extras},3)).status,409);
+ const again=await (await call(env,path+'day-plan','POST',{date:'2026-10-06'},3)).json();
+ assert(again.teachers.find(t=>t.teacher_id===away).lessons.every(l=>l.assignment_id));
+});

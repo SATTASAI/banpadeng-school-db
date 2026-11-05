@@ -341,6 +341,109 @@ async function assign(request,env,user){
   catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"คาบนี้มีการมอบหมายครูแล้ว กรุณารีเฟรช"},409);throw error;}
   return reply({ok:true});
 }
+// ===== จัดสอนแทนทั้งวัน: ครูที่ไม่อยู่หลายคนพร้อมกัน ไม่ให้ครูสอนแทนชนคาบกัน =====
+// extras = ครูที่ไม่อยู่โดยไม่มีใบลา [{teacher_id,reason}] (ยังไม่บันทึก)
+function cleanExtras(list){const out=new Map();for(const x of Array.isArray(list)?list:[]){const id=validId(x?.teacher_id),why=text(x?.reason,300);if(id&&!out.has(id))out.set(id,why);}return out;}
+async function dayContext(env,date,extras){
+  if(!validDate(date))return {error:reply({error:"เลือกวันที่ให้ถูกต้อง"},400)};
+  const day=weekday(date);if(!day)return {error:reply({error:"เลือกวันจันทร์ถึงศุกร์"},400)};
+  const term=await env.DB.prepare(`SELECT t.id,t.name,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
+    WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
+  if(!term)return {error:reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404)};
+  const published=await plan(env,term.id,"published");if(!published)return {error:reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400)};
+  const {results:entries}=await env.DB.prepare(`SELECT e.id,e.teacher_id,e.grade_level,e.classroom,e.period,e.subject,e.room_name,
+    a.id AS assignment_id,a.substitute_teacher_id,p.full_name AS substitute_name
+    FROM timetable_entries e LEFT JOIN substitute_assignments a ON a.timetable_entry_id=e.id AND a.absence_date=?
+    LEFT JOIN personnel_records p ON p.id=a.substitute_teacher_id
+    WHERE e.plan_id=? AND e.weekday=? AND e.teacher_id IS NOT NULL ORDER BY e.period,e.grade_level,e.classroom`).bind(date,published.id,day).all();
+  const {results:saved}=await env.DB.prepare(`SELECT substitute_teacher_id AS id,period FROM substitute_assignments WHERE absence_date=?`).bind(date).all();
+  const {results:absRows}=await env.DB.prepare(`SELECT ab.teacher_id,ab.reason,p.full_name FROM substitute_absences ab JOIN personnel_records p ON p.id=ab.teacher_id WHERE ab.absence_date=?`).bind(date).all();
+  const leaves=(await (await leaveAbsences(env,date)).json()).leave_requests||[];
+  const {results:people}=await env.DB.prepare(`SELECT p.id,p.full_name,u.role FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active'`).all();
+  const names=new Map(people.map(p=>[p.id,p.full_name]));
+  // ครูที่ไม่อยู่: ใบลา → บันทึกไว้แล้ว → เพิ่มเอง
+  const absent=new Map();
+  for(const r of leaves)if(!absent.has(r.teacher_id))absent.set(r.teacher_id,{teacher_id:r.teacher_id,full_name:r.full_name,source:'leave',leave_request_id:r.leave_request_id,leave_type:r.leave_type,leave_status:r.status,reason:null});
+  for(const r of absRows)if(!absent.has(r.teacher_id))absent.set(r.teacher_id,{teacher_id:r.teacher_id,full_name:r.full_name,source:'saved',leave_request_id:null,reason:r.reason||''});
+  for(const [id,why] of extras)if(names.has(id)&&!absent.has(id))absent.set(id,{teacher_id:id,full_name:names.get(id),source:'extra',leave_request_id:null,reason:why});
+  const busy=new Set([...entries.map(e=>e.teacher_id+':'+e.period),...saved.map(s=>s.id+':'+s.period)]);
+  const {results:gradeRows}=await env.DB.prepare("SELECT DISTINCT teacher_id,grade_level FROM timetable_entries WHERE plan_id=? AND teacher_id IS NOT NULL").bind(published.id).all();
+  const bands=new Map();for(const r of gradeRows){if(!bands.has(r.teacher_id))bands.set(r.teacher_id,new Set());bands.get(r.teacher_id).add(gradeBand(r.grade_level));}
+  const load=await substituteLoad(env,{date});const loadById=new Map((load.people||[]).map(p=>[p.personnel_id,p]));
+  const {results:termRows}=await env.DB.prepare(`SELECT substitute_teacher_id AS id,COUNT(*) AS term_count,MAX(absence_date) AS last_date,
+    SUM(CASE WHEN absence_date=? THEN 1 ELSE 0 END) AS day_count FROM substitute_assignments WHERE absence_date BETWEEN ? AND ? GROUP BY substitute_teacher_id`)
+    .bind(date,term.start_date,term.end_date).all();
+  const termById=new Map(termRows.map(r=>[r.id,r]));
+  // ครูที่จัดสอนแทนได้: ครู/เจ้าหน้าที่ที่มีคาบในตารางสอน และไม่ได้อยู่ในรายชื่อครูที่ไม่อยู่
+  const pool=people.filter(p=>bands.has(p.id)&&(p.role==null||p.role==='teacher'||p.role==='staff')&&!absent.has(p.id)).map(p=>({id:p.id,full_name:p.full_name,bands:[...bands.get(p.id)],
+    week_count:loadById.get(p.id)?.week||0,month_count:loadById.get(p.id)?.month||0,term_count:termById.get(p.id)?.term_count||0,day_count:termById.get(p.id)?.day_count||0,last_date:termById.get(p.id)?.last_date||null}));
+  return {date,term,entries,absent,busy,pool};
+}
+function freeTeachers(ctx,lesson,taken){const band=gradeBand(lesson.grade_level);
+  return ctx.pool.filter(t=>!ctx.busy.has(t.id+':'+lesson.period)&&!taken.has(t.id+':'+lesson.period)).map(t=>({...t,same_band:t.bands.includes(band)}))
+    .sort((a,b)=>Number(b.same_band)-Number(a.same_band)||a.term_count-b.term_count||a.month_count-b.month_count||a.week_count-b.week_count||String(a.full_name).localeCompare(String(b.full_name),'th'));}
+async function dayPlan(request,env){
+  const body=await request.json().catch(()=>null);
+  const ctx=await dayContext(env,body?.date,cleanExtras(body?.extras));if(ctx.error)return ctx.error;
+  const taken=new Set(),extra=new Map(),teachers=[];
+  const lessonsOf=id=>ctx.entries.filter(e=>e.teacher_id===id);
+  // จัดทีละคาบตามลำดับเวลา ครูช่วงชั้นเดียวกันก่อน ถ้าไม่มีค่อยใช้ครูว่างต่างช่วงชั้น — คนที่ถูกจัดน้อยก่อน
+  const all=[...ctx.absent.values()].flatMap(a=>lessonsOf(a.teacher_id).map(l=>({a,l}))).sort((x,y)=>x.l.period-y.l.period);
+  const proposals=new Map();
+  for(const {l} of all){
+    if(l.assignment_id)continue;
+    const free=freeTeachers(ctx,l,taken);
+    const pickFrom=free.some(t=>t.same_band)?free.filter(t=>t.same_band):free;
+    const score=t=>[t.day_count+(extra.get(t.id)||0),t.term_count+(extra.get(t.id)||0),t.month_count,t.week_count];
+    const pick=[...pickFrom].sort((a,b)=>{const x=score(a),y=score(b);for(let i=0;i<x.length;i++)if(x[i]!==y[i])return x[i]-y[i];
+      return String(a.last_date||'').localeCompare(String(b.last_date||''))||String(a.full_name).localeCompare(String(b.full_name),'th');})[0];
+    proposals.set(l.id,pick||null);
+    if(pick){taken.add(pick.id+':'+l.period);extra.set(pick.id,(extra.get(pick.id)||0)+1);}
+  }
+  let unfilled=0;
+  for(const a of ctx.absent.values()){
+    const lessons=lessonsOf(a.teacher_id).map(l=>{
+      const pick=proposals.get(l.id)||null;if(!l.assignment_id&&!pick)unfilled++;
+      // ตัวเลือก: ครูว่างในคาบนั้น (ยังไม่หักข้อเสนอของคาบอื่น หน้าเว็บกันซ้ำเอง)
+      const options=l.assignment_id?[]:freeTeachers(ctx,l,new Set()).map(t=>({id:t.id,full_name:t.full_name,same_band:t.same_band,term_count:t.term_count}));
+      return {entry_id:l.id,period:l.period,grade_level:l.grade_level,classroom:l.classroom,subject:l.subject,room_name:l.room_name,
+        assignment_id:l.assignment_id,substitute_name:l.substitute_name,proposed_teacher_id:pick?.id||null,cross_band:!!pick&&!pick.same_band,options};});
+    teachers.push({...a,lessons});
+  }
+  teachers.sort((x,y)=>String(x.full_name).localeCompare(String(y.full_name),'th'));
+  const absentIds=new Set(ctx.absent.keys());
+  const candidates=[...new Map(ctx.entries.filter(e=>!absentIds.has(e.teacher_id)).map(e=>[e.teacher_id,e])).keys()].map(id=>({id,full_name:ctx.pool.find(t=>t.id===id)?.full_name})).filter(t=>t.full_name)
+    .sort((a,b)=>String(a.full_name).localeCompare(String(b.full_name),'th'));
+  return reply({date:ctx.date,term:ctx.term,teachers,unfilled,other_teachers:candidates});
+}
+async function saveDayPlan(request,env,user){
+  const body=await request.json().catch(()=>null),items=Array.isArray(body?.items)?body.items:[];
+  if(!items.length||items.length>200)return reply({error:"ไม่มีรายการสอนแทนที่จะบันทึก"},400);
+  const extras=cleanExtras(body?.extras);
+  const ctx=await dayContext(env,body?.date,extras);if(ctx.error)return ctx.error;
+  const date=ctx.date,day=weekday(date),taken=new Set(),errors=[],rows=[];
+  for(const it of items){
+    const teacherId=validId(it?.teacher_id),entryId=validId(it?.entry_id),subId=validId(it?.substitute_teacher_id);
+    const a=ctx.absent.get(teacherId),l=ctx.entries.find(e=>e.id===entryId&&e.teacher_id===teacherId);
+    if(!a||!l||!subId){errors.push({entry_id:entryId,error:"ข้อมูลคาบหรือครูไม่ถูกต้อง"});continue;}
+    if(l.assignment_id){errors.push({entry_id:entryId,error:`คาบ ${l.period} ${l.grade_level}/${l.classroom} ถูกจัดแล้ว`});continue;}
+    if(a.source!=='leave'&&!a.reason){errors.push({entry_id:entryId,error:`ระบุเหตุที่ ${a.full_name} ไม่อยู่`});continue;}
+    const key=subId+':'+l.period;
+    if(!ctx.pool.some(t=>t.id===subId)||ctx.busy.has(key)){errors.push({entry_id:entryId,error:`ครูที่เลือกไม่ว่างคาบ ${l.period}`});continue;}
+    if(taken.has(key)){errors.push({entry_id:entryId,error:`เลือกครูคนเดียวกันซ้ำในคาบ ${l.period}`});continue;}
+    taken.add(key);rows.push({a,l,subId});
+  }
+  if(errors.length)return reply({error:errors[0].error,errors},409);
+  const stmts=[];
+  for(const a of new Set(rows.map(r=>r.a)))stmts.push(env.DB.prepare("INSERT OR IGNORE INTO substitute_absences(absence_date,teacher_id,reason,created_by) VALUES (?,?,?,?)")
+    .bind(date,a.teacher_id,a.source==='leave'?null:(a.reason||null),user.id));
+  for(const r of rows)stmts.push(env.DB.prepare(`INSERT INTO substitute_assignments(absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by,leave_request_id)
+    SELECT id,?,?,?,?,?,NULL,?,? FROM substitute_absences WHERE absence_date=? AND teacher_id=?`)
+    .bind(r.l.id,r.subId,day,r.l.period,date,user.id,r.a.leave_request_id,date,r.a.teacher_id));
+  try{await env.DB.batch(stmts);}
+  catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"มีคาบที่ถูกจัดไปแล้วระหว่างบันทึก กรุณาโหลดข้อมูลใหม่"},409);throw error;}
+  return reply({ok:true,saved:rows.length});
+}
 // ลายเซ็นอิเล็กทรอนิกส์ของ ผอ. สำหรับคำสั่งสอนแทน
 async function orderSignature(env){
   const director=(await executives(env)).filter(isDirector);
@@ -515,6 +618,8 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term,user);
   }else{
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
+    if(pathname==="/api/substitutes/day-plan"&&method==="POST")return dayPlan(request,env);
+    if(pathname==="/api/substitutes/day-plan/save"&&method==="POST")return saveDayPlan(request,env,user);
     if(pathname==="/api/substitutes/order-signature"&&method==="GET")return orderSignature(env);
     if(pathname==="/api/substitutes/leave-days"&&method==="GET")return leaveDays(env,url.searchParams.get("month"));
     if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
