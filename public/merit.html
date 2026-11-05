@@ -10,6 +10,24 @@
 <link rel="stylesheet" href="/css/teaching-works.css">
 <style>
 [hidden]{display:none!important}
+/* สีแยกงานย่อย: บันทึกความดี = ฟ้า · บันทึกการเจอเงิน = ชมพู (โทนอ่อนเข้ากับธีมน้ำเงินของระบบ) */
+body{--mr-accent:#2D7FD3;--mr-deep:#1a4f8f;--mr-soft:#e8f2fd;--mr-line:#b9d6f2;--mr-grad:linear-gradient(135deg,#3a8ee0,#1E5FC0)}
+body[data-tab="money"]{--mr-accent:#D9578A;--mr-deep:#9c2f5c;--mr-soft:#fdebf2;--mr-line:#f3c1d5;--mr-grad:linear-gradient(135deg,#ec7aa6,#cc4d80)}
+.mr-tab[data-tab="good"]{--c:#2D7FD3;--cs:#e8f2fd}.mr-tab[data-tab="money"]{--c:#D9578A;--cs:#fdebf2}
+.mr-tab{border-color:var(--cs);background:var(--cs);color:var(--c);font-weight:600}
+.mr-tab[aria-selected="true"]{background:var(--c);border-color:var(--c);color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--c) 30%,transparent)}
+.mr-tab::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:7px;vertical-align:middle}
+#pageTitle{color:var(--mr-deep)}
+.mr-bar .btn-primary{background:var(--mr-grad);border-color:var(--mr-accent)}
+.tw-card{border-color:var(--mr-line);border-top:3px solid var(--mr-accent);background:linear-gradient(180deg,var(--mr-soft),#fff 70%)}
+.tw-card strong{color:var(--mr-deep)!important}
+.mr-section h2{color:var(--mr-deep);border-left:4px solid var(--mr-accent);padding-left:8px}
+.mr-wrap{border-color:var(--mr-line)}
+.mr-table th{background:var(--mr-soft);color:var(--mr-deep)}
+.mr-table tr[data-room]:hover td{background:var(--mr-soft)}
+.mr-modal h2{color:var(--mr-deep)}.mr-modal>div{border-top:5px solid var(--mr-accent)}.mr-modal .btn-primary{background:var(--mr-grad);border-color:var(--mr-accent)}
+.mr-chip.ok{background:var(--mr-soft);color:var(--mr-deep)}
+.mr-filters input:focus,.mr-filters select:focus,.mr-form input:focus,.mr-form select:focus,.mr-form textarea:focus{outline:2px solid var(--mr-line);border-color:var(--mr-accent)}
 .mr-info{font-size:13px;color:var(--color-text-muted);margin:-6px 0 14px}
 .mr-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 .mr-tab{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 18px;font:inherit;font-size:14px;cursor:pointer;color:var(--color-forest-900)}
@@ -35,7 +53,7 @@
 .mr-big{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;cursor:zoom-out}.mr-big img{max-width:94vw;max-height:92vh;border-radius:10px}
 </style>
 </head>
-<body>
+<body data-tab="good">
 <main class="tw-page">
   <header class="tw-head">
     <div><h1 id="pageTitle">บันทึกความดี</h1><p id="pageSub"></p></div>
@@ -123,6 +141,7 @@ function topBy(list,valueOf){const m=new Map();for(const r of list){const x=m.ge
 
 function render(){
   document.querySelectorAll('.mr-tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
+  document.body.dataset.tab=tab;
   const money_=tab==='money',p=data.permissions;
   $('pageTitle').textContent=money_?'บันทึกการเจอเงิน':'บันทึกความดี';
   $('pageSub').textContent=money_?'นักเรียนเจอเงินแล้วนำส่งคืน — สถิติ ยอดรวมรายภาคเรียน/ปีการศึกษา และอันดับผู้เจอเงิน':'บันทึกการทำความดีของนักเรียน แยกรายห้อง สายชั้น และสถิตินักเรียนที่ทำความดีบ่อยที่สุด';
@@ -159,7 +178,7 @@ function groupTable(title,list,keyOf,name,withMoney=false){
   const m=new Map();for(const r of list){const k=keyOf(r);const x=m.get(k)||{n:0,kids:new Set(),sum:0};x.n++;x.kids.add(r.student_id);x.sum+=Number(r.amount)||0;m.set(k,x)}
   const keys=[...m.keys()].sort((a,b)=>title==='สรุปรายห้อง'?cmp(a,b):m.get(b).n-m.get(a).n);
   const isRoom=title==='สรุปรายห้อง';
-  return `<section class="mr-section"><h2>${title}</h2><div class="mr-wrap" style="max-height:340px"><table class="mr-table"><thead><tr><th>${isRoom?'ห้อง':title.replace('สรุปตาม','')}</th><th class="num">ครั้ง</th><th class="num">นักเรียน</th>${withMoney?'<th class="num">บาท</th>':''}</tr></thead><tbody>${keys.length?keys.map(k=>`<tr ${isRoom?`data-room="${esc(k)}" style="cursor:pointer;${k===room?'background:#e8f2fd':''}"`:''}><td>${esc(name(k))}</td><td class="num">${m.get(k).n}</td><td class="num">${m.get(k).kids.size}</td>${withMoney?`<td class="num">${money(m.get(k).sum)}</td>`:''}</tr>`).join(''):`<tr><td colspan="${withMoney?4:3}" class="mr-muted">ยังไม่มีข้อมูล</td></tr>`}</tbody></table></div></section>`;
+  return `<section class="mr-section"><h2>${title}</h2><div class="mr-wrap" style="max-height:340px"><table class="mr-table"><thead><tr><th>${isRoom?'ห้อง':title.replace('สรุปตาม','')}</th><th class="num">ครั้ง</th><th class="num">นักเรียน</th>${withMoney?'<th class="num">บาท</th>':''}</tr></thead><tbody>${keys.length?keys.map(k=>`<tr ${isRoom?`data-room="${esc(k)}" style="cursor:pointer;${k===room?'background:var(--mr-soft)':''}"`:''}><td>${esc(name(k))}</td><td class="num">${m.get(k).n}</td><td class="num">${m.get(k).kids.size}</td>${withMoney?`<td class="num">${money(m.get(k).sum)}</td>`:''}</tr>`).join(''):`<tr><td colspan="${withMoney?4:3}" class="mr-muted">ยังไม่มีข้อมูล</td></tr>`}</tbody></table></div></section>`;
 }
 function renderList(list){
   const q=$('q').value.trim().toLowerCase(),money_=tab==='money',p=data.permissions;
@@ -274,6 +293,7 @@ $('iSave').onclick=async()=>{
   }catch(e){showErr('iError',e.message)}
 };
 document.addEventListener('keydown',e=>{if(e.key==='Escape')['goodModal','moneyModal','importModal'].forEach(id=>$(id).hidden=true)});
+document.body.dataset.tab=tab;document.querySelectorAll('.mr-tab').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===tab)));
 load();
 })();
 </script>
