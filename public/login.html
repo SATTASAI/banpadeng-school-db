@@ -73,7 +73,7 @@
       });
       const requested=new URLSearchParams(location.search).get('next');
       let destination=user.role ? "/dashboard.html" : "/pending.html";
-      if(user.role&&requested){try{const next=new URL(requested,location.origin);if(next.origin===location.origin&&next.pathname==='/evaluation-connect'&&/^[0-9a-f]{64}$/.test(next.searchParams.get('state')||''))destination=next.pathname+next.search;}catch{}}
+      if(user.role&&requested){try{const next=new URL(requested,location.origin);if(next.origin===location.origin&&next.pathname==='/evaluation-connect'&&/^[0-9a-f]{64}$/.test(next.searchParams.get('state')||''))destination=next.pathname+next.search;else if(next.origin===location.origin&&next.pathname==='/leave.html'&&/^\d+$/.test(next.searchParams.get('request')||''))destination='/leave.html?request='+next.searchParams.get('request');}catch{}}
       window.location.href = destination;
     } catch (err) {
       errorBox.textContent = err.message;
