@@ -77,7 +77,53 @@
     };
   }
 
-  window.BpdPush = { state, enable, disable, test, banner, isIOS, standalone, IOS_STEPS };
+  // ป็อปอัพขอเปิดแจ้งเตือน: ขึ้นครั้งเดียวหลังเข้าสู่ระบบ (login.html ตั้ง bpdPushPrompt) ทุกอุปกรณ์
+  const PROMPT_KEY = 'bpdPushPrompt';
+  async function loginPopup() {
+    try { if (localStorage.getItem(PROMPT_KEY) !== '1') return false; localStorage.removeItem(PROMPT_KEY); } catch { return false; }
+    const s = await state().catch(() => ({ status: 'unavailable' }));
+    if (!['off', 'ios-home'].includes(s.status)) return false;
+    const ios = s.status === 'ios-home';
+    const wrap = document.createElement('div');
+    wrap.className = 'bpd-push-modal';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.innerHTML = `<style>.bpd-push-modal{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:20px;background:rgba(16,32,60,.45);backdrop-filter:blur(3px);animation:bpdFade .18s ease}
+      @keyframes bpdFade{from{opacity:0}to{opacity:1}}@keyframes bpdRing{0%,100%{transform:rotate(0)}20%{transform:rotate(14deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-4deg)}}
+      .bpd-push-modal .box{width:min(400px,100%);background:#fff;border-radius:20px;padding:26px 22px 20px;text-align:center;box-shadow:0 24px 60px rgba(16,32,60,.28);font-size:15px;line-height:1.6;color:#1c2c40}
+      .bpd-push-modal .bell{width:76px;height:76px;margin:0 auto 12px;border-radius:50%;display:grid;place-items:center;font-size:38px;background:linear-gradient(135deg,#4F6BED,#7B4FE0);box-shadow:0 10px 24px rgba(79,107,237,.35)}
+      .bpd-push-modal .bell span{display:inline-block;animation:bpdRing 1.4s ease .3s 2}
+      .bpd-push-modal h2{margin:0 0 6px;font-size:20px;color:#1e3a8a}.bpd-push-modal p{margin:0 0 16px;color:#4a5d73}
+      .bpd-push-modal .steps{text-align:left;background:#f4f7ff;border:1px solid #dbe4fb;border-radius:12px;padding:12px 14px;margin:0 0 16px;font-size:14px}
+      .bpd-push-modal button{display:block;width:100%;font:inherit;font-weight:700;border:0;border-radius:12px;padding:13px;cursor:pointer;margin-top:8px}
+      .bpd-push-modal .go{background:linear-gradient(135deg,#4F6BED,#7B4FE0);color:#fff;font-size:16px}.bpd-push-modal .later{background:#eef2f8;color:#3b5068}
+      .bpd-push-modal .msg{margin-top:10px;font-size:13px;min-height:1em}</style>
+      <div class="box"><div class="bell"><span>🔔</span></div>
+      <h2>เปิดการแจ้งเตือน</h2>
+      <p>รับแจ้งเตือนใบลา แจ้งซ่อม นิเทศ และงานในกระดิ่งทั้งหมด เด้งเข้าเครื่องนี้ทันที ไม่ต้องเปิดระบบค้างไว้</p>
+      ${ios ? `<div class="steps"><b>iPhone / iPad</b><br>${IOS_STEPS}</div><button class="later" type="button">เข้าใจแล้ว</button>`
+        : '<button class="go" type="button">อนุญาตการแจ้งเตือน</button><button class="later" type="button">ไว้ทีหลัง</button>'}
+      <div class="msg" role="status"></div></div>`;
+    document.body.appendChild(wrap);
+    const close = () => wrap.remove();
+    wrap.querySelector('.later').onclick = close;
+    const go = wrap.querySelector('.go');
+    if (go) go.onclick = async () => {
+      go.disabled = true;
+      const msg = wrap.querySelector('.msg');
+      try {
+        await enable();
+        wrap.querySelector('h2').textContent = 'เปิดการแจ้งเตือนแล้ว ✅';
+        wrap.querySelector('p').textContent = 'กำลังส่งแจ้งเตือนทดสอบมาที่เครื่องนี้…';
+        go.remove(); wrap.querySelector('.later').textContent = 'ปิด';
+        await test().catch(() => {});
+        setTimeout(close, 3500);
+      } catch (e) { msg.textContent = e.message; go.disabled = false; }
+    };
+    return true;
+  }
+
+  window.BpdPush = { state, enable, disable, test, banner, loginPopup, isIOS, standalone, IOS_STEPS };
   // ลงทะเบียน service worker ไว้ เพื่อให้กดแจ้งเตือนแล้วเปิดหน้าในระบบได้
   if (supported) registration().catch(() => {});
 })();

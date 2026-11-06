@@ -1404,7 +1404,7 @@
 </script>
 <script src="/js/mobile-shell.js"></script>
 <script src="/js/web-push.js"></script>
-<script>window.BpdPush&&BpdPush.banner(document.getElementById("overviewWrap")).catch(()=>{});</script>
+<script>window.BpdPush&&BpdPush.loginPopup().then((shown)=>{if(!shown)return BpdPush.banner(document.getElementById("overviewWrap"))}).catch(()=>{});</script>
 </body>
 </html>
 
