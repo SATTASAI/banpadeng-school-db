@@ -95,3 +95,15 @@
  .sn-mobile .sn-list{max-height:calc(100dvh - 250px);overflow-y:auto}
 }
 @keyframes sn-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+/* ===== กันหน้าเลื่อนซ้ายขวาบนมือถือ (ทุกหน้า) ===== */
+@media(max-width:720px){
+ html,body{max-width:100%;overflow-x:clip}
+ @supports not (overflow:clip){html,body{overflow-x:hidden}}
+ main,section,article,aside,header,footer,form,fieldset,.panel,.card,[class*="card"],[class*="grid"]>*,[class*="-row"]>*{min-width:0}
+ img,video,canvas,svg,iframe,embed,object{max-width:100%}
+ img,video,canvas{height:auto}
+ pre,code{white-space:pre-wrap;overflow-wrap:anywhere}
+ p,li,dd,dt,h1,h2,h3,h4,label,strong,small{overflow-wrap:anywhere}
+ .mfit-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}
+ input,select,textarea{max-width:100%}
+}
