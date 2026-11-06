@@ -67,6 +67,7 @@ import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handleProcurementRoute } from "./routes/procurement.js";
 import { dispatchLineNotifications, ensureLineFeedSchema } from "./lib/line-feed.js";
+import { dispatchPushNotifications, pushLinkStatus } from "./lib/push-feed.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
@@ -4842,6 +4843,17 @@ const app = {
       const linePersonalResponse = await handleLinePersonalRoute(request, env, pathname, method);
       if (linePersonalResponse) return linePersonalResponse;
       if (pathname === "/api/line/status" && method === "GET") return await handleLineStatus(request, env);
+      // แจ้งเตือนบนมือถือ (Web Push ผ่าน school-notify)
+      if (pathname === "/api/push/link" && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+        return jsonResponse(await pushLinkStatus(env, user), 200, { "Cache-Control": "no-store" });
+      }
+      if (pathname === "/api/push/feed/run" && method === "POST") {
+        const user = await getCurrentUser(request, env);
+        if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+        return jsonResponse(await dispatchPushNotifications(env, { trigger: "manual", origin: env.PUBLIC_BASE_URL || new URL(request.url).origin }));
+      }
       if (pathname === "/api/line/feed/run" && method === "POST") {
         const user = await getCurrentUser(request, env);
         if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
@@ -5050,9 +5062,13 @@ export default {
     if (guard?.response) return applySecurityHeaders(guard.response);
     const response = applySecurityHeaders(await app.fetch(request, env, context));
     if (guard?.release && response.status >= 400) await guard.release().catch(() => {});
-    if (!["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
-      && response.status < 400 && env.LINE_CHANNEL_ACCESS_TOKEN && context?.waitUntil) {
+    const changed = !["GET", "HEAD", "OPTIONS"].includes(request.method) && pathname.startsWith("/api/") && !LINE_FEED_SKIP.test(pathname)
+      && response.status < 400 && context?.waitUntil;
+    if (changed && env.LINE_CHANNEL_ACCESS_TOKEN) {
       context.waitUntil(dispatchLineNotifications(env, { trigger: "event", origin: publicOrigin(env, request) }).catch(() => {}));
+    }
+    if (changed && env.NOTIFY_API_KEY && !pathname.startsWith("/api/push/")) {
+      context.waitUntil(dispatchPushNotifications(env, { trigger: "event", origin: publicOrigin(env, request) }).catch((error) => console.error("push feed", error)));
     }
     return response;
   },
@@ -5060,5 +5076,6 @@ export default {
     // เตือน/งานค้างของระบบนิเทศก่อน แล้วจึงส่ง LINE ในรอบเดียวกัน
     context.waitUntil(supervisionMaintenance(env, SUPERVISION_FILE_SERVICES).catch((error) => console.error("supervision maintenance", error))
       .then(() => dispatchLineNotifications(env, { trigger: "cron" })).catch((error) => console.error("line feed", error)));
+    context.waitUntil(dispatchPushNotifications(env, { trigger: "cron" }).catch((error) => console.error("push feed", error)));
   },
 };

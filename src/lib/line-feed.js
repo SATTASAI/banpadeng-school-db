@@ -63,7 +63,7 @@ function leaveDate(value) {
   return match?`${Number(match[3])}/${Number(match[2])}/${Number(match[1])+543}`:'—';
 }
 
-async function leaveApprover(env,leaveId,userId){
+export async function leaveApprover(env,leaveId,userId){
   const row=await env.DB.prepare(`SELECT MAX(CASE WHEN user_id=? AND kind='director' THEN 1 ELSE 0 END) mine_director,
     MAX(CASE WHEN user_id=? AND kind='deputy' THEN 1 ELSE 0 END) mine_deputy,MAX(CASE WHEN kind='director' THEN 1 ELSE 0 END) has_director
     FROM leave_reviewers WHERE leave_id=?`).bind(userId,userId,leaveId).first();

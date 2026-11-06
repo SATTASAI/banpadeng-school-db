@@ -99,6 +99,21 @@
         </div>
         <div class="message" id="lineMessage" role="status"></div>
       </section>
+      <section class="account-card line-card" id="pushCard" style="display:none">
+        <h2>แจ้งเตือนบนมือถือ (Web Push) <span class="device-tag" style="background:#7B4FE0">ทดลอง</span></h2>
+        <p class="muted">รับแจ้งเตือนทุกรายการในกระดิ่งเข้ามือถือโดยตรง ฟรี ไม่ต้องใช้ LINE · iPhone ต้องใช้ iOS 16.4 ขึ้นไป และเพิ่มหน้าแจ้งเตือนลงหน้าจอโฮมก่อน</p>
+        <div class="line-status"><span class="line-dot" id="pushDot"></span><span id="pushStatusText">กำลังตรวจสอบ...</span></div>
+        <div class="line-actions"><a class="btn btn-tm" id="pushOpenButton" href="#" target="_blank" rel="noopener">🔔 เปิดแจ้งเตือนบนมือถือเครื่องนี้</a></div>
+        <div class="line-steps visible" style="border-color:#d9d2f5;background:#f7f4ff">
+          <strong>วิธีใช้</strong>
+          <ol>
+            <li><b>Android</b>: กดปุ่มด้านบนใน Chrome แล้วกด “เปิดรับการแจ้งเตือน”</li>
+            <li><b>iPhone</b>: เปิดหน้านี้ใน Safari แล้วกดปุ่มด้านบน → แตะปุ่มแชร์ → “เพิ่มไปยังหน้าจอโฮม” → เปิดไอคอน “แจ้งเตือน บปด.” แล้วกด “เปิดรับการแจ้งเตือน”</li>
+            <li>กด “ส่งทดสอบ” เพื่อตรวจว่าแจ้งเตือนเด้งจริง</li>
+          </ol>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">ลิงก์ผูกกับบัญชีของคุณ ใช้ได้ 7 วัน ห้ามส่งต่อให้ผู้อื่น · LINE ยังส่งตามเดิม</p>
+        </div>
+      </section>
       <section class="account-card devices-card" id="devices">
         <h2>อุปกรณ์ที่เข้าสู่ระบบ</h2>
         <p class="muted">อุปกรณ์ที่ใช้บัญชีนี้อยู่ ทั้งระบบบริหารโรงเรียนและระบบรายงานผลการเรียน ถ้าพบอุปกรณ์ที่ไม่รู้จัก ให้ออกจากระบบอุปกรณ์นั้นแล้วเปลี่ยนรหัสผ่าน</p>
@@ -236,6 +251,15 @@
     loadDevices().then(()=>{if(location.hash==="#devices")document.getElementById("devices").scrollIntoView()}).catch(error=>deviceMessage(error.message,true));
     load().catch(error=>message(error.message,true));
     loadLine().catch(error=>lineMessage(error.message,true));
+    async function loadPush(){
+      const s=await apiRequest("/api/push/link");
+      if(!s?.allowed)return;
+      document.getElementById("pushCard").style.display="";
+      document.getElementById("pushOpenButton").href=s.url;
+      document.getElementById("pushDot").className="line-dot"+(s.linked?" on":"");
+      document.getElementById("pushStatusText").textContent=s.linked===null?"ไม่สามารถตรวจสอบสถานะได้ในขณะนี้":s.linked?"มีมือถือที่รับแจ้งเตือนแล้ว (เพิ่มเครื่องอื่นได้)":"ยังไม่มีมือถือที่รับแจ้งเตือน";
+    }
+    loadPush().catch(()=>{});
     // ---------- ตารางสอนของฉัน (เห็นเฉพาะของตนเอง) ----------
     let myTt=null;
     async function loadMyTimetable(termId){

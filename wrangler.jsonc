@@ -10,7 +10,11 @@
   },
   "vars": {
     "FILE_STORAGE_PROVIDER": "drive",
-    "GOOGLE_DRIVE_FOLDER_ID": "1miKzaiIj3Y0CJ1RQHma7cDA7G3pz6ca9"
+    "GOOGLE_DRIVE_FOLDER_ID": "1miKzaiIj3Y0CJ1RQHma7cDA7G3pz6ca9",
+    // แจ้งเตือนบนมือถือ (Web Push ผ่าน school-notify) — Secret: NOTIFY_API_KEY = API_KEY ของ school-notify
+    // ช่วงทดลอง ส่งเฉพาะบทบาทเหล่านี้ (คั่นด้วยจุลภาค, all = ทุกคน)
+    "NOTIFY_ORIGIN": "https://notify.banpadengschool.ac.th",
+    "PUSH_PILOT_ROLES": "superadmin"
   },
   // รหัสเวอร์ชันของการ deploy: ใช้ตั้งค่าโครงสร้างฐานข้อมูลครั้งเดียวต่อ deploy (src/lib/schema-stamp.js)
   "version_metadata": { "binding": "CF_VERSION_METADATA" },
