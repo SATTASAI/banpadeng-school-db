@@ -24,5 +24,5 @@ export async function handleTeachingMediaSsoRoute(request, env, pathname, method
     env.DB.prepare("INSERT INTO tm_sso_codes (code_hash, user_id, session_version, expires_at) VALUES (?, ?, ?, ?)")
       .bind(await sha256Hex(code), user.id, Number(user.session_version ?? 1), now + 60),
   ]);
-  return new Response(null, { status: 302, headers: { Location: `${TM_ORIGIN}/sso?code=${code}`, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
+  return new Response(null, { status: 302, headers: { Location: `${TM_ORIGIN}/sso?code=${code}${new URL(request.url).searchParams.get('to') === 'plans' ? '&to=plans' : ''}`, "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" } });
 }
