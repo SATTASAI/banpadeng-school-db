@@ -77,12 +77,18 @@
     };
   }
 
-  // ป็อปอัพขอเปิดแจ้งเตือน: ขึ้นครั้งเดียวหลังเข้าสู่ระบบ (login.html ตั้ง bpdPushPrompt) ทุกอุปกรณ์
+  // ป็อปอัพขอเปิดแจ้งเตือน: ขึ้นครั้งแรกครั้งเดียวหลังเข้าสู่ระบบ (login.html ตั้ง bpdPushPrompt) ทุกอุปกรณ์
   const PROMPT_KEY = 'bpdPushPrompt';
+  const SEEN_KEY = 'bpdPushPromptSeen';
   async function loginPopup() {
-    try { if (localStorage.getItem(PROMPT_KEY) !== '1') return false; localStorage.removeItem(PROMPT_KEY); } catch { return false; }
+    try {
+      if (localStorage.getItem(PROMPT_KEY) !== '1') return false;
+      localStorage.removeItem(PROMPT_KEY);
+      if (localStorage.getItem(SEEN_KEY)) return false; // ขึ้นแค่ครั้งแรกบนเครื่องนี้
+    } catch { return false; }
     const s = await state().catch(() => ({ status: 'unavailable' }));
     if (!['off', 'ios-home'].includes(s.status)) return false;
+    try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch { /* ignore */ }
     const ios = s.status === 'ios-home';
     const wrap = document.createElement('div');
     wrap.className = 'bpd-push-modal';
