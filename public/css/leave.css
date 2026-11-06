@@ -18,3 +18,14 @@
 #lenientLeaveCard.active{background:#daf3e1;border-color:#2a9d55;box-shadow:0 0 0 3px rgba(42,157,85,.18)}
 .leave-category-card{transition:border-color .15s,box-shadow .15s,background .15s}
 #newLeaveSection.real-leave{border-top:4px solid #1f6fd1}#newLeaveSection.lenient-leave{border-top:4px solid #2a9d55}.leave-category-card span{font-size:14px}.signature-preview{max-width:100%}@media(max-width:600px){.leave-category-cards{grid-template-columns:1fr}}
+
+/* การ์ดลา: นูนมินิมอล + จุดแดงเมื่อมีคำขอรอดำเนินการ */
+.leave-category-card,#realLeaveCard,#lenientLeaveCard{position:relative;border:1px solid rgba(255,255,255,.7);background:#f4f7fb;box-shadow:6px 6px 14px rgba(163,177,198,.45),-6px -6px 14px rgba(255,255,255,.9);transition:box-shadow .18s,transform .18s,background .18s}
+#realLeaveCard{background:linear-gradient(145deg,#f6faff,#eaf2fc)}#lenientLeaveCard{background:linear-gradient(145deg,#f6fcf7,#e9f6ec)}
+.leave-category-card:hover,#realLeaveCard:hover,#lenientLeaveCard:hover{border-color:rgba(255,255,255,.7);transform:translateY(-1px);box-shadow:8px 8px 18px rgba(163,177,198,.5),-8px -8px 18px rgba(255,255,255,.95)}
+.leave-category-card:active{transform:none;box-shadow:inset 4px 4px 10px rgba(163,177,198,.4),inset -4px -4px 10px rgba(255,255,255,.9)}
+#realLeaveCard.active{background:#eef5fe;border-color:rgba(255,255,255,.7);box-shadow:inset 4px 4px 10px rgba(120,150,190,.3),inset -4px -4px 10px rgba(255,255,255,.95),0 0 0 2px rgba(31,111,209,.35)}
+#lenientLeaveCard.active{background:#eef8f0;border-color:rgba(255,255,255,.7);box-shadow:inset 4px 4px 10px rgba(120,170,135,.3),inset -4px -4px 10px rgba(255,255,255,.95),0 0 0 2px rgba(42,157,85,.35)}
+.leave-category-card.has-pending::after{content:"";position:absolute;top:14px;right:14px;width:12px;height:12px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 3px #fff;animation:leavePing 1.6s ease-out infinite}
+@keyframes leavePing{0%{box-shadow:0 0 0 3px #fff,0 0 0 3px rgba(229,56,59,.5)}100%{box-shadow:0 0 0 3px #fff,0 0 0 12px rgba(229,56,59,0)}}
+@media(prefers-reduced-motion:reduce){.leave-category-card.has-pending::after{animation:none}}
