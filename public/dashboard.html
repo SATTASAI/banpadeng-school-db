@@ -895,6 +895,11 @@
         setNavGroupOpen(group, false);
         return;
       }
+      // มือถือ: กดหัวข้อฝ่ายครั้งแรก = เปิดเมนูย่อย (หน้าบุคลากรในฝ่ายอยู่ในเมนูย่อย)
+      if (group && phoneScreen?.matches && DEPARTMENT_NAV_KEYS.includes(a.getAttribute("data-page"))) {
+        openOnlyNavGroup(group);
+        return;
+      }
       showPage(a.getAttribute("data-page"));
     });
   });
