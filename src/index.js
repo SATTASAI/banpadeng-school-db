@@ -67,7 +67,7 @@ import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handleProcurementRoute } from "./routes/procurement.js";
 import { dispatchLineNotifications, ensureLineFeedSchema } from "./lib/line-feed.js";
-import { dispatchPushNotifications, pushLinkStatus, handlePushRoute } from "./lib/push-feed.js";
+import { dispatchPushNotifications, pushLinkStatus, handlePushRoute, pushSubscribersReport, pushTestUser } from "./lib/push-feed.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
@@ -4855,6 +4855,19 @@ const app = {
         if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
         const result = await handlePushRoute(request, env, user, pushAction);
         return jsonResponse(result.data, result.status);
+      }
+      if ((pathname === "/api/push/admin/subscribers" && method === "GET") || (pathname === "/api/push/admin/test" && method === "POST")) {
+        const user = await getCurrentUser(request, env);
+        if (user?.role !== "superadmin") return jsonResponse({ error: "เฉพาะผู้ดูแลระบบ" }, 403);
+        const result = method === "GET" ? await pushSubscribersReport(env)
+          : await pushTestUser(env, Number((await request.json().catch(() => ({})))?.user_id));
+        return jsonResponse(result.data, result.status, { "Cache-Control": "no-store" });
+      }
+      if ((pathname === "/push-status.html" || pathname === "/push-status") && method === "GET") {
+        const user = await getCurrentUser(request, env);
+        if (!user) return Response.redirect(new URL("/login.html", url.origin), 302);
+        if (user.role !== "superadmin") return Response.redirect(new URL("/dashboard.html", url.origin), 302);
+        return env.ASSETS.fetch(request);
       }
       if (pathname === "/api/push/feed/run" && method === "POST") {
         const user = await getCurrentUser(request, env);

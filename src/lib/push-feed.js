@@ -97,7 +97,8 @@ export async function handlePushRoute(request, env, user, action) {
   if (action === "subscribe") {
     if (!validSubscription(body?.subscription)) return { status: 400, data: { error: "ข้อมูลการสมัครไม่ถูกต้อง" } };
     const { endpoint, keys } = body.subscription;
-    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1) });
+    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1),
+      userAgent: (request.headers.get("user-agent") || "").slice(0, 200) });
   }
   if (typeof body?.endpoint !== "string") return { status: 400, data: { error: "ข้อมูลไม่ถูกต้อง" } };
   if (action === "unsubscribe") return forward(env, "/api/unsubscribe", { endpoint: body.endpoint });
@@ -201,4 +202,30 @@ async function deliver(env, user, origin, stats) {
     await env.DB.batch(mine.map((r) => env.DB.prepare("DELETE FROM push_feed_sent WHERE user_id = ? AND message_key = ? AND status = 'pending'").bind(user.id, r.message_key)));
     stats.failures++;
   }
+}
+
+// หน้าตรวจสอบการเชื่อมแจ้งเตือน (superadmin): ใครเชื่อมแล้วบ้าง กี่เครื่อง เครื่องอะไร ส่งถึงล่าสุดเมื่อไร
+export async function pushSubscribersReport(env) {
+  if (!env.NOTIFY_API_KEY) return { status: 503, data: { error: "ยังไม่ได้ตั้งค่า NOTIFY_API_KEY" } };
+  const res = await notifyFetch(env, "/api/subscriptions?prefix=u:");
+  if (!res.ok) return { status: 502, data: { error: "ระบบแจ้งเตือนไม่ตอบสนอง" } };
+  const subs = (await res.json()).subscriptions || [];
+  const byUser = new Map();
+  for (const sub of subs) for (const ref of sub.refs) {
+    const id = Number(String(ref).slice(2));
+    if (!Number.isInteger(id)) continue;
+    if (!byUser.has(id)) byUser.set(id, []);
+    byUser.get(id).push({ device: sub.device, created_at: sub.created_at, last_ok_at: sub.last_ok_at, fail_count: sub.fail_count });
+  }
+  const { results: users } = await env.DB.prepare("SELECT id, full_name, email, role FROM users WHERE role IS NOT NULL AND role <> '' ORDER BY full_name").all();
+  const rows = users.map((u) => ({ id: u.id, full_name: u.full_name, email: u.email, role: u.role, devices: byUser.get(Number(u.id)) || [] }));
+  return { status: 200, data: { rows, linked: rows.filter((r) => r.devices.length).length, total: rows.length } };
+}
+
+export async function pushTestUser(env, userId) {
+  if (!Number.isInteger(userId) || userId <= 0) return { status: 400, data: { error: "ข้อมูลไม่ถูกต้อง" } };
+  return forward(env, "/api/notifications", {
+    title: "ทดสอบการแจ้งเตือน", body: "ข้อความทดสอบจากผู้ดูแลระบบ โรงเรียนบ้านป่าเด็ง ✅", url: "/dashboard.html",
+    roles: ["all"], refs: [`u:${userId}`], source: "system-test",
+  });
 }
