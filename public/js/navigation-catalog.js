@@ -5,7 +5,6 @@
  const directory=dept=>'/department-staff.html?dept='+dept;
  const routes={approvers:'/budget.html?view=roles',imports:'/import-center.html',students:'/students.html',staff:'/staff.html','academic-periods':'/academic-years.html',academic:directory('academic'),early_childhood:directory('early_childhood'),budget:directory('budget'),personnel:directory('personnel'),general:directory('general'),administration:directory('administration'),maintenance:'/maintenance.html','finance-requests':'/finance-requests.html','student-support':'/support.html',documents:'/documents.html',reports:'/reports.html',users:'/admin-users.html',security:'/security.html','system-status':'/system-status.html','line-settings':'/line-settings.html','admin-cleanup':'/admin-cleanup.html',usage:'/usage.html',tasks:'/tasks.html',leave:'/leave.html','my-substitutes':'/my-substitutes.html',substitutes:'/substitutes.html',supervision:'/supervision.html','padeng-model':'/padeng-model.html','classroom-research':'/classroom-research.html',insurance:'/insurance.html',scholarships:'/scholarships.html',merit:'/merit.html'};
  labels['pa-directory']='แฟ้ม PA รายบุคคล';routes['pa-directory']='/pa-directory.html';
- labels['training-log']='บันทึกการอบรม';routes['training-log']='/teacher-records.html?kind=training&view=mine';
  const workScopes={
   'personnel-duties':{label:'คำสั่งและเวร',area:'personnel',topic:'1,3',contexts:{personnel:['1','3'],staff:['3','5']}},
   'personnel-development':{label:'พัฒนาและผลงาน',area:'personnel',topic:'6,7',contexts:{personnel:['6','7'],staff:['4','7','8']}}
@@ -43,7 +42,6 @@
   if(path==='/budget'&&u.searchParams.get('view')==='requests')return 'finance-requests';
   if(path==='/procurement')return u.searchParams.get('mine')==='1'?'finance-requests':'budget';
   if(path==='/supervision-admin'&&['results','evaluators'].includes(u.searchParams.get('view')))return 'academic';
-  if(path==='/teacher-records'&&u.searchParams.get('view')==='mine')return 'training-log';
   if((path==='/padeng-model'||path==='/classroom-research')&&u.searchParams.get('view')==='progress')return 'academic';
   if(path==='/department'||path==='/department-staff'){const dept=u.searchParams.get('dept');if(routes[dept])return dept;}
   if(path==='/work-center'){if(workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic')))return 'personnel';const area=u.searchParams.get('area');if(routes[area])return area;}
