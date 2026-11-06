@@ -53,6 +53,17 @@
     if (!a || !phone.matches || e.ctrlKey || e.metaKey) return;
     e.preventDefault(); window.setMobileMenu?.(false); openAccount(); setActive('account');
   }, true);
+  // แผงแจ้งเตือน: แถบบนมี backdrop-filter ทำให้ position:fixed ติดกรอบแถบบน → บนมือถือย้ายไปไว้ที่ body
+  let snHome = null, snNext = null;
+  const placeNotifications = () => {
+    const sn = $('schoolNotifications'); if (!sn) return false;
+    if (!snHome && sn.parentElement !== document.body) { snHome = sn.parentElement; snNext = sn.nextSibling; }
+    if (phone.matches) { if (sn.parentElement !== document.body) document.body.append(sn); sn.classList.add('sn-mobile'); }
+    else if (snHome && sn.parentElement !== snHome) { snHome.insertBefore(sn, snNext); sn.classList.remove('sn-mobile'); }
+    return true;
+  };
+  if (!placeNotifications()) { const t = setInterval(() => { if (placeNotifications()) clearInterval(t); }, 300); setTimeout(() => clearInterval(t), 15000); }
+  phone.addEventListener('change', placeNotifications);
   const setActive = (tab) => bar.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]'); if (!b) return;
@@ -61,7 +72,7 @@
     try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
-    else if (tab === 'notify') { e.stopPropagation(); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
+    else if (tab === 'notify') { e.stopPropagation(); placeNotifications(); window.setMobileMenu?.(false); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
     else if (tab === 'account') { openAccount(); setActive('account'); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));
   });
