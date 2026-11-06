@@ -26,6 +26,7 @@ import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
 import { handleScholarshipRoute, handleScholarshipVendor } from './routes/scholarships.js';
 import { handleMeritRoute } from './routes/student-merit.js';
+import { handleTeacherRecordsRoute } from './routes/teacher-records.js';
 import { handleStaffDeletionRoute } from './routes/staff-deletion.js';
 import { stripGradeOwned, GRADE_OWNED_MESSAGE } from './lib/grade-owned.js';
 import { schemaIsCurrent, markSchemaCurrent } from './lib/schema-stamp.js';
@@ -4890,6 +4891,8 @@ const app = {
       if (scholarshipResponse) return scholarshipResponse;
       const meritResponse = await handleMeritRoute(request, env, pathname, method, TEACHING_WORKS_DRIVE);
       if (meritResponse) return meritResponse;
+      const teacherRecordsResponse = await handleTeacherRecordsRoute(request, env, pathname, method, TEACHING_WORKS_DRIVE);
+      if (teacherRecordsResponse) return teacherRecordsResponse;
       const studentDeletionResponse = await handleStudentDeletionRoute(request, env, pathname, method);
       if (studentDeletionResponse) return studentDeletionResponse;
       if (pathname === "/api/students/export" && method === "GET") return await handleListStudents(request, env, true);
