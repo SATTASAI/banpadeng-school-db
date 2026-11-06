@@ -636,4 +636,7 @@ a { text-decoration:none; }
 /* ในตาราง/บรรทัดข้อความ ใช้ขนาดเล็กลง */
 :where(:is(td,th,li,p,small,.tw-current) > a:not([class]):not(:has(img,svg,canvas))) { padding:3px 10px; min-height:28px; font-size:.92em; border-radius:9px; margin:2px 1px; }
 @media (max-width:720px){ :where(a:not([class]):not(:has(img,svg,canvas)):not(nav a):not(.sidebar a)), :where(a.page-back,a.link-chip){ min-height:40px; } :where(:is(td,th,li,p,small,.tw-current) > a:not([class]):not(:has(img,svg,canvas))){ min-height:34px; } }
+/* หน้าเข้าสู่ระบบ/สมัคร/ลืมรหัสผ่าน: ลิงก์เป็นข้อความธรรมดา ไม่ทำเป็นการ์ด */
+.auth-card a:not([class]),.auth-card a:not([class]):hover,.auth-card a:not([class]):active{display:inline;padding:0;min-height:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none;transform:none;font-weight:600;color:#1D5F9E}
+.auth-card a:not([class]):hover{text-decoration:underline}
 a[hidden]{display:none!important}
