@@ -40,6 +40,9 @@ async function ensureSchema(env) {
     env.DB.prepare("CREATE TABLE IF NOT EXISTS push_feed_users (user_id INTEGER PRIMARY KEY, started_at TEXT NOT NULL DEFAULT (datetime('now')))"),
     env.DB.prepare("CREATE TABLE IF NOT EXISTS push_feed_state (id INTEGER PRIMARY KEY CHECK (id = 1), started_at TEXT NOT NULL)"),
     env.DB.prepare("INSERT OR IGNORE INTO push_feed_state (id, started_at) VALUES (1, '2000-01-01 00:00:00')"),
+    env.DB.prepare(`CREATE TABLE IF NOT EXISTS push_feed_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, message_key TEXT NOT NULL,
+      title TEXT NOT NULL, message TEXT, url TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (user_id, message_key))`),
+    env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_feed_messages_user ON push_feed_messages (user_id, id)"),
   ]);
   ready.add(env.DB);
 }
@@ -120,6 +123,7 @@ export async function dispatchPushNotifications(env, { trigger = "cron", origin 
   const deadline = Date.now() + (trigger === "cron" ? CRON_BUDGET_MS : EVENT_BUDGET_MS);
   // รายการที่จองไว้แต่รอบนั้นถูกตัดกลางคัน: ปล่อยให้ส่งใหม่
   await env.DB.prepare("DELETE FROM push_feed_sent WHERE status = 'pending' AND created_at < datetime('now', '-10 minutes')").run();
+  await env.DB.prepare("DELETE FROM push_feed_messages WHERE created_at < datetime('now', '-90 days')").run();
   const stats = { people: 0, sent: 0, items: 0, failures: 0 };
 
   const res = await notifyFetch(env, "/api/refs?prefix=u:");
@@ -170,21 +174,30 @@ async function deliver(env, user, origin, stats) {
   try {
     const items = await Promise.all(mine.map(async (r) => {
       const leaveId = String(r.message_key).match(/^leave:(\d+):/)?.[1];
-      let url = r.url || "/dashboard.html";
-      if (leaveId) url = /:forwarded$/.test(r.message_key) && await leaveApprover(env, Number(leaveId), Number(user.id))
-        ? `/leave.html?request=${Number(leaveId)}`
-        : (await createLeaveAccessUrl(env, r.message_key, Number(user.id))) || url;
-      return { ...r, url: new URL(url, origin).href };
+      let url = r.url || "/dashboard.html", details = null;
+      if (leaveId) {
+        details = await env.DB.prepare("SELECT reason, start_date, end_date, contact_phone, leave_days FROM leave_requests WHERE id = ?").bind(Number(leaveId)).first();
+        url = /:forwarded$/.test(r.message_key) && await leaveApprover(env, Number(leaveId), Number(user.id))
+          ? `/leave.html?request=${Number(leaveId)}`
+          : (await createLeaveAccessUrl(env, r.message_key, Number(user.id))) || url;
+      }
+      const target = new URL(url, origin);
+      return { ...r, details, path: target.origin === new URL(origin).origin ? target.pathname + target.search + target.hash : target.href };
     }));
+    // เก็บข้อความไว้ให้หน้า "รายละเอียดแจ้งเตือน" (แบบ LINE OA) — กดแจ้งเตือนแล้วเห็นรายละเอียด + ปุ่มไปหน้างาน
+    await env.DB.batch(items.map((r) => env.DB.prepare(`INSERT INTO push_feed_messages (user_id, message_key, title, message, url, details) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT (user_id, message_key) DO UPDATE SET title = excluded.title, message = excluded.message, url = excluded.url, details = excluded.details, created_at = datetime('now')`)
+      .bind(user.id, r.message_key, trim(r.title, 200), String(r.message || "").slice(0, 2000), r.path, r.details ? JSON.stringify(r.details) : null)));
     const single = items.length === 1;
     const lines = items.slice(0, MAX_LINES).map((r) => `• ${trim(r.title, 60)}: ${trim(r.message, 80)}`);
     if (items.length > MAX_LINES) lines.push(`และอีก ${items.length - MAX_LINES} รายการ`);
+    const leaveLine = (d) => d ? [d.start_date === d.end_date ? `วันที่ ${d.start_date}` : `${d.start_date} ถึง ${d.end_date}`, d.reason && `เหตุผล: ${trim(d.reason, 80)}`].filter(Boolean).join(" · ") : "";
     const res = await notifyFetch(env, "/api/notifications", {
       method: "POST",
       body: JSON.stringify({
         title: single ? trim(items[0].title, 120) : `แจ้งเตือนใหม่ ${items.length} รายการ`,
-        body: single ? trim(items[0].message, 500) : lines.join("\n"),
-        url: single ? items[0].url : new URL("/dashboard.html", origin).href,
+        body: single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500) : lines.join("\n"),
+        url: new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
         roles: ["all"],
         refs: [`u:${user.id}`],
         source: "system",
@@ -228,4 +241,17 @@ export async function pushTestUser(env, userId) {
     title: "ทดสอบการแจ้งเตือน", body: "ข้อความทดสอบจากผู้ดูแลระบบ โรงเรียนบ้านป่าเด็ง ✅", url: "/dashboard.html",
     roles: ["all"], refs: [`u:${userId}`], source: "system-test",
   });
+}
+
+// กล่องแจ้งเตือนของผู้ใช้ (หน้า notification.html)
+export async function pushInbox(env, user, key) {
+  await ensureSchema(env);
+  const { results } = await env.DB.prepare("SELECT message_key, title, message, url, details, created_at FROM push_feed_messages WHERE user_id = ? ORDER BY id DESC LIMIT 50")
+    .bind(user.id).all();
+  let items = results;
+  if (key && !items.some((r) => r.message_key === key)) {
+    const one = await env.DB.prepare("SELECT message_key, title, message, url, details, created_at FROM push_feed_messages WHERE user_id = ? AND message_key = ?").bind(user.id, key).first();
+    if (one) items = [one, ...items];
+  }
+  return items.map((r) => ({ ...r, details: r.details ? JSON.parse(r.details) : null }));
 }
