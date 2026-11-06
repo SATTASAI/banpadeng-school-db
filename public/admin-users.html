@@ -11,6 +11,25 @@
 <meta name="theme-color" content="#1E5FC0" />
 <meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
 <link rel="stylesheet" href="/css/style.css" />
+<style>
+@media (max-width:720px){
+ .users-table thead{display:none}
+ .users-table,.users-table tbody{display:block;width:100%}
+ .users-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:14px;border-bottom:1px solid var(--color-border)}
+ .users-table tr:last-child{border-bottom:0}
+ .users-table td{display:block;border:0;padding:0;min-width:0;overflow-wrap:anywhere;font-size:14px}
+ .users-table .c-name{grid-column:1;font-weight:700;font-size:16px}
+ .users-table .c-name br{display:none}.users-table .c-name button{margin:0 0 0 8px;padding:4px 10px;min-height:32px;font-size:12px;width:auto;vertical-align:middle}
+ .users-table .c-status{grid-column:2;grid-row:1 / span 2;text-align:right}
+ .users-table .c-status br{display:none}.users-table .c-status button{width:auto;min-height:36px;padding:6px 12px;font-size:13px}
+ .users-table .c-email{grid-column:1;color:var(--color-text-muted);font-size:13px}
+ .users-table .c-prof{grid-column:1 / -1;font-size:13px;line-height:1.5}
+ .users-table .c-role{grid-column:1 / -1}.users-table .c-role select{width:100%}
+ .users-table .c-date{grid-column:1;font-size:12px;color:var(--color-text-muted);align-self:center}.users-table .c-date::before{content:'สมัครเมื่อ '}
+ .users-table .c-act{grid-column:2;text-align:right}.users-table .c-act br{display:none}.users-table .c-act button{width:auto;min-height:36px;padding:6px 12px;font-size:13px}
+ .app-main h2{font-size:20px}
+}
+</style>
 </head>
 <body>
 <div class="app-shell">
@@ -29,7 +48,7 @@
     <p style="color: var(--color-text-muted);">อนุมัติสมาชิกใหม่และกำหนดสิทธิ์การใช้งาน</p>
 
     <div class="panel" style="margin-top:20px;">
-      <table>
+      <table class="users-table">
         <thead>
           <tr>
             <th>ชื่อ-นามสกุล</th>
@@ -222,7 +241,7 @@
     users.forEach((user) => {
       const tr = document.createElement("tr");
 
-      const nameTd = document.createElement("td");
+      const nameTd = document.createElement("td"); nameTd.className = "c-name";
       const nameText = document.createElement("span");
       nameText.textContent = user.full_name;
       nameTd.appendChild(nameText);
@@ -230,11 +249,11 @@
       nameTd.appendChild(buildRenameButton(user));
       tr.appendChild(nameTd);
 
-      const emailTd = document.createElement("td");
+      const emailTd = document.createElement("td"); emailTd.className = "c-email";
       emailTd.textContent = user.email;
       tr.appendChild(emailTd);
 
-      const profileTd = document.createElement("td");
+      const profileTd = document.createElement("td"); profileTd.className = "c-prof";
       const departmentText = String(user.departments || "").split(",").filter(Boolean).map((item) => DEPARTMENT_LABELS[item] || item).join(", ");
       const profileLines = [user.position, departmentText ? `ฝ่าย: ${departmentText}` : "", user.phone ? `โทร: ${user.phone}` : ""].filter(Boolean);
       profileLines.forEach((line, index) => {
@@ -247,12 +266,12 @@
       if (!profileLines.length) profileTd.textContent = "ยังไม่มีข้อมูล";
       tr.appendChild(profileTd);
 
-      const roleTd = document.createElement("td");
+      const roleTd = document.createElement("td"); roleTd.className = "c-role";
       roleTd.appendChild(buildRoleSelect(user));
       if (user.role === "viewer") roleTd.appendChild(buildViewerExpiry(user));
       tr.appendChild(roleTd);
 
-      const statusTd = document.createElement("td");
+      const statusTd = document.createElement("td"); statusTd.className = "c-status";
       const statusLabel = document.createElement("span");
       if (!user.role) {
         statusLabel.textContent = "รอกำหนดสิทธิ์";
@@ -272,11 +291,11 @@
       statusTd.appendChild(toggleWrap);
       tr.appendChild(statusTd);
 
-      const dateTd = document.createElement("td");
+      const dateTd = document.createElement("td"); dateTd.className = "c-date";
       dateTd.textContent = formatDate(user.created_at);
       tr.appendChild(dateTd);
 
-      const actionTd = document.createElement("td");
+      const actionTd = document.createElement("td"); actionTd.className = "c-act";
       actionTd.appendChild(buildDeleteButton(user));
       actionTd.appendChild(document.createElement("br"));
       tr.appendChild(actionTd);
