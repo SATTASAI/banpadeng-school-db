@@ -67,7 +67,7 @@ import { handleSchoolBankRoute } from "./routes/school-bank.js";
 import { ensureBudgetSchema, handleBudgetRoute } from "./routes/budget.js";
 import { handleProcurementRoute } from "./routes/procurement.js";
 import { dispatchLineNotifications, ensureLineFeedSchema } from "./lib/line-feed.js";
-import { dispatchPushNotifications, pushLinkStatus } from "./lib/push-feed.js";
+import { dispatchPushNotifications, pushLinkStatus, handlePushRoute } from "./lib/push-feed.js";
 import { handlePersonnelRoute } from "./routes/personnel.js";
 import { ensureCorrespondenceSchema, handleCorrespondenceRoute } from "./routes/correspondence.js";
 import { handleProjectWorkflowRoute, budgetDirectorIds, projectWorkflowSnapshots, canAccessBudgetSupportingDocument, notifyBudgetSupportingDocument, canManageProjectFinance, PROJECT_FUNDING_TYPES, projectFundingSummary, currentProjectFiscalYear } from "./routes/project-workflow.js";
@@ -4848,6 +4848,13 @@ const app = {
         const user = await getCurrentUser(request, env);
         if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
         return jsonResponse(await pushLinkStatus(env, user), 200, { "Cache-Control": "no-store" });
+      }
+      const pushAction = pathname.match(/^\/api\/push\/(subscribe|unsubscribe|test)$/)?.[1];
+      if (pushAction && method === "POST") {
+        const user = await getCurrentUser(request, env);
+        if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
+        const result = await handlePushRoute(request, env, user, pushAction);
+        return jsonResponse(result.data, result.status);
       }
       if (pathname === "/api/push/feed/run" && method === "POST") {
         const user = await getCurrentUser(request, env);

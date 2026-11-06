@@ -52,23 +52,57 @@ function notifyFetch(env, path, init = {}) {
   });
 }
 
-// ลิงก์ผูกมือถือกับบัญชี (ลงชื่อด้วย NOTIFY_API_KEY อายุ 7 วัน) — school-notify ตรวจลายเซ็นก่อนผูก
-export async function createPushLink(env, user) {
-  const payload = { ref: `u:${user.id}`, role: "teacher", label: trim(user.full_name || user.email || `ผู้ใช้ ${user.id}`, 80), exp: Date.now() + LINK_DAYS * 86400000 };
+// ลายเซ็นผูกมือถือกับบัญชี (ลงชื่อด้วย NOTIFY_API_KEY) — school-notify ตรวจลายเซ็นก่อนผูก ref u:<id>
+async function signLink(env, user, days = LINK_DAYS) {
+  const payload = { ref: `u:${user.id}`, role: "teacher", label: trim(user.full_name || user.email || `ผู้ใช้ ${user.id}`, 80), exp: Date.now() + days * 86400000 };
   const body = b64u(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.NOTIFY_API_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = b64u(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
-  return `${notifyOrigin(env)}/?t=${body}.${sig}`;
+  return `${body}.${b64u(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)))}`;
+}
+export async function createPushLink(env, user) {
+  return `${notifyOrigin(env)}/?t=${await signLink(env, user)}`;
+}
+
+let publicKeyCache = null;
+async function vapidPublicKey(env) {
+  if (publicKeyCache) return publicKeyCache;
+  const res = await notifyFetch(env, "/api/vapid-public-key");
+  if (!res.ok) throw new Error(`notify ${res.status}`);
+  publicKeyCache = (await res.json()).publicKey;
+  return publicKeyCache;
 }
 
 export async function pushLinkStatus(env, user) {
   if (!pushAllowed(env, user)) return { allowed: false };
-  let linked = null;
+  let linked = null, publicKey = null;
   try {
-    const res = await notifyFetch(env, "/api/refs?prefix=" + encodeURIComponent(`u:${user.id}`));
+    const [res, key] = await Promise.all([notifyFetch(env, "/api/refs?prefix=" + encodeURIComponent(`u:${user.id}`)), vapidPublicKey(env)]);
     if (res.ok) linked = ((await res.json()).refs || []).includes(`u:${user.id}`);
+    publicKey = key;
   } catch { /* ระบบแจ้งเตือนไม่ตอบ: แสดงว่าไม่ทราบสถานะ */ }
-  return { allowed: true, linked, url: await createPushLink(env, user) };
+  return { allowed: true, linked, publicKey, url: await createPushLink(env, user) };
+}
+
+// กดปุ่มเดียวในระบบ: เบราว์เซอร์สมัคร push แล้วส่ง subscription มาที่นี่ ระบบส่งต่อให้ school-notify พร้อมลายเซ็น
+const validSubscription = (s) => s && typeof s.endpoint === "string" && /^https:\/\//.test(s.endpoint) && s.endpoint.length < 1000
+  && typeof s.keys?.p256dh === "string" && typeof s.keys?.auth === "string";
+async function forward(env, path, body) {
+  const res = await notifyFetch(env, path, { method: "POST", body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  return { status: res.ok ? 200 : res.status === 404 ? 404 : 502, data: res.ok ? data : { error: data.error || "ระบบแจ้งเตือนไม่ตอบสนอง ลองใหม่อีกครั้ง" } };
+}
+export async function handlePushRoute(request, env, user, action) {
+  if (!pushAllowed(env, user)) return { status: 403, data: { error: "ยังไม่เปิดใช้แจ้งเตือนบนมือถือสำหรับบัญชีนี้" } };
+  const body = await request.json().catch(() => null);
+  if (action === "subscribe") {
+    if (!validSubscription(body?.subscription)) return { status: 400, data: { error: "ข้อมูลการสมัครไม่ถูกต้อง" } };
+    const { endpoint, keys } = body.subscription;
+    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1) });
+  }
+  if (typeof body?.endpoint !== "string") return { status: 400, data: { error: "ข้อมูลไม่ถูกต้อง" } };
+  if (action === "unsubscribe") return forward(env, "/api/unsubscribe", { endpoint: body.endpoint });
+  if (action === "test") return forward(env, "/api/test", { endpoint: body.endpoint });
+  return { status: 404, data: { error: "ไม่พบ endpoint นี้" } };
 }
 
 async function acquire(env, trigger) {

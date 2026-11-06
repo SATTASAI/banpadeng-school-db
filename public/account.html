@@ -100,19 +100,15 @@
         <div class="message" id="lineMessage" role="status"></div>
       </section>
       <section class="account-card line-card" id="pushCard" style="display:none">
-        <h2>แจ้งเตือนบนมือถือ (Web Push) <span class="device-tag" style="background:#7B4FE0">ทดลอง</span></h2>
-        <p class="muted">รับแจ้งเตือนทุกรายการในกระดิ่งเข้ามือถือโดยตรง ฟรี ไม่ต้องใช้ LINE · iPhone ต้องใช้ iOS 16.4 ขึ้นไป และเพิ่มหน้าแจ้งเตือนลงหน้าจอโฮมก่อน</p>
+        <h2>แจ้งเตือนบนมือถือ <span class="device-tag" style="background:#7B4FE0">ทดลอง</span></h2>
+        <p class="muted">รับแจ้งเตือนทุกรายการในกระดิ่งเข้ามือถือโดยตรง ฟรี ไม่ต้องใช้ LINE · LINE ยังส่งตามเดิม</p>
         <div class="line-status"><span class="line-dot" id="pushDot"></span><span id="pushStatusText">กำลังตรวจสอบ...</span></div>
-        <div class="line-actions"><a class="btn btn-tm" id="pushOpenButton" href="#" target="_blank" rel="noopener">🔔 เปิดแจ้งเตือนบนมือถือเครื่องนี้</a></div>
-        <div class="line-steps visible" style="border-color:#d9d2f5;background:#f7f4ff">
-          <strong>วิธีใช้</strong>
-          <ol>
-            <li><b>Android</b>: กดปุ่มด้านบนใน Chrome แล้วกด “เปิดรับการแจ้งเตือน”</li>
-            <li><b>iPhone</b>: เปิดหน้านี้ใน Safari แล้วกดปุ่มด้านบน → แตะปุ่มแชร์ → “เพิ่มไปยังหน้าจอโฮม” → เปิดไอคอน “แจ้งเตือน บปด.” แล้วกด “เปิดรับการแจ้งเตือน”</li>
-            <li>กด “ส่งทดสอบ” เพื่อตรวจว่าแจ้งเตือนเด้งจริง</li>
-          </ol>
-          <p class="muted" style="margin:8px 0 0;font-size:12px">ลิงก์ผูกกับบัญชีของคุณ ใช้ได้ 7 วัน ห้ามส่งต่อให้ผู้อื่น · LINE ยังส่งตามเดิม</p>
+        <div class="line-actions">
+          <button class="btn btn-tm" id="pushOnButton" type="button" style="display:none">🔔 เปิดแจ้งเตือนบนเครื่องนี้</button>
+          <button class="btn" id="pushTestButton" type="button" style="display:none">ส่งทดสอบ</button>
+          <button class="btn" id="pushOffButton" type="button" style="display:none">ปิดบนเครื่องนี้</button>
         </div>
+        <div class="message" id="pushMessage" role="status"></div>
       </section>
       <section class="account-card devices-card" id="devices">
         <h2>อุปกรณ์ที่เข้าสู่ระบบ</h2>
@@ -129,6 +125,7 @@
     </div>
   </main>
   <script src="/js/api.js"></script>
+  <script src="/js/web-push.js"></script>
   <script src="/js/rank-choice.js"></script>
   <script src="/js/timetable-pdf.js"></script>
   <script>
@@ -251,14 +248,24 @@
     loadDevices().then(()=>{if(location.hash==="#devices")document.getElementById("devices").scrollIntoView()}).catch(error=>deviceMessage(error.message,true));
     load().catch(error=>message(error.message,true));
     loadLine().catch(error=>lineMessage(error.message,true));
+    const pushMessage=(text,error=false)=>{const el=document.getElementById("pushMessage");el.innerHTML=text;el.className=`message visible${error?" error":""}`};
     async function loadPush(){
-      const s=await apiRequest("/api/push/link");
-      if(!s?.allowed)return;
+      if(!window.BpdPush)return;
+      const s=await BpdPush.state();
+      if(s.status==="unavailable")return;
       document.getElementById("pushCard").style.display="";
-      document.getElementById("pushOpenButton").href=s.url;
-      document.getElementById("pushDot").className="line-dot"+(s.linked?" on":"");
-      document.getElementById("pushStatusText").textContent=s.linked===null?"ไม่สามารถตรวจสอบสถานะได้ในขณะนี้":s.linked?"มีมือถือที่รับแจ้งเตือนแล้ว (เพิ่มเครื่องอื่นได้)":"ยังไม่มีมือถือที่รับแจ้งเตือน";
+      const show=(id,on)=>{document.getElementById(id).style.display=on?"":"none"};
+      const text={on:"เครื่องนี้รับแจ้งเตือนแล้ว",off:s.config?.linked?"มีเครื่องอื่นรับแจ้งเตือนอยู่ · เครื่องนี้ยังไม่ได้เปิด":"ยังไม่ได้เปิดแจ้งเตือนบนเครื่องนี้",
+        blocked:"เครื่องนี้บล็อกการแจ้งเตือนไว้ — เปิดได้ที่การตั้งค่าของเครื่อง/เบราว์เซอร์",
+        "ios-home":"iPhone: ต้องเพิ่มระบบลงหน้าจอโฮมก่อน",unsupported:"เบราว์เซอร์นี้ไม่รองรับ ลองใช้ Chrome (Android) หรือ Safari (iPhone)"}[s.status];
+      document.getElementById("pushDot").className="line-dot"+(s.status==="on"?" on":["blocked","ios-home"].includes(s.status)?" warn":"");
+      document.getElementById("pushStatusText").textContent=text;
+      show("pushOnButton",s.status==="off");show("pushTestButton",s.status==="on");show("pushOffButton",s.status==="on");
+      if(s.status==="ios-home")pushMessage(BpdPush.IOS_STEPS);
     }
+    document.getElementById("pushOnButton").addEventListener("click",async()=>{try{await BpdPush.enable();await loadPush();pushMessage("เปิดแจ้งเตือนแล้ว กำลังส่งแจ้งเตือนทดสอบ…");await BpdPush.test()}catch(error){pushMessage(error.message,true)}});
+    document.getElementById("pushTestButton").addEventListener("click",async()=>{try{const r=await BpdPush.test();pushMessage(r.ok?"ส่งแล้ว รอสักครู่…":"ส่งไม่สำเร็จ ลองปิดแล้วเปิดใหม่",!r.ok)}catch(error){pushMessage(error.message,true)}});
+    document.getElementById("pushOffButton").addEventListener("click",async()=>{if(!confirm("ปิดแจ้งเตือนบนเครื่องนี้?"))return;try{await BpdPush.disable();await loadPush();pushMessage("ปิดแจ้งเตือนบนเครื่องนี้แล้ว")}catch(error){pushMessage(error.message,true)}});
     loadPush().catch(()=>{});
     // ---------- ตารางสอนของฉัน (เห็นเฉพาะของตนเอง) ----------
     let myTt=null;
