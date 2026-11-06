@@ -52,6 +52,33 @@ body[data-tab="money"]{--mr-accent:#D9578A;--mr-deep:#9c2f5c;--mr-soft:#fdebf2;-
 .mr-pick{max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:10px;padding:6px 10px;display:grid;gap:2px}.mr-pick label{display:flex;gap:8px;align-items:center;color:inherit;font-size:13px}
 .mr-big{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;cursor:zoom-out}.mr-big img{max-width:94vw;max-height:92vh;border-radius:10px}
 .mr-export-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.mr-export-head h2{margin:0}.mr-export{display:flex;gap:8px;flex-wrap:wrap}.mr-export .btn{width:auto;padding:8px 14px;font-size:14px}
+@media(max-width:720px){
+ .mr-scroll{max-height:none}
+ .mr-list-table thead{display:none}
+ .mr-list-table,.mr-list-table tbody{display:block}
+ .mr-list-table tr[data-row]{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:3px 10px;align-items:start;padding:11px 12px;border-bottom:1px solid var(--color-border);-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:background .15s,transform .15s}
+ .mr-list-table tr[data-row] td{display:block;border:0;padding:0;font-size:13.5px}
+ .mr-list-table .c-sel{grid-row:1/span 4;padding-top:2px}tr[data-row] td.c-sel:empty{display:none}
+ .mr-list-table .c-name{grid-column:2;font-weight:600;font-size:15px}
+ .mr-list-table .c-date{grid-column:3;grid-row:1;text-align:right;font-size:12px;color:var(--color-text-muted)}
+ .mr-list-table .c-cat,.mr-list-table .c-detail,.mr-list-table .c-amt,.mr-list-table .c-photo,.mr-list-table .c-pts{grid-column:2/-1}
+ .mr-list-table .c-sel:empty~.c-name{grid-column:1/3}.mr-list-table .c-sel:empty~.c-cat,.mr-list-table .c-sel:empty~.c-detail,.mr-list-table .c-sel:empty~.c-amt,.mr-list-table .c-sel:empty~.c-photo,.mr-list-table .c-sel:empty~.c-pts{grid-column:1/-1}
+ .mr-list-table tr[data-row] td.c-detail{color:#4b5d6e;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+ .mr-list-table .c-amt{text-align:left;font-size:15px}
+ .mr-list-table tr[data-row] td.c-pts:has(.mr-muted){display:none}
+ .mr-list-table tr[data-row] td.c-act{display:none}
+ .mr-cat{display:inline-block;padding:2px 9px;border-radius:99px;background:var(--mr-soft,#eef4fb);color:var(--mr-deep,#24587d);font-size:12px}
+ .mr-list-table tr.mr-pressing{background:#eef4fb;transform:scale(.985)}
+ .mr-lp-hint{display:block!important}
+}
+.mr-lp-hint{display:none;margin:-4px 0 8px;font-size:12.5px;color:var(--color-text-muted)}
+.mr-sheet{position:fixed;inset:0;z-index:2000;background:rgba(15,30,45,0);display:flex;align-items:flex-end;justify-content:center;transition:background .2s}
+.mr-sheet.open{background:rgba(15,30,45,.4)}
+.mr-sheet-card{width:100%;max-width:520px;background:#fff;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:grid;gap:8px;transform:translateY(100%);transition:transform .22s ease-out}
+.mr-sheet.open .mr-sheet-card{transform:none}
+.mr-sheet-card b{font-size:16px}.mr-sheet-card small{color:var(--color-text-muted);margin-bottom:4px}
+.mr-sheet-card button{min-height:48px;border:1px solid #d6e2ec;border-radius:14px;background:#f6f9fc;font:inherit;font-size:15px;font-weight:600;color:#24405a}
+.mr-sheet-card button.danger{background:#fff1f1;border-color:#f2c4c4;color:#b3261e}.mr-sheet-card button:disabled{opacity:.5}
 </style>
 </head>
 <body data-tab="good">
@@ -70,7 +97,7 @@ body[data-tab="money"]{--mr-accent:#D9578A;--mr-deep:#9c2f5c;--mr-soft:#fdebf2;-
   <section id="cards" class="tw-cards"></section>
   <div class="mr-grid" id="stats"></div>
   <div class="mr-filters"><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหา: ชื่อ เลขประจำตัว รายละเอียด" autocomplete="off"></div>
-  <section class="mr-section"><div class="mr-export-head"><h2 id="listTitle">รายการ</h2><div class="mr-export"><button class="btn btn-ghost" type="button" id="pdfBtn">🖨 พิมพ์ PDF</button><button class="btn btn-ghost" type="button" id="xlsxBtn">⬇ ดาวน์โหลด XLSX</button></div></div><div class="mr-wrap mr-scroll"><table class="mr-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div></section>
+  <section class="mr-section"><div class="mr-export-head"><h2 id="listTitle">รายการ</h2><div class="mr-export"><button class="btn btn-ghost" type="button" id="pdfBtn">🖨 พิมพ์ PDF</button><button class="btn btn-ghost" type="button" id="xlsxBtn">⬇ ดาวน์โหลด XLSX</button></div></div><p class="mr-lp-hint">กดค้างที่การ์ดนักเรียนเพื่อลบ/แก้ไข</p><div class="mr-wrap mr-scroll"><table class="mr-table mr-list-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div></section>
 </main>
 
 <div class="mr-modal" id="goodModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="goodTitle">
@@ -187,7 +214,7 @@ function renderList(list){
   lastRows=rows;
   $('listTitle').textContent=`${money_?'รายการเจอเงิน':'รายการความดี'}${room?' · '+label(room):''} (${rows.length})`;
   $('listHead').innerHTML=`<tr><th style="width:30px">${p.can_write?'<input type="checkbox" id="selAll" aria-label="เลือกทั้งหมด">':''}</th><th>วันที่</th><th>นักเรียน</th>${money_?'<th class="num">จำนวนเงิน</th><th>สถานที่ / รายละเอียด</th><th>ภาพ</th>':'<th>ประเภท</th><th>รายละเอียด</th>'}<th>คะแนนพฤติกรรม</th><th></th></tr>`;
-  $('list').innerHTML=rows.length?rows.map(r=>{const s=students.get(r.student_id),w=canWriteRoom(key(s));return `<tr><td>${w&&!r.points_used?`<input type="checkbox" data-sel="${r.id}"${selected.has(r.id)?' checked':''}>`:''}</td><td style="white-space:nowrap">${thDate(r.date)}<small class="mr-muted" style="display:block">ภาค ${r.term}</small></td><td class="mr-name">${esc(s.full_name)}<small>${esc(s.student_code||'')} · ${esc(label(key(s)))}</small></td>${money_?`<td class="num"><b>${money(r.amount)}</b></td><td>${esc(r.place||'')}${r.detail?`<small class="mr-muted" style="display:block">${esc(r.detail)}</small>`:''}</td><td><div class="mr-thumbs">${(r.photos||[]).map(id=>`<img src="/api/merit/money/photos/${id}" loading="lazy" alt="ภาพ" data-big="${id}">`).join('')}</div></td>`:`<td>${esc(r.category)}</td><td>${esc(r.detail||'')}</td>`}<td>${r.points_used?'<span class="mr-chip ok">+1 แล้ว</span>':'<span class="mr-muted">–</span>'}</td><td style="white-space:nowrap">${w?`${money_?`<button class="btn btn-ghost" type="button" data-edit="${r.id}">แก้ไข</button> `:''}<button class="btn btn-ghost" type="button" data-del="${r.id}"${r.points_used?' disabled title="ใช้เพิ่มคะแนนแล้ว"':''}>ลบ</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="${money_?8:7}" class="mr-muted">ยังไม่มีรายการ</td></tr>`;
+  $('list').innerHTML=rows.length?rows.map(r=>{const s=students.get(r.student_id),w=canWriteRoom(key(s));return `<tr data-row="${r.id}" data-can="${w?1:0}"><td class="c-sel">${w&&!r.points_used?`<input type="checkbox" data-sel="${r.id}"${selected.has(r.id)?' checked':''}>`:''}</td><td class="c-date" style="white-space:nowrap">${thDate(r.date)}<small class="mr-muted" style="display:block">ภาค ${r.term}</small></td><td class="mr-name c-name">${esc(s.full_name)}<small>${esc(s.student_code||'')} · ${esc(label(key(s)))}</small></td>${money_?`<td class="num c-amt"><b>${money(r.amount)}</b><span class="mr-unit"> บาท</span></td><td class="c-detail">${esc(r.place||'')}${r.detail?`<small class="mr-muted" style="display:block">${esc(r.detail)}</small>`:''}</td><td class="c-photo"><div class="mr-thumbs">${(r.photos||[]).map(id=>`<img src="/api/merit/money/photos/${id}" loading="lazy" alt="ภาพ" data-big="${id}">`).join('')}</div></td>`:`<td class="c-cat"><span class="mr-cat">${esc(r.category)}</span></td><td class="c-detail">${esc(r.detail||'')}</td>`}<td class="c-pts">${r.points_used?'<span class="mr-chip ok">+1 แล้ว</span>':'<span class="mr-muted">–</span>'}</td><td class="c-act" style="white-space:nowrap">${w?`${money_?`<button class="btn btn-ghost" type="button" data-edit="${r.id}">แก้ไข</button> `:''}<button class="btn btn-ghost" type="button" data-del="${r.id}"${r.points_used?' disabled title="ใช้เพิ่มคะแนนแล้ว"':''}>ลบ</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="${money_?8:7}" class="mr-muted">ยังไม่มีรายการ</td></tr>`;
   $('list').querySelectorAll('[data-sel]').forEach(c=>c.onchange=()=>{c.checked?selected.add(Number(c.dataset.sel)):selected.delete(Number(c.dataset.sel));syncPts()});
   if($('selAll'))$('selAll').onchange=()=>{$('list').querySelectorAll('[data-sel]').forEach(c=>{c.checked=$('selAll').checked;c.checked?selected.add(Number(c.dataset.sel)):selected.delete(Number(c.dataset.sel))});syncPts()};
   $('list').querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('ลบรายการนี้?'))return;try{await apiRequest(`/api/merit/${tab}/${b.dataset.del}`,{method:'DELETE'});await load()}catch(e){showErr('error',e.message)}});
@@ -195,6 +222,38 @@ function renderList(list){
   $('list').querySelectorAll('[data-big]').forEach(img=>img.onclick=()=>{const d=document.createElement('div');d.className='mr-big';d.innerHTML=`<img src="${img.src}" alt="">`;d.onclick=()=>d.remove();document.body.append(d)});
   syncPts();
 }
+// ---------- มือถือ: กดค้างที่การ์ดเพื่อลบ/แก้ไข ----------
+(()=>{
+  let timer=0,start=null,row=null;
+  const cancel=()=>{clearTimeout(timer);timer=0;row?.classList.remove('mr-pressing');row=null};
+  const list=$('list');
+  list.addEventListener('pointerdown',e=>{
+    if(!window.matchMedia('(max-width:720px)').matches||e.target.closest('input,button,img,a'))return;
+    const tr=e.target.closest('tr[data-row]');if(!tr||tr.dataset.can!=='1')return;
+    row=tr;start=[e.clientX,e.clientY];tr.classList.add('mr-pressing');
+    timer=setTimeout(()=>{const id=Number(tr.dataset.row);cancel();try{navigator.vibrate?.(15)}catch{};actionSheet(id)},550);
+  });
+  list.addEventListener('pointermove',e=>{if(timer&&start&&Math.hypot(e.clientX-start[0],e.clientY-start[1])>10)cancel()});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>list.addEventListener(ev,cancel));
+  list.addEventListener('contextmenu',e=>{if(e.target.closest('tr[data-row]')&&window.matchMedia('(max-width:720px)').matches)e.preventDefault()});
+  function actionSheet(id){
+    const r=(data.records||[]).find(x=>x.id===id);if(!r)return;const s=students.get(r.student_id)||{};
+    const money_=tab==='money';
+    const sh=document.createElement('div');sh.className='mr-sheet';
+    sh.innerHTML=`<div class="mr-sheet-card" role="dialog" aria-label="จัดการรายการ"><b>${esc(s.full_name||'')}</b><small>${thDate(r.date)} · ${esc(money_?money(r.amount)+' บาท':r.category)}</small>
+      ${money_?'<button type="button" data-a="edit">✏️ แก้ไข</button>':''}
+      <button type="button" data-a="del" class="danger"${r.points_used?' disabled':''}>🗑 ลบรายการ${r.points_used?' (ใช้เพิ่มคะแนนแล้ว)':''}</button>
+      <button type="button" data-a="x">ยกเลิก</button></div>`;
+    document.body.append(sh);requestAnimationFrame(()=>sh.classList.add('open'));
+    const close=()=>{sh.classList.remove('open');setTimeout(()=>sh.remove(),200)};
+    sh.onclick=async e=>{
+      const a=e.target.closest('[data-a]')?.dataset.a;
+      if(e.target===sh||a==='x')return close();
+      if(a==='edit'){close();openMoney(r);}
+      if(a==='del'){if(!confirm('ลบรายการนี้?'))return;close();try{await apiRequest(`/api/merit/${tab}/${id}`,{method:'DELETE'});await load()}catch(err){showErr('error',err.message)}}
+    };
+  }
+})();
 function syncPts(){if($('ptsBtn')){$('ptsBtn').disabled=!selected.size;$('ptsBtn').textContent=`ใช้เพิ่มคะแนนพฤติกรรม (+1/รายการ)${selected.size?` · ${selected.size} รายการ`:''}`}}
 async function addPoints(){
   if(!selected.size)return;
