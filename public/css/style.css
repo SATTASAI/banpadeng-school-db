@@ -613,3 +613,27 @@ html.embedded .page-back { display:none; }
 /* ชื่อคนในตารางอยู่บรรทัดเดียว — ตารางในแผงเลื่อนซ้ายขวาได้แทน (span.nm ใส่ให้อัตโนมัติจาก api.js) */
 td .nm { white-space: nowrap; }
 .panel:has(> table), .panel:has(> * > table) { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* ===== ลิงก์ทั้งระบบเป็นปุ่มการ์ด (ไม่มีขีดเส้นใต้ / ไม่เป็นข้อความเปล่า) ทั้งมือถือและ PC ===== */
+a { text-decoration:none; }
+.btn { text-decoration:none; }
+:where(a:not([class]):not(:has(img,svg,canvas))):not(nav a):not(.sidebar a):not([role=tab]):not([role=menuitem]):not([role=option]),
+:where(a.page-back,a.link-chip) {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:7px 14px; min-height:36px;
+  border:1px solid #cfe0ef; border-radius:11px;
+  background:linear-gradient(180deg,#fff,#f3f8fd);
+  color:#1D5F9E; font-weight:600; line-height:1.3;
+  text-decoration:none; vertical-align:middle;
+  box-shadow:0 1px 2px rgba(30,60,90,.06),0 3px 10px rgba(30,60,90,.05);
+  transition:background .15s,border-color .15s,box-shadow .15s,transform .12s;
+  cursor:pointer;
+}
+:where(a:not([class]):not(:has(img,svg,canvas))):not(nav a):not(.sidebar a):not([role=tab]):not([role=menuitem]):not([role=option]):hover,
+:where(a.page-back,a.link-chip):hover { background:#e9f3fc; border-color:#a9cbe9; color:#0b5fae; box-shadow:0 4px 14px rgba(22,105,201,.12); }
+:where(a:not([class]):not(:has(img,svg,canvas))):not(nav a):not(.sidebar a):not([role=tab]):not([role=menuitem]):not([role=option]):active,
+:where(a.page-back,a.link-chip):active { transform:scale(.97); }
+/* ในตาราง/บรรทัดข้อความ ใช้ขนาดเล็กลง */
+:where(td,th,li,p,small,.tw-current) > a:not([class]):not(:has(img,svg,canvas)) { padding:3px 10px; min-height:28px; font-size:.92em; border-radius:9px; margin:2px 1px; }
+@media (max-width:720px){ :where(a:not([class]):not(:has(img,svg,canvas))):not(nav a):not(.sidebar a), :where(a.page-back,a.link-chip){ min-height:40px; } :where(td,th,li,p,small,.tw-current) > a:not([class]):not(:has(img,svg,canvas)){ min-height:34px; } }
+a[hidden]{display:none!important}

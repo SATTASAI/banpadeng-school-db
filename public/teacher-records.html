@@ -54,7 +54,7 @@ dialog.tr-rep{width:min(760px,96vw);max-height:92vh}
 </head>
 <body class="k-works">
 <main class="tw-page">
-  <a href="/account.html" id="backLink" hidden>← กลับบัญชีของฉัน</a>
+  <a href="/account.html" id="backLink" class="link-chip" hidden style="margin-bottom:12px">← กลับบัญชีของฉัน</a>
   <div class="tr-band"></div>
   <header class="tw-head">
     <div><h1 id="title">ผลงานครู</h1><p id="lead"></p></div>
@@ -68,7 +68,7 @@ dialog.tr-rep{width:min(760px,96vw);max-height:92vh}
 <dialog class="tr-dlg" id="formDlg"><form id="form"></form></dialog>
 <dialog class="tr-dlg tr-rep" id="repDlg"><div id="repBody"></div></dialog>
 <dialog class="tr-dlg tr-pv" id="pvDlg">
-  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><b id="pvName"></b><span class="tr-acts"><a class="btn" id="pvDown">ดาวน์โหลด</a><button type="button" class="btn" id="pvClose">ปิด</button></span></div>
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><b id="pvName"></b><span class="tr-acts"><a class="btn btn-ghost" id="pvDown">ดาวน์โหลด</a><button type="button" class="btn" id="pvClose">ปิด</button></span></div>
   <div class="body" id="pvBody"></div>
 </dialog>
 <script src="/js/api.js"></script>
@@ -102,7 +102,7 @@ function header(){
   if(mine)$('backLink').hidden=false;
   $('headActions').innerHTML=`${data.view_all?`<label class="tw-term">ครู<select id="teacher"><option value="">ครูทุกคน</option>${data.teachers.map(t=>`<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select></label>`:''}
    ${add?`<button type="button" class="btn tr-btn" id="addBtn">+ ${W?'เพิ่มผลงาน':'บันทึกการอบรม'}</button>`:''}
-   <a class="btn" id="zipBtn" href="#">⬇ ดาวน์โหลดไฟล์ทั้งหมด (.zip)</a>`;
+   <a class="btn btn-ghost" id="zipBtn" href="#">⬇ ดาวน์โหลดไฟล์ทั้งหมด (.zip)</a>`;
   const zip=()=>{const u=$('teacher')?.value;$('zipBtn').href=`/api/teacher-records/${kind}/zip${u?`?user_id=${u}`:''}`;};zip();
   if($('teacher'))$('teacher').addEventListener('change',zip);
   if($('teacher'))$('teacher').onchange=load;if(add)$('addBtn').onclick=()=>openForm(null);
