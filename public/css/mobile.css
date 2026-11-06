@@ -65,3 +65,25 @@
  .tw-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tw-card{padding:11px 12px}.tw-card strong{font-size:19px}
  .tw-grid,.tr-grid{grid-template-columns:minmax(0,1fr)}
 }
+/* แถบเมนูล่าง: สูงขึ้น เว้นขอบ iPhone และลูกเล่นเมื่อกด */
+@media(max-width:720px){
+ .layout>.content-area{padding-bottom:calc(74px + env(safe-area-inset-bottom))}
+ .mobile-tabbar{padding:6px 8px calc(8px + env(safe-area-inset-bottom));gap:4px}
+ .mobile-tabbar button{min-height:62px;font-size:12px;gap:3px;transition:color .2s}
+ .mobile-tabbar button::before{content:'';position:absolute;inset:4px 10%;border-radius:16px;background:#e5effb;transform:scale(.6);opacity:0;transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s}
+ .mobile-tabbar button.active::before{transform:scale(1);opacity:1}
+ .mobile-tabbar button>*{position:relative}
+ .mobile-tabbar button svg{transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+ .mobile-tabbar button.active svg{transform:translateY(-1px) scale(1.08)}
+ .mobile-tabbar button:active{background:none}
+ .mobile-tabbar button:active svg{transform:scale(.82)}
+ .mobile-tabbar button.pop svg{animation:mt-pop .42s cubic-bezier(.34,1.56,.64,1)}
+ .mobile-tabbar button.pop::after{content:'';position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-28px 0 0 -22px;border-radius:50%;background:rgba(30,95,192,.18);animation:mt-ripple .5s ease-out forwards;pointer-events:none}
+ .mobile-tabbar .mt-badge{top:7px;transition:transform .2s}
+ .mobile-tabbar button.pop .mt-badge{animation:mt-pop .42s}
+ .layout .sn-panel{bottom:calc(84px + env(safe-area-inset-bottom))}
+ .layout>.sidebar{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+}
+@keyframes mt-pop{0%{transform:scale(1)}35%{transform:scale(.78)}70%{transform:scale(1.18) translateY(-2px)}100%{transform:scale(1.08) translateY(-1px)}}
+@keyframes mt-ripple{from{transform:scale(.3);opacity:1}to{transform:scale(2.2);opacity:0}}
+@media(prefers-reduced-motion:reduce){.mobile-tabbar button svg,.mobile-tabbar button::before{transition:none}.mobile-tabbar button.pop svg,.mobile-tabbar button.pop::after{animation:none}}
