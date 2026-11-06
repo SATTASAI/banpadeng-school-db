@@ -121,6 +121,11 @@ function scheduledRequests(){
  return state.list.filter(r=>r.status!=='cancelled'&&(state.teacher==='all'||String(r.teacher_user_id)===state.teacher))
   .sort((a,b)=>sortAsc(a,b)||a.teacher_name.localeCompare(b.teacher_name,'th')||a.id-b.id);
 }
+// หน้าจอ: รายการที่รอผู้บริหารรับนิเทศขึ้นบนสุด (คำขอใหม่สุดก่อน) · รับนิเทศแล้วเรียงตามวันที่และคาบ (เอกสารพิมพ์คงเรียงตามวันที่)
+function pendingFirst(list){
+ const pend=list.filter(r=>r.status==='pending').sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))||b.id-a.id);
+ return [...pend,...list.filter(r=>r.status!=='pending')];
+}
 function scheduleTable(list,print=false){
  const head='<tr><th>ที่</th><th>วันที่นิเทศ</th><th>คาบ</th><th>ครูผู้รับการนิเทศ</th><th>วิชา</th><th>ชั้น/ห้อง</th><th>ผู้นิเทศ</th><th>สถานะ</th></tr>';
  const rows=list.map((r,i)=>`<tr><td class="s-no">${i+1}</td><td class="s-date">${print?U.date(r.visit_date):`<button type="button" class="sv-btn sm" data-calslot="${r.visit_date}|${r.period}">${U.date(r.visit_date)}</button>`}</td><td class="s-per"><span class="s-lb">คาบ </span>${r.period}</td><td class="s-teach">${esc(r.teacher_name)}</td><td class="s-subj">${esc(r.subject)}</td><td class="s-room">${esc(U.classLabel(r))||'—'}</td><td class="s-sup"><span class="s-lb">ผู้นิเทศ: </span>${r.supervisor_name?esc(r.supervisor_name):'ยังไม่มีผู้รับนิเทศ'}</td><td class="s-st">${print?esc(U.STATUS[r.status]||r.status):U.pill(r.status)}</td></tr>`).join('');
@@ -129,8 +134,8 @@ function scheduleTable(list,print=false){
 async function calendarHtml(){
  const list=scheduledRequests(),days=new Set(list.map(r=>r.visit_date)).size;
  return `<section class="sv-card" style="display:flex;flex-direction:column;gap:14px;margin-top:16px"><h2 style="margin:0;color:#163e67;font-size:19px">ตารางนัดนิเทศรวม</h2>
-  <p class="sv-hint" style="margin:0">วันนัดนิเทศ ${days} วัน · ${list.length} รายการ · เรียงตามวันที่และคาบเรียน · กดวันที่เพื่อดูรายละเอียด</p>
-  ${list.length?`<div class="sv-scroll">${scheduleTable(list)}</div>`:'<div class="sv-empty"><b>ยังไม่มีนัดนิเทศ</b></div>'}</section>`;
+  <p class="sv-hint" style="margin:0">วันนัดนิเทศ ${days} วัน · ${list.length} รายการ · รอผู้บริหารรับนิเทศอยู่บนสุด ที่เหลือเรียงตามวันที่และคาบเรียน · กดวันที่เพื่อดูรายละเอียด</p>
+  ${list.length?`<div class="sv-scroll">${scheduleTable(pendingFirst(list))}</div>`:'<div class="sv-empty"><b>ยังไม่มีนัดนิเทศ</b></div>'}</section>`;
 }
 function openCalSlot(key){
  const [date,p]=key.split('|'),period=Number(p),list=state.list.filter(r=>r.visit_date===date&&r.period===period).sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th'));
