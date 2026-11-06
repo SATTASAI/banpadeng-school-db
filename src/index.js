@@ -22,6 +22,7 @@ import {databaseQuotaResponse} from './lib/database-errors.js';
 import {handleAdminCleanup} from './routes/admin-cleanup.js';
 import { handleUsageRoute } from './routes/usage.js';
 import { handleNotifications } from './routes/notifications.js';
+import { handlePendingWork } from './routes/pending-work.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
 import { handleScholarshipRoute, handleScholarshipVendor } from './routes/scholarships.js';
@@ -4916,6 +4917,8 @@ const app = {
       if (workRecordMatch && method === "PATCH") return await handleUpdateWorkRecord(request, env, Number(workRecordMatch[1]));
       const notificationResponse=await handleNotifications(request,env,pathname,method);
       if(notificationResponse)return notificationResponse;
+      const pendingWorkResponse=await handlePendingWork(request,env,pathname,method);
+      if(pendingWorkResponse)return pendingWorkResponse;
       if (pathname === "/api/tasks" && method === "GET") return await handleListTasks(request, env);
       if (pathname === "/api/tasks" && method === "POST") return await handleCreateTask(request, env);
 

@@ -34,6 +34,7 @@
  .mobile-tabbar button:active{background:#eef4fa}
  .mobile-tabbar .mt-badge{position:absolute;top:5px;left:calc(50% + 4px);min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#e0423b;color:#fff;font-size:11px;line-height:18px;font-weight:700}
  .mobile-tabbar .mt-badge[hidden]{display:none}
+ .mobile-tabbar .mt-dot{position:absolute;top:8px;left:calc(50% + 8px);width:9px;height:9px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 2px #fff;pointer-events:none}
  .mobile-nav-open .mobile-tabbar{z-index:303}
  .mobile-account{display:block;margin-top:14px;padding:14px 4px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #c9dae8}
  .ma-user{display:flex;gap:10px;align-items:center}.ma-user .top-avatar{display:grid;flex-shrink:0}.ma-user strong{display:block;font-size:15px}.ma-user small{color:#64798c;font-size:12.5px}

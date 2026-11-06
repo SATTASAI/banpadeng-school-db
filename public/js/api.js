@@ -108,6 +108,7 @@ const ROLE_LABELS = {
 (() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/admin-cleanup.css";document.head.append(css);const script=document.createElement("script");script.src="/js/admin-cleanup.js";document.head.append(script);})();
 
 // Portrait phone layout shared by standalone pages and iframe modules.
+(() => {const pj=document.createElement("script");pj.src="/js/pending-dots.js";document.head.append(pj);})();
 (() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/mobile.css";document.head.append(css);const js=document.createElement("script");js.src="/js/mobile-fit.js";document.head.append(js);})();
 
 // ปีงบประมาณเริ่มต้นของหน้าโครงการ/เบิกจ่าย/จัดซื้อ: ผูกกับปีการศึกษาปัจจุบัน
