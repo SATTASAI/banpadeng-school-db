@@ -23,6 +23,21 @@ body{background:inherit}.ps-page{max-width:1100px;margin:auto;padding:24px}
 .ps-note{font-size:13px;color:var(--color-text-muted);margin:8px 2px}
 .btn-test{font:inherit;font-size:13px;font-weight:600;border:1px solid #c9d8ee;background:#fff;color:#1d5f9e;border-radius:10px;padding:6px 12px;cursor:pointer;white-space:nowrap}.btn-test:disabled{opacity:.5;cursor:default}
 @media(max-width:820px){.ps-page{padding:14px}}
+/* มือถือ: แถวตารางเป็นการ์ด พอดีหน้าจอ */
+@media(max-width:720px){
+ .ps-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.ps-card{padding:11px 12px;border-radius:14px}.ps-card strong{font-size:20px}
+ .ps-filters{grid-template-columns:1fr;padding:10px}
+ .ps-table{overflow:visible;border:0;background:transparent}.ps-table table{min-width:0;display:block}.ps-table thead{display:none}
+ .ps-table tbody{display:grid;gap:10px}.ps-table tr{display:grid;grid-template-columns:1fr auto;gap:6px 10px;padding:14px;border:1px solid var(--color-border);border-radius:16px;background:#fff}
+ .ps-table td{padding:0;border:0;min-width:0;overflow-wrap:anywhere}
+ .ps-table td.c-user{grid-column:1}.ps-table td.c-status{grid-column:2;text-align:right}
+ .ps-table td.c-dev,.ps-table td.c-at,.ps-table td.c-last{grid-column:1/-1;display:flex;gap:8px;font-size:13px}
+ .ps-table td[data-label]::before{content:attr(data-label);flex:0 0 92px;color:var(--color-text-muted)}
+ .ps-table td.c-dev>div{min-width:0}
+ .ps-table td.c-act{grid-column:1/-1}.ps-table td.c-act:empty{display:none}.btn-test{width:100%;padding:10px}
+ .ps-table td.empty{grid-column:1/-1}
+ .ps-table tr.row-off td.c-dev,.ps-table tr.row-off td.c-at,.ps-table tr.row-off td.c-last{display:none}
+}
 </style></head>
 <body>
 <main class="ps-page">
@@ -54,11 +69,11 @@ function render(){
     const on=r.devices.length>0,bad=r.devices.some(d=>Number(d.fail_count)>=3);
     const first=on?Math.min(...r.devices.map(d=>Number(d.created_at)||Infinity)):0;
     const last=on?Math.max(...r.devices.map(d=>Number(d.last_ok_at)||0)):0;
-    return `<tr><td><b>${esc(r.full_name||"-")}</b><small>${esc(ROLE[r.role]||r.role)} · ${esc(r.email||"")}</small></td>
-      <td><span class="st ${on?(bad?"warn":"on"):"off"}">${on?(bad?"ส่งไม่ถึงบางเครื่อง":"เชื่อมแล้ว"):"ยังไม่เชื่อม"}</span></td>
-      <td>${on?`${r.devices.length} เครื่อง<br>${r.devices.map(d=>`<span class="dev">${esc(d.device)}</span>`).join("")}`:"-"}</td>
-      <td>${on&&Number.isFinite(first)?when(first):"-"}</td><td>${last?when(last):on?"ยังไม่เคยส่ง":"-"}</td>
-      <td>${on?`<button class="btn-test" data-test="${r.id}" type="button">ส่งทดสอบ</button>`:""}</td></tr>`;
+    return `<tr class="${on?"":"row-off"}"><td class="c-user"><b>${esc(r.full_name||"-")}</b><small>${esc(ROLE[r.role]||r.role)} · ${esc(r.email||"")}</small></td>
+      <td class="c-status"><span class="st ${on?(bad?"warn":"on"):"off"}">${on?(bad?"ส่งไม่ถึงบางเครื่อง":"เชื่อมแล้ว"):"ยังไม่เชื่อม"}</span></td>
+      <td class="c-dev" data-label="เครื่อง"><div>${on?`${r.devices.length} เครื่อง<br>${r.devices.map(d=>`<span class="dev">${esc(d.device)}</span>`).join("")}`:"-"}</div></td>
+      <td class="c-at" data-label="เชื่อมเมื่อ">${on&&Number.isFinite(first)?when(first):"-"}</td><td class="c-last" data-label="ส่งถึงล่าสุด">${last?when(last):on?"ยังไม่เคยส่ง":"-"}</td>
+      <td class="c-act">${on?`<button class="btn-test" data-test="${r.id}" type="button">ส่งทดสอบ</button>`:""}</td></tr>`;
   }).join("")||'<tr><td colspan="6" class="empty">ไม่พบรายการ</td></tr>';
 }
 async function load(){
