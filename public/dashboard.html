@@ -461,7 +461,7 @@
         <button type="button" role="tab" data-tab="overview" aria-selected="true">ภาพรวม</button>
         <button type="button" role="tab" data-tab="students" aria-selected="false">นักเรียน · มาเรียน</button>
         <button type="button" role="tab" data-tab="personnel" aria-selected="false">บุคลากร</button>
-        <button type="button" role="tab" data-tab="budget" aria-selected="false">งบประมาณ <span class="dash-tab-badge" id="budgetTabBadge" hidden></span></button>
+        <button type="button" role="tab" data-tab="budget" aria-selected="false" data-pending-key="balance">งบประมาณ <span class="dash-tab-badge" id="budgetTabBadge" hidden></span></button>
       </div>
 
       <div class="dash-panel" data-panel="overview" role="tabpanel">
@@ -740,13 +740,20 @@
     }
     return out;
   }
+  // งานค้าง (จุดแดงค้างจนงานเสร็จ ไม่หายเมื่อเปิดหน้า) จาก /js/pending-dots.js
+  let pendingWork=[];
+  window.addEventListener('school-pending',e=>{pendingWork=e.detail||[];paintMenuDots();});
   function paintMenuDots(){
     const on=new Set();menuNotices.forEach(n=>{if(n.url&&n.url!=='/dashboard.html')menuTargets(n.url).forEach(el=>on.add(el));});
+    pendingWork.forEach(p=>{if(p.url&&p.url!=='/dashboard.html')menuTargets(p.url).forEach(el=>on.add(el));});
     document.querySelectorAll('.sidebar nav a').forEach(a=>{
       const dot=a.querySelector(':scope > .nav-new-dot');
       if(on.has(a)&&!dot){const d=document.createElement('span');d.className='nav-new-dot';d.setAttribute('aria-hidden','true');a.appendChild(d);a.dataset.hasNew='true';}
       else if(!on.has(a)&&dot){dot.remove();delete a.dataset.hasNew;}
     });
+    // ปุ่มเมนู/ภาพรวมที่แถบล่างมือถือ
+    const anyMenu=on.size>0,overview=pendingWork.some(p=>p.url==='/dashboard.html');
+    window.dispatchEvent(new CustomEvent('menu-dots',{detail:{menu:anyMenu,overview}}));
   }
   async function clearMenuNotices(url){
     if(!menuLoaded){pendingClear=url;return;}

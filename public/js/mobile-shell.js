@@ -81,6 +81,9 @@
     if (e.target.closest('#overviewNav,#homeLink')) setActive('home');
     else if (e.target.closest('.sidebar nav a[data-page],.sidebar nav .nav-child,.global-search-results')) setActive('');
   });
+  // จุดแดงงานค้างที่ปุ่มเมนู/ภาพรวม (คำนวณใน dashboard.html)
+  const dotOn = (btn, on) => { let d = btn.querySelector('.mt-dot'); if (on && !d) { d = document.createElement('i'); d.className = 'mt-dot'; btn.appendChild(d); } else if (!on && d) d.remove(); };
+  window.addEventListener('menu-dots', (e) => { dotOn(bar.querySelector('[data-tab=menu]'), !!e.detail?.menu); dotOn(bar.querySelector('[data-tab=home]'), !!e.detail?.overview); });
   // ตัวเลขแจ้งเตือน
   window.addEventListener('school-notifications', () => {
     const src = document.querySelector('#schoolNotifications .sn-count'), dst = bar.querySelector('.mt-badge');

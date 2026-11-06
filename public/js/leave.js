@@ -99,7 +99,7 @@
   $('realLeaveTotal').textContent=(totals?.real.times??real.length)+' ครั้ง · '+(totals?.real.days??real.reduce((n,r)=>n+Number(r.leave_days||0),0))+' วัน';
   $('lenientLeaveTotal').textContent=(totals?.lenient.times??lenient.length)+' ครั้ง · '+(totals?.lenient.days??lenient.reduce((n,r)=>n+Number(r.leave_days||0),0))+' วัน (แยกต่างหาก)';
   const isPend=r=>r.status==='pending'; // จุดแดงค้างจนกว่า ผอ. อนุมัติ (หรือไม่อนุมัติ)
-  for(const [id,cat] of [['realLeaveCard','real'],['lenientLeaveCard','lenient']]){const n=records.filter(r=>(r.leave_type==='lenient')===(cat==='lenient')&&isPend(r)).length;$(id).classList.toggle('has-pending',n>0);$(id).title=n?'มีคำขอลารอดำเนินการ '+n+' รายการ':'';}
+  for(const [id,cat] of [['realLeaveCard','real'],['lenientLeaveCard','lenient']]){const n=records.filter(r=>(r.leave_type==='lenient')===(cat==='lenient')&&isPend(r)).length;$(id).classList[n>0?'add':'remove']('has-pending');$(id).title=n?'มีคำขอลารอดำเนินการ '+n+' รายการ':'';}
   renderRegisters();
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
   if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id)){setCategory(records.find(r=>r.id===id).leave_type==='lenient'?'lenient':'real',false);await details(id);}}
