@@ -51,6 +51,7 @@ body[data-tab="money"]{--mr-accent:#D9578A;--mr-deep:#9c2f5c;--mr-soft:#fdebf2;-
 .mr-form input,.mr-form select,.mr-form textarea{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}
 .mr-pick{max-height:240px;overflow:auto;border:1px solid var(--color-border);border-radius:10px;padding:6px 10px;display:grid;gap:2px}.mr-pick label{display:flex;gap:8px;align-items:center;color:inherit;font-size:13px}
 .mr-big{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;cursor:zoom-out}.mr-big img{max-width:94vw;max-height:92vh;border-radius:10px}
+.mr-export-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.mr-export-head h2{margin:0}.mr-export{display:flex;gap:8px;flex-wrap:wrap}.mr-export .btn{width:auto;padding:8px 14px;font-size:14px}
 </style>
 </head>
 <body data-tab="good">
@@ -69,7 +70,7 @@ body[data-tab="money"]{--mr-accent:#D9578A;--mr-deep:#9c2f5c;--mr-soft:#fdebf2;-
   <section id="cards" class="tw-cards"></section>
   <div class="mr-grid" id="stats"></div>
   <div class="mr-filters"><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหา: ชื่อ เลขประจำตัว รายละเอียด" autocomplete="off"></div>
-  <section class="mr-section"><h2 id="listTitle">รายการ</h2><div class="mr-wrap mr-scroll"><table class="mr-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div></section>
+  <section class="mr-section"><div class="mr-export-head"><h2 id="listTitle">รายการ</h2><div class="mr-export"><button class="btn btn-ghost" type="button" id="pdfBtn">🖨 พิมพ์ PDF</button><button class="btn btn-ghost" type="button" id="xlsxBtn">⬇ ดาวน์โหลด XLSX</button></div></div><div class="mr-wrap mr-scroll"><table class="mr-table"><thead id="listHead"></thead><tbody id="list"></tbody></table></div></section>
 </main>
 
 <div class="mr-modal" id="goodModal" hidden><div role="dialog" aria-modal="true" aria-labelledby="goodTitle">
@@ -183,6 +184,7 @@ function groupTable(title,list,keyOf,name,withMoney=false){
 function renderList(list){
   const q=$('q').value.trim().toLowerCase(),money_=tab==='money',p=data.permissions;
   const rows=list.filter(r=>{const s=students.get(r.student_id);return (!room||key(s)===room)&&(!q||`${s.full_name} ${s.student_code} ${r.detail||''} ${r.category||''} ${r.place||''}`.toLowerCase().includes(q))});
+  lastRows=rows;
   $('listTitle').textContent=`${money_?'รายการเจอเงิน':'รายการความดี'}${room?' · '+label(room):''} (${rows.length})`;
   $('listHead').innerHTML=`<tr><th style="width:30px">${p.can_write?'<input type="checkbox" id="selAll" aria-label="เลือกทั้งหมด">':''}</th><th>วันที่</th><th>นักเรียน</th>${money_?'<th class="num">จำนวนเงิน</th><th>สถานที่ / รายละเอียด</th><th>ภาพ</th>':'<th>ประเภท</th><th>รายละเอียด</th>'}<th>คะแนนพฤติกรรม</th><th></th></tr>`;
   $('list').innerHTML=rows.length?rows.map(r=>{const s=students.get(r.student_id),w=canWriteRoom(key(s));return `<tr><td>${w&&!r.points_used?`<input type="checkbox" data-sel="${r.id}"${selected.has(r.id)?' checked':''}>`:''}</td><td style="white-space:nowrap">${thDate(r.date)}<small class="mr-muted" style="display:block">ภาค ${r.term}</small></td><td class="mr-name">${esc(s.full_name)}<small>${esc(s.student_code||'')} · ${esc(label(key(s)))}</small></td>${money_?`<td class="num"><b>${money(r.amount)}</b></td><td>${esc(r.place||'')}${r.detail?`<small class="mr-muted" style="display:block">${esc(r.detail)}</small>`:''}</td><td><div class="mr-thumbs">${(r.photos||[]).map(id=>`<img src="/api/merit/money/photos/${id}" loading="lazy" alt="ภาพ" data-big="${id}">`).join('')}</div></td>`:`<td>${esc(r.category)}</td><td>${esc(r.detail||'')}</td>`}<td>${r.points_used?'<span class="mr-chip ok">+1 แล้ว</span>':'<span class="mr-muted">–</span>'}</td><td style="white-space:nowrap">${w?`${money_?`<button class="btn btn-ghost" type="button" data-edit="${r.id}">แก้ไข</button> `:''}<button class="btn btn-ghost" type="button" data-del="${r.id}"${r.points_used?' disabled title="ใช้เพิ่มคะแนนแล้ว"':''}>ลบ</button>`:''}</td></tr>`}).join(''):`<tr><td colspan="${money_?8:7}" class="mr-muted">ยังไม่มีรายการ</td></tr>`;
@@ -253,6 +255,44 @@ $('mSave').onclick=async()=>{
     }
     $('moneyModal').hidden=true;await load();
   }catch(e){showErr('mError',e.message)}
+};
+
+// ---------- ส่งออก PDF / XLSX (ตามตัวกรองที่แสดงอยู่) ----------
+let lastRows=[];
+function exportData(){
+  const money_=tab==='money',title=money_?'บันทึกการเจอเงิน':'บันทึกความดี';
+  const period=$('term').value==='all'?`ปีการศึกษา ${data.academic_year}`:`ภาคเรียนที่ ${$('term').value}/${data.academic_year}`;
+  const sub=[period,room?label(room):'',$('q').value.trim()?`ค้นหา “${$('q').value.trim()}”`:''].filter(Boolean).join(' · ');
+  const head=money_?['ที่','วันที่','รหัสนักเรียน','ชื่อ-สกุล','ชั้น/ห้อง','จำนวนเงิน (บาท)','สถานที่','รายละเอียด']:['ที่','วันที่','รหัสนักเรียน','ชื่อ-สกุล','ชั้น/ห้อง','ประเภทความดี','รายละเอียด'];
+  const rows=lastRows.map((r,i)=>{const s=students.get(r.student_id)||{};const base=[i+1,thDate(r.date),s.student_code||'',s.full_name||'',label(key(s))];
+    return money_?[...base,Number(r.amount)||0,r.place||'',r.detail||'']:[...base,r.category||'',r.detail||''];});
+  const total=money_?lastRows.reduce((t,r)=>t+(Number(r.amount)||0),0):null;
+  return {money_,title,sub,head,rows,total};
+}
+$('xlsxBtn').onclick=async()=>{
+  const d=exportData();if(!d.rows.length)return showErr('error','ไม่มีรายการให้ส่งออก');
+  try{const X=await xlsx(),aoa=[[d.title],[d.sub],[],d.head,...d.rows];if(d.money_)aoa.push([],['','','','','รวม',d.total]);
+    const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=d.head.map((h,i)=>({wch:[5,14,14,28,14,d.money_?16:20,24,30][i]||16}));
+    const book=X.utils.book_new();X.utils.book_append_sheet(book,ws,d.money_?'เจอเงิน':'ความดี');
+    const blob=new Blob([X.write(book,{type:'array',bookType:'xlsx'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`${d.title} ${d.sub.replace(/[\\/:*?"<>|]/g,' ')}.xlsx`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+  }catch(e){showErr('error','ส่งออก XLSX ไม่สำเร็จ: '+e.message)}
+};
+$('pdfBtn').onclick=()=>{
+  const d=exportData();if(!d.rows.length)return showErr('error','ไม่มีรายการให้พิมพ์');
+  const cell=v=>esc(typeof v==='number'&&d.money_&&v!==Math.trunc(v)?money(v):v);
+  const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(d.title)} ${esc(d.sub)}</title><style>
+   @page{size:A4 ${d.money_?'landscape':'portrait'};margin:12mm}body{font-family:'Sarabun','TH Sarabun New','Noto Sans Thai',Tahoma,sans-serif;font-size:12.5px;color:#111;margin:0}
+   h1{font-size:18px;margin:0 0 2px}p{margin:0 0 10px;color:#444}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}
+   th{background:#eef2f6}td.n{text-align:right;white-space:nowrap}tfoot td{font-weight:700;background:#f7f7f7}.meta{display:flex;justify-content:space-between;font-size:11px;color:#666;margin-top:8px}
+  </style></head><body><h1>${esc(d.title)} · โรงเรียนบ้านป่าเด็ง</h1><p>${esc(d.sub)} · ทั้งหมด ${d.rows.length} รายการ</p>
+  <table><thead><tr>${d.head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${d.rows.map(r=>`<tr>${r.map((v,i)=>`<td${i===0||(d.money_&&i===5)?' class="n"':''}>${d.money_&&i===5?money(v):esc(v)}</td>`).join('')}</tr>`).join('')}</tbody>
+  ${d.money_?`<tfoot><tr><td colspan="5" class="n">รวม</td><td class="n">${money(d.total)}</td><td colspan="2"></td></tr></tfoot>`:''}</table>
+  <div class="meta"><span>พิมพ์เมื่อ ${new Date().toLocaleString('th-TH',{dateStyle:'long',timeStyle:'short'})}</span><span>ระบบบริหารโรงเรียนบ้านป่าเด็ง</span></div>
+  <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
+  const w=window.open('','_blank');
+  if(!w){const f=document.createElement('iframe');f.style.cssText='position:fixed;width:0;height:0;border:0';document.body.append(f);f.contentDocument.open();f.contentDocument.write(html.replace(/<script>[\s\S]*?<\/script>/,''));f.contentDocument.close();setTimeout(()=>{f.contentWindow.print();setTimeout(()=>f.remove(),2000)},400);return;}
+  w.document.open();w.document.write(html);w.document.close();
 };
 
 // ---------- แม่แบบ / อัปโหลด xlsx ----------
