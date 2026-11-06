@@ -96,6 +96,11 @@
   .topbar-actions { display:flex; align-items:center; gap:12px; }
   .period-pill,.user-pill { display:flex; align-items:center; gap:8px; min-height:34px; padding:4px 9px; border:1px solid rgba(84,111,138,.15); border-radius:10px; background:rgba(255,255,255,.66); font-size:12px; color:var(--color-text-muted); box-shadow:0 1px 2px rgba(53,88,123,.04),inset 0 1px rgba(255,255,255,.8); }
   .period-pill strong,.user-pill strong { color:var(--color-text); }
+  .top-btn { display:inline-flex; align-items:center; min-height:34px; padding:4px 12px; border-radius:10px; font-size:13px; font-weight:600; text-decoration:none; white-space:nowrap; border:1px solid rgba(84,111,138,.15); box-shadow:0 1px 2px rgba(53,88,123,.04),inset 0 1px rgba(255,255,255,.8); }
+  .top-account { color:#fff; background:linear-gradient(145deg,#58A8F0,#1A70CD); border-color:transparent; }
+  .top-account:hover { filter:brightness(1.06); }
+  .top-logout { color:#4C759C; background:rgba(255,255,255,.66); }
+  .top-logout:hover { color:#1D66AD; background:#fff; }
   .top-avatar { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; background:linear-gradient(145deg,#58A8F0,#1A70CD); box-shadow:inset 0 1px rgba(255,255,255,.3); }
   .workspace-stage { flex:1; min-height:0; overflow:auto; position:relative; }
   .main-content { padding:30px 34px 54px; max-width:1320px; margin:0 auto; }
@@ -395,12 +400,6 @@
       <a href="/line-settings.html" data-page="line-settings" class="superadmin-only" style="display:none;"><span class="nav-number">LINE</span>ตั้งค่า LINE</a>
     </nav>
     <script src="/js/nav-icons.js"></script>
-    <div class="sidebar-footer">
-      <span class="role-chip" id="roleChip">—</span>
-      <div id="userName">—</div>
-      <a href="/account.html">บัญชีของฉัน</a>
-      <a href="#" id="logoutLink">ออกจากระบบ</a>
-    </div>
   </div>
 
   <div class="content-area">
@@ -412,7 +411,8 @@
       </div>
       <div class="topbar-actions">
         <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
-        <div class="user-pill"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span></div>
+        <a href="/account.html" class="top-btn top-account" id="topAccountLink">บัญชีของฉัน</a>
+        <a href="#" class="top-btn top-logout" id="logoutLink">ออกจากระบบ</a>
       </div>
     </header>
     <div class="workspace-stage">
@@ -1287,11 +1287,6 @@
     if (user.role === "viewer") enterViewerMode(user);
     else { ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox")); window.WorkCalendar?.render(document.getElementById("workCalendar")); }
 
-    document.getElementById("roleChip").textContent = ROLE_LABELS[user.role] || user.role;
-    document.getElementById("userName").textContent = user.full_name;
-    document.getElementById("topUserName").textContent = user.full_name;
-    document.getElementById("topUserRole").textContent = ROLE_LABELS[user.role] || user.role;
-    document.getElementById("topAvatar").textContent = user.full_name.trim().charAt(0) || "ผ";
     document.getElementById("greeting").textContent = `สวัสดีครับ/ค่ะ คุณ${user.full_name}`;
 
     if (user.is_admin) {
@@ -1334,7 +1329,7 @@
     document.querySelectorAll(".sidebar nav > .nav-label").forEach((label) => { if (!/ฝ่ายงาน/.test(label.textContent)) label.style.display = "none"; });
     document.querySelectorAll(".sidebar nav > a.nav-grades").forEach((a) => { a.style.display = "none"; });
     document.getElementById("globalSearch").style.display = "none";
-    document.querySelectorAll('.sidebar-footer a[href="/account.html"]').forEach((a) => { a.style.display = "none"; });
+    document.getElementById("topAccountLink").style.display = "none";
     const banner = document.createElement("div");
     banner.className = "viewer-banner";
     banner.textContent = "บัญชีผู้ชมภายนอก — ดูข้อมูลภาพรวมได้อย่างเดียว ข้อมูลส่วนบุคคลของนักเรียนและบุคลากรถูกซ่อนไว้";
