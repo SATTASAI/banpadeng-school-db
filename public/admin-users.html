@@ -28,7 +28,19 @@
  .users-table .c-date{grid-column:1;font-size:12px;color:var(--color-text-muted);align-self:center}.users-table .c-date::before{content:'สมัครเมื่อ '}
  .users-table .c-act{grid-column:2;text-align:right}.users-table .c-act br{display:none}.users-table .c-act button{width:auto;min-height:36px;padding:6px 12px;font-size:13px}
  .app-main h2{font-size:20px}
+ .users-table .c-name button,.users-table .c-status button,.users-table .c-act{display:none!important}
+ .users-table .c-status{grid-row:1}
+ .users-table tr{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;transition:background .15s,transform .15s}
+ .users-table tr.lp-press{background:#eef4fb;transform:scale(.985)}
+ .lp-hint{display:block!important}
 }
+.lp-hint{display:none;margin:12px 14px 0;font-size:12.5px;color:var(--color-text-muted)}
+.lp-sheet{position:fixed;inset:0;z-index:2000;background:rgba(15,30,45,0);display:flex;align-items:flex-end;justify-content:center;transition:background .2s}
+.lp-sheet.open{background:rgba(15,30,45,.4)}
+.lp-card{width:100%;max-width:520px;background:#fff;border-radius:20px 20px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));display:grid;gap:8px;transform:translateY(100%);transition:transform .22s ease-out}
+.lp-sheet.open .lp-card{transform:none}.lp-card b{font-size:16px}.lp-card small{color:var(--color-text-muted);margin-bottom:4px;overflow-wrap:anywhere}
+.lp-card button{min-height:48px;border:1px solid #d6e2ec;border-radius:14px;background:#f6f9fc;font:inherit;font-size:15px;font-weight:600;color:#24405a;width:100%}
+.lp-card button.danger{background:#fff1f1;border-color:#f2c4c4;color:#b3261e}.lp-card button:disabled{opacity:.5}
 </style>
 </head>
 <body>
@@ -47,7 +59,7 @@
     <h2>จัดการผู้ใช้งาน</h2>
     <p style="color: var(--color-text-muted);">อนุมัติสมาชิกใหม่และกำหนดสิทธิ์การใช้งาน</p>
 
-    <div class="panel" style="margin-top:20px;">
+    <div class="panel" style="margin-top:20px;"><p class="lp-hint">กดค้างที่การ์ดผู้ใช้เพื่อแก้ไขชื่อ ระงับ หรือลบผู้ใช้</p>
       <table class="users-table">
         <thead>
           <tr>
@@ -303,6 +315,39 @@
       tbody.appendChild(tr);
     });
   }
+
+  // มือถือ: กดค้างที่การ์ดผู้ใช้ → แก้ไขชื่อ / ระงับ-เปิดใช้ / ลบผู้ใช้ (เรียกปุ่มเดิมในการ์ด)
+  (() => {
+    const tbody = document.getElementById("userRows");
+    const phone = window.matchMedia("(max-width:720px)");
+    let timer = 0, start = null, row = null;
+    const cancel = () => { clearTimeout(timer); timer = 0; row?.classList.remove("lp-press"); row = null; };
+    tbody.addEventListener("pointerdown", (e) => {
+      if (!phone.matches || e.target.closest("select,input,button,a")) return;
+      const tr = e.target.closest("tr"); if (!tr) return;
+      row = tr; start = [e.clientX, e.clientY]; tr.classList.add("lp-press");
+      timer = setTimeout(() => { cancel(); try { navigator.vibrate?.(15); } catch {} openSheet(tr); }, 550);
+    });
+    tbody.addEventListener("pointermove", (e) => { if (timer && Math.hypot(e.clientX - start[0], e.clientY - start[1]) > 10) cancel(); });
+    ["pointerup", "pointercancel", "pointerleave"].forEach((ev) => tbody.addEventListener(ev, cancel));
+    tbody.addEventListener("contextmenu", (e) => { if (phone.matches && e.target.closest("tr")) e.preventDefault(); });
+    function openSheet(tr) {
+      const rename = tr.querySelector(".c-name button"), toggle = tr.querySelector(".c-status button"), del = tr.querySelector(".c-act button");
+      const name = tr.querySelector(".c-name span")?.textContent || "", email = tr.querySelector(".c-email")?.textContent || "";
+      const sh = document.createElement("div"); sh.className = "lp-sheet";
+      const card = document.createElement("div"); card.className = "lp-card"; card.setAttribute("role", "dialog");
+      const b = document.createElement("b"); b.textContent = name; const sm = document.createElement("small"); sm.textContent = email;
+      card.append(b, sm);
+      const add = (label, src, cls) => { if (!src) return; const btn = document.createElement("button"); btn.type = "button"; btn.textContent = label; if (cls) btn.className = cls; btn.disabled = src.disabled; btn.onclick = () => { close(); src.click(); }; card.append(btn); };
+      add("✏️ แก้ไขชื่อ", rename);
+      add(toggle ? (/ระงับ/.test(toggle.textContent) ? "⏸ ระงับผู้ใช้" : "▶️ " + toggle.textContent.trim()) : "", toggle);
+      add("🗑 ลบผู้ใช้", del, "danger");
+      const x = document.createElement("button"); x.type = "button"; x.textContent = "ยกเลิก"; x.onclick = () => close(); card.append(x);
+      sh.append(card); document.body.append(sh); requestAnimationFrame(() => sh.classList.add("open"));
+      sh.onclick = (e) => { if (e.target === sh) close(); };
+      function close() { sh.classList.remove("open"); setTimeout(() => sh.remove(), 200); }
+    }
+  })();
 
   (async () => {
     const { user } = await apiRequest("/api/auth/me");
