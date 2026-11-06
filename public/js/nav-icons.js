@@ -10,6 +10,7 @@
     handicraft: '<circle cx="13.5" cy="6.5" r="1.3"/><circle cx="17.5" cy="10.5" r="1.3"/><circle cx="8.5" cy="7.5" r="1.3"/><circle cx="6.5" cy="12.5" r="1.3"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.9 0 1.6-.7 1.6-1.6 0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1 0-.9.7-1.6 1.6-1.6H16c3.1 0 5.6-2.5 5.6-5.6C21.6 6 17.3 2 12 2Z"/>',
     activity: '<rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 17l5-4.5 3.5 3 3-2.5L20 17"/>',
     "padeng-model": '<path d="M12 3 3 8l9 5 9-5Z"/><path d="M7 10.5V16c0 1.7 2.2 3 5 3s5-1.3 5-3v-5.5"/>',
+    "training-log": '<path d="M3 9l9-5 9 5-9 5-9-5z"/><path d="M7 11v4c0 1.5 2.2 3 5 3s5-1.5 5-3v-4"/>',
     "classroom-research": '<circle cx="10.5" cy="10.5" r="6"/><path d="m20 20-5-5"/><path d="M8 10.5h5M10.5 8v5"/>',
     grades: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M9 17v-3M12 17v-6M15 17v-2"/>',
     administration: '<path d="M3 21h18"/><path d="M5 21V10M19 21V10M9 21v-7M15 21v-7"/><path d="M12 3 3 8h18Z"/>',

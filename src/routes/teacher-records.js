@@ -1,5 +1,6 @@
 // ผลงานครู และ อบรมครู (เมนูย่อยฝ่ายบุคคล)
-// ฝ่ายบุคคล (บุคลากรในฝ่าย) + superadmin บันทึก/แก้ไข/อัปโหลดให้ครูทุกคน · ครูดูรายการและไฟล์ของตนเองได้
+// ผลงานครู: ฝ่ายบุคคล + superadmin บันทึกให้ครูทุกคน · ครูดูของตนเอง
+// อบรมครู (รายงานการอบรม): ครูที่ไปอบรมบันทึกเอง (เมนูระบบสนับสนุน) · ฝ่ายบุคคลดูผลของทุกคน · superadmin แก้ไขได้ทุกรายการ
 // ไฟล์: ภาพ (JPG/PNG/WEBP/HEIC ≤10 MB) และ PDF (≤30 MB) เก็บใน Google Drive: <ผลงานครู|อบรมครู> / <ชื่อครู>
 import { getCurrentUser, jsonResponse } from '../lib/auth.js';
 import { ensurePersonnelData } from '../lib/personnel-data.js';
@@ -20,7 +21,7 @@ export async function ensureTeacherRecordsSchema(env) {
     `CREATE TABLE IF NOT EXISTS teacher_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK (kind IN ('works','training')),
       user_id INTEGER NOT NULL, title TEXT NOT NULL, category TEXT, level TEXT, organizer TEXT,
-      start_date TEXT, end_date TEXT, hours REAL, mode TEXT, detail TEXT,
+      start_date TEXT, end_date TEXT, hours REAL, mode TEXT, detail TEXT, location TEXT,
       created_by INTEGER, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), deleted_at TEXT)`,
     'CREATE INDEX IF NOT EXISTS idx_teacher_records_kind ON teacher_records(kind, user_id, deleted_at)',
     `CREATE TABLE IF NOT EXISTS teacher_record_files (
@@ -30,6 +31,8 @@ export async function ensureTeacherRecordsSchema(env) {
     'CREATE INDEX IF NOT EXISTS idx_teacher_record_files ON teacher_record_files(record_id)',
     'CREATE TABLE IF NOT EXISTS teacher_record_folders (key TEXT PRIMARY KEY, folder_id TEXT NOT NULL)',
   ]) await env.DB.prepare(sql).run();
+  const { results: cols } = await env.DB.prepare('PRAGMA table_info(teacher_records)').all();
+  if (!cols.some((c) => c.name === 'location')) { try { await env.DB.prepare('ALTER TABLE teacher_records ADD COLUMN location TEXT').run(); } catch (e) { if (!/duplicate column/i.test(String(e.message))) throw e; } }
   ready.add(env.DB);
 }
 
@@ -54,20 +57,18 @@ export function validDate(v) {
 }
 export function normalizeRecord(kind, input) {
   const title = text(input?.title, 200);
-  if (!title) return { error: kind === 'works' ? 'กรุณากรอกชื่อผลงาน' : 'กรุณากรอกชื่อหลักสูตร' };
+  if (!title) return { error: kind === 'works' ? 'กรุณากรอกชื่อผลงาน' : 'กรุณากรอกเรื่องที่อบรม' };
   const start = validDate(input.start_date), end = validDate(input.end_date);
   if (start === undefined || end === undefined) return { error: 'รูปแบบวันที่ไม่ถูกต้อง' };
-  const r = { title, organizer: text(input.organizer, 200), detail: text(input.detail, 2000), start_date: start, category: null, level: null, end_date: null, hours: null, mode: null };
+  const r = { title, organizer: text(input.organizer, 200), detail: text(input.detail, 2000), start_date: start, category: null, level: null, end_date: null, hours: null, mode: null, location: null };
   if (kind === 'works') {
     r.category = WORK_CATEGORIES.includes(input.category) ? input.category : null;
     r.level = WORK_LEVELS.includes(input.level) ? input.level : null;
   } else {
     if (end && start && end < start) return { error: 'วันที่สิ้นสุดต้องไม่ก่อนวันที่เริ่ม' };
     r.end_date = end;
-    const h = input.hours === '' || input.hours == null ? null : Number(input.hours);
-    if (h !== null && !(Number.isFinite(h) && h >= 0 && h <= 10000)) return { error: 'จำนวนชั่วโมงไม่ถูกต้อง' };
-    r.hours = h;
-    r.mode = TRAINING_MODES.includes(input.mode) ? input.mode : null;
+    r.location = text(input.location, 200);
+    r.detail = text(input.detail, 5000);
   }
   return { record: r };
 }
@@ -131,8 +132,16 @@ async function teachers(env) {
   const { results } = await env.DB.prepare("SELECT id, full_name FROM users WHERE status='active' AND role IS NOT NULL AND role <> 'viewer' AND deleted_at IS NULL ORDER BY full_name").all();
   return results;
 }
-async function listPayload(env, user, perms, kind, filterUser) {
-  const uid = perms.manage ? filterUser : user.id;
+// สิทธิ์ต่อชนิด: ผลงาน = ฝ่ายบุคคลจัดการ · อบรม = เจ้าของจัดการของตน, ฝ่ายบุคคลดูทั้งหมด, superadmin จัดการทั้งหมด
+function kindAccess(user, perms, kind) {
+  if (kind === 'works') return { view_all: perms.manage, manage_all: perms.manage, own: false };
+  return { view_all: perms.manage, manage_all: user.role === 'superadmin', own: true };
+}
+const canEdit = (user, acc, row) => acc.manage_all || (acc.own && row.user_id === user.id);
+async function listPayload(env, user, perms, kind, filterUser, mine) {
+  const acc = kindAccess(user, perms, kind);
+  const all = acc.view_all && !mine;
+  const uid = all ? filterUser : user.id;
   const { results: records } = await env.DB.prepare(`SELECT r.*, u.full_name FROM teacher_records r LEFT JOIN users u ON u.id = r.user_id
     WHERE r.kind = ? AND r.deleted_at IS NULL ${uid ? 'AND r.user_id = ?' : ''} ORDER BY COALESCE(r.start_date, r.created_at) DESC, r.id DESC`).bind(...(uid ? [kind, uid] : [kind])).all();
   const files = new Map();
@@ -143,19 +152,20 @@ async function listPayload(env, user, perms, kind, filterUser) {
     for (const f of results) { if (!files.has(f.record_id)) files.set(f.record_id, []); files.get(f.record_id).push(f); }
   }
   records.forEach((r) => { r.files = files.get(r.id) || []; });
-  return { kind, manage: perms.manage, records, teachers: perms.manage ? await teachers(env) : [],
+  records.forEach((r) => { r.can_edit = canEdit(user, acc, r); });
+  return { kind, manage: acc.manage_all && all, view_all: all, can_create: kind === 'works' ? acc.manage_all : true, records, teachers: all || (kind === 'works' && acc.manage_all) ? await teachers(env) : [],
     options: { categories: WORK_CATEGORIES, levels: WORK_LEVELS, modes: TRAINING_MODES }, max_files: MAX_FILES };
 }
 async function recordRow(env, kind, id) {
   return env.DB.prepare('SELECT r.*, u.full_name FROM teacher_records r LEFT JOIN users u ON u.id = r.user_id WHERE r.id = ? AND r.kind = ? AND r.deleted_at IS NULL').bind(id, kind).first();
 }
-const COLS = ['title', 'category', 'level', 'organizer', 'start_date', 'end_date', 'hours', 'mode', 'detail'];
+const COLS = ['title', 'category', 'level', 'organizer', 'start_date', 'end_date', 'hours', 'mode', 'detail', 'location'];
 
 async function handleCreate(request, env, user, kind) {
   const body = await readJson(request);
   const n = normalizeRecord(kind, body);
   if (n.error) return jsonResponse({ error: n.error }, 400);
-  const uid = Number(body.user_id);
+  const uid = kind === 'training' ? user.id : Number(body.user_id);
   if (!uid || !(await env.DB.prepare("SELECT 1 FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL").bind(uid).first())) return jsonResponse({ error: 'กรุณาเลือกครู' }, 400);
   const row = await env.DB.prepare(`INSERT INTO teacher_records (kind, user_id, ${COLS.join(', ')}, created_by) VALUES (?, ?, ${COLS.map(() => '?').join(', ')}, ?) RETURNING id`)
     .bind(kind, uid, ...COLS.map((c) => n.record[c]), user.id).first();
@@ -169,7 +179,7 @@ async function handleUpdate(request, env, user, kind, id) {
   const n = normalizeRecord(kind, body);
   if (n.error) return jsonResponse({ error: n.error }, 400);
   let uid = row.user_id;
-  if (body.user_id && Number(body.user_id) !== row.user_id) {
+  if (kind === 'works' && body.user_id && Number(body.user_id) !== row.user_id) {
     if (!(await env.DB.prepare("SELECT 1 FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL").bind(Number(body.user_id)).first())) return jsonResponse({ error: 'ไม่พบครูที่เลือก' }, 400);
     uid = Number(body.user_id);
   }
@@ -227,9 +237,10 @@ async function serveFile(env, user, perms, fid, url, drive) {
     'Content-Disposition': `${disposition}; filename="file-${row.id}"; filename*=UTF-8''${encodeURIComponent(row.file_name)}`,
   } });
 }
-async function deleteFile(env, user, fid, drive) {
+async function deleteFile(env, user, perms, fid, drive) {
   const row = await fileRow(env, fid);
   if (!row) return jsonResponse({ error: 'ไม่พบไฟล์' }, 404);
+  if (!canEdit(user, kindAccess(user, perms, row.kind), row)) return jsonResponse({ error: 'ไม่มีสิทธิ์ลบไฟล์นี้' }, 403);
   await env.DB.prepare('DELETE FROM teacher_record_files WHERE id = ?').bind(fid).run();
   if (!drive.ready(env)) await trashFile(drive, await drive.token(env), row.drive_file_id).catch(() => {});
   await audit(env, user, `${row.kind}_file_delete`, { id: fid });
@@ -249,11 +260,19 @@ export async function handleTeacherRecordsRoute(request, env, pathname, method, 
   if (file && method === 'GET') return serveFile(env, user, perms, Number(file[1]), url, drive);
   const m = pathname.match(/^\/api\/teacher-records\/(works|training)(?:\/(\d+)(\/files)?)?$/);
   if (!m && !file) return jsonResponse({ error: 'ไม่พบเส้นทาง' }, 404);
-  if (m && !m[2] && method === 'GET') return jsonResponse(await listPayload(env, user, perms, m[1], Number(url.searchParams.get('user_id')) || null));
-  if (!perms.manage) return jsonResponse({ error: 'บันทึกได้เฉพาะบุคลากรฝ่ายบุคคลและผู้ดูแลระบบ' }, 403);
-  if (file && method === 'DELETE') return deleteFile(env, user, Number(file[1]), drive);
+  if (m && !m[2] && method === 'GET') return jsonResponse(await listPayload(env, user, perms, m[1], Number(url.searchParams.get('user_id')) || null, url.searchParams.get('view') === 'mine'));
+  if (file && method === 'DELETE') return deleteFile(env, user, perms, Number(file[1]), drive);
   const [, kind, id, files] = m;
-  if (!id && method === 'POST') return handleCreate(request, env, user, kind);
+  const acc = kindAccess(user, perms, kind);
+  if (!id && method === 'POST') {
+    if (kind === 'works' && !acc.manage_all) return jsonResponse({ error: 'บันทึกได้เฉพาะบุคลากรฝ่ายบุคคลและผู้ดูแลระบบ' }, 403);
+    return handleCreate(request, env, user, kind);
+  }
+  if (id) {
+    const row = await recordRow(env, kind, Number(id));
+    if (!row) return jsonResponse({ error: 'ไม่พบรายการ' }, 404);
+    if (!canEdit(user, acc, row)) return jsonResponse({ error: kind === 'works' ? 'แก้ไขได้เฉพาะบุคลากรฝ่ายบุคคลและผู้ดูแลระบบ' : 'แก้ไขได้เฉพาะรายงานของตนเอง' }, 403);
+  }
   if (id && files && method === 'POST') return handleUpload(request, env, user, kind, Number(id), drive);
   if (id && !files && method === 'PATCH') return handleUpdate(request, env, user, kind, Number(id));
   if (id && !files && method === 'DELETE') return handleDelete(env, user, kind, Number(id), drive);
