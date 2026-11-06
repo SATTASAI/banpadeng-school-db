@@ -26,6 +26,8 @@ const age = (value) => {
 const trim = (text, max) => { const v = String(text || "").replace(/\s+/g, " ").trim(); return v.length > max ? v.slice(0, max - 1) + "…" : v; };
 const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
 
+const actionLabel = (key) => { const k = String(key || ""); return k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
+
 export function pushAllowed(env, user) {
   if (!env.NOTIFY_API_KEY || !user?.role) return false;
   const roles = String(env.PUSH_PILOT_ROLES || "superadmin").split(",").map((s) => s.trim()).filter(Boolean);
@@ -198,6 +200,9 @@ async function deliver(env, user, origin, stats) {
         title: single ? trim(items[0].title, 120) : `แจ้งเตือนใหม่ ${items.length} รายการ`,
         body: single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500) : lines.join("\n"),
         url: new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
+        // ปุ่มบนแจ้งเตือน: ไปหน้างานนั้นโดยตรง (Android/คอมพิวเตอร์; iPhone แตะแล้วเปิดหน้ารายละเอียดที่มีปุ่มเดียวกัน)
+        actions: single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
+          : [{ title: "ดูทั้งหมด", url: new URL("/notification.html", origin).href }],
         roles: ["all"],
         refs: [`u:${user.id}`],
         source: "system",

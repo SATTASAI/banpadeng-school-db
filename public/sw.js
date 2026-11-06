@@ -10,13 +10,17 @@ self.addEventListener('push', (e) => {
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     tag: d.tag,
-    data: { url: d.url || '/dashboard.html' },
+    // ปุ่มบนแจ้งเตือน เช่น "เปิดใบลา" ไปหน้างานโดยตรง (Android/คอมพิวเตอร์)
+    actions: (d.actions || []).slice(0, 2).map((a, i) => ({ action: 'a' + i, title: a.title })),
+    data: { url: d.url || '/dashboard.html', actions: (d.actions || []).map((a) => a.url) },
   }));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = new URL((e.notification.data && e.notification.data.url) || '/dashboard.html', self.location.origin).href;
+  const data = e.notification.data || {};
+  const picked = /^a\d$/.test(e.action || '') ? (data.actions || [])[Number(e.action.slice(1))] : null;
+  const url = new URL(picked || data.url || '/dashboard.html', self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     for (const c of list) {
       if (new URL(c.url).origin === self.location.origin && 'navigate' in c) return c.focus().then(() => c.navigate(url)).catch(() => self.clients.openWindow(url));
