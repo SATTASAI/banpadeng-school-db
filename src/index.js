@@ -4849,7 +4849,7 @@ const app = {
         if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
         return jsonResponse(await pushLinkStatus(env, user), 200, { "Cache-Control": "no-store" });
       }
-      const pushAction = pathname.match(/^\/api\/push\/(subscribe|unsubscribe|test)$/)?.[1];
+      const pushAction = pathname.match(/^\/api\/push\/(subscribe|unsubscribe|test|device)$/)?.[1];
       if (pushAction && method === "POST") {
         const user = await getCurrentUser(request, env);
         if (!user?.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);

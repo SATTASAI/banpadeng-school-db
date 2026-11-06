@@ -102,12 +102,18 @@ export async function handlePushRoute(request, env, user, action) {
   if (action === "subscribe") {
     if (!validSubscription(body?.subscription)) return { status: 400, data: { error: "ข้อมูลการสมัครไม่ถูกต้อง" } };
     const { endpoint, keys } = body.subscription;
-    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1),
+    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1), exclusive: true,
       userAgent: (request.headers.get("user-agent") || "").slice(0, 200) });
   }
   if (typeof body?.endpoint !== "string") return { status: 400, data: { error: "ข้อมูลไม่ถูกต้อง" } };
   if (action === "unsubscribe") return forward(env, "/api/unsubscribe", { endpoint: body.endpoint });
   if (action === "test") return forward(env, "/api/test", { endpoint: body.endpoint });
+  // เครื่องนี้ผูกกับบัญชีนี้อยู่จริงไหม (อาจถูกลบเพราะหมดอายุ หรือมีคนอื่นมาเปิดบนเครื่องเดียวกัน)
+  if (action === "device") {
+    const r = await forward(env, "/api/subscription", { endpoint: body.endpoint });
+    if (r.status !== 200) return r;
+    return { status: 200, data: { linked: Boolean(r.data.subscribed && (r.data.refs || []).includes(`u:${user.id}`)) } };
+  }
   return { status: 404, data: { error: "ไม่พบ endpoint นี้" } };
 }
 
@@ -172,7 +178,7 @@ async function deliver(env, user, origin, stats) {
   const mine = current.filter((_, i) => claims[i].meta.changes);
   if (!mine.length) return;
 
-  let ok = false;
+  let ok = false, permanent = false;
   try {
     const items = await Promise.all(mine.map(async (r) => {
       const leaveId = String(r.message_key).match(/^leave:(\d+):/)?.[1];
@@ -209,12 +215,17 @@ async function deliver(env, user, origin, stats) {
       }),
     });
     ok = res.ok;
+    if (!ok && res.status >= 400 && res.status < 500 && res.status !== 429) permanent = true;
   } catch (error) {
     console.error("push send", error);
   }
   if (ok) {
     await env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE push_feed_sent SET status = 'sent' WHERE user_id = ? AND message_key = ?").bind(user.id, r.message_key)));
     stats.sent++; stats.items += mine.length;
+  } else if (permanent) {
+    // ระบบแจ้งเตือนปฏิเสธข้อมูล (ไม่ใช่ปัญหาชั่วคราว): ไม่ลองซ้ำทุกรอบ
+    await env.DB.batch(mine.map((r) => env.DB.prepare("UPDATE push_feed_sent SET status = 'failed' WHERE user_id = ? AND message_key = ?").bind(user.id, r.message_key)));
+    stats.failures++;
   } else {
     // ส่งไม่สำเร็จ: ปล่อยรายการให้รอบถัดไปลองใหม่
     await env.DB.batch(mine.map((r) => env.DB.prepare("DELETE FROM push_feed_sent WHERE user_id = ? AND message_key = ? AND status = 'pending'").bind(user.id, r.message_key)));

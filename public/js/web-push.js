@@ -26,7 +26,12 @@
     if (!supported) return { status: isIOS && !standalone ? 'ios-home' : 'unsupported', config: c };
     if (Notification.permission === 'denied') return { status: 'blocked', config: c };
     const sub = Notification.permission === 'granted' ? await currentSubscription() : null;
-    return { status: sub && c.linked ? 'on' : 'off', config: c, subscription: sub };
+    let mine = false;
+    if (sub) {
+      // ตรวจว่าเครื่องนี้ผูกกับบัญชีนี้อยู่จริง (ไม่ใช่แค่มีเครื่องอื่นผูกไว้)
+      try { mine = (await apiRequest('/api/push/device', { method: 'POST', body: { endpoint: sub.endpoint } })).linked; } catch { mine = Boolean(c.linked); }
+    }
+    return { status: sub && mine ? 'on' : 'off', config: c, subscription: sub };
   }
 
   async function enable() {
