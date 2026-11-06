@@ -182,3 +182,22 @@ table.sv-grid.sv-sched{table-layout:auto;min-width:760px}
 .sv-sched th,.sv-sched td{white-space:nowrap;vertical-align:middle}
 .sv-sched td:nth-child(5){white-space:normal;min-width:140px}
 .sv-sched .sv-btn.sm{white-space:nowrap}
+
+.sv-sched .s-lb{display:none}
+/* มือถือ: ตารางนัดนิเทศรวมเป็นการ์ด ไม่ต้องเลื่อนซ้ายขวา */
+@media(max-width:720px){
+ table.sv-grid.sv-sched{min-width:0;width:100%;display:block;border:0}
+ .sv-sched thead{display:none}
+ .sv-sched tbody{display:grid;gap:8px}
+ .sv-sched tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;padding:12px;border:1px solid #dbe6f0;border-radius:14px;background:#fff}
+ .sv-sched td{display:block;border:0!important;padding:0!important;white-space:normal!important;min-width:0!important;font-size:13.5px;background:none!important}
+ .sv-sched .s-no{display:none}
+ .sv-sched .s-date{grid-column:1}.sv-sched .s-date .sv-btn{min-height:36px;padding:6px 12px}
+ .sv-sched .s-st{grid-column:2;grid-row:1;align-self:center;text-align:right}
+ .sv-sched .s-teach{grid-column:1/-1;font-weight:700;font-size:15px;margin-top:2px}
+ .sv-sched .s-subj{grid-column:1/-1;color:#4b5d6e}
+ .sv-sched .s-per,.sv-sched .s-room{grid-column:auto;display:inline-block;justify-self:start;padding:2px 9px!important;border-radius:99px;background:#eef4fb!important;color:#24587d;font-size:12px}
+ .sv-sched .s-sup{grid-column:1/-1;font-size:12.5px;color:#64798c}
+ .sv-sched .s-lb{display:inline}
+ .sv-scroll:has(.sv-sched){overflow:visible;border:0;background:none}
+}

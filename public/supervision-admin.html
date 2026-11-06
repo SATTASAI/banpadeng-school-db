@@ -123,7 +123,7 @@ function scheduledRequests(){
 }
 function scheduleTable(list,print=false){
  const head='<tr><th>ที่</th><th>วันที่นิเทศ</th><th>คาบ</th><th>ครูผู้รับการนิเทศ</th><th>วิชา</th><th>ชั้น/ห้อง</th><th>ผู้นิเทศ</th><th>สถานะ</th></tr>';
- const rows=list.map((r,i)=>`<tr><td>${i+1}</td><td>${print?U.date(r.visit_date):`<button type="button" class="sv-btn sm" data-calslot="${r.visit_date}|${r.period}">${U.date(r.visit_date)}</button>`}</td><td>${r.period}</td><td>${esc(r.teacher_name)}</td><td>${esc(r.subject)}</td><td>${esc(U.classLabel(r))||'—'}</td><td>${r.supervisor_name?esc(r.supervisor_name):'ยังไม่มีผู้รับนิเทศ'}</td><td>${print?esc(U.STATUS[r.status]||r.status):U.pill(r.status)}</td></tr>`).join('');
+ const rows=list.map((r,i)=>`<tr><td class="s-no">${i+1}</td><td class="s-date">${print?U.date(r.visit_date):`<button type="button" class="sv-btn sm" data-calslot="${r.visit_date}|${r.period}">${U.date(r.visit_date)}</button>`}</td><td class="s-per"><span class="s-lb">คาบ </span>${r.period}</td><td class="s-teach">${esc(r.teacher_name)}</td><td class="s-subj">${esc(r.subject)}</td><td class="s-room">${esc(U.classLabel(r))||'—'}</td><td class="s-sup"><span class="s-lb">ผู้นิเทศ: </span>${r.supervisor_name?esc(r.supervisor_name):'ยังไม่มีผู้รับนิเทศ'}</td><td class="s-st">${print?esc(U.STATUS[r.status]||r.status):U.pill(r.status)}</td></tr>`).join('');
  return `<table class="${print?'list':'sv-grid sv-sched'}"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
 }
 async function calendarHtml(){
