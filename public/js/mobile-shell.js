@@ -46,14 +46,23 @@
   };
   placeViewAs(); phone.addEventListener('change', placeViewAs);
 
+  // บัญชีของฉันเปิดในกรอบหน้าเดิม เพื่อให้แถบเมนูล่างยังอยู่
+  const openAccount = () => { if (typeof window.showPage === 'function') window.showPage('account', false, '/account.html'); else location.href = '/account.html'; };
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href="/account.html"]');
+    if (!a || !phone.matches || e.ctrlKey || e.metaKey) return;
+    e.preventDefault(); window.setMobileMenu?.(false); openAccount(); setActive('account');
+  }, true);
   const setActive = (tab) => bar.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]'); if (!b) return;
     const tab = b.dataset.tab;
+    b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+    try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
     else if (tab === 'notify') { e.stopPropagation(); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
-    else if (tab === 'account') location.href = '/account.html';
+    else if (tab === 'account') { openAccount(); setActive('account'); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));
   });
   // ไปหน้าอื่นจากเมนูด้านข้าง → ปุ่มภาพรวมไม่ active
