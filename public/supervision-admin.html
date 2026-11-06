@@ -124,7 +124,7 @@ function scheduledRequests(){
 function scheduleTable(list,print=false){
  const head='<tr><th>ที่</th><th>วันที่นิเทศ</th><th>คาบ</th><th>ครูผู้รับการนิเทศ</th><th>วิชา</th><th>ชั้น/ห้อง</th><th>ผู้นิเทศ</th><th>สถานะ</th></tr>';
  const rows=list.map((r,i)=>`<tr><td>${i+1}</td><td>${print?U.date(r.visit_date):`<button type="button" class="sv-btn sm" data-calslot="${r.visit_date}|${r.period}">${U.date(r.visit_date)}</button>`}</td><td>${r.period}</td><td>${esc(r.teacher_name)}</td><td>${esc(r.subject)}</td><td>${esc(U.classLabel(r))||'—'}</td><td>${r.supervisor_name?esc(r.supervisor_name):'ยังไม่มีผู้รับนิเทศ'}</td><td>${print?esc(U.STATUS[r.status]||r.status):U.pill(r.status)}</td></tr>`).join('');
- return `<table class="${print?'list':'sv-grid'}"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+ return `<table class="${print?'list':'sv-grid sv-sched'}"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
 }
 async function calendarHtml(){
  const list=scheduledRequests(),days=new Set(list.map(r=>r.visit_date)).size;

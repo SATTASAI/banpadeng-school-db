@@ -176,3 +176,9 @@ button.sv-slot{cursor:pointer}
 .sv-wrap.sv-closed::after{content:"";position:absolute;inset:0;z-index:5;background:rgba(110,120,132,.2);pointer-events:none}
 .sv-slot.locked{cursor:not-allowed;border-style:dashed}
 .sv-slot.locked .cta{color:#607991}
+
+/* ตารางนัดนิเทศรวม: ความกว้างคอลัมน์ตามเนื้อหา กันข้อความซ้อนกัน (เลื่อนซ้ายขวาในกรอบ) */
+table.sv-grid.sv-sched{table-layout:auto;min-width:760px}
+.sv-sched th,.sv-sched td{white-space:nowrap;vertical-align:middle}
+.sv-sched td:nth-child(5){white-space:normal;min-width:140px}
+.sv-sched .sv-btn.sm{white-space:nowrap}
