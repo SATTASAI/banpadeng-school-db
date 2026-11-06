@@ -35,6 +35,10 @@
  };
  // บุคลากรในฝ่าย เป็นเมนูย่อยแรกของทุกฝ่าย (บนมือถือ กดหัวข้อฝ่ายแล้วเปิดเมนูย่อยแทนการไปหน้าบุคลากร)
  ['administration','academic','early_childhood','budget','personnel','general'].forEach(dept=>{if(groups[dept])groups[dept].unshift(item('บุคลากรในฝ่าย',directory(dept)+'&view=staff'));});
+ // หน้าแรกของเมนูที่มีเมนูย่อย → เป็นเมนูย่อยแรก (กดหัวข้อเมนูแล้วเปิดเมนูย่อยเท่านั้น ไม่พาไปหน้าแรก)
+ groups.students.unshift(item('รายชื่อนักเรียน','/students.html?view=list'));
+ groups['finance-requests'].unshift(item('ภาพรวมคำขอ','/finance-requests.html?view=overview'));
+ groups.imports.unshift(item('ภาพรวมการนำเข้า','/import-center.html?view=all'));
  const parents={tasks:'personnel',substitutes:'personnel'};
  function canonicalUrl(url){const u=new URL(url,'https://school.invalid');if(u.pathname==='/modules.html'||u.pathname==='/modules'){const route=routes[u.searchParams.get('module')];if(route)return route;}if(u.pathname==='/work-center.html'){const scope=workScopeFor(u.searchParams.get('area'),u.searchParams.get('topic'));if(scope){const target=new URL(scopeUrl(scope),'https://school.invalid');for(const [key,value] of u.searchParams)if(!target.searchParams.has(key))target.searchParams.set(key,value);return target.pathname+'?'+target.searchParams.toString()+u.hash;}}return url;}
  function parentFor(key,url){

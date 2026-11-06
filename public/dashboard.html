@@ -895,8 +895,8 @@
         setNavGroupOpen(group, false);
         return;
       }
-      // มือถือ: กดหัวข้อฝ่ายครั้งแรก = เปิดเมนูย่อย (หน้าบุคลากรในฝ่ายอยู่ในเมนูย่อย)
-      if (group && phoneScreen?.matches && DEPARTMENT_NAV_KEYS.includes(a.getAttribute("data-page"))) {
+      // กดหัวข้อเมนูที่มีเมนูย่อย = เปิดเมนูย่อยเท่านั้น (หน้าแรกของเมนูอยู่ในเมนูย่อย) ทั้งมือถือและ PC
+      if (group) {
         openOnlyNavGroup(group);
         return;
       }
