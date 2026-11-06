@@ -15,3 +15,53 @@
 }
 @media(max-width:650px){.ak-hero-panel{padding:165px 18px 22px;background-size:100% 190px,auto 190px;background-image:linear-gradient(180deg,transparent 55px,#071b17 180px),url('/images/avada-duel-hero.webp')}.ak-hero-content{gap:12px}.ak-hero-panel .ak-image-button{width:min(100%,360px)}.ak-hero-panel .ak-admin-hint{font-size:15px}.sn-panel{top:116px;max-height:calc(100dvh - 130px)}.sn-list{max-height:calc(100dvh - 215px)}}
 @media(prefers-reduced-motion:reduce){.mobile-nav-open .layout>.sidebar{transition:none}}
+/* ===== โครงหลักบนมือถือ: แถบบนแถวเดียว + แถบเมนูล่าง ===== */
+.mobile-tabbar,.mobile-account{display:none}
+@media(max-width:720px){
+ .layout .global-topbar{flex-wrap:nowrap;align-items:center;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));gap:8px;border-bottom:1px solid #dbe6ef;background:rgba(246,250,253,.96)}
+ .layout .global-search{order:0;flex:1 1 auto;min-width:0}
+ .layout .global-search input{height:42px;border-radius:12px}
+ .layout .topbar-actions{flex:0 0 auto;margin-left:0}
+ .layout .topbar-actions>:not(#schoolNotifications){display:none!important}
+ .layout #schoolNotifications .sn-toggle,.layout .mobile-menu-toggle{display:none}
+ .layout .sn-panel{position:fixed;top:auto;bottom:calc(66px + env(safe-area-inset-bottom));left:8px;right:8px;width:auto;max-height:calc(100dvh - 150px)}
+ .layout .sn-list{max-height:calc(100dvh - 230px)}
+ .layout>.content-area{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
+ .mobile-tabbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));position:fixed;left:0;right:0;bottom:0;z-index:300;background:rgba(255,255,255,.97);border-top:1px solid #d6e2ec;box-shadow:0 -6px 20px rgba(30,60,90,.08);padding:4px 4px env(safe-area-inset-bottom);backdrop-filter:blur(12px)}
+ .mobile-tabbar button{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;border:0;background:none;color:#5d7387;font:inherit;font-size:11.5px;cursor:pointer;border-radius:12px}
+ .mobile-tabbar button[hidden]{display:none}
+ .mobile-tabbar button.active{color:#1E5FC0}.mobile-tabbar button.active svg{stroke-width:2.3}
+ .mobile-tabbar button:active{background:#eef4fa}
+ .mobile-tabbar .mt-badge{position:absolute;top:5px;left:calc(50% + 4px);min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#e0423b;color:#fff;font-size:11px;line-height:18px;font-weight:700}
+ .mobile-tabbar .mt-badge[hidden]{display:none}
+ .mobile-nav-open .mobile-tabbar{z-index:303}
+ .mobile-account{display:block;margin-top:14px;padding:14px 4px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #c9dae8}
+ .ma-user{display:flex;gap:10px;align-items:center}.ma-user .top-avatar{display:grid;flex-shrink:0}.ma-user strong{display:block;font-size:15px}.ma-user small{color:#64798c;font-size:12.5px}
+ .ma-year{margin:10px 0;font-size:13px;color:#64798c}.ma-year strong{color:#24405a}
+ .ma-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ma-actions .btn{width:100%;display:flex;align-items:center;justify-content:center;text-decoration:none;background:#fff;border:1px solid #c9dae8;color:#24587d;font-weight:600}
+ .ma-viewas:empty{display:none}.ma-viewas{margin-top:8px}.ma-viewas .view-as-wrap{display:block!important}.ma-viewas .top-viewas{width:100%;min-height:44px}.ma-viewas .view-as-panel{position:static;width:auto;margin-top:8px;box-shadow:none}
+ .layout>.sidebar{padding-bottom:calc(76px + env(safe-area-inset-bottom));overflow-y:auto}
+ .layout .sidebar nav a.nav-grades,.layout .sidebar nav a[class*="nav-"][target]{min-height:46px}
+}
+/* ===== สไตล์กลางบนมือถือ (ทุกหน้า รวมหน้าใน iframe) ===== */
+@media(max-width:720px){
+ body{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+ img,video,iframe{max-width:100%}
+ h1{font-size:22px;line-height:1.35}h2{font-size:18px;line-height:1.4}
+ .btn,button.btn,a.btn{min-height:44px;padding-left:14px;padding-right:14px;border-radius:12px}
+ select,input:not([type=checkbox]):not([type=radio]):not([type=range]){min-height:44px}
+ input[type=checkbox],input[type=radio]{width:20px;height:20px}
+ textarea{min-height:96px}
+ label{line-height:1.45}
+ table{font-size:14px}
+ th,td{padding:9px 10px}
+ .table-wrap,.tw-table,.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+ [role=tablist],.tabs,.dash-tabs{display:flex;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+ [role=tablist]::-webkit-scrollbar,.tabs::-webkit-scrollbar,.dash-tabs::-webkit-scrollbar{display:none}
+ [role=tablist]>*,.tabs>*,.dash-tabs>*{flex:0 0 auto}
+ dialog{max-width:calc(100vw - 16px);max-height:calc(100dvh - 24px);overflow:auto;border-radius:18px}
+ .modal,.modal-panel{width:calc(100vw - 16px)!important;max-width:none!important;max-height:calc(100dvh - 24px);overflow:auto}
+ .tw-page{padding:14px 12px 28px}.tw-head{flex-direction:column;align-items:stretch}.tw-actions{width:100%}.tw-actions>*{flex:1 1 auto}.tw-term select{min-width:0;width:100%}
+ .tw-cards{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.tw-card{padding:11px 12px}.tw-card strong{font-size:19px}
+ .tw-grid,.tr-grid{grid-template-columns:minmax(0,1fr)}
+}
