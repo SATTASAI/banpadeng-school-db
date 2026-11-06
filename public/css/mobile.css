@@ -87,3 +87,11 @@
 @keyframes mt-pop{0%{transform:scale(1)}35%{transform:scale(.78)}70%{transform:scale(1.18) translateY(-2px)}100%{transform:scale(1.08) translateY(-1px)}}
 @keyframes mt-ripple{from{transform:scale(.3);opacity:1}to{transform:scale(2.2);opacity:0}}
 @media(prefers-reduced-motion:reduce){.mobile-tabbar button svg,.mobile-tabbar button::before{transition:none}.mobile-tabbar button.pop svg,.mobile-tabbar button.pop::after{animation:none}}
+/* แจ้งเตือนบนมือถือ (ย้ายไปไว้ที่ body) */
+@media(max-width:720px){
+ .school-notifications.sn-mobile{position:static}
+ .sn-mobile .sn-toggle{display:none!important}
+ .sn-mobile .sn-panel{position:fixed;top:auto;left:8px;right:8px;bottom:calc(84px + env(safe-area-inset-bottom));width:auto;max-height:calc(100dvh - 170px);z-index:1001;border-radius:18px;animation:sn-up .22s ease-out}
+ .sn-mobile .sn-list{max-height:calc(100dvh - 250px);overflow-y:auto}
+}
+@keyframes sn-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
