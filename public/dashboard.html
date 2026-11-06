@@ -101,6 +101,15 @@
   .top-account:hover { filter:brightness(1.06); }
   .top-logout { color:#4C759C; background:rgba(255,255,255,.66); }
   .top-logout:hover { color:#1D66AD; background:#fff; }
+  .top-viewas { color:#7a2e0e; background:#fff5ec; border-color:#f0c9a8; cursor:pointer; font-family:inherit; }
+  .top-viewas:hover { background:#ffe9d6; }
+  .view-as-wrap { position:relative; }
+  .view-as-panel { position:absolute; right:0; top:calc(100% + 8px); width:300px; max-width:86vw; display:grid; gap:8px; padding:14px; background:#fff; border:1px solid rgba(84,111,138,.18); border-radius:12px; box-shadow:0 12px 30px rgba(24,49,83,.18); z-index:400; font-size:13px; color:var(--color-text); }
+  .view-as-panel[hidden] { display:none; }
+  .view-as-panel select { width:100%; font:inherit; padding:7px 8px; border-radius:8px; border:1px solid rgba(84,111,138,.3); }
+  .view-as-panel .top-btn { justify-content:center; cursor:pointer; font-family:inherit; }
+  .view-as-panel .top-btn:disabled { opacity:.5; cursor:not-allowed; }
+  .view-as-panel small { color:var(--color-text-muted); }
   .top-avatar { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; background:linear-gradient(145deg,#58A8F0,#1A70CD); box-shadow:inset 0 1px rgba(255,255,255,.3); }
   .workspace-stage { flex:1; min-height:0; overflow:auto; position:relative; }
   .main-content { padding:30px 34px 54px; max-width:1320px; margin:0 auto; }
@@ -411,6 +420,16 @@
       </div>
       <div class="topbar-actions">
         <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
+        <div class="user-pill"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span></div>
+        <div class="view-as-wrap superadmin-only" style="display:none;">
+          <button type="button" class="top-btn top-viewas" id="viewAsToggle" aria-expanded="false" aria-controls="viewAsPanel" title="ดูระบบในสิทธิ์ของบัญชีอื่น (ดูได้อย่างเดียว)">View as</button>
+          <div class="view-as-panel" id="viewAsPanel" hidden>
+            <label for="viewAsSelect">ดูในมุมมองของ</label>
+            <select id="viewAsSelect"><option value="">กำลังโหลดรายชื่อ…</option></select>
+            <button type="button" class="top-btn top-account" id="viewAsStart" disabled>เริ่มดู</button>
+            <small>ดูได้อย่างเดียว บันทึก/แก้ไขไม่ได้</small>
+          </div>
+        </div>
         <a href="/account.html" class="top-btn top-account" id="topAccountLink">บัญชีของฉัน</a>
         <a href="#" class="top-btn top-logout" id="logoutLink">ออกจากระบบ</a>
       </div>
@@ -1287,6 +1306,9 @@
     if (user.role === "viewer") enterViewerMode(user);
     else { ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox")); window.WorkCalendar?.render(document.getElementById("workCalendar")); }
 
+    document.getElementById("topUserName").textContent = user.full_name;
+    document.getElementById("topUserRole").textContent = ROLE_LABELS[user.role] || user.role;
+    document.getElementById("topAvatar").textContent = user.full_name.trim().charAt(0) || "ผ";
     document.getElementById("greeting").textContent = `สวัสดีครับ/ค่ะ คุณ${user.full_name}`;
 
     if (user.is_admin) {
@@ -1336,6 +1358,36 @@
     document.getElementById("overviewWrap").prepend(banner);
     document.querySelectorAll('#overviewWrap a[data-dashboard-page], #overviewWrap a[data-open-url]').forEach((a) => { a.style.display = "none"; });
   }
+
+  // View as (เฉพาะ superadmin): เลือกบัญชีแล้วเปิดระบบในมุมมองของบัญชีนั้น
+  (() => {
+    const toggle = document.getElementById("viewAsToggle"), panel = document.getElementById("viewAsPanel");
+    const select = document.getElementById("viewAsSelect"), start = document.getElementById("viewAsStart");
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    let loaded = false;
+    const close = () => { panel.hidden = true; toggle.setAttribute("aria-expanded", "false"); };
+    toggle.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!panel.hidden) return close();
+      panel.hidden = false; toggle.setAttribute("aria-expanded", "true");
+      if (loaded) return;
+      try {
+        const { users } = await apiRequest("/api/admin/view-as/candidates");
+        select.innerHTML = '<option value="">เลือกบัญชี…</option>' + users.map((u) =>
+          `<option value="${Number(u.id)}">${esc(u.full_name)} · ${esc(u.role_label)}${u.position ? " · " + esc(u.position) : ""}</option>`).join("");
+        loaded = true;
+      } catch (err) { select.innerHTML = `<option value="">${esc(err.message)}</option>`; }
+    });
+    panel.addEventListener("click", (e) => e.stopPropagation());
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    select.addEventListener("change", () => { start.disabled = !select.value; });
+    start.addEventListener("click", async () => {
+      start.disabled = true;
+      try { await window.SchoolViewAs.start(select.value); }
+      catch (err) { alert(err.message); start.disabled = false; }
+    });
+  })();
 
   document.getElementById("logoutLink").addEventListener("click", async (e) => {
     e.preventDefault();
