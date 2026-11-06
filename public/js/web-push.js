@@ -10,6 +10,12 @@
 
   const keyBytes = (b64) => { const p = '='.repeat((4 - b64.length % 4) % 4); const s = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
   const registration = () => navigator.serviceWorker.register('/sw.js');
+  const withTimeout = (promise, ms, message) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
+  // รอให้ service worker พร้อมก่อนสมัคร (Safari ค้างถ้าสมัครตอนยังติดตั้งไม่เสร็จ)
+  async function readyRegistration() {
+    await registration();
+    return withTimeout(navigator.serviceWorker.ready, 15000, 'เตรียมระบบแจ้งเตือนไม่สำเร็จ ลองปิดแอปแล้วเปิดใหม่ แล้วกดอีกครั้ง');
+  }
   async function getConfig() { return config ||= await apiRequest('/api/push/link'); }
   async function currentSubscription() { if (!supported) return null; const reg = await registration(); return reg.pushManager.getSubscription(); }
 
@@ -28,10 +34,12 @@
     if (perm !== 'granted') throw new Error('ไม่ได้รับอนุญาตให้แจ้งเตือน — เปิดได้ที่ การตั้งค่า > การแจ้งเตือน');
     const c = await getConfig();
     if (!c.publicKey) throw new Error('ระบบแจ้งเตือนยังไม่พร้อม ลองใหม่อีกครั้ง');
-    const reg = await registration();
+    const reg = await readyRegistration();
     let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(c.publicKey) });
-    await apiRequest('/api/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+    if (!sub) sub = await withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(c.publicKey) }),
+      20000, 'เครื่องไม่ตอบสนองตอนลงทะเบียนแจ้งเตือน ลองปิดแอปแล้วเปิดใหม่ แล้วกดอีกครั้ง');
+    await withTimeout(apiRequest('/api/push/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } }),
+      20000, 'เชื่อมต่อระบบแจ้งเตือนไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองอีกครั้ง');
     config = { ...c, linked: true };
     return sub;
   }
@@ -116,6 +124,8 @@
     const go = wrap.querySelector('.go');
     if (go) go.onclick = async () => {
       go.disabled = true;
+      const label = go.textContent;
+      go.textContent = 'กำลังเชื่อมต่อ…';
       const msg = wrap.querySelector('.msg');
       try {
         await enable();
@@ -124,7 +134,7 @@
         go.remove(); wrap.querySelector('.later').textContent = 'ปิด';
         await test().catch(() => {});
         setTimeout(close, 3500);
-      } catch (e) { msg.textContent = e.message; go.disabled = false; }
+      } catch (e) { msg.textContent = e.message; go.disabled = false; go.textContent = label; }
     };
     return true;
   }
