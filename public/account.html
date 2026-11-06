@@ -267,6 +267,7 @@
       document.getElementById("pushStatusText").textContent=text;
       show("pushOnButton",s.status==="off");show("pushTestButton",s.status==="on");show("pushOffButton",s.status==="on");
       if(s.status==="ios-home")pushMessage(BpdPush.IOS_STEPS);
+      if(s.status==="blocked")pushMessage(BpdPush.UNBLOCK_STEPS,true);
       const prefBox=document.getElementById("pushPrefs");
       if(s.config?.linked||s.status==="on"){
         const p=await apiRequest("/api/push/prefs");

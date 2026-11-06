@@ -36,7 +36,7 @@
 
   async function enable() {
     const perm = await Notification.requestPermission(); // ต้องเรียกทันทีที่กดปุ่ม (iOS)
-    if (perm !== 'granted') throw new Error('ไม่ได้รับอนุญาตให้แจ้งเตือน — เปิดได้ที่ การตั้งค่า > การแจ้งเตือน');
+    if (perm !== 'granted') throw new Error(perm === 'denied' ? UNBLOCK_STEPS : 'ยังไม่ได้กดอนุญาต ลองกดอีกครั้งแล้วเลือก “อนุญาต”');
     const c = await getConfig();
     if (!c.publicKey) throw new Error('ระบบแจ้งเตือนยังไม่พร้อม ลองใหม่อีกครั้ง');
     const reg = await readyRegistration();
@@ -59,6 +59,10 @@
     return apiRequest('/api/push/test', { method: 'POST', body: { endpoint: sub.endpoint } });
   }
 
+  // เบราว์เซอร์บล็อกการแจ้งเตือนไว้ (เคยกดไม่อนุญาต/ปิดคำขอหลายครั้ง Chrome จะ "บล็อกโดยอัตโนมัติ") — ต้องปลดเองในตั้งค่า
+  const UNBLOCK_STEPS = isIOS
+    ? 'การแจ้งเตือนถูกปิดไว้ — เปิดที่ การตั้งค่า → การแจ้งเตือน → บ้านป่าเด็ง → อนุญาตการแจ้งเตือน แล้วกลับมากดอีกครั้ง'
+    : 'การแจ้งเตือนถูกบล็อกไว้ — แตะไอคอน 🔒/⚙️ หน้าที่อยู่เว็บ → สิทธิ์ → การแจ้งเตือน → อนุญาต (หรือ Chrome → ⋮ → การตั้งค่า → การตั้งค่าเว็บไซต์ → การแจ้งเตือน → system.banpadengschool.ac.th → อนุญาต) แล้วโหลดหน้าใหม่';
   const IOS_STEPS = 'แตะปุ่ม <b>แชร์</b> <span aria-hidden="true">⎋</span> ด้านล่าง → <b>เพิ่มไปยังหน้าจอโฮม</b> → เปิดระบบจากไอคอน “บ้านป่าเด็ง” แล้วกดเปิดแจ้งเตือนอีกครั้ง';
   const DISMISS_KEY = 'bpdPushBannerUntil';
 
@@ -146,7 +150,7 @@
     return true;
   }
 
-  window.BpdPush = { state, enable, disable, test, banner, loginPopup, isIOS, standalone, IOS_STEPS };
+  window.BpdPush = { state, enable, disable, test, banner, loginPopup, isIOS, standalone, IOS_STEPS, UNBLOCK_STEPS };
   // ลงทะเบียน service worker ไว้ เพื่อให้กดแจ้งเตือนแล้วเปิดหน้าในระบบได้
   if (supported) registration().catch(() => {});
 })();
