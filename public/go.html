@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
+<title>กำลังเปิดลิงก์…</title>
+<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#eef3fb;color:#1c2c40;text-align:center;padding:20px}a{color:#1D5F9E;font-weight:700;word-break:break-all}</style>
+</head><body><div><p>กำลังเปิดลิงก์จากแจ้งเตือน…</p><p><a id="link" href="/dashboard.html">แตะที่นี่ถ้ายังไม่เปิด</a></p></div>
+<script>
+// ตัวกลางเปิดลิงก์ภายนอกจากแจ้งเตือน (iPhone เปิดลิงก์ต่างเว็บจาก service worker โดยตรงไม่ได้)
+(function(){
+  var to=new URLSearchParams(location.search).get('to')||'';
+  try{var u=new URL(to,location.origin);if(!/^https?:$/.test(u.protocol))throw 0;to=u.href;}catch(e){to='/dashboard.html';}
+  document.getElementById('link').href=to;
+  var host=new URL(to).hostname;
+  // ลิงก์ของโรงเรียนเปิดทันที · ลิงก์ภายนอกให้ผู้ใช้เห็นที่อยู่และแตะเปิดเอง (กันลิงก์หลอก)
+  if(host==='banpadengschool.ac.th'||/\.banpadengschool\.ac\.th$/.test(host))location.replace(to);
+  else{document.querySelector('p').textContent='ลิงก์ภายนอกโรงเรียน:';document.getElementById('link').textContent=to;}
+})();
+</script></body></html>

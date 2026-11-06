@@ -20,7 +20,9 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const data = e.notification.data || {};
   const picked = /^a\d$/.test(e.action || '') ? (data.actions || [])[Number(e.action.slice(1))] : null;
-  const url = new URL(picked || data.url || '/dashboard.html', self.location.origin).href;
+  let url = new URL(picked || data.url || '/dashboard.html', self.location.origin).href;
+  // ลิงก์ต่างเว็บ: เปิดผ่านหน้า /go.html ของเว็บนี้ก่อน (iPhone เปิดลิงก์ต่างเว็บจาก service worker ตรง ๆ ไม่ได้)
+  if (new URL(url).origin !== self.location.origin) url = new URL('/go.html?to=' + encodeURIComponent(url), self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
     for (const c of list) {
       if (new URL(c.url).origin === self.location.origin && 'navigate' in c) return c.focus().then(() => c.navigate(url)).catch(() => self.clients.openWindow(url));
