@@ -239,7 +239,7 @@
   }
 
   async function loadUsers() {
-    const { users } = await apiRequest("/api/admin/users");
+    let { users } = await apiRequest("/api/admin/users");
     const tbody = document.getElementById("userRows");
     const emptyState = document.getElementById("emptyState");
     tbody.innerHTML = "";
@@ -250,6 +250,9 @@
     }
     emptyState.style.display = "none";
 
+    // ผู้ที่ยังรอกำหนดสิทธิ์ (รออนุมัติ) อยู่บนสุด เรียงคำขอใหม่สุดก่อน · ที่เหลือคงลำดับเดิม
+    const pending = users.filter((u) => !u.role).sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+    users = [...pending, ...users.filter((u) => u.role)];
     users.forEach((user) => {
       const tr = document.createElement("tr");
 
