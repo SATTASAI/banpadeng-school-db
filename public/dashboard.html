@@ -1399,6 +1399,8 @@
   document.getElementById("logoutLink").addEventListener("click", async (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // ออกจากระบบ = ปิดแจ้งเตือนบนเครื่องนี้ด้วย (กันเครื่องใช้ร่วมกันได้รับแจ้งเตือนของบัญชีนี้ต่อ)
+    if (window.BpdPush) await Promise.race([BpdPush.disable().catch(() => {}), new Promise((r) => setTimeout(r, 3000))]);
     await apiRequest("/api/auth/logout", { method: "POST" });
     window.location.href = "/login.html";
   });

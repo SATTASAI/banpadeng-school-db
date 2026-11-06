@@ -97,11 +97,13 @@
     try {
       if (localStorage.getItem(PROMPT_KEY) !== '1') return false;
       localStorage.removeItem(PROMPT_KEY);
-      if (localStorage.getItem(SEEN_KEY)) return false; // ขึ้นแค่ครั้งแรกบนเครื่องนี้
     } catch { return false; }
     const s = await state().catch(() => ({ status: 'unavailable' }));
+    // ขึ้นแค่ครั้งแรกของแต่ละบัญชีบนเครื่องนี้ (เครื่องใช้ร่วมกัน: คนถัดไปก็เห็นครั้งแรกของตัวเอง)
+    const seenKey = `${SEEN_KEY}:${s.config?.user_id || ''}`;
+    try { if (localStorage.getItem(seenKey)) return false; } catch { return false; }
     if (!['off', 'ios-home'].includes(s.status)) return false;
-    try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch { /* ignore */ }
+    try { localStorage.setItem(seenKey, String(Date.now())); } catch { /* ignore */ }
     const ios = s.status === 'ios-home';
     const wrap = document.createElement('div');
     wrap.className = 'bpd-push-modal';

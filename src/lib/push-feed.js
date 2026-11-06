@@ -28,6 +28,42 @@ const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s +
 
 const actionLabel = (key) => { const k = String(key || ""); return k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
 
+// หมวดแจ้งเตือน (ตาม message_key ในกระดิ่ง) — ผู้ใช้เลือกปิดบางหมวดได้ที่บัญชีของฉัน
+export const PUSH_CATEGORIES = [
+  { key: "leave", label: "การลา", prefixes: ["leave:"] },
+  { key: "maintenance", label: "แจ้งซ่อม", prefixes: ["maintenance:"] },
+  { key: "supervision", label: "นิเทศ", prefixes: ["supervision:"] },
+  { key: "budget", label: "โครงการ เบิกจ่าย จัดซื้อจัดจ้าง", prefixes: ["project:", "approval:", "balance:", "procurement:"] },
+  { key: "substitute", label: "สอนแทน", prefixes: ["substitute:", "substitute-cancel:"] },
+  { key: "task", label: "งานมอบหมาย", prefixes: ["task:"] },
+  { key: "correspondence", label: "หนังสือราชการ", prefixes: ["correspondence:"] },
+  { key: "other", label: "อื่น ๆ (ความปลอดภัยบัญชี ฯลฯ)", prefixes: [] },
+];
+const categoryOf = (key) => (PUSH_CATEGORIES.find((c) => c.prefixes.some((p) => String(key || "").startsWith(p))) || PUSH_CATEGORIES.at(-1)).key;
+async function mutedSet(env, userId) {
+  const row = await env.DB.prepare("SELECT muted FROM push_feed_prefs WHERE user_id = ?").bind(userId).first();
+  return new Set(String(row?.muted || "").split(",").filter(Boolean));
+}
+export async function pushPrefs(env, user, body) {
+  await ensureSchema(env);
+  if (body) {
+    const valid = new Set(PUSH_CATEGORIES.map((c) => c.key));
+    const muted = (Array.isArray(body.muted) ? body.muted : []).filter((k) => valid.has(k));
+    await env.DB.prepare(`INSERT INTO push_feed_prefs (user_id, muted, updated_at) VALUES (?, ?, datetime('now'))
+      ON CONFLICT (user_id) DO UPDATE SET muted = excluded.muted, updated_at = excluded.updated_at`).bind(user.id, muted.join(",")).run();
+  }
+  const muted = await mutedSet(env, user.id);
+  return { categories: PUSH_CATEGORIES.map(({ key, label }) => ({ key, label, enabled: !muted.has(key) })) };
+}
+
+// รายการที่ค้างอยู่ตอนผูกเครื่อง ไม่ต้องส่ง (กันแจ้งเตือนท่วม) — ทำทันทีตอนกดเปิด ไม่รอรอบ cron
+async function baselineUser(env, user) {
+  await ensureSchema(env);
+  await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
+  const rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50);
+  if (rows.length) await env.DB.batch(rows.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
+}
+
 export function pushAllowed(env, user) {
   if (!env.NOTIFY_API_KEY || !user?.role) return false;
   const roles = String(env.PUSH_PILOT_ROLES || "superadmin").split(",").map((s) => s.trim()).filter(Boolean);
@@ -45,6 +81,7 @@ async function ensureSchema(env) {
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS push_feed_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, message_key TEXT NOT NULL,
       title TEXT NOT NULL, message TEXT, url TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE (user_id, message_key))`),
     env.DB.prepare("CREATE INDEX IF NOT EXISTS idx_push_feed_messages_user ON push_feed_messages (user_id, id)"),
+    env.DB.prepare("CREATE TABLE IF NOT EXISTS push_feed_prefs (user_id INTEGER PRIMARY KEY, muted TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now')))"),
   ]);
   ready.add(env.DB);
 }
@@ -85,7 +122,7 @@ export async function pushLinkStatus(env, user) {
     if (res.ok) linked = ((await res.json()).refs || []).includes(`u:${user.id}`);
     publicKey = key;
   } catch { /* ระบบแจ้งเตือนไม่ตอบ: แสดงว่าไม่ทราบสถานะ */ }
-  return { allowed: true, linked, publicKey, url: await createPushLink(env, user) };
+  return { allowed: true, user_id: Number(user.id), linked, publicKey, url: await createPushLink(env, user) };
 }
 
 // กดปุ่มเดียวในระบบ: เบราว์เซอร์สมัคร push แล้วส่ง subscription มาที่นี่ ระบบส่งต่อให้ school-notify พร้อมลายเซ็น
@@ -102,8 +139,10 @@ export async function handlePushRoute(request, env, user, action) {
   if (action === "subscribe") {
     if (!validSubscription(body?.subscription)) return { status: 400, data: { error: "ข้อมูลการสมัครไม่ถูกต้อง" } };
     const { endpoint, keys } = body.subscription;
-    return forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1), exclusive: true,
+    const result = await forward(env, "/api/subscribe", { subscription: { endpoint, keys: { p256dh: keys.p256dh, auth: keys.auth } }, roles: ["teacher"], token: await signLink(env, user, 1), exclusive: true,
       userAgent: (request.headers.get("user-agent") || "").slice(0, 200) });
+    if (result.status === 200) await baselineUser(env, user).catch((error) => console.error("push baseline", error));
+    return result;
   }
   if (typeof body?.endpoint !== "string") return { status: 400, data: { error: "ข้อมูลไม่ถูกต้อง" } };
   if (action === "unsubscribe") return forward(env, "/api/unsubscribe", { endpoint: body.endpoint });
@@ -168,9 +207,13 @@ async function deliver(env, user, origin, stats) {
   const known = new Set(seen.map((r) => r.message_key));
   const candidates = rows.filter((r) => !known.has(r.message_key));
   if (!candidates.length) return;
-  const old = candidates.filter((r) => age(r.created_at) > MAX_AGE_HOURS);
+  // หมวดที่ผู้ใช้ปิดไว้: บันทึกว่าข้าม (เปิดหมวดภายหลังก็ไม่ส่งย้อนหลัง)
+  const muted = await mutedSet(env, user.id);
+  const silenced = muted.size ? candidates.filter((r) => muted.has(categoryOf(r.message_key))) : [];
+  if (silenced.length) await env.DB.batch(silenced.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'muted')").bind(user.id, r.message_key)));
+  const old = candidates.filter((r) => !silenced.includes(r) && age(r.created_at) > MAX_AGE_HOURS);
   if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'skipped')").bind(user.id, r.message_key)));
-  const current = candidates.filter((r) => age(r.created_at) <= MAX_AGE_HOURS);
+  const current = candidates.filter((r) => !silenced.includes(r) && age(r.created_at) <= MAX_AGE_HOURS);
   if (!current.length) return;
 
   // จองก่อนส่ง กันสองรอบส่งซ้ำ

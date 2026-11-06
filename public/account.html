@@ -109,6 +109,11 @@
           <button class="btn" id="pushOffButton" type="button" style="display:none">ปิดบนเครื่องนี้</button>
         </div>
         <div class="message" id="pushMessage" role="status"></div>
+        <div id="pushPrefs" style="display:none;margin-top:14px;padding-top:12px;border-top:1px dashed #d9e2ee">
+          <strong style="display:block;margin-bottom:6px">หมวดที่ต้องการรับแจ้งเตือน</strong>
+          <div id="pushPrefList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 14px"></div>
+          <p class="muted" style="margin:8px 0 0;font-size:12px">ปิดหมวดใดแล้ว รายการหมวดนั้นยังแสดงในกระดิ่งตามปกติ แต่จะไม่เด้งเข้าเครื่อง</p>
+        </div>
       </section>
       <section class="account-card devices-card" id="devices">
         <h2>อุปกรณ์ที่เข้าสู่ระบบ</h2>
@@ -262,7 +267,17 @@
       document.getElementById("pushStatusText").textContent=text;
       show("pushOnButton",s.status==="off");show("pushTestButton",s.status==="on");show("pushOffButton",s.status==="on");
       if(s.status==="ios-home")pushMessage(BpdPush.IOS_STEPS);
+      const prefBox=document.getElementById("pushPrefs");
+      if(s.config?.linked||s.status==="on"){
+        const p=await apiRequest("/api/push/prefs");
+        document.getElementById("pushPrefList").innerHTML=p.categories.map(c=>`<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-cat="${c.key}" ${c.enabled?"checked":""}> ${c.label}</label>`).join("");
+        prefBox.style.display="";
+      }else prefBox.style.display="none";
     }
+    document.getElementById("pushPrefList").addEventListener("change",async()=>{
+      const muted=[...document.querySelectorAll("#pushPrefList input[data-cat]")].filter(i=>!i.checked).map(i=>i.dataset.cat);
+      try{await apiRequest("/api/push/prefs",{method:"POST",body:{muted}});pushMessage("บันทึกหมวดแจ้งเตือนแล้ว")}catch(error){pushMessage(error.message,true)}
+    });
     document.getElementById("pushOnButton").addEventListener("click",async()=>{try{await BpdPush.enable();await loadPush();pushMessage("เปิดแจ้งเตือนแล้ว กำลังส่งแจ้งเตือนทดสอบ…");await BpdPush.test()}catch(error){pushMessage(error.message,true)}});
     document.getElementById("pushTestButton").addEventListener("click",async()=>{try{const r=await BpdPush.test();pushMessage(r.ok?"ส่งแล้ว รอสักครู่…":"ส่งไม่สำเร็จ ลองปิดแล้วเปิดใหม่",!r.ok)}catch(error){pushMessage(error.message,true)}});
     document.getElementById("pushOffButton").addEventListener("click",async()=>{if(!confirm("ปิดแจ้งเตือนบนเครื่องนี้?"))return;try{await BpdPush.disable();await loadPush();pushMessage("ปิดแจ้งเตือนบนเครื่องนี้แล้ว")}catch(error){pushMessage(error.message,true)}});
