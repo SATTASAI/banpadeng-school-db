@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ผลงานครู — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+body.k-works{--ac:#B7791F;--ac-d:#8A5A12;--ac-s:#FFF7E6;--ac-b:#F1D39A}
+body.k-training{--ac:#0F8B8D;--ac-d:#0B6466;--ac-s:#E8F7F6;--ac-b:#A6DCD8}
+.tr-band{height:6px;border-radius:99px;background:linear-gradient(90deg,var(--ac),var(--ac-b));margin-bottom:14px}
+.tw-head h1{color:var(--ac-d)}
+.tr-pill{display:inline-block;font-size:12px;padding:3px 10px;border-radius:99px;background:var(--ac-s);color:var(--ac-d);border:1px solid var(--ac-b)}
+.tr-btn{background:var(--ac)!important;border-color:var(--ac)!important;color:#fff!important}
+.tw-card{border-top:3px solid var(--ac)}.tw-card strong{color:var(--ac-d)}
+.tr-list{display:grid;gap:10px}
+.tr-item{padding:14px 16px;border:1px solid var(--color-border);border-left:4px solid var(--ac);border-radius:14px;background:#fff}
+.tr-item header{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.tr-item h2{margin:0;font-size:16px}.tr-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;font-size:12.5px;color:var(--color-text-muted)}
+.tr-item p{margin:8px 0 0;font-size:14px;white-space:pre-line}
+.tr-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.tr-file{position:relative;width:84px;height:84px;border-radius:10px;overflow:hidden;border:1px solid var(--ac-b);background:var(--ac-s);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;font-size:11px;color:var(--ac-d);text-align:center;padding:0}
+.tr-file img{width:100%;height:100%;object-fit:cover}
+.tr-file b{font-size:20px}.tr-file span{display:block;max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr-file .tw-x{position:absolute;top:3px;right:3px}
+.tr-acts{display:flex;gap:6px;flex-wrap:wrap}.tr-acts .btn{width:auto;padding:6px 12px;font-size:13px}
+.tr-up{display:inline-flex;align-items:center;gap:6px;font-size:13px;cursor:pointer}
+dialog.tr-dlg{border:0;border-radius:18px;padding:20px;width:min(640px,94vw);box-shadow:0 24px 60px rgba(0,0,0,.25)}
+dialog.tr-dlg::backdrop{background:rgba(15,30,45,.45)}
+.tr-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}.tr-form .full{grid-column:1/-1}
+.tr-form label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}
+.tr-form input,.tr-form select,.tr-form textarea{width:100%}
+dialog.tr-pv{width:min(1000px,96vw);height:92vh;display:flex;flex-direction:column}
+dialog.tr-pv:not([open]){display:none}
+.tr-pv .body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#f3f5f7;border-radius:12px;overflow:auto}
+.tr-pv img{max-width:100%;max-height:100%}.tr-pv iframe{width:100%;height:100%;border:0}
+@media(max-width:640px){.tr-form{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="k-works">
+<main class="tw-page">
+  <div class="tr-band"></div>
+  <header class="tw-head">
+    <div><h1 id="title">ผลงานครู</h1><p id="lead"></p></div>
+    <div class="tw-actions" id="headActions"></div>
+  </header>
+  <div class="tw-error" id="error" role="alert"></div>
+  <section id="cards" class="tw-cards"></section>
+  <div class="tw-filter"><input id="search" type="search" placeholder="ค้นหา"></div>
+  <section id="body"><p class="tw-note">กำลังโหลด…</p></section>
+</main>
+<dialog class="tr-dlg" id="formDlg"><form id="form"></form></dialog>
+<dialog class="tr-dlg tr-pv" id="pvDlg">
+  <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px"><b id="pvName"></b><span class="tr-acts"><a class="btn" id="pvDown">ดาวน์โหลด</a><button type="button" class="btn" id="pvClose">ปิด</button></span></div>
+  <div class="body" id="pvBody"></div>
+</dialog>
+<script src="/js/api.js"></script>
+<script src="/js/teaching-works.js"></script>
+<script>
+(()=>{
+const {$,esc,uploadFiles,showError}=TeachingWorks;
+const kind=new URLSearchParams(location.search).get('kind')==='training'?'training':'works';
+const W=kind==='works';
+const MODES={onsite:'อบรมในสถานที่ (Onsite)',online:'ออนไลน์ (Online)',hybrid:'ผสม (Hybrid)'};
+const L=W?{title:'ผลงานครู',lead:'เก็บสะสมผลงาน รางวัล เกียรติบัตร และผลงานวิชาการของครู',name:'ชื่อผลงาน',org:'หน่วยงานที่มอบ/รับรอง',date:'วันที่ได้รับ',icon:'🏆'}
+  :{title:'อบรมครู',lead:'บันทึกประวัติการอบรม/พัฒนาตนเองของครู พร้อมเกียรติบัตรและเอกสาร',name:'ชื่อหลักสูตร/หัวข้ออบรม',org:'หน่วยงานที่จัด',date:'วันที่เริ่ม',icon:'🎓'};
+document.body.className='k-'+kind;document.title=L.title+' — โรงเรียนบ้านป่าเด็ง';
+$('title').textContent=L.title;
+let data=null,perms=null;
+const fileUrl=(id,dl)=>`/api/teacher-records/files/${id}${dl?'?download=1':''}`;
+const thDate=s=>s?new Date(s+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'}):'';
+const isImg=f=>f.mime_type.startsWith('image/')&&!/hei[cf]/.test(f.mime_type);
+
+async function load(){
+  showError();
+  try{
+    const u=perms.manage?$('teacher')?.value:'';
+    data=await apiRequest(`/api/teacher-records/${kind}${u?`?user_id=${u}`:''}`);
+    if(perms.manage&&!$('teacher'))header();
+    render();
+  }catch(e){showError(e.message);$('body').innerHTML='';}
+}
+function header(){
+  $('headActions').innerHTML=`<label class="tw-term">ครู<select id="teacher"><option value="">ครูทุกคน</option>${data.teachers.map(t=>`<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select></label>
+   <button type="button" class="btn tr-btn" id="addBtn">+ เพิ่ม${W?'ผลงาน':'การอบรม'}</button>`;
+  $('teacher').onchange=load;$('addBtn').onclick=()=>openForm(null);
+}
+function render(){
+  const r=data.records,files=r.reduce((n,x)=>n+x.files.length,0);
+  const people=new Set(r.map(x=>x.user_id)).size;
+  $('cards').innerHTML=`<div class="tw-card"><span>จำนวนรายการ</span><strong>${r.length}</strong></div>
+   ${W?'':`<div class="tw-card"><span>รวมชั่วโมงอบรม</span><strong>${r.reduce((n,x)=>n+(Number(x.hours)||0),0).toLocaleString('th-TH')} ชม.</strong></div>`}
+   ${data.manage?`<div class="tw-card"><span>จำนวนครู</span><strong>${people} คน</strong></div>`:''}
+   <div class="tw-card"><span>ไฟล์แนบ</span><strong>${files} ไฟล์</strong></div>`;
+  list();
+}
+function list(){
+  const q=$('search').value.trim();
+  const rows=data.records.filter(x=>!q||[x.title,x.full_name,x.organizer,x.category,x.level,x.detail].join(' ').includes(q));
+  if(!rows.length){$('body').innerHTML=`<div class="tw-empty"><b>${data.records.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีข้อมูล'}</b>${!data.records.length&&!data.manage?'<p>ฝ่ายบุคคลจะเป็นผู้บันทึกข้อมูลให้</p>':''}</div>`;return;}
+  $('body').innerHTML=`<div class="tr-list">${rows.map(item).join('')}</div>`;
+}
+function item(x){
+  const when=W?thDate(x.start_date):[thDate(x.start_date),x.end_date&&x.end_date!==x.start_date?thDate(x.end_date):''].filter(Boolean).join(' – ');
+  const meta=[data.manage?`<b>${esc(x.full_name||'')}</b>`:'',when&&`📅 ${when}`,x.organizer&&`🏢 ${esc(x.organizer)}`,
+    W&&x.category&&`<span class="tr-pill">${esc(x.category)}</span>`,W&&x.level&&`<span class="tr-pill">ระดับ${esc(x.level)}</span>`,
+    !W&&x.hours!=null&&`<span class="tr-pill">${Number(x.hours).toLocaleString('th-TH')} ชม.</span>`,!W&&x.mode&&`<span class="tr-pill">${MODES[x.mode]}</span>`].filter(Boolean);
+  const files=x.files.map(f=>`<button type="button" class="tr-file" data-pv="${f.id}" title="${esc(f.file_name)}">${isImg(f)?`<img loading="lazy" src="${fileUrl(f.id)}" alt="">`:`<b>${f.mime_type==='application/pdf'?'📄':'🖼️'}</b><span>${esc(f.file_name)}</span>`}${data.manage?`<span class="tw-x" data-delfile="${f.id}" title="ลบไฟล์">×</span>`:''}</button>`).join('');
+  return `<article class="tr-item"><header><div><h2>${L.icon} ${esc(x.title)}</h2><div class="tr-meta">${meta.join(' · ')}</div></div>
+   ${data.manage?`<span class="tr-acts"><label class="btn tr-up">📎 แนบไฟล์<input type="file" hidden multiple accept="image/*,application/pdf,.pdf" data-up="${x.id}"></label><button type="button" class="btn" data-edit="${x.id}">แก้ไข</button><button type="button" class="btn" data-del="${x.id}">ลบ</button></span>`:''}</header>
+   ${x.detail?`<p>${esc(x.detail)}</p>`:''}${files?`<div class="tr-files">${files}</div>`:''}<div class="tw-progress" id="up${x.id}"></div></article>`;
+}
+function openForm(rec){
+  const r=rec||{},o=data.options,sel=(n,v,opts,blank)=>`<select name="${n}"><option value="">${blank}</option>${opts.map(([k,t])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  const uid=r.user_id||$('teacher').value;
+  $('form').innerHTML=`<h2 style="margin:0 0 12px;color:var(--ac-d)">${rec?'แก้ไข':'เพิ่ม'}${W?'ผลงาน':'การอบรม'}</h2><div class="tr-form">
+   <label class="full">ครู${sel('user_id',String(uid||''),data.teachers.map(t=>[String(t.id),t.full_name]),'— เลือกครู —')}</label>
+   <label class="full">${L.name}<input name="title" maxlength="200" required value="${esc(r.title||'')}"></label>
+   ${W?`<label>ประเภท${sel('category',r.category,o.categories.map(c=>[c,c]),'— เลือก —')}</label><label>ระดับ${sel('level',r.level,o.levels.map(c=>[c,c]),'— เลือก —')}</label>`
+     :`<label>รูปแบบ${sel('mode',r.mode,o.modes.map(c=>[c,MODES[c]]),'— เลือก —')}</label><label>จำนวนชั่วโมง<input name="hours" type="number" min="0" step="0.5" value="${r.hours??''}"></label>`}
+   <label>${L.date}<input name="start_date" type="date" value="${esc(r.start_date||'')}"></label>
+   ${W?`<label>${L.org}<input name="organizer" maxlength="200" value="${esc(r.organizer||'')}"></label>`:`<label>วันที่สิ้นสุด<input name="end_date" type="date" value="${esc(r.end_date||'')}"></label><label class="full">${L.org}<input name="organizer" maxlength="200" value="${esc(r.organizer||'')}"></label>`}
+   <label class="full">รายละเอียด<textarea name="detail" rows="3" maxlength="2000">${esc(r.detail||'')}</textarea></label>
+   ${rec?'':'<label class="full">ไฟล์แนบ (ภาพ / PDF เลือกได้หลายไฟล์)<input name="files" type="file" multiple accept="image/*,application/pdf,.pdf"></label>'}
+   </div><div class="tw-progress" id="formUp"></div><div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px"><button type="button" class="btn" id="formCancel" style="width:auto">ยกเลิก</button><button class="btn tr-btn" style="width:auto">บันทึก</button></div>`;
+  $('formCancel').onclick=()=>$('formDlg').close();
+  $('form').onsubmit=async e=>{
+    e.preventDefault();const fd=new FormData(e.target),body=Object.fromEntries([...fd].filter(([k])=>k!=='files'));
+    const btn=e.submitter||e.target.querySelector('.tr-btn');btn.disabled=true;
+    try{
+      const res=await apiRequest(`/api/teacher-records/${kind}${rec?'/'+rec.id:''}`,{method:rec?'PATCH':'POST',body});
+      const files=fd.getAll('files').filter(f=>f&&f.size);
+      if(!rec&&files.length)await uploadFiles(`/api/teacher-records/${kind}/${res.id}/files`,files,f=>({file:f}),$('formUp'));
+      $('formDlg').close();load();
+    }catch(err){showError(err.message);$('formDlg').close();}
+  };
+  $('formDlg').showModal();
+}
+function preview(fid){
+  const f=data.records.flatMap(x=>x.files).find(x=>x.id===fid);if(!f)return;
+  $('pvName').textContent=f.file_name;$('pvDown').href=fileUrl(fid,true);
+  $('pvBody').innerHTML=f.mime_type==='application/pdf'?`<iframe src="${fileUrl(fid)}" title="${esc(f.file_name)}"></iframe>`
+    :isImg(f)?`<img src="${fileUrl(fid)}" alt="">`:`<p class="tw-note">ไฟล์ HEIC แสดงตัวอย่างในเบราว์เซอร์ไม่ได้ — กดดาวน์โหลด</p>`;
+  $('pvDlg').showModal();
+}
+$('pvClose').onclick=()=>{$('pvDlg').close();$('pvBody').innerHTML='';};
+$('search').oninput=()=>data&&list();
+document.addEventListener('click',async e=>{
+  const t=e.target;
+  const df=t.closest('[data-delfile]');
+  if(df){e.stopPropagation();if(!confirm('ลบไฟล์นี้? (ไฟล์ย้ายไปถังขยะ Drive)'))return;try{await apiRequest('/api/teacher-records/files/'+df.dataset.delfile,{method:'DELETE'});load();}catch(err){showError(err.message);}return;}
+  const pv=t.closest('[data-pv]');if(pv)return preview(Number(pv.dataset.pv));
+  const ed=t.closest('[data-edit]');if(ed)return openForm(data.records.find(x=>x.id===Number(ed.dataset.edit)));
+  const del=t.closest('[data-del]');
+  if(del){if(!confirm('ลบรายการนี้พร้อมไฟล์แนบทั้งหมด?'))return;try{await apiRequest(`/api/teacher-records/${kind}/${del.dataset.del}`,{method:'DELETE'});load();}catch(err){showError(err.message);}}
+});
+document.addEventListener('change',async e=>{
+  const inp=e.target.closest('[data-up]');if(!inp)return;
+  const files=[...inp.files];if(!files.length)return;
+  await uploadFiles(`/api/teacher-records/${kind}/${inp.dataset.up}/files`,files,f=>({file:f}),$('up'+inp.dataset.up));load();
+});
+(async()=>{
+  try{
+    const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return;}
+    perms=await apiRequest('/api/teacher-records/permissions');
+    if(!perms.view){$('body').innerHTML='<div class="tw-empty"><b>บัญชีนี้ดูข้อมูลส่วนนี้ไม่ได้</b></div>';return;}
+    $('lead').textContent=L.lead+(perms.manage?' · ฝ่ายบุคคลบันทึกให้ครูทุกคน':' · แสดงเฉพาะข้อมูลของคุณ (ฝ่ายบุคคลเป็นผู้บันทึก)');
+    load();
+  }catch(e){showError(e.message);$('body').innerHTML='';}
+})();
+})();
+</script></body></html>
