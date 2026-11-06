@@ -54,6 +54,7 @@ dialog.tr-rep{width:min(760px,96vw);max-height:92vh}
 </head>
 <body class="k-works">
 <main class="tw-page">
+  <a href="/account.html" id="backLink" hidden>← กลับบัญชีของฉัน</a>
   <div class="tr-band"></div>
   <header class="tw-head">
     <div><h1 id="title">ผลงานครู</h1><p id="lead"></p></div>
@@ -78,8 +79,8 @@ const {$,esc,uploadFiles,showError}=TeachingWorks;
 const qs=new URLSearchParams(location.search),kind=qs.get('kind')==='training'?'training':'works',mine=qs.get('view')==='mine';
 const W=kind==='works';
 const MODES={onsite:'อบรมในสถานที่ (Onsite)',online:'ออนไลน์ (Online)',hybrid:'ผสม (Hybrid)'};
-const L=W?{title:'ผลงานครู',lead:'เก็บสะสมผลงาน รางวัล เกียรติบัตร และผลงานวิชาการของครู',name:'ชื่อผลงาน',org:'หน่วยงานที่มอบ/รับรอง',date:'วันที่ได้รับ',icon:'🏆'}
-  :{title:mine?'บันทึกการอบรม':'อบรมครู',lead:mine?'บันทึกรายงานการอบรมของคุณ: เรื่องที่อบรม สถานที่ หน่วยงานที่จัด สรุปผล และภาพ/เกียรติบัตร':'รายงานการอบรมที่ครูบันทึก',name:'เรื่องที่อบรม',org:'หน่วยงานที่จัดอบรม',date:'วันที่อบรม',icon:'🎓'};
+const L=W?{title:mine?'ผลงานของฉัน':'ผลงานครู',lead:mine?'เก็บสะสมผลงาน รางวัล เกียรติบัตร และผลงานวิชาการของคุณ':'ผลงานที่ครูแต่ละท่านบันทึกจากบัญชีของตนเอง',name:'ชื่อผลงาน',org:'หน่วยงานที่มอบ/รับรอง',date:'วันที่ได้รับ',icon:'🏆'}
+  :{title:mine?'บันทึกการอบรม':'อบรมครู',lead:mine?'บันทึกรายงานการอบรมของคุณ: เรื่องที่อบรม สถานที่ หน่วยงานที่จัด สรุปผล และภาพ/เกียรติบัตร':'รายงานการอบรมที่ครูแต่ละท่านบันทึกจากบัญชีของตนเอง',name:'เรื่องที่อบรม',org:'หน่วยงานที่จัดอบรม',date:'วันที่อบรม',icon:'🎓'};
 document.body.className='k-'+kind;document.title=L.title+' — โรงเรียนบ้านป่าเด็ง';
 $('title').textContent=L.title;
 let data=null,perms=null,headed=false,curRep=null;
@@ -97,9 +98,13 @@ async function load(){
   }catch(e){showError(e.message);$('body').innerHTML='';}
 }
 function header(){
-  const add=data.can_create&&(W||!data.view_all);
+  const add=data.can_create;
+  if(mine)$('backLink').hidden=false;
   $('headActions').innerHTML=`${data.view_all?`<label class="tw-term">ครู<select id="teacher"><option value="">ครูทุกคน</option>${data.teachers.map(t=>`<option value="${t.id}">${esc(t.full_name)}</option>`).join('')}</select></label>`:''}
-   ${add?`<button type="button" class="btn tr-btn" id="addBtn">+ ${W?'เพิ่มผลงาน':'บันทึกการอบรม'}</button>`:''}`;
+   ${add?`<button type="button" class="btn tr-btn" id="addBtn">+ ${W?'เพิ่มผลงาน':'บันทึกการอบรม'}</button>`:''}
+   <a class="btn" id="zipBtn" href="#">⬇ ดาวน์โหลดไฟล์ทั้งหมด (.zip)</a>`;
+  const zip=()=>{const u=$('teacher')?.value;$('zipBtn').href=`/api/teacher-records/${kind}/zip${u?`?user_id=${u}`:''}`;};zip();
+  if($('teacher'))$('teacher').addEventListener('change',zip);
   if($('teacher'))$('teacher').onchange=load;if(add)$('addBtn').onclick=()=>openForm(null);
 }
 function render(){
@@ -113,45 +118,34 @@ function render(){
 function list(){
   const q=$('search').value.trim();
   const rows=data.records.filter(x=>!q||[x.title,x.full_name,x.organizer,x.category,x.level,x.detail].join(' ').includes(q));
-  if(!rows.length){$('body').innerHTML=`<div class="tw-empty"><b>${data.records.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีข้อมูล'}</b>${!data.records.length&&W&&!data.can_create?'<p>ฝ่ายบุคคลจะเป็นผู้บันทึกข้อมูลให้</p>':!W&&!data.view_all?'<p>กด “บันทึกการอบรม” เพื่อเพิ่มรายงาน</p>':''}</div>`;return;}
-  $('body').innerHTML=W?`<div class="tr-list">${rows.map(item).join('')}</div>`:`<div class="tr-grid">${rows.map(card).join('')}</div>`;
-}
-function item(x){
-  const when=W?thDate(x.start_date):[thDate(x.start_date),x.end_date&&x.end_date!==x.start_date?thDate(x.end_date):''].filter(Boolean).join(' – ');
-  const meta=[data.view_all?`<b>${esc(x.full_name||'')}</b>`:'',when&&`📅 ${when}`,x.organizer&&`🏢 ${esc(x.organizer)}`,
-    W&&x.category&&`<span class="tr-pill">${esc(x.category)}</span>`,W&&x.level&&`<span class="tr-pill">ระดับ${esc(x.level)}</span>`,
-    !W&&x.hours!=null&&`<span class="tr-pill">${Number(x.hours).toLocaleString('th-TH')} ชม.</span>`,!W&&x.mode&&`<span class="tr-pill">${MODES[x.mode]}</span>`].filter(Boolean);
-  const files=x.files.map(f=>`<button type="button" class="tr-file" data-pv="${f.id}" title="${esc(f.file_name)}">${isImg(f)?`<img loading="lazy" src="${fileUrl(f.id)}" alt="">`:`<b>${f.mime_type==='application/pdf'?'📄':'🖼️'}</b><span>${esc(f.file_name)}</span>`}${x.can_edit?`<span class="tw-x" data-delfile="${f.id}" title="ลบไฟล์">×</span>`:''}</button>`).join('');
-  return `<article class="tr-item"><header><div><h2>${L.icon} ${esc(x.title)}</h2><div class="tr-meta">${meta.join(' · ')}</div></div>
-   ${x.can_edit?`<span class="tr-acts"><label class="btn tr-up">📎 แนบไฟล์<input type="file" hidden multiple accept="image/*,application/pdf,.pdf" data-up="${x.id}"></label><button type="button" class="btn" data-edit="${x.id}">แก้ไข</button><button type="button" class="btn" data-del="${x.id}">ลบ</button></span>`:''}</header>
-   ${x.detail?`<p>${esc(x.detail)}</p>`:''}${files?`<div class="tr-files">${files}</div>`:''}<div class="tw-progress" id="up${x.id}"></div></article>`;
+  if(!rows.length){$('body').innerHTML=`<div class="tw-empty"><b>${data.records.length?'ไม่พบรายการที่ค้นหา':'ยังไม่มีข้อมูล'}</b>${!data.records.length&&data.can_create?`<p>กด “${W?'เพิ่มผลงาน':'บันทึกการอบรม'}” เพื่อเพิ่มข้อมูล</p>`:''}</div>`;return;}
+  $('body').innerHTML=`<div class="tr-grid">${rows.map(card).join('')}</div>`;
 }
 const dateText=x=>[thDate(x.start_date),x.end_date&&x.end_date!==x.start_date?thDate(x.end_date):''].filter(Boolean).join(' – ');
 function fileTiles(x){return x.files.map(f=>`<button type="button" class="tr-file" data-pv="${f.id}" title="${esc(f.file_name)}">${isImg(f)?`<img loading="lazy" src="${fileUrl(f.id)}" alt="">`:`<b>${f.mime_type==='application/pdf'?'📄':'🖼️'}</b><span>${esc(f.file_name)}</span>`}${x.can_edit?`<span class="tw-x" data-delfile="${f.id}" title="ลบไฟล์">×</span>`:''}</button>`).join('');}
 function card(x){
   const cover=x.files.find(isImg);
-  return `<article class="tr-card"><div class="tr-cover">${cover?`<img loading="lazy" src="${fileUrl(cover.id)}" alt="">`:'🎓'}</div><div class="in">
+  return `<article class="tr-card"><div class="tr-cover">${cover?`<img loading="lazy" src="${fileUrl(cover.id)}" alt="">`:L.icon}</div><div class="in">
    <h2>${esc(x.title)}</h2>${data.view_all?`<div class="row"><b>${esc(x.full_name||'')}</b></div>`:''}
-   ${x.start_date?`<div class="row">📅 ${dateText(x)}</div>`:''}${x.location?`<div class="row">📍 ${esc(x.location)}</div>`:''}${x.organizer?`<div class="row">🏢 ${esc(x.organizer)}</div>`:''}
+   ${x.start_date?`<div class="row">📅 ${dateText(x)}</div>`:''}${x.location?`<div class="row">📍 ${esc(x.location)}</div>`:''}${W&&(x.category||x.level)?`<div class="row">${[x.category&&`<span class="tr-pill">${esc(x.category)}</span>`,x.level&&`<span class="tr-pill">ระดับ${esc(x.level)}</span>`].filter(Boolean).join(' ')}</div>`:''}${x.organizer?`<div class="row">🏢 ${esc(x.organizer)}</div>`:''}
    ${x.detail?`<div class="sum">${esc(x.detail)}</div>`:''}<div class="row">📎 ${x.files.length} ไฟล์</div>
-   <button type="button" class="btn tr-btn" data-rep="${x.id}">ดูรายงาน</button></div></article>`;
+   <button type="button" class="btn tr-btn" data-rep="${x.id}">${W?'ดูผลงาน':'ดูรายงาน'}</button></div></article>`;
 }
 function report(id){
   const x=data.records.find(r=>r.id===id);if(!x)return;curRep=id;
-  $('repBody').innerHTML=`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h2 style="margin:0 0 12px;color:var(--ac-d)">🎓 ${esc(x.title)}</h2><button type="button" class="btn" style="width:auto" data-closerep>ปิด</button></div>
-   <dl>${data.view_all?`<dt>ครู</dt><dd><b>${esc(x.full_name||'')}</b></dd>`:''}<dt>เรื่องที่อบรม</dt><dd>${esc(x.title)}</dd><dt>วันที่อบรม</dt><dd>${dateText(x)||'—'}</dd>
-   <dt>สถานที่อบรม</dt><dd>${esc(x.location||'—')}</dd><dt>หน่วยงานที่จัด</dt><dd>${esc(x.organizer||'—')}</dd></dl>
-   <div class="tw-label">สรุปผลการอบรม</div><div class="sumfull">${x.detail?esc(x.detail):'—'}</div>
-   <div class="tw-label">ภาพการอบรม / เกียรติบัตร</div>${x.files.length?`<div class="tr-files">${fileTiles(x)}</div>`:'<p class="tw-note">ยังไม่มีไฟล์</p>'}
+  $('repBody').innerHTML=`<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><h2 style="margin:0 0 12px;color:var(--ac-d)">${L.icon} ${esc(x.title)}</h2><button type="button" class="btn" style="width:auto" data-closerep>ปิด</button></div>
+   <dl>${data.view_all?`<dt>ครู</dt><dd><b>${esc(x.full_name||'')}</b></dd>`:''}${W?`<dt>ชื่อผลงาน</dt><dd>${esc(x.title)}</dd><dt>ประเภท</dt><dd>${esc(x.category||'—')}</dd><dt>ระดับ</dt><dd>${esc(x.level||'—')}</dd><dt>วันที่ได้รับ</dt><dd>${thDate(x.start_date)||'—'}</dd><dt>หน่วยงานที่มอบ</dt><dd>${esc(x.organizer||'—')}</dd>`
+   :`<dt>เรื่องที่อบรม</dt><dd>${esc(x.title)}</dd><dt>วันที่อบรม</dt><dd>${dateText(x)||'—'}</dd><dt>สถานที่อบรม</dt><dd>${esc(x.location||'—')}</dd><dt>หน่วยงานที่จัด</dt><dd>${esc(x.organizer||'—')}</dd>`}</dl>
+   <div class="tw-label">${W?'รายละเอียด':'สรุปผลการอบรม'}</div><div class="sumfull">${x.detail?esc(x.detail):'—'}</div>
+   <div class="tw-label">${W?'ไฟล์หลักฐาน':'ภาพการอบรม / เกียรติบัตร'} <small style="font-weight:400">(กดเพื่อดูตัวอย่าง/ดาวน์โหลด)</small></div>${x.files.length?`<div class="tr-files">${fileTiles(x)}</div>`:'<p class="tw-note">ยังไม่มีไฟล์</p>'}
    <div class="tw-progress" id="up${x.id}"></div>
-   ${x.can_edit?`<div class="tr-acts" style="margin-top:14px;justify-content:flex-end"><label class="btn tr-up">📎 แนบภาพ/เกียรติบัตร<input type="file" hidden multiple accept="image/*,application/pdf,.pdf" data-up="${x.id}"></label><button type="button" class="btn" data-edit="${x.id}">แก้ไข</button><button type="button" class="btn" data-del="${x.id}">ลบ</button></div>`:''}`;
+   ${x.can_edit?`<div class="tr-acts" style="margin-top:14px;justify-content:flex-end"><label class="btn tr-up">📎 ${W?'แนบไฟล์':'แนบภาพ/เกียรติบัตร'}<input type="file" hidden multiple accept="image/*,application/pdf,.pdf" data-up="${x.id}"></label><button type="button" class="btn" data-edit="${x.id}">แก้ไข</button><button type="button" class="btn" data-del="${x.id}">ลบ</button></div>`:''}`;
   if(!$('repDlg').open)$('repDlg').showModal();
 }
 function openForm(rec){
   const r=rec||{},o=data.options,sel=(n,v,opts,blank)=>`<select name="${n}"><option value="">${blank}</option>${opts.map(([k,t])=>`<option value="${esc(k)}" ${k===v?'selected':''}>${esc(t)}</option>`).join('')}</select>`;
   const uid=r.user_id||$('teacher')?.value;
   $('form').innerHTML=`<h2 style="margin:0 0 12px;color:var(--ac-d)">${rec?'แก้ไข':W?'เพิ่ม':'บันทึก'}${W?'ผลงาน':'การอบรม'}</h2><div class="tr-form">
-   ${W?`<label class="full">ครู${sel('user_id',String(uid||''),data.teachers.map(t=>[String(t.id),t.full_name]),'— เลือกครู —')}</label>`:''}
    <label class="full">${L.name}<input name="title" maxlength="200" required value="${esc(r.title||'')}"></label>
    ${W?`<label>ประเภท${sel('category',r.category,o.categories.map(c=>[c,c]),'— เลือก —')}</label><label>ระดับ${sel('level',r.level,o.levels.map(c=>[c,c]),'— เลือก —')}</label>`
 :`<label class="full">สถานที่อบรม<input name="location" maxlength="200" value="${esc(r.location||'')}"></label>`}
@@ -204,7 +198,7 @@ document.addEventListener('change',async e=>{
     const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return;}
     perms=await apiRequest('/api/teacher-records/permissions');
     if(!perms.view){$('body').innerHTML='<div class="tw-empty"><b>บัญชีนี้ดูข้อมูลส่วนนี้ไม่ได้</b></div>';return;}
-    $('lead').textContent=W?L.lead+(perms.manage?' · ฝ่ายบุคคลบันทึกให้ครูทุกคน':' · แสดงเฉพาะข้อมูลของคุณ (ฝ่ายบุคคลเป็นผู้บันทึก)'):L.lead+(!mine&&perms.manage?' · แสดงผลจากที่ครูกรอก':'');
+    $('lead').textContent=L.lead;
     load();
   }catch(e){showError(e.message);$('body').innerHTML='';}
 })();

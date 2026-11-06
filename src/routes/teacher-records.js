@@ -1,10 +1,11 @@
 // ผลงานครู และ อบรมครู (เมนูย่อยฝ่ายบุคคล)
-// ผลงานครู: ฝ่ายบุคคล + superadmin บันทึกให้ครูทุกคน · ครูดูของตนเอง
-// อบรมครู (รายงานการอบรม): ครูที่ไปอบรมบันทึกเอง (เมนูระบบสนับสนุน) · ฝ่ายบุคคลดูผลของทุกคน · superadmin แก้ไขได้ทุกรายการ
+// ผลงานของฉัน / บันทึกการอบรม: ครูบันทึกเองที่ "บัญชีของฉัน" (view=mine)
+// ฝ่ายบุคคล (ผลงานครู / อบรมครู): ดูข้อมูลของครูทุกคน preview และดาวน์โหลดไฟล์หลักฐาน (รายไฟล์ / .zip) · superadmin แก้ไขได้ทุกรายการ
 // ไฟล์: ภาพ (JPG/PNG/WEBP/HEIC ≤10 MB) และ PDF (≤30 MB) เก็บใน Google Drive: <ผลงานครู|อบรมครู> / <ชื่อครู>
 import { getCurrentUser, jsonResponse } from '../lib/auth.js';
 import { ensurePersonnelData } from '../lib/personnel-data.js';
 import { ensureDepartmentStaff, belongsToDepartment } from './department-staff.js';
+import { zipStream, uniqueNames } from '../lib/zip-stream.js';
 
 const SCHOOL_FOLDER_ID = '1ZvfJvwRf0sf_k_hcZwNR0lXLdYZlgFI3';
 export const KINDS = { works: 'ผลงานครู', training: 'อบรมครู' };
@@ -133,13 +134,12 @@ async function teachers(env) {
   return results;
 }
 // สิทธิ์ต่อชนิด: ผลงาน = ฝ่ายบุคคลจัดการ · อบรม = เจ้าของจัดการของตน, ฝ่ายบุคคลดูทั้งหมด, superadmin จัดการทั้งหมด
-function kindAccess(user, perms, kind) {
-  if (kind === 'works') return { view_all: perms.manage, manage_all: perms.manage, own: false };
+function kindAccess(user, perms) {
   return { view_all: perms.manage, manage_all: user.role === 'superadmin', own: true };
 }
 const canEdit = (user, acc, row) => acc.manage_all || (acc.own && row.user_id === user.id);
 async function listPayload(env, user, perms, kind, filterUser, mine) {
-  const acc = kindAccess(user, perms, kind);
+  const acc = kindAccess(user, perms);
   const all = acc.view_all && !mine;
   const uid = all ? filterUser : user.id;
   const { results: records } = await env.DB.prepare(`SELECT r.*, u.full_name FROM teacher_records r LEFT JOIN users u ON u.id = r.user_id
@@ -153,7 +153,7 @@ async function listPayload(env, user, perms, kind, filterUser, mine) {
   }
   records.forEach((r) => { r.files = files.get(r.id) || []; });
   records.forEach((r) => { r.can_edit = canEdit(user, acc, r); });
-  return { kind, manage: acc.manage_all && all, view_all: all, can_create: kind === 'works' ? acc.manage_all : true, records, teachers: all || (kind === 'works' && acc.manage_all) ? await teachers(env) : [],
+  return { kind, manage: acc.manage_all && all, view_all: all, can_create: mine || !all, records, teachers: all ? await teachers(env) : [],
     options: { categories: WORK_CATEGORIES, levels: WORK_LEVELS, modes: TRAINING_MODES }, max_files: MAX_FILES };
 }
 async function recordRow(env, kind, id) {
@@ -165,7 +165,7 @@ async function handleCreate(request, env, user, kind) {
   const body = await readJson(request);
   const n = normalizeRecord(kind, body);
   if (n.error) return jsonResponse({ error: n.error }, 400);
-  const uid = kind === 'training' ? user.id : Number(body.user_id);
+  const uid = user.id;
   if (!uid || !(await env.DB.prepare("SELECT 1 FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL").bind(uid).first())) return jsonResponse({ error: 'กรุณาเลือกครู' }, 400);
   const row = await env.DB.prepare(`INSERT INTO teacher_records (kind, user_id, ${COLS.join(', ')}, created_by) VALUES (?, ?, ${COLS.map(() => '?').join(', ')}, ?) RETURNING id`)
     .bind(kind, uid, ...COLS.map((c) => n.record[c]), user.id).first();
@@ -179,10 +179,6 @@ async function handleUpdate(request, env, user, kind, id) {
   const n = normalizeRecord(kind, body);
   if (n.error) return jsonResponse({ error: n.error }, 400);
   let uid = row.user_id;
-  if (kind === 'works' && body.user_id && Number(body.user_id) !== row.user_id) {
-    if (!(await env.DB.prepare("SELECT 1 FROM users WHERE id = ? AND status='active' AND deleted_at IS NULL").bind(Number(body.user_id)).first())) return jsonResponse({ error: 'ไม่พบครูที่เลือก' }, 400);
-    uid = Number(body.user_id);
-  }
   await env.DB.prepare(`UPDATE teacher_records SET user_id = ?, ${COLS.map((c) => `${c} = ?`).join(', ')}, updated_at = datetime('now') WHERE id = ?`)
     .bind(uid, ...COLS.map((c) => n.record[c]), id).run();
   await audit(env, user, `${kind}_update`, { id });
@@ -240,11 +236,32 @@ async function serveFile(env, user, perms, fid, url, drive) {
 async function deleteFile(env, user, perms, fid, drive) {
   const row = await fileRow(env, fid);
   if (!row) return jsonResponse({ error: 'ไม่พบไฟล์' }, 404);
-  if (!canEdit(user, kindAccess(user, perms, row.kind), row)) return jsonResponse({ error: 'ไม่มีสิทธิ์ลบไฟล์นี้' }, 403);
+  if (!canEdit(user, kindAccess(user, perms), row)) return jsonResponse({ error: 'ไม่มีสิทธิ์ลบไฟล์นี้' }, 403);
   await env.DB.prepare('DELETE FROM teacher_record_files WHERE id = ?').bind(fid).run();
   if (!drive.ready(env)) await trashFile(drive, await drive.token(env), row.drive_file_id).catch(() => {});
   await audit(env, user, `${row.kind}_file_delete`, { id: fid });
   return jsonResponse({ ok: true });
+}
+
+async function handleZip(env, user, perms, kind, url, drive) {
+  const acc = kindAccess(user, perms);
+  const uid = acc.view_all ? Number(url.searchParams.get('user_id')) || null : user.id;
+  const { results: rows } = await env.DB.prepare(`SELECT f.drive_file_id, f.file_name, r.title, u.full_name FROM teacher_record_files f
+    JOIN teacher_records r ON r.id = f.record_id LEFT JOIN users u ON u.id = r.user_id
+    WHERE r.kind = ? AND r.deleted_at IS NULL ${uid ? 'AND r.user_id = ?' : ''} ORDER BY u.full_name, r.start_date, r.id, f.id`).bind(...(uid ? [kind, uid] : [kind])).all();
+  if (!rows.length) return jsonResponse({ error: 'ยังไม่มีไฟล์ให้ดาวน์โหลด' }, 404);
+  const names = uniqueNames(rows.map((r) => `${safeName(r.full_name || 'ครู')}/${safeName(r.title).slice(0, 80)}/${r.file_name}`));
+  const token = await drive.token(env);
+  const stream = zipStream(rows.map((r, i) => ({ name: names[i].replace(/[:*?"<>|\\]/g, '_'), open: async () => {
+    const res = await drive.request(token, `/files/${encodeURIComponent(r.drive_file_id)}?alt=media&supportsAllDrives=true`);
+    if (!res.ok) throw new Error('ไม่พบไฟล์ใน Google Drive');
+    return res.body;
+  } })), (entry, e) => console.error('teacher-records zip', entry?.name, e?.message));
+  const who = uid ? safeName(rows[0].full_name || '') : 'ครูทุกคน';
+  return new Response(stream, { headers: {
+    'Content-Type': 'application/zip', 'Cache-Control': 'no-store',
+    'Content-Disposition': `attachment; filename="${kind}.zip"; filename*=UTF-8''${encodeURIComponent(`${KINDS[kind]} - ${who}.zip`)}`,
+  } });
 }
 
 export async function handleTeacherRecordsRoute(request, env, pathname, method, drive) {
@@ -257,21 +274,22 @@ export async function handleTeacherRecordsRoute(request, env, pathname, method, 
   await ensureTeacherRecordsSchema(env);
   const url = new URL(request.url);
   const file = pathname.match(/^\/api\/teacher-records\/files\/(\d+)$/);
+  const zip = pathname.match(/^\/api\/teacher-records\/(works|training)\/zip$/);
+  if (zip && method === 'GET') return handleZip(env, user, perms, zip[1], url, drive);
   if (file && method === 'GET') return serveFile(env, user, perms, Number(file[1]), url, drive);
   const m = pathname.match(/^\/api\/teacher-records\/(works|training)(?:\/(\d+)(\/files)?)?$/);
   if (!m && !file) return jsonResponse({ error: 'ไม่พบเส้นทาง' }, 404);
   if (m && !m[2] && method === 'GET') return jsonResponse(await listPayload(env, user, perms, m[1], Number(url.searchParams.get('user_id')) || null, url.searchParams.get('view') === 'mine'));
   if (file && method === 'DELETE') return deleteFile(env, user, perms, Number(file[1]), drive);
   const [, kind, id, files] = m;
-  const acc = kindAccess(user, perms, kind);
+  const acc = kindAccess(user, perms);
   if (!id && method === 'POST') {
-    if (kind === 'works' && !acc.manage_all) return jsonResponse({ error: 'บันทึกได้เฉพาะบุคลากรฝ่ายบุคคลและผู้ดูแลระบบ' }, 403);
     return handleCreate(request, env, user, kind);
   }
   if (id) {
     const row = await recordRow(env, kind, Number(id));
     if (!row) return jsonResponse({ error: 'ไม่พบรายการ' }, 404);
-    if (!canEdit(user, acc, row)) return jsonResponse({ error: kind === 'works' ? 'แก้ไขได้เฉพาะบุคลากรฝ่ายบุคคลและผู้ดูแลระบบ' : 'แก้ไขได้เฉพาะรายงานของตนเอง' }, 403);
+    if (!canEdit(user, acc, row)) return jsonResponse({ error: 'แก้ไขได้เฉพาะข้อมูลของตนเอง' }, 403);
   }
   if (id && files && method === 'POST') return handleUpload(request, env, user, kind, Number(id), drive);
   if (id && !files && method === 'PATCH') return handleUpdate(request, env, user, kind, Number(id));
