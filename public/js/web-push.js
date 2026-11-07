@@ -9,7 +9,7 @@
   let config = null;
 
   const keyBytes = (b64) => { const p = '='.repeat((4 - b64.length % 4) % 4); const s = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(s, (c) => c.charCodeAt(0)); };
-  const registration = () => navigator.serviceWorker.register('/sw.js');
+  const registration = () => navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' }).then(reg => { reg.update().catch(() => {}); return reg; });
   const withTimeout = (promise, ms, message) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
   // รอให้ service worker พร้อมก่อนสมัคร (Safari ค้างถ้าสมัครตอนยังติดตั้งไม่เสร็จ)
   async function readyRegistration() {
