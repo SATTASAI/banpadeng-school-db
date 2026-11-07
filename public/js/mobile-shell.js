@@ -183,7 +183,7 @@
     try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
-    else if (tab === 'messages') openChat();
+    else if (tab === 'messages') { if (chatOpen) closeChat(); else openChat(); }
     else if (tab === 'notify') { e.stopPropagation(); placeNotifications(); window.setMobileMenu?.(false); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
     else if (tab === 'account') { openAccount(); setActive('account'); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));

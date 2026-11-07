@@ -31,6 +31,8 @@ assert(panel.classList.contains('is-open'));assert(doc.body.classList.contains('
 assert.equal(new URL(frame.src).origin,'https://notify.banpadengschool.ac.th');assert.equal(new URL(frame.src).searchParams.get('embedded'),'1');assert.equal(new URL(frame.src).searchParams.get('t'),'signed-test-link');assert(button.querySelector('.mt-dot'),'opening alone cannot clear unread');
 send('school-chat-ready','https://evil.test');assert.equal(status.hidden,false);send('school-chat-ready','https://notify.banpadengschool.ac.th',w);assert.equal(status.hidden,false);send('school-chat-ready');assert.equal(status.hidden,true);
 const originalFrame=frame,originalSrc=frame.src,originalLinks=requests.filter(p=>p==='/api/push/link').length;
+button.click();await flush();assert(!panel.classList.contains('is-open'));assert.equal(button.getAttribute('aria-expanded'),'false');assert(panel.inert);assert(bar.isConnected);assert.equal(location.href,'https://system.test/dashboard.html');
+button.click();await flush();assert(panel.classList.contains('is-open'));assert.equal(button.getAttribute('aria-expanded'),'true');assert.equal(panel.querySelector('iframe'),originalFrame);assert.equal(frame.src,originalSrc);assert.equal(requests.filter(p=>p==='/api/push/link').length,originalLinks,'toggle must retain the existing room');
 w.visualViewport.height=450;viewportListeners.resize();assert.equal(panel.style.height,'366px');assert.equal(doc.documentElement.style.getPropertyValue('--chat-keyboard-inset'),'394px');
 bar.querySelector('[data-tab=home]').click();await flush();assert(!panel.classList.contains('is-open'));assert(panel.inert);assert(!doc.querySelector('.layout').inert);assert(bar.isConnected);
 button.click();await flush();assert.equal(panel.querySelector('iframe'),originalFrame);assert.equal(frame.src,originalSrc);assert.equal(requests.filter(p=>p==='/api/push/link').length,originalLinks,'reopening cannot reload the chat frame');
@@ -46,4 +48,4 @@ unread=true;await poll();assert(button.querySelector('.mt-dot'));error={status:4
 button.click();send('school-chat-error');assert.equal(status.hidden,false);assert.equal(status.querySelector('button').hidden,false);
 linkMode='bad';status.querySelector('button').click();await flush();assert.match(status.textContent,/ไม่ถูกต้อง/);assert.equal(location.href,'https://system.test/dashboard.html');assert.equal(frame.src,originalSrc);
 assert(CONTENT_SECURITY_POLICY.includes("frame-src 'self' blob: data: https://challenges.cloudflare.com https://notify.banpadengschool.ac.th"));assert.equal(SECURITY_HEADERS['X-Frame-Options'],'SAMEORIGIN');
-dom.window.close();console.log('✓ Mobile chat sheet: persistent bar/frame, no external navigation, viewport/keyboard geometry, safe messages, unread state and retry');
+dom.window.close();console.log('✓ Mobile chat sheet: repeat-tap open/collapse, persistent bar/frame, no external navigation, viewport/keyboard geometry, safe messages, unread state and retry');
