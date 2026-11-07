@@ -523,6 +523,7 @@
 
 <script src="/js/navigation-catalog.js"></script>
 <script src="/js/api.js"></script><script src="/js/project-allocation-chart.js"></script><script src="/js/project-balance.js"></script>
+<script src="/js/navigation-permissions.js"></script>
 <script src="/js/project-workflow.js"></script>
 <script src="/js/work-calendar.js"></script>
 <script>
@@ -614,16 +615,16 @@
     });
   }
   buildSidebarSubmenus();
-  apiRequest('/api/supervision/permissions').then(p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';})).catch(()=>{});
-  apiRequest('/api/timetable/permissions').then(p=>document.querySelectorAll('[data-timetable-view-only]').forEach(link=>{link.hidden=!p.view_all;link.style.display=p.view_all?'':'none';})).catch(()=>{});
-  apiRequest('/api/lesson-plans/permissions').then(p=>document.querySelectorAll('[data-lesson-plan-only]').forEach(link=>{link.hidden=!p.view;link.style.display=p.view?'':'none';})).catch(()=>{});
-  apiRequest('/api/teaching-works/permissions').then(p=>document.querySelectorAll('[data-academic-only]').forEach(link=>{link.hidden=!p.academic;link.style.display=p.academic?'':'none';})).catch(()=>{});
+  loadNavigationPermission('/api/supervision/permissions',p=>document.querySelectorAll('[data-supervision-only]').forEach(link=>{const ok=link.dataset.supervisionOnly.split('|').some(k=>p[k]);link.hidden=!ok;link.style.display=ok?'':'none';}));
+  loadNavigationPermission('/api/timetable/permissions',p=>document.querySelectorAll('[data-timetable-view-only]').forEach(link=>{link.hidden=!p.view_all;link.style.display=p.view_all?'':'none';}));
+  loadNavigationPermission('/api/lesson-plans/permissions',p=>document.querySelectorAll('[data-lesson-plan-only]').forEach(link=>{link.hidden=!p.view;link.style.display=p.view?'':'none';}));
+  loadNavigationPermission('/api/teaching-works/permissions',p=>document.querySelectorAll('[data-academic-only]').forEach(link=>{link.hidden=!p.academic;link.style.display=p.academic?'':'none';}));
   // เมนูฝ่ายงาน: เห็นเฉพาะฝ่ายที่ตนสังกัด (ผู้บริหาร/superadmin เห็นทุกฝ่าย, ครูอนุบาลเห็นฝ่ายปฐมวัยเพิ่ม)
   const DEPARTMENT_NAV_KEYS=['administration','academic','early_childhood','budget','personnel','general'];
   const departmentNavNodes=()=>DEPARTMENT_NAV_KEYS.map(key=>document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`)).filter(Boolean);
   departmentNavNodes().forEach(node=>{node.hidden=true;node.style.display='none';});
-  apiRequest('/api/navigation/departments').then(v=>{const allowed=new Set(v.departments||[]);DEPARTMENT_NAV_KEYS.forEach(key=>{const node=document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`);if(!node)return;const ok=allowed.has(key);node.hidden=!ok;node.style.display=ok?'':'none';});const label=[...document.querySelectorAll('.sidebar nav > .nav-label')].find(l=>/ฝ่ายงาน/.test(l.textContent));if(label){if(!allowed.size)label.style.display='none';else label.textContent=v.all?'6 ฝ่ายงาน':'ฝ่ายงานของฉัน';}}).catch(()=>departmentNavNodes().forEach(node=>{node.hidden=false;node.style.display='';}));
-  apiRequest('/api/evaluation/permissions').then(p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';})).catch(()=>{});
+  loadNavigationPermission('/api/navigation/departments',v=>{const allowed=new Set(v.departments||[]);DEPARTMENT_NAV_KEYS.forEach(key=>{const node=document.querySelector(`.sidebar nav [data-nav-group="${key}"]`)||document.querySelector(`.sidebar nav > a[data-page="${key}"]`);if(!node)return;const ok=allowed.has(key);node.hidden=!ok;node.style.display=ok?'':'none';});const label=[...document.querySelectorAll('.sidebar nav > .nav-label')].find(l=>/ฝ่ายงาน/.test(l.textContent));if(label){if(!allowed.size)label.style.display='none';else label.textContent=v.all?'6 ฝ่ายงาน':'ฝ่ายงานของฉัน';}});
+  loadNavigationPermission('/api/evaluation/permissions',p=>document.querySelectorAll('[data-evaluation-only]').forEach(link=>{link.hidden=!p.access;link.style.display=p.access?'':'none';}));
 
   function showOverview() {
     setMobileMenu(false);
@@ -1284,9 +1285,10 @@
       });
     }
 
-    const substitutePermission=await apiRequest('/api/substitutes/permissions').catch(()=>({can_manage:false}));
-    document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
-    document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
+    loadNavigationPermission('/api/substitutes/permissions',substitutePermission=>{
+      document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
+      document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
+    });
     await loadOverview();
 
     const initialKey = window.location.hash.replace("#", "");

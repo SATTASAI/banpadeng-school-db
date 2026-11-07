@@ -167,7 +167,7 @@ function notifyStatements(env,userIds,requestId,message,actorId){
 
 async function tableExists(env,name){return !!await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").bind(name).first();}
 async function termFor(env,date){
- return env.DB.prepare(`SELECT t.id,t.name,t.term_number,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
+ return env.DB.prepare(`SELECT t.id,t.name,t.term_number,t.academic_year_id,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
   WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
 }
 async function publishedPlan(env,termId){
@@ -177,6 +177,27 @@ async function publishedPlan(env,termId){
 async function personnelIdsOf(env,userId){
  const {results}=await env.DB.prepare("SELECT a.personnel_id id FROM personnel_accounts a JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active' WHERE a.user_id=?").bind(userId).all();
  return results.map(r=>Number(r.id));
+}
+// ตรวจจากทะเบียนครู/งานที่ได้รับมอบหมาย ไม่ใช้ชั้นที่ผู้ใช้กรอกขณะจองเป็นสิทธิ์ยกเว้น
+async function kindergartenTeacher(env,userId,term){
+ const {results:people}=await env.DB.prepare(`SELECT p.homeroom_classroom,p.departments,
+  EXISTS(SELECT 1 FROM department_staff d WHERE d.personnel_id=p.id AND d.department='early_childhood') early_childhood
+  FROM personnel_records p WHERE p.status='active' AND (p.user_id=? OR p.id IN (SELECT personnel_id FROM personnel_accounts WHERE user_id=?))`).bind(userId,userId).all();
+ if(people.some(p=>bandOf(p.homeroom_classroom)==='k'||belongsToDepartment(p.departments,'early_childhood')||Number(p.early_childhood)===1))return true;
+ if(await tableExists(env,'gr_homerooms')){
+  const {results}=await env.DB.prepare('SELECT grade_level FROM gr_homerooms WHERE user_id=? AND academic_year_id=?').bind(userId,term.academic_year_id).all();
+  if(results.some(r=>bandOf(r.grade_level)==='k'))return true;
+ }
+ if(await tableExists(env,'learner_class_assignments')){
+  const {results}=await env.DB.prepare('SELECT grade_level FROM learner_class_assignments WHERE teacher_user_id=? AND academic_term_id=?').bind(userId,term.id).all();
+  if(results.some(r=>bandOf(r.grade_level)==='k'))return true;
+ }
+ if(await tableExists(env,'gr_courses')&&await tableExists(env,'gr_subjects')&&await tableExists(env,'gr_course_teachers')){
+  const {results}=await env.DB.prepare(`SELECT s.grade_level FROM gr_course_teachers ct JOIN gr_courses c ON c.id=ct.course_id
+   JOIN gr_subjects s ON s.id=c.subject_id WHERE ct.user_id=? AND s.academic_year_id=?`).bind(userId,term.academic_year_id).all();
+  if(results.some(r=>bandOf(r.grade_level)==='k'))return true;
+ }
+ return false;
 }
 async function lessonsFor(env,planId,personnelIds,weekday=null){
  if(!personnelIds.length)return [];
@@ -271,7 +292,9 @@ async function week(env,user,url){
   const term=await termFor(env,date);
   if(term&&!terms.has(term.id)){
    const plan=await publishedPlan(env,term.id),structure=await periodTimes(env,term.id);
-   terms.set(term.id,{term,plan,structure,lessons:plan?await lessonsFor(env,plan.id,personnelIds):[]});
+   const lessons=plan?await lessonsFor(env,plan.id,personnelIds):[];
+   const kindergartenManual=!lessons.length&&await kindergartenTeacher(env,user.id,term);
+   terms.set(term.id,{term,plan,structure,lessons,kindergartenManual});
   }
   days.push({date,weekday:weekdayOf(date),term_id:term?.id||null});
  }
@@ -291,7 +314,7 @@ async function week(env,user,url){
  for(const id of terms.keys()){const r=await termRequestOf(env,user.id,id);registered.set(id,r?{id:r.id,visit_date:r.visit_date,period:r.period}:null);}
  return reply({start,end:dates[4],now,closed:registrationClosed(env,user,now),open_date:openDateOf(env),linked:personnelIds.length>0,capacity:SLOT_CAPACITY,full,taken,
   terms:[...terms.values()].map(t=>({id:t.term.id,name:t.term.name,year_be:t.term.year_be,start_date:t.term.start_date,end_date:t.term.end_date,registered:registered.get(t.term.id),
-   mode:t.plan?'timetable':'manual',times:t.structure.times,lunch:t.structure.lunch,
+   mode:t.plan&&!t.kindergartenManual?'timetable':'manual',kindergarten_manual:t.kindergartenManual,times:t.structure.times,lunch:t.structure.lunch,
    lessons:t.lessons.map(l=>({entry_id:l.id,weekday:l.weekday,period:l.period,subject:l.subject,grade_level:l.grade_level,classroom:l.classroom,room_name:l.room_name}))})),
   days,requests:await withEvidence(env,mine.map(r=>shape(r,{withResult:true}))),default_times:DEFAULT_STRUCTURE.times});
 }
@@ -311,15 +334,17 @@ async function createRequest(request,env,user){
  if(holiday?.kind==='activity'&&body.confirm_activity!==true)return reply({error:activityMsg(holiday),code:'activity_day',activity:holiday.name||''},409);
  if(await termRequestOf(env,user.id,term.id))return fail(TERM_LIMIT_MSG,409);
  const plan=await publishedPlan(env,term.id),personnelIds=await personnelIdsOf(env,user.id);
+ const lessons=plan?await lessonsFor(env,plan.id,personnelIds):[];
+ const kindergartenManual=!lessons.length&&await kindergartenTeacher(env,user.id,term);
  let lesson;
- if(plan){
+ if(plan&&!kindergartenManual){
   if(!personnelIds.length)return fail('บัญชียังไม่ผูกกับทะเบียนบุคลากร จึงหาคาบสอนไม่ได้ กรุณาติดต่อผู้ดูแลระบบ',409);
-  const lessons=await lessonsFor(env,plan.id,personnelIds,weekdayOf(date));
-  lesson=lessons.find(l=>l.period===period);
+  lesson=lessons.find(l=>l.weekday===weekdayOf(date)&&l.period===period);
   if(!lesson)return fail('คุณไม่มีคาบสอนในวันและคาบนี้ตามตารางสอนที่เผยแพร่',409);
  }else{
   const subject=text(body.subject,120),grade=text(body.grade_level,30),classroom=text(body.classroom,30);
   if(!subject||!grade)return fail('ยังไม่มีตารางสอนที่เผยแพร่ กรุณากรอกวิชาและชั้นเรียนที่สอนในคาบนี้');
+  if(kindergartenManual&&bandOf(grade)!=='k')return fail('สิทธิ์ลงทะเบียนโดยไม่มีตารางสอนนี้ใช้ได้เฉพาะชั้นอนุบาล');
   lesson={id:null,teacher_id:personnelIds[0]||null,subject,grade_level:grade,classroom,room_name:text(body.room_name,60)||null};
  }
  const band=bandOf(lesson.grade_level);
@@ -331,7 +356,7 @@ async function createRequest(request,env,user){
   const result=await env.DB.prepare(`INSERT INTO supervision_requests(teacher_user_id,teacher_personnel_id,academic_term_id,visit_date,weekday,period,source,timetable_entry_id,subject,grade_level,classroom,room_name,supervision_type,topic,grade_band)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_requests WHERE visit_date=? AND period=? AND status<>'cancelled')<${CAPACITY_SQL}
    AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE teacher_user_id=? AND academic_term_id=? AND status<>'cancelled')
-   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE visit_date=? AND period=? AND grade_band=? AND status<>'cancelled')`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,plan?'timetable':'manual',lesson.id,
+   AND NOT EXISTS(SELECT 1 FROM supervision_requests WHERE visit_date=? AND period=? AND grade_band=? AND status<>'cancelled')`).bind(user.id,lesson.teacher_id||personnelIds[0]||null,term.id,date,weekdayOf(date),period,lesson.id?'timetable':'manual',lesson.id,
    lesson.subject,lesson.grade_level,lesson.classroom||null,lesson.room_name||null,type,topic||null,band,date,period,SLOT_CAPACITY,date,period,user.id,term.id,date,period,band).run();
   if(!result.meta.changes){
    if(await termRequestOf(env,user.id,term.id))return fail(TERM_LIMIT_MSG,409);
