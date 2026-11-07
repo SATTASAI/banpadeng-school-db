@@ -111,7 +111,8 @@
         <div class="message" id="pushMessage" role="status"></div>
         <div id="pushPrefs" style="display:none;margin-top:14px;padding-top:12px;border-top:1px dashed #d9e2ee">
           <strong style="display:block;margin-bottom:6px">หมวดที่ต้องการรับแจ้งเตือน</strong>
-          <div id="pushPrefList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px 14px"></div>
+          <div id="pushPrefList"></div>
+          <style>#pushPrefList{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(220px,100%),1fr));gap:8px 14px}#pushPrefList .push-cat{display:flex!important;align-items:center;justify-content:flex-start;gap:10px;margin:0;padding:8px 10px;border:1px solid #e3e9f1;border-radius:12px;background:#fff;font-weight:500;cursor:pointer;text-align:left}#pushPrefList .push-cat input{flex:0 0 auto;width:18px!important;height:18px;min-height:0;margin:0;padding:0}#pushPrefList .push-cat span{flex:1 1 auto;min-width:0;line-height:1.4}</style>
           <p class="muted" style="margin:8px 0 0;font-size:12px">ปิดหมวดใดแล้ว รายการหมวดนั้นยังแสดงในกระดิ่งตามปกติ แต่จะไม่เด้งเข้าเครื่อง</p>
         </div>
       </section>
@@ -271,7 +272,7 @@
       const prefBox=document.getElementById("pushPrefs");
       if(s.config?.linked||s.status==="on"){
         const p=await apiRequest("/api/push/prefs");
-        document.getElementById("pushPrefList").innerHTML=p.categories.map(c=>`<label style="display:flex;gap:8px;align-items:center;font-weight:500"><input type="checkbox" data-cat="${c.key}" ${c.enabled?"checked":""}> ${c.label}</label>`).join("");
+        document.getElementById("pushPrefList").innerHTML=p.categories.map(c=>`<label class="push-cat"><input type="checkbox" data-cat="${c.key}" ${c.enabled?"checked":""}><span>${c.label}</span></label>`).join("");
         prefBox.style.display="";
       }else prefBox.style.display="none";
     }
