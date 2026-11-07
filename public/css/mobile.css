@@ -108,3 +108,12 @@
  .mfit-scroll{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:12px}
  input,select,textarea{max-width:100%}
 }
+/* Keep all six shortcuts tappable without wrapping labels on narrow phones. */
+@media(max-width:720px){
+ .mobile-tabbar button{min-width:0;padding-inline:0}
+ .mobile-tabbar button>span{white-space:nowrap}
+}
+@media(max-width:360px){
+ .mobile-tabbar{gap:0;padding-left:4px;padding-right:4px}
+ .mobile-tabbar button{font-size:11px}
+}

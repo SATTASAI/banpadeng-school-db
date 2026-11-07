@@ -125,6 +125,20 @@ export async function pushLinkStatus(env, user) {
   return { allowed: true, user_id: Number(user.id), linked, publicKey, url: await createPushLink(env, user) };
 }
 
+// Only the server's authenticated user ID is forwarded; the browser cannot select another account.
+export async function pushChatUnread(env, user) {
+  if (!pushAllowed(env, user)) return { status: 200, data: { allowed: false, unread: false } };
+  try {
+    const res = await notifyFetch(env, "/api/chat/admin/unread?ref=" + encodeURIComponent(`u:${user.id}`) + "&role=teacher");
+    if (!res.ok) throw new Error(`notify ${res.status}`);
+    const data = await res.json();
+    if (typeof data.unread !== "boolean") throw new Error("invalid unread response");
+    return { status: 200, data: { allowed: true, unread: data.unread } };
+  } catch {
+    return { status: 502, data: { error: "ตรวจสอบข้อความใหม่ไม่สำเร็จ" } };
+  }
+}
+
 // กดปุ่มเดียวในระบบ: เบราว์เซอร์สมัคร push แล้วส่ง subscription มาที่นี่ ระบบส่งต่อให้ school-notify พร้อมลายเซ็น
 const validSubscription = (s) => s && typeof s.endpoint === "string" && /^https:\/\//.test(s.endpoint) && s.endpoint.length < 1000
   && typeof s.keys?.p256dh === "string" && typeof s.keys?.auth === "string";

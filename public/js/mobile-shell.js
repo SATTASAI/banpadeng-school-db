@@ -9,6 +9,7 @@
   bar.innerHTML = `
     <button type="button" data-tab="home" class="active">${icon('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>')}<span>ภาพรวม</span></button>
     <button type="button" data-tab="search">${icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')}<span>ค้นหา</span></button>
+    <button type="button" data-tab="messages" aria-label="ข้อความ">${icon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')}<span>ข้อความ</span></button>
     <button type="button" data-tab="notify">${icon('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/>')}<span>แจ้งเตือน</span><b class="mt-badge" hidden>0</b></button>
     <button type="button" data-tab="account">${icon('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>')}<span>บัญชี</span></button>
     <button type="button" data-tab="menu">${icon('<path d="M4 6h16M4 12h16M4 18h16"/>')}<span>เมนู</span></button>`;
@@ -72,6 +73,7 @@
     try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
+    else if (tab === 'messages') { window.setMobileMenu?.(false); location.href = '/notify-chat.html'; }
     else if (tab === 'notify') { e.stopPropagation(); placeNotifications(); window.setMobileMenu?.(false); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
     else if (tab === 'account') { openAccount(); setActive('account'); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));
@@ -84,6 +86,31 @@
   // จุดแดงงานค้างที่ปุ่มเมนู/ภาพรวม (คำนวณใน dashboard.html)
   const dotOn = (btn, on) => { let d = btn.querySelector('.mt-dot'); if (on && !d) { d = document.createElement('i'); d.className = 'mt-dot'; btn.appendChild(d); } else if (!on && d) d.remove(); };
   window.addEventListener('menu-dots', (e) => { dotOn(bar.querySelector('[data-tab=menu]'), !!e.detail?.menu); dotOn(bar.querySelector('[data-tab=home]'), !!e.detail?.overview); });
+  // Chat unread state is independent of the bell. Opening the tab alone does not clear it.
+  const messageButton = bar.querySelector('[data-tab=messages]');
+  let messageLoading = false;
+  const setMessageUnread = (unread) => {
+    dotOn(messageButton, unread);
+    messageButton.querySelector('.mt-dot')?.setAttribute('aria-hidden', 'true');
+    messageButton.setAttribute('aria-label', unread ? 'ข้อความ มีข้อความที่ยังไม่อ่าน' : 'ข้อความ');
+  };
+  const refreshMessages = async () => {
+    if (!phone.matches || document.hidden || messageLoading || typeof apiRequest !== 'function') return;
+    messageLoading = true;
+    try {
+      const data = await apiRequest('/api/push/chat-unread');
+      setMessageUnread(data.unread === true);
+    } catch (error) {
+      if (error.status === 401) setMessageUnread(false);
+      // Keep the last known state during a connection failure.
+    } finally { messageLoading = false; }
+  };
+  refreshMessages();
+  setInterval(refreshMessages, 30000);
+  window.addEventListener('pageshow', refreshMessages);
+  window.addEventListener('focus', refreshMessages);
+  document.addEventListener('visibilitychange', refreshMessages);
+  phone.addEventListener('change', refreshMessages);
   // ตัวเลขแจ้งเตือน
   window.addEventListener('school-notifications', () => {
     const src = document.querySelector('#schoolNotifications .sn-count'), dst = bar.querySelector('.mt-badge');
