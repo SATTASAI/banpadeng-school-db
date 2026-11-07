@@ -52,7 +52,7 @@
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href="/account.html"]');
     if (!a || !phone.matches || e.ctrlKey || e.metaKey) return;
-    e.preventDefault(); window.setMobileMenu?.(false); openAccount(); setActive('account');
+    e.preventDefault(); closeChat(); window.setMobileMenu?.(false); openAccount(); setActive('account');
   }, true);
   // แผงแจ้งเตือน: แถบบนมี backdrop-filter ทำให้ position:fixed ติดกรอบแถบบน → บนมือถือย้ายไปไว้ที่ body
   let snHome = null, snNext = null;
@@ -66,22 +66,132 @@
   if (!placeNotifications()) { const t = setInterval(() => { if (placeNotifications()) clearInterval(t); }, 300); setTimeout(() => clearInterval(t), 15000); }
   phone.addEventListener('change', placeNotifications);
   const setActive = (tab) => bar.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  // Keep one live chat frame above the bar; hiding it must not reset its draft or scroll position.
+  const chatOrigin = 'https://notify.banpadengschool.ac.th';
+  const chatPanel = document.createElement('section');
+  chatPanel.id = 'mobileChatPanel';
+  chatPanel.className = 'mobile-chat-panel';
+  chatPanel.setAttribute('aria-label', 'ข้อความโรงเรียน');
+  chatPanel.setAttribute('aria-hidden', 'true');
+  chatPanel.inert = true;
+  chatPanel.innerHTML = '<div class="mobile-chat-status" role="status"><p>กำลังเปิดห้องข้อความ…</p><button type="button" hidden>ลองอีกครั้ง</button></div>';
+  const chatStatus = chatPanel.querySelector('.mobile-chat-status');
+  const chatRetry = chatStatus.querySelector('button');
+  const chatFrame = document.createElement('iframe');
+  chatFrame.title = 'ห้องข้อความโรงเรียน';
+  chatFrame.referrerPolicy = 'no-referrer';
+  chatFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+  chatPanel.prepend(chatFrame);
+  document.body.append(chatPanel);
+  const chatButton = bar.querySelector('[data-tab=messages]');
+  chatButton.setAttribute('aria-controls', chatPanel.id);
+  chatButton.setAttribute('aria-expanded', 'false');
+  let chatOpen = false, chatLoaded = false, chatConnecting = false, chatTimeout, previousTab = 'home';
+  const background = document.querySelector('.layout');
+  let backgroundWasInert = false;
+  const sendChatVisibility = () => chatFrame.contentWindow?.postMessage({ type: 'school-chat-visibility', visible: chatOpen }, chatOrigin);
+  const positionChat = () => {
+    if (!chatOpen) return;
+    const viewport = window.visualViewport;
+    const height = viewport?.height || window.innerHeight;
+    const top = viewport?.offsetTop || 0;
+    const keyboardInset = Math.max(0, window.innerHeight - top - height);
+    const barHeight = bar.getBoundingClientRect().height || 84;
+    document.documentElement.style.setProperty('--chat-keyboard-inset', keyboardInset + 'px');
+    chatPanel.style.top = top + 'px';
+    chatPanel.style.height = Math.max(0, height - barHeight) + 'px';
+  };
+  const chatError = (text) => {
+    chatLoaded = false;
+    chatStatus.hidden = false;
+    chatStatus.querySelector('p').textContent = text || 'เปิดแชทไม่สำเร็จ ลองอีกครั้ง';
+    chatRetry.hidden = false;
+  };
+  const connectChat = async () => {
+    if (chatConnecting || chatLoaded) return;
+    chatConnecting = true;
+    chatStatus.hidden = false;
+    chatStatus.querySelector('p').textContent = 'กำลังเปิดห้องข้อความ…';
+    chatRetry.hidden = true;
+    try {
+      const data = await apiRequest('/api/push/link', { signal: AbortSignal.timeout(15000) });
+      if (!data.allowed || !data.url) throw new Error('บัญชีนี้ยังไม่เปิดใช้ห้องข้อความ');
+      const target = new URL(data.url);
+      if (target.origin !== chatOrigin || !target.searchParams.get('t')) throw new Error('ลิงก์เชื่อมบัญชีไม่ถูกต้อง');
+      target.searchParams.set('chat', '1');
+      target.searchParams.set('embedded', '1');
+      clearTimeout(chatTimeout);
+      chatTimeout = setTimeout(() => chatError('โหลดแชทไม่สำเร็จ ลองอีกครั้ง'), 20000);
+      chatFrame.src = target.href;
+    } catch (error) { chatError(error.message); }
+    finally { chatConnecting = false; }
+  };
+  chatRetry.onclick = () => { chatLoaded = false; connectChat(); };
+  chatFrame.addEventListener('load', sendChatVisibility);
+  const openChat = () => {
+    if (chatOpen) return;
+    previousTab = bar.querySelector('[data-tab].active')?.dataset.tab || '';
+    chatOpen = true;
+    window.setMobileMenu?.(false);
+    document.querySelector('#schoolNotifications .sn-panel')?.setAttribute('hidden', '');
+    if (background) { backgroundWasInert = background.inert; background.inert = true; }
+    document.body.classList.add('mobile-chat-open');
+    positionChat();
+    chatPanel.inert = false;
+    chatPanel.setAttribute('aria-hidden', 'false');
+    chatPanel.classList.add('is-open');
+    chatButton.setAttribute('aria-expanded', 'true');
+    setActive('messages');
+    sendChatVisibility();
+    if (!chatLoaded) connectChat();
+  };
+  const closeChat = () => {
+    if (!chatOpen) return;
+    chatOpen = false;
+    sendChatVisibility();
+    chatPanel.classList.remove('is-open');
+    chatPanel.setAttribute('aria-hidden', 'true');
+    chatPanel.inert = true;
+    chatButton.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('mobile-chat-open');
+    if (background) background.inert = backgroundWasInert;
+    setActive(previousTab);
+    refreshMessages();
+  };
+  window.addEventListener('message', (event) => {
+    if (event.origin !== chatOrigin || event.source !== chatFrame.contentWindow) return;
+    if (event.data?.type === 'school-chat-ready') {
+      clearTimeout(chatTimeout);
+      chatLoaded = true;
+      chatStatus.hidden = true;
+      sendChatVisibility();
+    } else if (event.data?.type === 'school-chat-read') refreshMessages();
+    else if (event.data?.type === 'school-chat-error') {
+      clearTimeout(chatTimeout);
+      chatError('เชื่อมต่อห้องข้อความไม่สำเร็จ ลองอีกครั้ง');
+    }
+  });
+  window.visualViewport?.addEventListener('resize', positionChat);
+  window.visualViewport?.addEventListener('scroll', positionChat);
+  window.addEventListener('resize', positionChat);
+  phone.addEventListener('change', () => { if (!phone.matches) closeChat(); });
   bar.addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]'); if (!b) return;
     const tab = b.dataset.tab;
+    if (tab !== 'messages') closeChat();
     b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
     try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
-    else if (tab === 'messages') { window.setMobileMenu?.(false); location.href = '/notify-chat.html'; }
+    else if (tab === 'messages') openChat();
     else if (tab === 'notify') { e.stopPropagation(); placeNotifications(); window.setMobileMenu?.(false); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
     else if (tab === 'account') { openAccount(); setActive('account'); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));
   });
   // ไปหน้าอื่นจากเมนูด้านข้าง → ปุ่มภาพรวมไม่ active
   document.addEventListener('click', (e) => {
-    if (e.target.closest('#overviewNav,#homeLink')) setActive('home');
-    else if (e.target.closest('.sidebar nav a[data-page],.sidebar nav .nav-child,.global-search-results')) setActive('');
+    if (e.target.closest('#overviewNav,#homeLink')) { closeChat(); setActive('home'); }
+    else if (e.target.closest('.sidebar nav a[data-page],.sidebar nav .nav-child,.global-search-results')) { closeChat(); setActive(''); }
   });
   // จุดแดงงานค้างที่ปุ่มเมนู/ภาพรวม (คำนวณใน dashboard.html)
   const dotOn = (btn, on) => { let d = btn.querySelector('.mt-dot'); if (on && !d) { d = document.createElement('i'); d.className = 'mt-dot'; btn.appendChild(d); } else if (!on && d) d.remove(); };

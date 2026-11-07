@@ -179,7 +179,7 @@ export const CONTENT_SECURITY_POLICY = [
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
   "connect-src 'self' https://challenges.cloudflare.com",
-  "frame-src 'self' blob: data: https://challenges.cloudflare.com",
+  "frame-src 'self' blob: data: https://challenges.cloudflare.com https://notify.banpadengschool.ac.th",
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",

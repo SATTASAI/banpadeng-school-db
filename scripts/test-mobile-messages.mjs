@@ -1,35 +1,49 @@
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
-// Install jsdom for local tests, or provide its module URL through JSDOM_MODULE.
+import {CONTENT_SECURITY_POLICY,SECURITY_HEADERS} from '../src/lib/auth-sessions.js';
 const {JSDOM}=await import(process.env.JSDOM_MODULE || 'jsdom');
-const dom=new JSDOM('<!doctype html><body><div id="schoolNotifications"><button class="sn-toggle"></button><b class="sn-count">4</b></div></body>',{url:'https://system.test/dashboard.html'});
+const dom=new JSDOM('<!doctype html><body><main class="layout"><input id="globalSearchInput"></main><div id="schoolNotifications"><button class="sn-toggle"></button><b class="sn-count">4</b></div></body>',{url:'https://system.test/dashboard.html'});
 const w=dom.window,doc=w.document;
 Object.defineProperty(doc,'hidden',{configurable:true,writable:true,value:false});
+Object.defineProperty(w,'innerHeight',{configurable:true,value:844});
 const phone={matches:true,addEventListener(){}};w.matchMedia=()=>phone;
-const intervals=[],location={href:'https://system.test/dashboard.html'},requests=[];
-let unread=false,error=null,pause=null;
+const viewportListeners={};w.visualViewport={height:844,offsetTop:0,addEventListener(type,fn){viewportListeners[type]=fn;}};
+const intervals=[],timeouts=[],location={href:'https://system.test/dashboard.html'},requests=[],pages=[];
+w.showPage=(...args)=>pages.push(args);w.showOverview=()=>{};
+let unread=false,error=null,pause=null,linkMode='ok';
 const source=await readFile(new URL('../public/js/mobile-shell.js',import.meta.url),'utf8');
-vm.runInNewContext(source,{window:w,document:doc,location,history:{replaceState(){}},navigator:{vibrate(){}},MutationObserver:w.MutationObserver,
-  setInterval(fn,ms){intervals.push({fn,ms});return intervals.length;},clearInterval(){},setTimeout(){},
-  async apiRequest(path){requests.push(path);if(pause)await pause;if(error)throw error;return {unread};},
+vm.runInNewContext(source,{window:w,document:doc,location,URL,AbortSignal,history:{replaceState(){}},navigator:{vibrate(){}},MutationObserver:w.MutationObserver,
+  setInterval(fn,ms){intervals.push({fn,ms});return intervals.length;},clearInterval(){},setTimeout(fn,ms){timeouts.push({fn,ms});return timeouts.length;},clearTimeout(){},
+  async apiRequest(path){requests.push(path);if(path==='/api/push/link')return {allowed:true,url:linkMode==='ok'?'https://notify.banpadengschool.ac.th/?t=signed-test-link':'https://evil.test/?t=bad'};if(pause)await pause;if(error)throw error;return {unread};},
 });
-const flush=()=>new Promise(resolve=>setImmediate(resolve));
-await flush();
+const flush=()=>new Promise(resolve=>setImmediate(resolve));await flush();
 const bar=doc.querySelector('.mobile-tabbar'),button=bar.querySelector('[data-tab=messages]');
+bar.getBoundingClientRect=()=>({height:84});
+const panel=doc.getElementById('mobileChatPanel'),frame=panel.querySelector('iframe'),status=panel.querySelector('.mobile-chat-status');
+const send=(type,origin='https://notify.banpadengschool.ac.th',source=frame.contentWindow)=>w.dispatchEvent(new w.MessageEvent('message',{origin,source,data:{type}}));
 assert.deepEqual([...bar.querySelectorAll('[data-tab]')].map(b=>b.dataset.tab),['home','search','messages','notify','account','menu']);
-assert.equal(button.textContent.trim(),'ข้อความ');assert.equal(button.querySelector('.mt-dot'),null);
-assert.deepEqual(requests,['/api/push/chat-unread']);
-unread=true;w.dispatchEvent(new w.Event('focus'));await flush();assert(button.querySelector('.mt-dot'));assert.match(button.getAttribute('aria-label'),/ยังไม่อ่าน/);
-button.click();assert.equal(location.href,'/notify-chat.html');assert(button.querySelector('.mt-dot'),'clicking does not mark the conversation read');
-w.dispatchEvent(new w.Event('school-notifications'));assert.equal(bar.querySelector('.mt-badge').textContent,'4');assert(button.querySelector('.mt-dot'),'bell and chat states are independent');
-error={status:502};w.dispatchEvent(new w.Event('focus'));await flush();assert(button.querySelector('.mt-dot'),'connection errors preserve the last known badge');
-error=null;unread=false;w.dispatchEvent(new w.Event('pageshow'));await flush();assert.equal(button.querySelector('.mt-dot'),null,'returning after chat read clears the badge');assert.equal(bar.querySelector('.mt-badge').textContent,'4');
+assert.equal(button.querySelector('.mt-dot'),null);assert(panel.inert);assert.deepEqual(requests,['/api/push/chat-unread']);
+unread=true;w.dispatchEvent(new w.Event('focus'));await flush();assert(button.querySelector('.mt-dot'));
+button.click();await flush();
+assert.equal(location.href,'https://system.test/dashboard.html','opening chat must not navigate the school app');
+assert(panel.classList.contains('is-open'));assert(doc.body.classList.contains('mobile-chat-open'));assert(bar.isConnected);assert.equal(button.getAttribute('aria-expanded'),'true');assert(doc.querySelector('.layout').inert);
+assert.equal(new URL(frame.src).origin,'https://notify.banpadengschool.ac.th');assert.equal(new URL(frame.src).searchParams.get('embedded'),'1');assert.equal(new URL(frame.src).searchParams.get('t'),'signed-test-link');assert(button.querySelector('.mt-dot'),'opening alone cannot clear unread');
+send('school-chat-ready','https://evil.test');assert.equal(status.hidden,false);send('school-chat-ready','https://notify.banpadengschool.ac.th',w);assert.equal(status.hidden,false);send('school-chat-ready');assert.equal(status.hidden,true);
+const originalFrame=frame,originalSrc=frame.src,originalLinks=requests.filter(p=>p==='/api/push/link').length;
+w.visualViewport.height=450;viewportListeners.resize();assert.equal(panel.style.height,'366px');assert.equal(doc.documentElement.style.getPropertyValue('--chat-keyboard-inset'),'394px');
+bar.querySelector('[data-tab=home]').click();await flush();assert(!panel.classList.contains('is-open'));assert(panel.inert);assert(!doc.querySelector('.layout').inert);assert(bar.isConnected);
+button.click();await flush();assert.equal(panel.querySelector('iframe'),originalFrame);assert.equal(frame.src,originalSrc);assert.equal(requests.filter(p=>p==='/api/push/link').length,originalLinks,'reopening cannot reload the chat frame');
+bar.querySelector('[data-tab=account]').click();await flush();assert(!panel.classList.contains('is-open'));assert.equal(pages.at(-1)[0],'account');assert.equal(location.href,'https://system.test/dashboard.html');
+w.dispatchEvent(new w.Event('school-notifications'));assert.equal(bar.querySelector('.mt-badge').textContent,'4');assert(button.querySelector('.mt-dot'));
+error={status:502};w.dispatchEvent(new w.Event('focus'));await flush();assert(button.querySelector('.mt-dot'));
+error=null;unread=false;send('school-chat-read','https://evil.test');await flush();assert(button.querySelector('.mt-dot'));
+send('school-chat-read');await flush();assert.equal(button.querySelector('.mt-dot'),null);assert.equal(bar.querySelector('.mt-badge').textContent,'4');
 const poll=intervals.find(x=>x.ms===30000).fn;
-let before=requests.length;doc.hidden=true;await poll();assert.equal(requests.length,before);
-doc.hidden=false;phone.matches=false;await poll();assert.equal(requests.length,before);
-phone.matches=true;let release;pause=new Promise(resolve=>release=resolve);w.dispatchEvent(new w.Event('focus'));w.dispatchEvent(new w.Event('pageshow'));assert.equal(requests.length,before+1,'overlapping refresh events must share the in-flight request');release();await flush();pause=null;
-unread=true;await poll();assert(button.querySelector('.mt-dot'));
-error={status:401};await poll();assert.equal(button.querySelector('.mt-dot'),null,'a signed-out session cannot retain the previous account badge');
-dom.window.close();
-console.log('✓ Mobile messages: exact tab position, chat navigation, independent red dot, read return, failures, visibility and overlapping refreshes');
+let before=requests.length;doc.hidden=true;await poll();assert.equal(requests.length,before);doc.hidden=false;phone.matches=false;await poll();assert.equal(requests.length,before);
+phone.matches=true;let release;pause=new Promise(resolve=>release=resolve);w.dispatchEvent(new w.Event('focus'));w.dispatchEvent(new w.Event('pageshow'));assert.equal(requests.length,before+1);release();await flush();pause=null;
+unread=true;await poll();assert(button.querySelector('.mt-dot'));error={status:401};await poll();assert.equal(button.querySelector('.mt-dot'),null);error=null;
+button.click();send('school-chat-error');assert.equal(status.hidden,false);assert.equal(status.querySelector('button').hidden,false);
+linkMode='bad';status.querySelector('button').click();await flush();assert.match(status.textContent,/ไม่ถูกต้อง/);assert.equal(location.href,'https://system.test/dashboard.html');assert.equal(frame.src,originalSrc);
+assert(CONTENT_SECURITY_POLICY.includes("frame-src 'self' blob: data: https://challenges.cloudflare.com https://notify.banpadengschool.ac.th"));assert.equal(SECURITY_HEADERS['X-Frame-Options'],'SAMEORIGIN');
+dom.window.close();console.log('✓ Mobile chat sheet: persistent bar/frame, no external navigation, viewport/keyboard geometry, safe messages, unread state and retry');

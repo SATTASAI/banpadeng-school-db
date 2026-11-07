@@ -117,3 +117,17 @@
  .mobile-tabbar{gap:0;padding-left:4px;padding-right:4px}
  .mobile-tabbar button{font-size:11px}
 }
+/* The chat rises inside the school app; the navigation bar stays outside the frame. */
+.mobile-chat-panel{display:none}
+@media(max-width:720px){
+ .mobile-chat-open{overflow:hidden}
+ .mobile-chat-panel{display:flex;flex-direction:column;position:fixed;left:0;right:0;top:0;height:calc(100dvh - 84px - env(safe-area-inset-bottom));padding-top:env(safe-area-inset-top);z-index:299;overflow:hidden;border-radius:20px 20px 0 0;background:#fff;box-shadow:0 -12px 45px #1831531c;transform:translateY(105%);visibility:hidden;pointer-events:none;transition:transform .26s cubic-bezier(.2,.75,.25,1),visibility .26s;isolation:isolate}
+ .mobile-chat-panel.is-open{transform:translateY(0);visibility:visible;pointer-events:auto}
+ .mobile-chat-panel iframe{width:100%;flex:1;min-height:0;border:0;display:block;background:#f3f6fa}
+ .mobile-chat-status{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#f3f6fa;color:#5d7387;text-align:center;padding:24px;font-size:14px}
+ .mobile-chat-status[hidden]{display:none}
+ .mobile-chat-status button{font:inherit;border:0;border-radius:12px;background:#1e5fc0;color:white;padding:10px 20px;cursor:pointer}
+ .mobile-chat-status button[hidden]{display:none}
+ .mobile-chat-open .mobile-tabbar{bottom:var(--chat-keyboard-inset,0px);z-index:300}
+}
+@media(prefers-reduced-motion:reduce){.mobile-chat-panel{transition:none}}
