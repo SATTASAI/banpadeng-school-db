@@ -10,7 +10,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -64,6 +64,18 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
   const license=licenseReminderQuery(user.id,tables.has('personnel_accounts'));
   tertiaryTerms.push(license.sql);tertiaryValues.push(...license.values);
  }
+ // Preliminary notices share the registry permission boundary. Keep a separate
+ // CTE so D1 compound-select limits do not grow with the other optional feeds.
+ const transfers=!forLine&&tables.has('student_transfer_notices')&&tables.has('student_transfer_access');
+ const transferCte=transfers?`, transfer_messages AS (
+ SELECT 'transfer-notice:'||n.id,'แจ้งย้าย'||CASE n.direction WHEN 'in' THEN 'เข้า' ELSE 'ออก' END||'ใหม่',
+ 'ผู้ปกครองแจ้งย้ายเบื้องต้น · '||n.student_name||' · กรุณาตรวจสอบข้อมูล',
+ n.created_at,'/dmcreport/?view=notices',NULL,NULL,0
+ FROM student_transfer_notices n JOIN users me ON me.id=?
+ WHERE n.acknowledged_at IS NULL AND me.status='active' AND me.deleted_at IS NULL
+ AND me.role IS NOT NULL AND me.role NOT IN ('','viewer')
+ AND (me.role='superadmin' OR EXISTS(SELECT 1 FROM student_transfer_access a WHERE a.user_id=me.id))
+ )`:'';
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}
@@ -112,13 +124,13 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
- )${tertiary}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}
- ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}${forLine||forDelivery?" OR m.message_key LIKE 'license:%'":''}`;
+ )${tertiary}${transferCte}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}${transfers?' UNION ALL SELECT * FROM transfer_messages':''}
+ ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}${forLine||forDelivery?" OR m.message_key LIKE 'license:%'":''}${forDelivery?" OR m.message_key LIKE 'transfer-notice:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,
  user.role==='superadmin'?1:0,personnelHead?1:0,user.id,executive,user.id,
- user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,user.id]};
+ user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,...(transfers?[user.id]:[]),user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50,{forLine=false,forDelivery=false}={}){

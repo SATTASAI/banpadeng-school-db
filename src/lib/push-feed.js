@@ -27,7 +27,9 @@ const age = (value) => {
 const trim = (text, max) => { const v = String(text || "").replace(/\s+/g, " ").trim(); return v.length > max ? v.slice(0, max - 1) + "…" : v; };
 const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
 
-const actionLabel = (key) => { const k = String(key || ""); return isLicenseReminder(k) ? "อัปเดตข้อมูลใบประกอบวิชาชีพ" : k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
+const isTransferNotice = (key) => String(key || "").startsWith("transfer-notice:");
+const sendOnFirstRun = (key) => isLicenseReminder(key) || isTransferNotice(key);
+const actionLabel = (key) => { const k = String(key || ""); return isTransferNotice(k) ? "ตรวจสอบแจ้งย้าย" : isLicenseReminder(k) ? "อัปเดตข้อมูลใบประกอบวิชาชีพ" : k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
 
 // หมวดแจ้งเตือน (ตาม message_key ในกระดิ่ง) — ผู้ใช้เลือกปิดบางหมวดได้ที่บัญชีของฉัน
 export const PUSH_CATEGORIES = [
@@ -39,6 +41,7 @@ export const PUSH_CATEGORIES = [
   { key: "substitute", label: "สอนแทน", prefixes: ["substitute:", "substitute-cancel:"] },
   { key: "task", label: "งานมอบหมาย", prefixes: ["task:"] },
   { key: "correspondence", label: "หนังสือราชการ", prefixes: ["correspondence:"] },
+  { key: "transfer", label: "แจ้งย้ายนักเรียน", prefixes: ["transfer-notice:"] },
   { key: "other", label: "อื่น ๆ (ความปลอดภัยบัญชี ฯลฯ)", prefixes: [] },
 ];
 const categoryOf = (key) => (PUSH_CATEGORIES.find((c) => c.prefixes.some((p) => String(key || "").startsWith(p))) || PUSH_CATEGORIES.at(-1)).key;
@@ -209,12 +212,12 @@ async function deliver(env, user, origin, stats) {
   let rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50, {forDelivery:true});
   rows = rows.filter((r) => Number(r.actor_id || 0) !== Number(user.id));
 
-  // ครั้งแรกที่เปิดรับ: รายการค้างเดิมไม่ต้องส่ง (ไม่ให้แจ้งเตือนท่วม)
+  // First delivery baselines old work, except daily license reminders and pending transfer notices.
   const fresh = await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
   if (fresh.meta.changes) {
-    const old = rows.filter(r => !isLicenseReminder(r.message_key));
+    const old = rows.filter(r => !sendOnFirstRun(r.message_key));
     if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
-    rows = rows.filter(r => isLicenseReminder(r.message_key));
+    rows = rows.filter(r => sendOnFirstRun(r.message_key));
   }
   if (!rows.length) return;
 

@@ -1,9 +1,10 @@
 import { getCurrentUser, jsonResponse } from '../lib/auth.js';
-import { mayUseTransfers } from '../lib/transfer-access.js';
+import { ensureTransferAccess, mayUseTransfers } from '../lib/transfer-access.js';
 const ready = new WeakSet();
 const reply = (data, status=200) => jsonResponse(data,status,{'Cache-Control':'no-store'});
 export async function ensureTransferNotices(env) {
   if (ready.has(env.DB)) return;
+  await ensureTransferAccess(env);
   await env.DB.batch([
     env.DB.prepare(`CREATE TABLE IF NOT EXISTS student_transfer_notices (
       id INTEGER PRIMARY KEY AUTOINCREMENT, receipt TEXT NOT NULL UNIQUE, client_ref TEXT NOT NULL UNIQUE,
