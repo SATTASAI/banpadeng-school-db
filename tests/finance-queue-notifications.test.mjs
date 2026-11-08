@@ -34,7 +34,7 @@ test('submit creates finance notifications without relying on SQL changes() conn
  const draft=await call(env,2,'requests','POST',payload());assert.equal(draft.status,201);
  const sent=await action(env,2,draft.body.id,'submit');assert.equal(sent.status,200);
  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,3); // ผู้ดูแล + การเงิน + ผู้บริหาร (ผอ.)
- const overview=await call(env,3,'overview');assert.equal(overview.body.projects.find(p=>p.id===10).new_request_count,1);assert.equal(overview.body.notifications.length,1);
+ const overview=await call(env,3,'overview');assert.deepEqual(overview.body.projects,[]);assert.equal(overview.body.requests.length,1);assert.equal(overview.body.notifications.length,1);
  assert.equal((await action(env,2,draft.body.id,'submit')).status,409);
  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_notifications WHERE audience='finance'").get().n,3); // ผู้ดูแล + การเงิน + ผู้บริหาร (ผอ.)
  assert.equal((await action(env,3,draft.body.id,'receive')).status,200);assert.equal((await action(env,3,draft.body.id,'complete')).status,200);assert.equal((await action(env,6,draft.body.id,'approve')).status,200);
@@ -48,7 +48,7 @@ test('queued submissions with missing events are repaired once; read notificatio
  const before=env.raw.prepare('SELECT amount,status,current_step FROM project_expenses WHERE id=?').get(draft.body.id);
  const first=await global(env,3,'/api/notifications');assert.equal(first.status,200);assert.equal(first.body.unread_count,1);assert.equal(first.body.notifications[0].url,'/budget.html?view=otherProjects&project=10');
  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_workflow_events WHERE event_type='submit_recovered'").get().n,1);
- const p=await call(env,3,'overview');assert.equal(p.body.projects.find(p=>p.id===10).unread_count,1);assert.equal(p.body.projects.find(p=>p.id===10).new_request_count,1);
+ const p=await call(env,3,'overview');assert.deepEqual(p.body.projects,[]);assert.equal(p.body.notifications.length,1);assert.equal(p.body.requests.length,1);
  assert.deepEqual(env.raw.prepare('SELECT amount,status,current_step FROM project_expenses WHERE id=?').get(draft.body.id),before);
  await global(env,3,'/api/notifications/read','POST',{all:true});
  for(let i=0;i<3;i++)assert.equal((await global(env,3,'/api/notifications')).body.unread_count,0);
@@ -60,7 +60,7 @@ test('finance assigned after submission sees pending requests from every fiscal 
  assert.equal((await global(env,4,'/api/notifications')).body.unread_count,0);
  env.raw.exec("UPDATE budget_role_assignments SET user_id=4 WHERE role_key='finance_review'");
  const feed=await global(env,4,'/api/notifications');assert.equal(feed.body.unread_count,1);
- const overview=await call(env,4,'overview');assert.equal(overview.body.permissions.can_finance,true);assert.equal(overview.body.projects.find(p=>p.id===10).new_request_count,1);
+ const overview=await call(env,4,'overview');assert.equal(overview.body.permissions.can_finance,true);assert.deepEqual(overview.body.projects,[]);assert.equal(overview.body.requests.length,1);
  assert.equal(overview.body.requests.find(r=>r.id===draft.body.id).fiscal_year,2569);
  assert.equal((await call(env,4,'overview?fiscal_year=2570')).body.requests.length,0);
 });

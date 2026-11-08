@@ -1,3 +1,4 @@
+import { visibleFinancialRows } from '../lib/project-access.js';
 import { money as moneyValue, sumMoney, multiplyMoney, financialTotals, projectFinancialRows, workingFiscalYear } from '../lib/project-finance.js';
 import { ensureProjectBalanceSchema } from "./project-balance.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
@@ -251,6 +252,7 @@ async function overview(request, env) {
     requests.results = requests.results.filter((r) => Number(r.created_by) === Number(user.id) || owned.has(Number(r.project_id)) || signer.has(Number(r.id)));
     incomes.results = []; audits.results = [];
   }
+  projects.results = projects.results.filter(p=>isAdmin(user)||Boolean(p.can_request));
   const approvalsByRequest = new Map(), itemsByRequest = new Map();
   for (const row of approvalRows.results) { if (!approvalsByRequest.has(row.expense_id)) approvalsByRequest.set(row.expense_id, []); approvalsByRequest.get(row.expense_id).push(row); }
   for (const row of itemRows.results) { if (!itemsByRequest.has(row.expense_id)) itemsByRequest.set(row.expense_id, []); itemsByRequest.get(row.expense_id).push(row); }
@@ -260,7 +262,7 @@ async function overview(request, env) {
     || (step.step_key === "finance_review" && financeMember && Number(row.created_by) !== Number(user.id))));
   const totals = Object.fromEntries(STATUSES.map((status) => [status, { item_count: 0, total_amount: 0 }]));
   for (const row of statusRows.results) totals[row.status] = { item_count: Number(row.item_count), total_amount: Number(row.total_amount) };
-  const financials=await projectFinancialRows(env,year),financialMap=new Map(financials.map(p=>[p.id,p])),canonical=financialTotals(financials);
+  const financials=await visibleFinancialRows(env,user,await projectFinancialRows(env,year)),financialMap=new Map(financials.map(p=>[p.id,p])),canonical=financialTotals(financials);
   for(const p of projects.results)Object.assign(p,financialMap.get(p.id));
   const number = (value) => moneyValue(value || 0), total = canonical.total_amount, pending = canonical.pending_amount, approved = canonical.approved_amount, paid = canonical.spent_amount;
   const requestData = requests.results.map((row) => {

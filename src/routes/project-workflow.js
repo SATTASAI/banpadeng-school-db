@@ -1,3 +1,4 @@
+import { projectVisibility, visibleFinancialRows, rowsByIds } from '../lib/project-access.js';
 import { money, sumMoney, multiplyMoney, financialTotals, projectFinancialRows, workingFiscalYear } from '../lib/project-finance.js';
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { executives, isDirector } from "../lib/leave-data.js";
@@ -138,10 +139,10 @@ function eventStatements(env, token, expenseId, eventType, message, user, audien
     SELECT ?,e.id,e.project_id,?,?,? FROM project_expenses e WHERE e.id=? AND (${condition})`)
     .bind(token, eventType, message, user.id, expenseId,...conditionValues)];
   const recipients = audience === "finance"
-    ? `SELECT u.id FROM users u WHERE u.status='active' AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key IN ${FINANCE_ROLE_SQL} AND a.department=''))`
+    ? `SELECT u.id FROM users u WHERE u.status='active' AND u.deleted_at IS NULL AND (u.role IN ('superadmin','executive') OR EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=u.id AND a.role_key IN ${FINANCE_ROLE_SQL} AND a.department=''))`
     : Array.isArray(audience)
-      ? `SELECT u.id FROM users u WHERE u.status='active' AND u.id IN (${audience.map((id) => Number(id) || 0).join(",") || "0"})`
-      : `SELECT u.id FROM users u WHERE u.status='active' AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
+      ? `SELECT u.id FROM users u WHERE u.status='active' AND u.deleted_at IS NULL AND u.id IN (${audience.map((id) => Number(id) || 0).join(",") || "0"})`
+      : `SELECT u.id FROM users u WHERE u.status='active' AND u.deleted_at IS NULL AND (u.id=e.actor_id OR u.id=(SELECT created_by FROM project_expenses WHERE id=e.expense_id) OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id))`;
   statements.push(env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
     SELECT e.token,u.id,? FROM project_workflow_events e JOIN users u ON u.id IN (${recipients}) WHERE e.token=?`).bind(Array.isArray(audience) ? "director" : audience, token));
   statements.push(env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details)
@@ -157,11 +158,17 @@ export async function notifyBudgetSupportingDocument(env, user, documentId) {
     'EXISTS(SELECT 1 FROM budget_supporting_documents WHERE id=? AND notification_sent=0)',[documentId]);
   await env.DB.batch([events[0],
     env.DB.prepare("UPDATE budget_supporting_documents SET notification_sent=1 WHERE id=? AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)").bind(documentId,token),
-    ...events.slice(1)]);
+    ...events.slice(1),
+    env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+      SELECT ?,s.assigned_user_id,'assignee' FROM project_expense_signoffs s JOIN users u ON u.id=s.assigned_user_id
+      WHERE s.expense_id=? AND s.status='pending' AND u.status='active' AND u.deleted_at IS NULL
+      AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)`).bind(token,row.expense_id,token),
+  ]);
 }
 
 export async function projectWorkflowSnapshots(env, user, department = null, fiscalYear = null, financialRows = null) {
-  const filters = [], values = [user.id, user.id, user.id];
+  const visibility = projectVisibility(user);
+  const filters = [visibility.sql], values = [user.id, user.id, user.id, ...visibility.values];
   if (department) { filters.push("COALESCE(p.management_area,p.department)=?"); values.push(department); }
   if (fiscalYear) { filters.push("p.fiscal_year=?"); values.push(fiscalYear); }
   const { results } = await env.DB.prepare(`SELECT p.*,COALESCE(p.management_area,p.department) AS department,
@@ -189,40 +196,51 @@ async function overview(request, env, user) {
   const finance = await canManageProjectFinance(env, user);
   const director = (await budgetDirectorIds(env)).includes(Number(user.id));
   await ensureFinanceQueueNotifications(env,user);
-  const financialRows=await projectFinancialRows(env,year);
+  const financialRows=await visibleFinancialRows(env,user,await projectFinancialRows(env,year));
   const fundingSummary = await projectFundingSummary(env,year,financialRows);
   const projects = await projectWorkflowSnapshots(env, user, department, year,financialRows);
-  const ids = projects.map(p => p.id);
-  if (!ids.length) return jsonResponse({ projects: [], requests: [], notifications: [], working_fiscal_year: await workingFiscalYear(env), funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) } });
-  const placeholders = ids.map(() => "?").join(",");
+  const taskFilters = [], taskValues = [];
+  if (department) { taskFilters.push('COALESCE(p.management_area,p.department)=?'); taskValues.push(department); }
+  if (year) { taskFilters.push('p.fiscal_year=?'); taskValues.push(year); }
+  if (!isAdmin(user)) {
+    taskFilters.push(`(EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?)
+      OR EXISTS(SELECT 1 FROM project_expense_signoffs s WHERE s.expense_id=e.id AND s.assigned_user_id=? AND s.status<>'skipped')
+      OR (?=1 AND e.status<>'draft') OR (?=1 AND e.current_step='director_approval'))`);
+    taskValues.push(user.id,user.id,finance?1:0,director?1:0);
+  }
   const { results: requests } = await env.DB.prepare(`SELECT e.*,p.name AS project_name,COALESCE(p.management_area,p.department) AS department,u.full_name AS requester_name
     FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
-    WHERE e.workflow_version=2 AND e.project_id IN (${placeholders}) ${finance || director ? "" : "AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?) OR EXISTS(SELECT 1 FROM project_expense_signoffs s WHERE s.expense_id=e.id AND s.assigned_user_id=? AND s.status<>'skipped'))"}
+    WHERE e.workflow_version=2 ${taskFilters.length?'AND '+taskFilters.join(' AND '):''}
     ORDER BY CASE WHEN e.current_step IN ('dept_head_review','dept_deputy_review','budget_head_review','budget_deputy_review') THEN -1 WHEN e.current_step='finance_queue' THEN 0 WHEN e.current_step='finance_processing' THEN 1 WHEN e.current_step='finance_ready' THEN 2 ELSE 3 END,
-      CASE e.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,COALESCE(e.needed_date,'9999-12-31'),e.submitted_at,e.id`).bind(...ids, ...(finance || director ? [] : [user.id, user.id, user.id])).all();
-  const { results: items } = await env.DB.prepare(`SELECT i.* FROM budget_request_items i JOIN project_expenses e ON e.id=i.expense_id WHERE e.project_id IN (${placeholders}) ORDER BY i.line_no`).bind(...ids).all();
-  const { results: docs } = await env.DB.prepare(`SELECT d.*,a.id AS attachment_id,a.file_name,a.file_size FROM budget_supporting_documents d
-    JOIN project_expenses e ON e.id=d.expense_id LEFT JOIN file_attachments a ON a.entity_type='document' AND a.entity_id=d.native_document_id
-    WHERE e.project_id IN (${placeholders}) ORDER BY d.id`).bind(...ids).all();
+      CASE e.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,COALESCE(e.needed_date,'9999-12-31'),e.submitted_at,e.id`).bind(...taskValues).all();
+  const expenseIds = requests.map(e=>e.id);
+  const items = await rowsByIds(env,expenseIds,placeholders=>`SELECT * FROM budget_request_items WHERE expense_id IN (${placeholders}) ORDER BY line_no`);
+  const docs = await rowsByIds(env,expenseIds,placeholders=>`SELECT d.*,a.id AS attachment_id,a.file_name,a.file_size FROM budget_supporting_documents d
+    LEFT JOIN file_attachments a ON a.entity_type='document' AND a.entity_id=d.native_document_id
+    WHERE d.expense_id IN (${placeholders}) ORDER BY d.id`);
   for (const doc of docs) {
     if (doc.attachment_id && !doc.notification_sent) await notifyBudgetSupportingDocument(env,{ id: doc.created_by },doc.id);
   }
   const requestIds = requests.map(e => e.id);
   const signoffs = new Map();
   if (requestIds.length) {
-    const { results: rows } = await env.DB.prepare(`SELECT s.expense_id,s.step_key,s.step_order,s.status,s.decision,s.note,s.acted_at,s.assigned_user_id,a.full_name assigned_name,b.full_name acted_name
+    const rows = await rowsByIds(env,requestIds,placeholders=>`SELECT s.expense_id,s.step_key,s.step_order,s.status,s.decision,s.note,s.acted_at,s.assigned_user_id,a.full_name assigned_name,b.full_name acted_name
       FROM project_expense_signoffs s LEFT JOIN users a ON a.id=s.assigned_user_id LEFT JOIN users b ON b.id=s.acted_by
-      WHERE s.expense_id IN (${requestIds.map(() => "?").join(",")}) ORDER BY s.step_order`).bind(...requestIds).all();
+      WHERE s.expense_id IN (${placeholders}) ORDER BY s.step_order`);
+
     for (const r of rows) { if (!signoffs.has(r.expense_id)) signoffs.set(r.expense_id, []); signoffs.get(r.expense_id).push({ ...r, label: SIGNOFF_STEPS.find((s) => s.key === r.step_key)?.label || r.step_key }); }
   }
   const procurement = new Map();
   if (requestIds.length) {
-    const { results: cases } = await env.DB.prepare(`SELECT expense_id,id,case_no,status,total_amount FROM procurement_cases WHERE status<>'cancelled' AND expense_id IN (${requestIds.map(() => "?").join(",")})`).bind(...requestIds).all().catch(() => ({ results: [] }));
+    const cases = await rowsByIds(env,requestIds,placeholders=>`SELECT expense_id,id,case_no,status,total_amount FROM procurement_cases WHERE status<>'cancelled' AND expense_id IN (${placeholders})`);
+
     for (const c of cases) procurement.set(c.expense_id, c);
   }
-  const { results: notifications } = await env.DB.prepare(`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
+  const notifications = (await rowsByIds(env,expenseIds,placeholders=>`SELECT n.id,n.read_at,v.*,p.name AS project_name FROM project_notifications n
     JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id
-    WHERE n.user_id=? AND v.project_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`).bind(user.id,...ids).all();
+    WHERE n.user_id=? AND v.expense_id IN (${placeholders}) ORDER BY v.created_at DESC,n.id DESC LIMIT 100`,[user.id]))
+    .sort((a,b)=>b.created_at.localeCompare(a.created_at)||b.id-a.id).slice(0,100);
+
   return jsonResponse({ projects, notifications, working_fiscal_year: await workingFiscalYear(env), funding_summary: fundingSummary, permissions: { can_finance: finance, can_director: director, can_balance_edit: isAdmin(user) }, requests: requests.map(e => ({ ...e,
     can_director_approve: director && e.status === "pending" && e.current_step === "director_approval" && Number(e.created_by) !== Number(user.id),
     procurement: procurement.get(e.id) || null,
@@ -360,7 +378,10 @@ async function action(request, env, user, id) {
     if (!await canManageProjectFinance(env,user)) return jsonResponse({ error: "เฉพาะเจ้าหน้าที่การเงินที่ได้รับมอบหมายหรือผู้บริหาร" },403);
     if (kind === "receive") {
       sql = "UPDATE project_expenses SET current_step='finance_processing',finance_received_by=?,finance_received_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='finance_queue'";
-      args = [user.id,id]; message = "เจ้าหน้าที่การเงินรับเรื่องแล้ว";
+      args = [user.id,id]; message = "เจ้าหน้าที่การเงินรับเรื่องแล้ว ส่งต่อเจ้าหน้าที่พัสดุดำเนินการจัดซื้อจัดจ้าง";
+      const {results:nextOfficers} = await env.DB.prepare("SELECT a.user_id FROM budget_role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_key IN ('procurement_officer','procurement_officer_2') AND a.department='' AND u.status='active' AND u.deleted_at IS NULL").all();
+      const {results:owners} = await env.DB.prepare('SELECT user_id FROM project_owners WHERE project_id=?').bind(row.project_id).all();
+      audience = [...nextOfficers.map(o=>o.user_id),...owners.map(o=>o.user_id),row.created_by];
     } else if (kind === "complete") {
       // ตรวจเอกสารเสร็จ → เสนอผู้อำนวยการอนุมัติ (ยังไม่อนุมัติจนกว่า ผอ. ลงนาม)
       const procurement = await procurementBlocksDisbursement(env, id);
@@ -420,7 +441,7 @@ export async function handleProjectWorkflowRoute(request, env, pathname, method)
       const allowed = Number(row.created_by) === Number(user.id) || await ownsProject(env,user,row.project_id) || await canManageProjectFinance(env,user)
         || (await budgetDirectorIds(env)).includes(Number(user.id))
         || Boolean(await env.DB.prepare("SELECT 1 FROM project_expense_signoffs WHERE expense_id=? AND assigned_user_id=?").bind(id,user.id).first())
-        || Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE user_id=? AND role_key IN ('procurement_officer','procurement_head')").bind(user.id).first());
+        || Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE user_id=? AND role_key IN ('procurement_officer','procurement_officer_2','procurement_head')").bind(user.id).first());
       if (!allowed) return jsonResponse({ error: "ไม่มีสิทธิ์ดูเอกสารนี้" },403);
       const doc = await memoDocument(env, id);
       return new Response(doc.html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });

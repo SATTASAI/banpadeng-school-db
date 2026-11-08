@@ -35,11 +35,11 @@ test('เอกสารโครงการ: หมวด 4 หมวด อ�
  assert.deepEqual(list.items.map(i=>i.name),['ไฟล์โครงการ','ภาคผนวก','รายการวัสดุอุปกรณ์','ภาพ']);
  assert.equal(list.can_manage,true); // ครู ข เป็นผู้ดูแลโครงการ 10
  // ย้อนหลัง 4 ปี: ชื่อเดียวกัน ฝ่ายเดียวกัน 2566–2569 (2565 เกิน, ฝ่ายอื่นไม่นับ)
- assert.deepEqual(list.years.map(y=>[y.fiscal_year,y.project_id]),[[2569,10],[2567,20]]);
+ assert.deepEqual(list.years.map(y=>[y.fiscal_year,y.project_id]),[[2569,10]]);
  const cat=list.items.find(i=>i.category==='project').id, img=list.items.find(i=>i.category==='images').id;
- // คนนอกโครงการดูได้แต่อัปโหลดไม่ได้
+ // คนนอกโครงการไม่มีสิทธิ์อ่านหรืออัปโหลด
  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(4,'x@test','x','x','ครู ค','teacher')`);
- assert.equal((await (await call(env,'/api/projects/10/files','GET',undefined,4)).json()).can_manage,false);
+ assert.equal((await call(env,'/api/projects/10/files','GET',undefined,4)).status,403);
  assert.equal((await send(env,'/api/projects/10/files',{file:pdf(),parent_id:String(cat)},4)).status,403);
  assert.equal((await send(env,'/api/projects/10/files',{file:fake()},2)).status,400);
  assert.equal((await send(env,'/api/projects/10/files',{file:pdf(),parent_id:String(cat)},2)).status,201);
@@ -60,8 +60,9 @@ test('เอกสารโครงการ: หมวด 4 หมวด อ�
  items=(await (await call(env,'/api/projects/10/files','GET',undefined,2)).json()).items;
  assert.equal(items.find(i=>i.id===file.id).name,'แผนงาน.pdf');
  assert.equal(items.find(i=>i.id===file.id).parent_id,mk.id);
- // ดูตัวอย่าง (inline) ได้ทุกคนที่เข้าสู่ระบบ
- const view=await call(env,`/api/project-files/${file.id}/content`,'GET',undefined,4);
+ // ดูไฟล์ได้เฉพาะผู้รับผิดชอบและแอดมิน/ผู้บริหาร
+ assert.equal((await call(env,`/api/project-files/${file.id}/content`,'GET',undefined,4)).status,403);
+ const view=await call(env,`/api/project-files/${file.id}/content`,'GET',undefined,2);
  assert.equal(view.status,200);assert.match(view.headers.get('content-disposition'),/^inline/);
  // แทนที่ไฟล์
  assert.equal((await send(env,`/api/project-files/${file.id}/replace`,{file:pdf('ฉบับแก้.pdf')},2)).status,200);

@@ -106,6 +106,9 @@ export async function ensureProcurementSchema(env) {
     try { await env.DB.prepare(`ALTER TABLE procurement_items ADD COLUMN ${name} ${type}`).run(); }
     catch (error) { if (!String(error?.message || error).toLowerCase().includes("duplicate column")) throw error; }
   }
+  try { await env.DB.prepare('ALTER TABLE procurement_cases ADD COLUMN action_revision INTEGER NOT NULL DEFAULT 0').run(); }
+  catch(e) { if (!String(e.message).toLowerCase().includes('duplicate column')) throw e; }
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS procurement_action_tokens(token TEXT PRIMARY KEY,case_id INTEGER NOT NULL REFERENCES procurement_cases(id) ON DELETE CASCADE)').run();
   ready.add(env.DB);
 }
 
@@ -172,18 +175,18 @@ async function nextNumber(env, kind, year) {
   return Number(row.last_number);
 }
 
-function notifyStatements(env, caseId, userIds, message, actorId) {
+function notifyStatements(env, caseId, userIds, message, actorId, token = null) {
   const ids = [...new Set(userIds.map(Number).filter((id) => id && id !== Number(actorId)))];
-  return ids.map((id) => env.DB.prepare("INSERT INTO procurement_notifications(case_id,user_id,message) VALUES(?,?,?)").bind(caseId, id, message));
+  return ids.map((id) => env.DB.prepare(`INSERT INTO procurement_notifications(case_id,user_id,message) SELECT ?,?,? ${token?"WHERE EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)":""}`).bind(caseId, id, message,...(token?[token]:[])));
 }
 
-function eventStatement(env, caseId, action, note, user) {
-  return env.DB.prepare("INSERT INTO procurement_events(case_id,action,note,actor_id) VALUES(?,?,?,?)").bind(caseId, action, note || null, user.id);
+function eventStatement(env, caseId, action, note, user, token = null) {
+  return env.DB.prepare(`INSERT INTO procurement_events(case_id,action,note,actor_id) SELECT ?,?,?,? ${token?"WHERE EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)":""}`).bind(caseId, action, note || null, user.id,...(token?[token]:[]));
 }
 
-function auditStatement(env, user, action, caseId, details, request) {
-  return env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details,ip_address) VALUES(?,?,?,?,?,?)`)
-    .bind(user.id, action, "procurement_case", caseId, JSON.stringify(details || {}), request?.headers?.get("CF-Connecting-IP") || null);
+function auditStatement(env, user, action, caseId, details, request, token = null) {
+  return env.DB.prepare(`INSERT INTO audit_logs(user_id,action,resource,resource_id,details,ip_address) SELECT ?,?,?,?,?,? ${token?"WHERE EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)":""}`)
+    .bind(user.id, action, "procurement_case", caseId, JSON.stringify(details || {}), request?.headers?.get("CF-Connecting-IP") || null,...(token?[token]:[]));
 }
 
 async function financeUserIds(env) {
@@ -565,10 +568,14 @@ async function action(request, env, user, id) {
   const ctx = await context(env, user);
   const note = clean(body?.note, 1500);
   const change = async (sql, args, eventAction, eventNote, recipients = [], message = "") => {
-    const results = await env.DB.batch([env.DB.prepare(sql).bind(...args), eventStatement(env, id, eventAction, eventNote, user),
-      auditStatement(env, user, eventAction, id, { case_no: row.case_no, note: eventNote }, request),
-      ...notifyStatements(env, id, recipients, message || eventNote, user.id)]);
-    if (!results[0].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
+    const token = crypto.randomUUID();
+    const results = await env.DB.batch([
+      env.DB.prepare('INSERT INTO procurement_action_tokens(token,case_id) SELECT ?,id FROM procurement_cases WHERE id=? AND action_revision=? AND status=?').bind(token,id,row.action_revision,row.status),
+      env.DB.prepare(sql.replace(' SET ',' SET action_revision=action_revision+1, ')+' AND EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)').bind(...args,token),
+      eventStatement(env, id, eventAction, eventNote, user, token),
+      auditStatement(env, user, eventAction, id, { case_no: row.case_no, note: eventNote }, request, token),
+      ...notifyStatements(env, id, recipients, message || eventNote, user.id, token)]);
+    if (!results[1].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
     return jsonResponse({ ok: true });
   };
   if (kind === "submit") {
@@ -644,23 +651,29 @@ async function action(request, env, user, id) {
     if (!decision) return jsonResponse({ error: "กรุณาเลือกผลการตรวจรับ" }, 400);
     if (decision === "reject") {
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผลที่ไม่รับพัสดุ" }, 400);
+      const token = crypto.randomUUID();
       const results = await env.DB.batch([
-        env.DB.prepare("UPDATE procurement_cases SET delivered_date=NULL,review_note=?,updated_at=datetime('now') WHERE id=? AND status='ordered'").bind(`ผู้ตรวจรับไม่รับพัสดุ: ${note}`, id),
-        env.DB.prepare("UPDATE procurement_inspectors SET decision=NULL,decided_at=NULL,note=NULL WHERE case_id=?").bind(id),
-        env.DB.prepare("UPDATE procurement_inspectors SET decision='reject',decided_at=datetime('now'),note=? WHERE case_id=? AND user_id=?").bind(note, id, user.id),
-        eventStatement(env, id, "inspect_reject", `ไม่รับพัสดุ: ${note}`, user),
-        auditStatement(env, user, "inspect_reject", id, { note }, request),
-        ...notifyStatements(env, id, [row.created_by], `ผู้ตรวจรับไม่รับพัสดุ ${row.case_no}: ${note}`, user.id),
+        env.DB.prepare("INSERT INTO procurement_action_tokens(token,case_id) SELECT ?,id FROM procurement_cases WHERE id=? AND action_revision=? AND status='ordered' AND delivered_date IS NOT NULL").bind(token,id,row.action_revision),
+        env.DB.prepare("UPDATE procurement_cases SET action_revision=action_revision+1,delivered_date=NULL,review_note=?,updated_at=datetime('now') WHERE id=? AND EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)").bind(`ผู้ตรวจรับไม่รับพัสดุ: ${note}`, id,token),
+        env.DB.prepare("UPDATE procurement_inspectors SET decision=NULL,decided_at=NULL,note=NULL WHERE case_id=? AND EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)").bind(id,token),
+        env.DB.prepare("UPDATE procurement_inspectors SET decision='reject',decided_at=datetime('now'),note=? WHERE case_id=? AND user_id=? AND EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)").bind(note, id, user.id,token),
+        eventStatement(env, id, "inspect_reject", `ไม่รับพัสดุ: ${note}`, user,token),
+        auditStatement(env, user, "inspect_reject", id, { note }, request,token),
+        ...notifyStatements(env, id, [row.created_by], `ผู้ตรวจรับไม่รับพัสดุ ${row.case_no}: ${note}`, user.id,token),
       ]);
-      if (!results[0].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
+      if (!results[1].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
       return jsonResponse({ ok: true });
     }
+    const token = crypto.randomUUID();
     const results = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO procurement_action_tokens(token,case_id) SELECT ?,c.id FROM procurement_cases c
+        WHERE c.id=? AND c.status='ordered' AND c.delivered_date IS NOT NULL
+        AND EXISTS(SELECT 1 FROM procurement_inspectors i WHERE i.case_id=c.id AND i.user_id=? AND COALESCE(i.decision,'')<>'accept')`).bind(token,id,user.id),
       env.DB.prepare(`UPDATE procurement_inspectors SET decision='accept',decided_at=datetime('now'),note=? WHERE case_id=? AND user_id=?
-        AND EXISTS(SELECT 1 FROM procurement_cases WHERE id=? AND status='ordered' AND delivered_date IS NOT NULL)`).bind(note, id, user.id, id),
-      eventStatement(env, id, "inspect_accept", note ? `ตรวจรับถูกต้อง: ${note}` : "ตรวจรับถูกต้องครบถ้วน", user),
+        AND EXISTS(SELECT 1 FROM procurement_action_tokens WHERE token=?)`).bind(note,id,user.id,token),
+      eventStatement(env, id, "inspect_accept", note ? `ตรวจรับถูกต้อง: ${note}` : "ตรวจรับถูกต้องครบถ้วน", user,token),
     ]);
-    if (!results[0].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
+    if (!results[1].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" }, 409);
     const pending = await env.DB.prepare("SELECT COUNT(*) n FROM procurement_inspectors WHERE case_id=? AND (decision IS NULL OR decision<>'accept')").bind(id).first();
     if (Number(pending.n)) return jsonResponse({ ok: true, waiting_for: Number(pending.n) });
     const posted = await postInventory(env, user, row, request);

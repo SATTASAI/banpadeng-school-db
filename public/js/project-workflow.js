@@ -31,7 +31,8 @@ window.ProjectWorkflow = (() => {
       const projects=data.projects.filter(p=>(!options.internal || p.department==='budget') && (!search || (p.name+' '+p.owner_names).toLowerCase().includes(search)));
       const unread=data.notifications.filter(n=>!n.read_at);
       const toReview=data.requests.filter(e=>e.can_review);
-      root.innerHTML=`${toReview.map(e=>`<div class="wf-notice wf-notice--alert"><span><strong>รอคุณพิจารณา: ${esc(e.request_no)}</strong><br>${esc(e.project_name)} · ${money(e.amount)} บาท · ${esc(states[e.current_step]||'')}</span><button class="btn btn-ghost" data-open="${e.project_id}">ไปที่คำขอ</button></div>`).join('')}${unread.slice(0,6).map(n=>`<div class="wf-notice wf-notice--alert"><span><strong>${esc(n.project_name)}</strong><br>${esc(n.message)}</span><button class="btn btn-ghost" data-open="${n.project_id}">ไปที่คำขอ</button></div>`).join('')}
+      const assignedTasks=data.requests.filter(e=>!data.projects.some(p=>p.id===e.project_id));
+      root.innerHTML=`${assignedTasks.length?`<section class="wf-assigned"><h3>เอกสารที่เกี่ยวข้องกับหน้าที่ของคุณ</h3>${assignedTasks.map(e=>requestCard(e)).join('')}</section>`:''}${toReview.map(e=>`<div class="wf-notice wf-notice--alert"><span><strong>รอคุณพิจารณา: ${esc(e.request_no)}</strong><br>${esc(e.project_name)} · ${money(e.amount)} บาท · ${esc(states[e.current_step]||'')}</span><button class="btn btn-ghost" data-open="${e.project_id}">ไปที่คำขอ</button></div>`).join('')}${unread.slice(0,6).map(n=>`<div class="wf-notice wf-notice--alert"><span><strong>${esc(n.project_name)}</strong><br>${esc(n.message)}</span><button class="btn btn-ghost" data-open="${n.project_id}">ไปที่คำขอ</button></div>`).join('')}
         <div class="wf-tools"><input type="search" data-search aria-label="ค้นหาโครงการ" placeholder="ค้นหาชื่อโครงการ / ผู้รับผิดชอบ" value="${esc(search)}"><span class="wf-muted">${projects.length} โครงการ</span></div>
         <div class="wf-projects">${projects.map(p=>`<article class="wf-project ${p.new_request_count?'wf-project--attention':''}" data-project="${p.id}">
           <div class="wf-project-info">${p.unread_count||p.new_request_count?`<small class="wf-alert">${p.new_request_count?`รอรับ ${p.new_request_count}`:`แจ้งเตือน ${p.unread_count}`}</small>`:''}
@@ -83,7 +84,7 @@ window.ProjectWorkflow = (() => {
       root.querySelectorAll('[data-action]').forEach(b=>b.onclick=()=>requestAction(Number(b.dataset.request),b.dataset.action));
       root.querySelectorAll('[data-attach]').forEach(b=>b.onclick=()=>attach(Number(b.dataset.attach)));
     }
-    function requestCard(e){return `<article data-cleanup-request="${e.id}" class="wf-request ${e.current_step==='finance_queue'?'wf-request--attention':''}"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4>
+    function requestCard(e){return `<article data-cleanup-request="${e.id}" class="wf-request ${e.current_step==='finance_queue'?'wf-request--attention':''}"><h4>${esc(e.request_no)} · ${money(e.amount)} บาท</h4><div class="wf-muted">${esc(e.project_name||'')}</div>
           <span class="wf-state ${esc(e.current_step)}">${states[e.current_step]||esc(e.status)}</span>
           <p>${esc(e.request_purpose)}</p><div class="wf-muted">ผู้ขอ: ${esc(e.requester_name)} · ความสำคัญ: ${e.priority==='urgent'?'ด่วนมาก':e.priority==='high'?'ด่วน':'ปกติ'}${e.needed_date?' · ต้องการใช้เงิน '+esc(e.needed_date):''}</div>
           <p class="wf-muted">เหตุผล: ${esc(e.necessity)}${e.review_note?'<br>หมายเหตุเจ้าหน้าที่: '+esc(e.review_note):''}</p>
@@ -123,7 +124,7 @@ window.ProjectWorkflow = (() => {
       const procurement=['finance_queue','finance_processing'].includes(e.current_step)?`<a class="btn btn-ghost" href="/procurement.html?expense=${e.id}">จัดซื้อจัดจ้าง</a>`:'';
       return primary+procurement+(['pending','approved'].includes(e.status)&&e.current_step!=='director_approval'?button('return','ส่งกลับแก้ไข')+button('reject','ไม่อนุมัติ'):'');
     }
-    async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();root.querySelector(`[data-project="${id}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});}
+    async function openProject(id){openedProject=id;await apiRequest('/api/project-documents/notifications/read',{method:'POST',body:{project_id:id}});await refresh();(root.querySelector(`[data-project="${id}"]`)||root.querySelector(`[data-cleanup-request="${data.requests.find(e=>e.project_id===id)?.id}"]`))?.scrollIntoView({behavior:'smooth',block:'start'});}
     function newRequest(id){editRequest(null,id);}
     function editRequest(id,projectId){
       let savedId=id;const request=data.requests.find(e=>e.id===id);const selectedId=request?.project_id||projectId;const eligible=data.projects.filter(p=>p.can_request&&p.status!=='cancelled');

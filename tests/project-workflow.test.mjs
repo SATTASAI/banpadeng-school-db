@@ -33,9 +33,9 @@ test('document workflow reserves funds, notifies both sides, and confirms paymen
   assert.equal(env.raw.prepare('SELECT source_type FROM project_expenses WHERE id=?').get(id).source_type,'subsidy');
   assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM project_notifications').get().n,0);
   assert.equal((await action(env,2,id,'submit')).status,200);
-  let finance=(await call(env,3,'overview?fiscal_year=2570')).body;let p=finance.projects.find(p=>p.id===10);
-  assert.equal(p.reserved_amount,200);assert.equal(p.remaining_amount,1000);assert.equal(p.available_amount,800);assert.equal(p.new_request_count,1);
-  assert.equal(finance.notifications[0].event_type,'submit');assert.ok(p.unread_count);
+  let finance=(await call(env,3,'overview?fiscal_year=2570')).body;assert.deepEqual(finance.projects,[]);let p=(await call(env,2,'overview?fiscal_year=2570')).body.projects.find(p=>p.id===10);
+  assert.equal(p.reserved_amount,200);assert.equal(p.remaining_amount,1000);assert.equal(p.available_amount,800);assert.equal(finance.requests.length,1);
+  assert.equal(finance.notifications[0].event_type,'submit');assert.ok(finance.notifications.length);
   assert.equal((await action(env,2,id,'receive')).status,403);
   assert.equal((await action(env,3,id,'pay',payment)).status,409);
   assert.equal((await action(env,3,id,'receive')).status,200);
@@ -54,7 +54,7 @@ test('document workflow reserves funds, notifies both sides, and confirms paymen
   assert.equal(owner.requests[0].net_paid,198);assert.equal(owner.notifications[0].event_type,'pay');
   assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_workflow_events WHERE event_type='pay'").get().n,1);
   const summary=owner.funding_summary;assert.deepEqual(summary.budgets.map(b=>[b.key,b.total_amount,b.spent_amount,b.remaining_amount]),[['subsidy',1000,200,800],['free_education',2000,0,2000],['school_income',3000,0,3000]]);
-  assert.equal(summary.unclassified.total_amount,400);
+  assert.equal(summary.unclassified.total_amount,0);
   assert.equal((await call(env,4,'overview')).body.requests.length,0);
   await call(env,2,'notifications/read','POST',{project_id:10});assert.equal((await call(env,2,'overview?department=academic')).body.projects[0].unread_count,0);
   assert.throws(()=>env.raw.prepare("UPDATE project_expenses SET amount=300 WHERE id=?").run(id),/confirmed_payment_locked/);
@@ -68,7 +68,7 @@ test('simultaneous submissions cannot overspend and stale actions create no dupl
   assert.equal((await action(env,2,id,'submit')).status,409);
   assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM project_workflow_events WHERE event_type='submit'").get().n,1);
   assert.throws(()=>env.raw.prepare('UPDATE projects SET budget_amount=600 WHERE id=10').run(),/project_budget_exceeded/);
-  const overview=(await call(env,3,'overview')).body;assert.equal(overview.projects.find(p=>p.id===10).reserved_amount,700);
+  const overview=(await call(env,2,'overview')).body;assert.equal(overview.projects.find(p=>p.id===10).reserved_amount,700);
 });
 
 test('returning a request releases reservation and allows an edited resubmission',async()=>{
@@ -76,7 +76,7 @@ test('returning a request releases reservation and allows an edited resubmission
   assert.equal((await action(env,3,id,'return',{review_note:'เพิ่มรายละเอียด'})).status,200);
   assert.equal((await call(env,2,'overview')).body.projects.find(p=>p.id===10).reserved_amount,0);
   assert.equal((await call(env,2,'requests/'+id,'PATCH',payload(300))).status,200);assert.equal((await action(env,2,id,'submit')).status,200);
-  assert.equal((await call(env,3,'overview')).body.projects.find(p=>p.id===10).reserved_amount,300);
+  assert.equal((await call(env,2,'overview')).body.projects.find(p=>p.id===10).reserved_amount,300);
 });
 
 test('supplemental documents preserve every attachment and notify finance only after upload succeeds',async()=>{
@@ -90,12 +90,12 @@ test('supplemental documents preserve every attachment and notify finance only a
   await notifyBudgetSupportingDocument(env,{id:2},first.body.id);
   const overview=(await call(env,3,'overview')).body;assert.equal(overview.requests[0].documents.filter(d=>d.attachment_id).length,2);
   assert.equal(overview.notifications.filter(n=>n.event_type==='attachment_added').length,2);
-  assert.equal(overview.projects.find(p=>p.id===10).remaining_amount,800);
+  assert.equal((await call(env,2,'overview')).body.projects.find(p=>p.id===10).remaining_amount,800);
 });
 
 test('multi-owner projects do not multiply budget totals across modules',async()=>{
   const env=await fixture();const saved=await call(env,2,'requests','POST',payload(250));await action(env,2,saved.body.id,'submit');
-  const token=await signJWT({sub:3},secret),request=new Request('https://school.test/api/budget/overview?fiscal_year=2570',{headers:{Cookie:'bpd_session='+token}});
+  const token=await signJWT({sub:1},secret),request=new Request('https://school.test/api/budget/overview?fiscal_year=2570',{headers:{Cookie:'bpd_session='+token}});
   const response=await handleBudgetRoute(request,env,new URL(request.url).pathname,'GET'),body=await response.json();
   assert.equal(body.projects.find(p=>p.id===10).pending_amount,250);
   assert.deepEqual(body.funding_summary,await projectFundingSummary(env,2570));

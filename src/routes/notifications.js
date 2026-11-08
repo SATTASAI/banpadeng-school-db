@@ -84,7 +84,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  // that limit, including the two optional message sources.
  const sql=`WITH primary_messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
- CASE WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
+ CASE WHEN v.event_type='receive' AND EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=n.user_id AND a.role_key IN ('procurement_officer','procurement_officer_2') AND a.department='') THEN '/procurement.html?expense='||v.expense_id WHEN n.audience='finance' THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
  v.actor_id actor_id,
  CASE WHEN n.audience<>'finance' THEN 1
   WHEN EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='' AND f.user_id=n.user_id) THEN 1

@@ -1,3 +1,4 @@
+import { projectVisibility, canViewProject, visibleFinancialRows, validateProjectOwners, rowsByIds } from './lib/project-access.js';
 import {handleSchoolPasskeys} from './routes/passkeys.js';
 import { handleTransferNotices } from './routes/transfer-notices.js';
 import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from './routes/student-transfers.js';
@@ -1026,8 +1027,8 @@ async function handleGlobalSearch(request, env) {
         AND (full_name LIKE ? ESCAPE '\\' OR COALESCE(position,'') LIKE ? ESCAPE '\\' OR COALESCE(homeroom_classroom,'') LIKE ? ESCAPE '\\')
       ORDER BY CASE WHEN full_name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,full_name LIMIT 5`).bind(like,like,like,prefix),
     env.DB.prepare(`SELECT id,name,COALESCE(management_area,department) AS department,status FROM projects
-      WHERE name LIKE ? ESCAPE '\\' OR COALESCE(description,'') LIKE ? ESCAPE '\\'
-      ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,created_at DESC LIMIT 5`).bind(like,like,prefix),
+      WHERE (${projectVisibility(user, 'projects').sql}) AND (name LIKE ? ESCAPE '\\' OR COALESCE(description,'') LIKE ? ESCAPE '\\')
+      ORDER BY CASE WHEN name LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END,created_at DESC LIMIT 5`).bind(...projectVisibility(user, 'projects').values,like,like,prefix),
     env.DB.prepare(`SELECT id,title,COALESCE(management_area,department) AS department,document_type FROM documents
       WHERE COALESCE(record_status,'active')='active'
         AND (title LIKE ? ESCAPE '\\' OR COALESCE(keywords,'') LIKE ? ESCAPE '\\')
@@ -1905,22 +1906,16 @@ async function handleListProjects(request, env, department) {
   if (!DEPARTMENTS.includes(department)) return jsonResponse({ error: "ไม่พบฝ่ายงานนี้" }, 404);
 
   const { results: projects } = await env.DB.prepare(
-    "SELECT *, COALESCE(management_area,department) AS effective_department FROM projects WHERE COALESCE(management_area,department) = ? ORDER BY status ASC, created_at DESC"
+    `SELECT p.*, COALESCE(p.management_area,p.department) AS effective_department FROM projects p WHERE COALESCE(p.management_area,p.department) = ? AND ${projectVisibility(user).sql} ORDER BY p.status ASC, p.created_at DESC`
   )
-    .bind(department)
+    .bind(department,...projectVisibility(user).values)
     .all();
 
   if (projects.length === 0) return jsonResponse({ projects: [] });
 
   const ids = projects.map((p) => p.id);
-  const placeholders = ids.map(() => "?").join(",");
-  const { results: ownerRows } = await env.DB.prepare(
-    `SELECT po.project_id, u.id as user_id, u.full_name
-     FROM project_owners po JOIN users u ON u.id = po.user_id
-     WHERE po.project_id IN (${placeholders})`
-  )
-    .bind(...ids)
-    .all();
+  const ownerRows = await rowsByIds(env,ids,placeholders=>
+    `SELECT po.project_id,u.id AS user_id,u.full_name FROM project_owners po JOIN users u ON u.id=po.user_id WHERE po.project_id IN (${placeholders})`);
 
   const ownersByProject = {};
   for (const row of ownerRows) {
@@ -1950,7 +1945,9 @@ async function handleCreateProject(request, env, department) {
   if (!name) return jsonResponse({ error: "กรุณากรอกชื่อโครงการ" }, 400);
   if (!PROJECT_FUNDING_TYPES[body.funding_type]) return jsonResponse({ error: "กรุณาเลือกงบอุดหนุน งบเรียนฟรี 15 ปี หรืองบรายได้สถานศึกษา" },400);
 
-  const ownerIds = isAdmin(user) && Array.isArray(body.owner_ids) ? body.owner_ids.map(Number) : [user.id];
+  let ownerIds;
+  try { ownerIds = await validateProjectOwners(env, isAdmin(user) && body.owner_ids !== undefined ? body.owner_ids : [user.id]); }
+  catch(e) { return jsonResponse({error:e.message},400); }
   const budgetAmount = !(await canManageProjectFinance(env,user)) || body.budget_amount === "" || body.budget_amount == null ? 0 : money(body.budget_amount);
   if (!Number.isFinite(budgetAmount) || budgetAmount < 0) {
     return jsonResponse({ error: "ยอดงบประมาณต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, 400);
@@ -1997,8 +1994,25 @@ async function handleUpdateProject(request, env, projectId) {
     return jsonResponse({ error: "รูปแบบข้อมูลไม่ถูกต้อง" }, 400);
   }
 
+  if (!body || typeof body!=='object' || Array.isArray(body)) return jsonResponse({error:'รูปแบบข้อมูลไม่ถูกต้อง'},400);
+  const projectBefore = await env.DB.prepare('SELECT * FROM projects WHERE id=?').bind(projectId).first();
+  if (!projectBefore) return jsonResponse({error:'ไม่พบโครงการ'},404);
+  let ownerIds = null;
+  if (body.owner_ids !== undefined) {
+    if (!isAdmin(user)) return jsonResponse({error:'เฉพาะผู้ดูแลระบบหรือผู้บริหารที่เปลี่ยนผู้รับผิดชอบได้'},403);
+    try { ownerIds = await validateProjectOwners(env, body.owner_ids); }
+    catch(e) { return jsonResponse({error:e.message},400); }
+  }
+  if (body.name !== undefined && (typeof body.name!=='string' || !body.name.trim() || body.name.trim().length>300)) return jsonResponse({error:'กรุณากรอกชื่อโครงการ'},400);
+  if (body.description != null && (typeof body.description!=='string' || body.description.length>3000)) return jsonResponse({error:'รายละเอียดโครงการไม่ถูกต้อง'},400);
+  if (body.status !== undefined && !['ongoing','completed','cancelled'].includes(body.status)) return jsonResponse({error:'สถานะโครงการไม่ถูกต้อง'},400);
   const updates = [];
   const values = [];
+  if (body.department !== undefined) {
+    if (!isAdmin(user)) return jsonResponse({error:'ไม่มีสิทธิ์เปลี่ยนฝ่ายโครงการ'},403);
+    if (!DEPARTMENTS.includes(body.department)) return jsonResponse({error:'ฝ่ายงานไม่ถูกต้อง'},400);
+    updates.push('department = ?', 'management_area = ?');values.push(storedDepartment(body.department),managementArea(body.department));
+  }
   if (body.funding_type !== undefined) {
     if (!PROJECT_FUNDING_TYPES[body.funding_type]) return jsonResponse({ error: "ประเภทเงินไม่ถูกต้อง" },400);
     const existing = await env.DB.prepare("SELECT funding_type FROM projects WHERE id=?").bind(projectId).first();
@@ -2020,6 +2034,7 @@ async function handleUpdateProject(request, env, projectId) {
   if (body.fiscal_year !== undefined) {
     const fiscalYear = Number(body.fiscal_year);
     if (!Number.isInteger(fiscalYear) || fiscalYear < 2500 || fiscalYear > 3000) return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
+    if (fiscalYear!==Number(projectBefore.fiscal_year) && await env.DB.prepare('SELECT 1 FROM project_expenses WHERE project_id=? LIMIT 1').bind(projectId).first()) return jsonResponse({error:'โครงการมีเอกสารเบิกจ่ายแล้ว เปลี่ยนปีงบประมาณไม่ได้'},409);
     updates.push("fiscal_year = ?"); values.push(fiscalYear);
   }
   if (body.progress_percent !== undefined) {
@@ -2044,24 +2059,18 @@ async function handleUpdateProject(request, env, projectId) {
     const owners = isAdmin(user) && Array.isArray(body.owner_ids) ? body.owner_ids : assigned.map(o=>o.user_id);
     const candidate = {...existing, department:existing.management_area || existing.department};
     for (let i=0;i<updates.length;i++) candidate[updates[i].split(' = ')[0]]=values[i];
+    candidate.department=candidate.management_area||candidate.department;
     const duplicate = await findDuplicateProject(env,candidate,owners,projectId);
     if (duplicate) return jsonResponse({error:'ชื่อโครงการและรายละเอียดตรงกับโครงการที่มีอยู่ แน่ใจใช่ไหมที่จะกดยืนยัน?',code:'duplicate_project',project_id:duplicate.id},409);
   }
-  if (updates.length > 0) {
-    values.push(projectId);
-    await env.DB.prepare(`UPDATE projects SET ${updates.join(", ")} WHERE id = ?`).bind(...values).run();
+  const statements = [];
+  if (updates.length) statements.push(env.DB.prepare(`UPDATE projects SET ${updates.join(', ')} WHERE id=?`).bind(...values,projectId));
+  if (ownerIds !== null) {
+    statements.push(env.DB.prepare('DELETE FROM project_owners WHERE project_id=?').bind(projectId));
+    statements.push(...ownerIds.map(id => env.DB.prepare('INSERT INTO project_owners(project_id,user_id) VALUES(?,?)').bind(projectId,id)));
   }
-
-  if (isAdmin(user) && Array.isArray(body.owner_ids)) {
-    const ownerIds = body.owner_ids.map(Number);
-    await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
-    if (ownerIds.length > 0) {
-      const inserts = ownerIds.map((uid) =>
-        env.DB.prepare("INSERT INTO project_owners (project_id, user_id) VALUES (?, ?)").bind(projectId, uid)
-      );
-      await env.DB.batch(inserts);
-    }
-  }
+  statements.push(env.DB.prepare('INSERT INTO audit_logs(user_id,action,resource,resource_id,details) VALUES(?,?,?,?,?)').bind(user.id,'update','project',projectId,JSON.stringify({fields:updates,owner_ids:ownerIds})));
+  await env.DB.batch(statements);
 
   return jsonResponse({ ok: true });
 }
@@ -2078,10 +2087,14 @@ async function handleDeleteProject(request, env, projectId) {
   // คำขอเบิกที่รออนุมัติหรืออนุมัติแล้วเป็นภาระผูกพัน ต้องยกเลิก/ไม่อนุมัติก่อน ไม่ลบทิ้งเงียบ ๆ
   const committed = await env.DB.prepare("SELECT COUNT(*) AS n FROM project_expenses WHERE project_id=? AND status IN ('pending','approved')").bind(projectId).first();
   if (Number(committed?.n || 0) > 0) return jsonResponse({ error: `โครงการมีคำขอเบิกที่รออนุมัติหรืออนุมัติแล้ว ${committed.n} รายการ ต้องยกเลิกหรือไม่อนุมัติก่อนจึงลบได้` }, 409);
+  const procurementTable = await env.DB.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='procurement_cases'").first();
+  if (procurementTable && await env.DB.prepare('SELECT 1 FROM procurement_cases WHERE project_id=? LIMIT 1').bind(projectId).first()) return jsonResponse({error:'โครงการมีประวัติจัดซื้อจัดจ้าง กรุณาเปลี่ยนสถานะเป็นยกเลิกเพื่อเก็บหลักฐาน'},409);
   const { results: removed } = await env.DB.prepare("SELECT id, request_no, status, amount FROM project_expenses WHERE project_id=?").bind(projectId).all();
-  await env.DB.prepare("DELETE FROM project_expenses WHERE project_id = ?").bind(projectId).run();
-  await env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId).run();
-  await env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM project_expenses WHERE project_id = ?").bind(projectId),
+    env.DB.prepare("DELETE FROM project_owners WHERE project_id = ?").bind(projectId),
+    env.DB.prepare("DELETE FROM projects WHERE id = ?").bind(projectId),
+  ]);
   await writeAuditLog(env, user, "delete", "project", projectId, { name: project.name, fiscal_year: project.fiscal_year, budget_amount: project.budget_amount, removed_expenses: removed }, request);
   return jsonResponse({ ok: true });
 }
@@ -2142,6 +2155,7 @@ async function handleListProjectExpenses(request, env, projectId) {
      FROM projects WHERE id = ?`
   ).bind(projectId).first();
   if (!project) return jsonResponse({ error: "ไม่พบโครงการ" }, 404);
+  if (!await canViewProject(env,user,projectId)) return jsonResponse({error:"ไม่มีสิทธิ์ดูโครงการนี้"},403);
 
   const financial=(await projectFinancialRows(env,null,project.department)).find(p=>p.id===projectId);
   Object.assign(project,financial);
@@ -4528,8 +4542,8 @@ async function handleOverview(request, env) {
     "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now','+7 hours')"
   ).first();
   const ongoingProjects = await env.DB.prepare(
-    "SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing'"
-  ).first();
+    `SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing' AND ${projectVisibility(user,'projects').sql}`
+  ).bind(...projectVisibility(user,'projects').values).first();
   const pendingProjectExpenses = await env.DB.prepare(
     `SELECT COUNT(*) AS count, COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)), 0)/100.0 AS total_amount
      FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)`
@@ -4548,9 +4562,9 @@ async function handleOverview(request, env) {
             ROUND(AVG(progress_percent), 0) AS average_progress,
             COALESCE(SUM(budget_amount), 0) AS total_budget,
             COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=projects.id AND e.status='paid')), 0) AS spent_budget
-     FROM projects WHERE (? IS NULL OR fiscal_year=?)
+     FROM projects WHERE (? IS NULL OR fiscal_year=?) AND ${projectVisibility(user,'projects').sql}
      GROUP BY COALESCE(management_area,department)`
-  ).bind(budgetFiscalYear,budgetFiscalYear).all();
+  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user,'projects').values).all();
 
   const { results: projectBudgetRows } = await env.DB.prepare(
     `SELECT p.id, COALESCE(p.management_area,p.department) AS department, p.name, p.status, p.progress_percent, p.fiscal_year,
@@ -4563,14 +4577,14 @@ async function handleOverview(request, env) {
      LEFT JOIN academic_years y ON y.id = p.academic_year_id
      LEFT JOIN project_owners po ON po.project_id = p.id
      LEFT JOIN users u ON u.id = po.user_id
-     WHERE (? IS NULL OR p.fiscal_year=?)
+     WHERE (? IS NULL OR p.fiscal_year=?) AND ${projectVisibility(user).sql}
      GROUP BY p.id
      ORDER BY CASE COALESCE(p.management_area,p.department)
                 WHEN 'academic' THEN 1 WHEN 'early_childhood' THEN 2 WHEN 'budget' THEN 3
                 WHEN 'personnel' THEN 4 WHEN 'general' THEN 5 ELSE 6 END,
               CASE p.status WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
               p.name`
-  ).bind(budgetFiscalYear,budgetFiscalYear).all();
+  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user).values).all();
 
   const { results: licensesExpiring } = await env.DB.prepare(
     `SELECT full_name, license_expiry_date,
@@ -4581,7 +4595,7 @@ async function handleOverview(request, env) {
      ORDER BY days_remaining ASC, full_name ASC`
   ).all();
 
-  const financials=await projectFinancialRows(env,budgetFiscalYear);
+  const financials=await visibleFinancialRows(env,user,await projectFinancialRows(env,budgetFiscalYear));
   const financeById=new Map(financials.map(p=>[p.id,p]));
   for(const p of projectBudgetRows) Object.assign(p,financeById.get(p.id));
   const departmentMap = Object.fromEntries(DEPARTMENTS.map(department=>{
@@ -4974,6 +4988,14 @@ const app = {
       if (staffDeletionResponse) return staffDeletionResponse;
       if (pathname === "/api/staff" && method === "GET") return await handleListStaff(request, env);
       if (pathname === "/api/staff/import" && method === "POST") return await handleImportStaff(request, env);
+      if (pathname === '/api/projects/settings' && method === 'GET') {
+        const user = await getCurrentUser(request,env);
+        if (!isAdmin(user)) return jsonResponse({error:'ไม่มีสิทธิ์จัดการโครงการ'},403);
+        const projects = await projectWorkflowSnapshots(env,user);
+        const {results:owners} = await env.DB.prepare('SELECT project_id,user_id FROM project_owners').all();
+        const {results:users} = await env.DB.prepare("SELECT id,full_name,email FROM users WHERE status='active' AND deleted_at IS NULL AND role IN ('teacher','staff','executive','superadmin') ORDER BY full_name").all();
+        return jsonResponse({projects:projects.map(p=>({...p,owner_ids:owners.filter(o=>o.project_id===p.id).map(o=>o.user_id)})),users},200,{'Cache-Control':'no-store'});
+      }
       if (pathname === "/api/projects/import" && method === "POST") return await handleImportProjects(request, env);
 
       const staffMatch = pathname.match(/^\/api\/staff\/(\d+)$/);

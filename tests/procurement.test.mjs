@@ -205,6 +205,8 @@ test("committee of three is required above 100,000 baht and every member must ac
   assert.equal((await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "record_delivery", delivered_date: "2099-01-01" })).status, 200);
   const first = await call(env, 7, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" });
   assert.equal(first.body.waiting_for, 2);
+  assert.equal((await call(env,7,`/api/procurement/cases/${id}/action`,'POST',{action:'inspect',decision:'accept'})).status,409);
+  assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM procurement_events WHERE case_id=? AND action='inspect_accept'").get(id).n,1);
   await call(env, 8, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" });
   const last = await call(env, 9, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" });
   assert.equal(last.body.accepted, true);
@@ -274,4 +276,17 @@ test("similar names need a decision, chosen register is merged, and the owner cl
   assert.equal((await call(env, 2, `/api/project-documents/requests/${expenseId}/action`, "POST", { action: "close_balance" })).status, 409);
   assert.equal((await call(env, 5, `/api/project-documents/requests/${expenseId}/action`, "POST", pay)).status, 200);
   assert.equal(env.raw.prepare("SELECT spent_amount FROM projects WHERE id=10").get().spent_amount, 600);
+});
+
+test('finance handoff links to procurement; simultaneous submissions notify the next officer once',async()=>{
+ const {env,expenseId}=await setup();
+ const feed=await call(env,3,'/api/notifications');assert.equal(feed.status,200);assert.ok(feed.body.notifications.some(n=>n.url===`/procurement.html?expense=${expenseId}`));
+ const created=await call(env,3,'/api/procurement/cases','POST',casePayload(expenseId));assert.equal(created.status,201);const id=created.body.id;
+ const original=env.DB.batch.bind(env.DB);let tail=Promise.resolve();env.DB.batch=items=>{const pending=tail.then(()=>original(items));tail=pending.catch(()=>{});return pending;};
+ const results=await Promise.all([1,2].map(()=>call(env,3,`/api/procurement/cases/${id}/action`,'POST',{action:'submit'})));
+ assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);
+ assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM procurement_events WHERE case_id=? AND action='submit'").get(id).n,1);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM procurement_notifications WHERE case_id=? AND user_id=4').get(id).n,1);
+ assert.equal((await call(env,3,`/api/procurement/cases/${id}/action`,'POST',{action:'submit'})).status,409);
+ const head=await call(env,4,'/api/notifications');assert.ok(head.body.notifications.some(n=>n.url===`/procurement.html?case=${id}`));
 });

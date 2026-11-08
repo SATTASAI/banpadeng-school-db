@@ -1,10 +1,10 @@
+import { projectVisibility, canViewProject } from '../lib/project-access.js';
 // เอกสารโครงการ (เมนูโครงการของทุกฝ่าย) — ไฟล์โครงการ / ภาคผนวก / รายการวัสดุอุปกรณ์ / ภาพ + โฟลเดอร์ย่อยที่ผู้ใช้สร้างเอง
 // Drive: โครงการ / <ปีงบประมาณ> / <ฝ่าย> / <ชื่อโครงการ> / <หมวด> / <โฟลเดอร์ย่อย…>
 //   ค้นหาโฟลเดอร์ชื่อเดิมก่อนสร้างใหม่ทุกชั้น → โครงการที่มีโฟลเดอร์อยู่แล้วใช้โฟลเดอร์เดิม
 // ย้อนหลัง 4 ปี: โครงการชื่อเดียวกันในฝ่ายเดียวกัน ปีงบประมาณ (ปีที่เลือก-3 … ปีที่เลือก)
-// สิทธิ์: ผู้รับผิดชอบโครงการ + หัวหน้าฝ่ายของโครงการ + admin จัดการไฟล์ได้ · ผู้ใช้อื่นที่เข้าสู่ระบบดูได้อย่างเดียว
+// สิทธิ์: ผู้รับผิดชอบโครงการ + ผู้บริหาร/แอดมิน อ่านและจัดการไฟล์ได้
 import { getCurrentUser, jsonResponse, isAdmin } from '../lib/auth.js';
-import { ensureDepartmentStaff } from './department-staff.js';
 
 export const PROJECT_FILE_CATEGORIES = [
   { key: 'project', name: 'ไฟล์โครงการ' },
@@ -59,10 +59,7 @@ async function canManage(env, user, project) {
   if (isAdmin(user)) return true;
   const owner = await env.DB.prepare('SELECT 1 FROM project_owners WHERE project_id=? AND user_id=?').bind(project.id, user.id).first();
   if (owner) return true;
-  await ensureDepartmentStaff(env);
-  const head = await env.DB.prepare(`SELECT 1 FROM department_staff d JOIN personnel_accounts a ON a.personnel_id=d.personnel_id
-    WHERE a.user_id=? AND d.department=? AND d.is_head=1`).bind(user.id, effDept(project)).first().catch(() => null);
-  return !!head;
+  return false;
 }
 
 async function checkFile(file) {
@@ -144,10 +141,10 @@ async function ensureCategories(env, projectId) {
   if (missing.length) await env.DB.batch(missing.map((c) => env.DB.prepare("INSERT INTO project_file_items (project_id,parent_id,kind,category,name) VALUES (?,NULL,'folder',?,?)").bind(projectId, c.key, c.name)));
 }
 
-async function yearsOf(env, project) {
+async function yearsOf(env, project, user) {
   const fy = Number(project.fiscal_year) || 0;
-  const { results } = await env.DB.prepare(`SELECT id,name,fiscal_year FROM projects WHERE COALESCE(management_area,department)=? AND fiscal_year BETWEEN ? AND ?
-    ORDER BY fiscal_year DESC, id DESC`).bind(effDept(project), fy - (HISTORY_YEARS - 1), fy).all();
+  const { results } = await env.DB.prepare(`SELECT id,name,fiscal_year FROM projects WHERE COALESCE(management_area,department)=? AND fiscal_year BETWEEN ? AND ? AND ${projectVisibility(user,'projects').sql}
+    ORDER BY fiscal_year DESC, id DESC`).bind(effDept(project), fy - (HISTORY_YEARS - 1), fy, ...projectVisibility(user,'projects').values).all();
   const target = normName(project.name);
   const byYear = new Map();
   for (const r of results) if (normName(r.name) === target && !byYear.has(r.fiscal_year)) byYear.set(r.fiscal_year, r.id);
@@ -202,11 +199,12 @@ export async function handleProjectFilesRoute(request, env, pathname, method, dr
     if (list && method === 'GET') {
       const project = await loadProject(env, Number(list[1]));
       if (!project) return err('ไม่พบโครงการ', 404);
+      if (!await canViewProject(env,user,project.id)) return err('ไม่มีสิทธิ์ดูโครงการนี้',403);
       await ensureCategories(env, project.id);
       return jsonResponse({
         project: { id: project.id, name: project.name, fiscal_year: project.fiscal_year, department: effDept(project) },
         can_manage: await canManage(env, user, project),
-        years: await yearsOf(env, project),
+        years: await yearsOf(env, project, user),
         categories: PROJECT_FILE_CATEGORIES,
         items: await listItems(env, project.id),
         drive_ready: !drive.ready(env),
@@ -216,7 +214,8 @@ export async function handleProjectFilesRoute(request, env, pathname, method, dr
     if (list && method === 'POST') {
       const project = await loadProject(env, Number(list[1]));
       if (!project) return err('ไม่พบโครงการ', 404);
-      if (!(await canManage(env, user, project))) return err('เฉพาะผู้รับผิดชอบโครงการ หัวหน้าฝ่าย หรือผู้ดูแลระบบเท่านั้นที่อัปโหลดได้', 403);
+      if (!await canViewProject(env,user,project.id)) return err('ไม่มีสิทธิ์ดูโครงการนี้',403);
+      if (!(await canManage(env, user, project))) return err('เฉพาะผู้รับผิดชอบโครงการ ผู้บริหาร หรือผู้ดูแลระบบเท่านั้นที่อัปโหลดได้', 403);
       const driveError = drive.ready(env);
       if (driveError) return err(driveError, 503);
       const form = await request.formData().catch(() => null);
@@ -237,6 +236,7 @@ export async function handleProjectFilesRoute(request, env, pathname, method, dr
     if (folders && method === 'POST') {
       const project = await loadProject(env, Number(folders[1]));
       if (!project) return err('ไม่พบโครงการ', 404);
+      if (!await canViewProject(env,user,project.id)) return err('ไม่มีสิทธิ์ดูโครงการนี้',403);
       if (!(await canManage(env, user, project))) return err('ไม่มีสิทธิ์สร้างโฟลเดอร์ในโครงการนี้', 403);
       const body = await request.json().catch(() => ({}));
       const name = safeName(body.name);
@@ -256,6 +256,7 @@ export async function handleProjectFilesRoute(request, env, pathname, method, dr
     if (!row) return err('ไม่พบไฟล์', 404);
     const project = await loadProject(env, row.project_id);
     if (!project) return err('ไม่พบโครงการ', 404);
+    if (!await canViewProject(env,user,project.id)) return err('ไม่มีสิทธิ์ดูโครงการนี้',403);
 
     if (content && method === 'GET') {
       if (row.kind !== 'file' || !row.drive_id) return err('ไม่พบไฟล์', 404);

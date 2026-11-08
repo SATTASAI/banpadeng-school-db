@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { signJWT } from '../src/lib/crypto.js';
 import { ensureBudgetSchema } from '../src/routes/budget.js';
-import { handleProjectWorkflowRoute } from '../src/routes/project-workflow.js';
+import { handleProjectWorkflowRoute, notifyBudgetSupportingDocument } from '../src/routes/project-workflow.js';
 
 const secret='project-workflow-tests';
 async function fixture(){
@@ -37,26 +37,27 @@ test('six-step memo approval follows approver settings and fills the printed for
   const env=await fixture();addApprovers(env);
   const id=(await call(env,2,'requests','POST',payload())).body.id;
   assert.equal((await action(env,2,id,'submit')).status,200);
+  const notified=user=>assert.ok(env.raw.prepare('SELECT 1 FROM project_notifications WHERE user_id=? AND event_token=(SELECT token FROM project_workflow_events WHERE expense_id=? ORDER BY rowid DESC LIMIT 1)').get(user,id));
   const step=()=>env.raw.prepare('SELECT current_step FROM project_expenses WHERE id=?').get(id).current_step;
-  assert.equal(step(),'dept_head_review');
+  assert.equal(step(),'dept_head_review');notified(7);
   let head=(await call(env,7,'overview?fiscal_year=2570')).body.requests.find(r=>r.id===id);
   assert.ok(head.can_review);assert.equal(head.review_step,'dept_head');
   assert.equal((await action(env,8,id,'review_approve')).status,403);
   assert.equal((await action(env,7,id,'review_approve')).status,400);
   assert.equal((await action(env,3,id,'receive')).status,409);
   assert.equal((await action(env,7,id,'review_approve',{plan_status:'in_plan'})).status,200);
-  assert.equal(step(),'dept_deputy_review');
+  assert.equal(step(),'dept_deputy_review');notified(8);
   assert.equal((await action(env,8,id,'review_approve')).status,200);
-  assert.equal(step(),'finance_queue');
-  assert.equal((await action(env,3,id,'receive')).status,200);
+  assert.equal(step(),'finance_queue');notified(3);
+  assert.equal((await action(env,3,id,'receive')).status,200);notified(11);
   assert.equal((await action(env,3,id,'complete')).status,200);
-  assert.equal(step(),'budget_head_review');
+  assert.equal(step(),'budget_head_review');notified(9);
   assert.equal((await action(env,9,id,'review_approve')).status,200);
-  assert.equal(step(),'budget_deputy_review');
+  assert.equal(step(),'budget_deputy_review');notified(10);
   assert.equal((await action(env,6,id,'approve')).status,409);
   assert.equal((await action(env,10,id,'review_approve')).status,200);
-  assert.equal(step(),'director_approval');
-  assert.equal((await action(env,6,id,'approve')).status,200);
+  assert.equal(step(),'director_approval');notified(6);
+  assert.equal((await action(env,6,id,'approve')).status,200);notified(3);
   const doc=await memo(env,2,id);assert.equal(doc.status,200);
   for(const name of ['นายหัวหน้า วิชาการ','นางสาวรอง วิชาการ','การเงิน','นางหัวหน้า งบประมาณ','นายรอง งบประมาณ','ผู้อำนวยการ','นายพัสดุ ทดสอบ','อ่านคล่อง','สองร้อยบาทถ้วน'])assert.ok(doc.text.includes(name),name);
   assert.equal((await memo(env,4,id)).status,403);
@@ -78,4 +79,14 @@ test('reviewer return sends draft back and resubmission rebuilds the chain; requ
   const id2=(await call(env,2,'requests','POST',payload(100))).body.id;
   await action(env,2,id2,'submit');
   assert.equal(env.raw.prepare('SELECT current_step FROM project_expenses WHERE id=?').get(id2).current_step,'dept_deputy_review');
+});
+
+test('supplementary documents notify the current reviewer and finance exactly once',async()=>{
+ const env=await fixture();addApprovers(env);const id=(await call(env,2,'requests','POST',payload())).body.id;await action(env,2,id,'submit');
+ const doc=await call(env,2,`requests/${id}/supporting-documents`,'POST',{title:'เอกสารเพิ่ม'});assert.equal(doc.status,201);
+ env.raw.prepare("INSERT INTO file_attachments(entity_type,entity_id,object_key,file_name,mime_type,file_size,uploaded_by) VALUES('document',?,'test-doc','a.pdf','application/pdf',10,2)").run(doc.body.entity_id);
+ await Promise.all([notifyBudgetSupportingDocument(env,{id:2},doc.body.id),notifyBudgetSupportingDocument(env,{id:2},doc.body.id)]);
+ const events=env.raw.prepare("SELECT token FROM project_workflow_events WHERE expense_id=? AND event_type='attachment_added'").all(id);assert.equal(events.length,1);
+ const users=env.raw.prepare('SELECT user_id FROM project_notifications WHERE event_token=?').all(events[0].token).map(r=>r.user_id);
+ assert(users.includes(7));assert(users.includes(3));assert(!users.includes(4));
 });
