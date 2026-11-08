@@ -100,6 +100,7 @@ test('LINE and School Notify deliver on first run once daily despite reading; re
     assert.equal(line.length,1);assert.equal(push.length,1);
     assert.deepEqual(push[0].refs,['u:2']);assert.equal(line[0].to,'U-license');
     assert.ok(line[0].messages[0].text.includes(LICENSE_RENEWAL_URL));assert.ok(push[0].body.includes(LICENSE_RENEWAL_URL));
+    assert.equal(push[0].url,LICENSE_RENEWAL_URL);assert.deepEqual(push[0].actions,[{title:'ต่ออายุใบประกอบวิชาชีพ',url:LICENSE_RENEWAL_URL}]);
     await run();assert.equal(line.length,1);assert.equal(push.length,1);
     clock=env.raw.prepare("SELECT datetime(?,'+1 day') day").get(clock).day+'Z';
     await run();assert.equal(line.length,2);assert.equal(push.length,2);
