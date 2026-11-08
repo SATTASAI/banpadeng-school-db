@@ -1,3 +1,4 @@
+import {isLicenseReminder} from './license-reminders.js';
 // ส่งแจ้งเตือนทุกระบบทาง LINE รายบุคคล
 // ใช้รายการเดียวกับกระดิ่งแจ้งเตือนในระบบ (src/routes/notifications.js) แล้วรวมเป็นข้อความเดียวต่อคนต่อรอบ
 // ทำงานทุก 2 นาที (Cron) และหลังมีการบันทึกข้อมูลในระบบ (เว้นระยะอย่างน้อย LOCK_SECONDS)
@@ -73,6 +74,7 @@ export async function leaveApprover(env,leaveId,userId){
 export function buildLineDigest(items, origin = DEFAULT_ORIGIN, leaveTemplate = DEFAULT_LEAVE_LINE_TEMPLATE) {
   const base = String(origin || DEFAULT_ORIGIN).replace(/\/$/, "");
   const lines = items.slice(0, MAX_LINES).map((item) => {
+    if (isLicenseReminder(item.message_key)) return `• ${item.title}\n${item.message}`;
     if (!String(item.message_key || "").startsWith("leave:")) return `• ${trim(item.title, 80)}\n  ${trim(item.message, 160)}`;
     const fields={title:trim(item.title,80),message:trim(item.message,160),id:String(item.message_key).split(":")[1],link:base+(item.url||"/leave.html"),reason:trim(item.reason,300)||"—",phone:trim(item.contact_phone,100)||"—",
       leave_dates:item.start_date===item.end_date?leaveDate(item.start_date):`${leaveDate(item.start_date)} ถึง ${leaveDate(item.end_date)}`};
@@ -204,7 +206,7 @@ async function deliverToPerson({ env, origin, leaveTemplate, enabled, reserve, q
   // still be delivered, even when the first cron run occurs after submission.
   const fresh = await env.DB.prepare("INSERT OR IGNORE INTO line_feed_users(user_id) VALUES(?)").bind(person.user_id).run();
   if (fresh.meta.changes) {
-    const old=rows.filter(r=>!r.message_key.startsWith('leave:')||String(r.created_at)<String(person.linked_at));
+    const old=rows.filter(r=>!isLicenseReminder(r.message_key)&&(!r.message_key.startsWith('leave:')||String(r.created_at)<String(person.linked_at)));
     if(old.length) await env.DB.batch(old.map(row=>env.DB.prepare("INSERT OR IGNORE INTO line_feed_sent(user_id,message_key,status) VALUES(?,?,'baseline')").bind(person.user_id,row.message_key)));
   }
   if (!rows.length) return;
