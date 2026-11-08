@@ -42,12 +42,13 @@ test('public intake schedules School Notify to each authorized user once, with i
   assert.ok(background.length);await Promise.all(background);
   assert.deepEqual(sent.map(p=>p.refs[0]),['u:1']);
   fail=false;await run();assert.deepEqual(sent.map(p=>p.refs[0]),['u:1','u:2']);
-  for(const message of sent){assert.match(message.title,/แจ้งย้ายออกใหม่/);assert.match(message.body,/นักเรียนทดสอบ/);assert.ok(!message.body.includes(body.contact_address));assert.ok(!message.body.includes(body.contact_phone));assert.equal(message.actions[0].title,'ตรวจสอบแจ้งย้าย');assert.equal(message.actions[0].url,'https://system.banpadengschool.ac.th/dmcreport/?view=notices');}
+  for(const message of sent){assert.match(message.title,/แจ้งย้ายออกใหม่/);assert.match(message.body,/นักเรียนทดสอบ/);assert.ok(message.body.includes('ตรวจสอบแจ้งย้าย: https://system.banpadengschool.ac.th/dmcreport/?view=notices'));assert.equal(message.url,'https://system.banpadengschool.ac.th/dmcreport/?view=notices');assert.ok(!message.body.includes(body.contact_address));assert.ok(!message.body.includes(body.contact_phone));assert.equal(message.actions[0].title,'ตรวจสอบแจ้งย้าย');assert.equal(message.actions[0].url,'https://system.banpadengschool.ac.th/dmcreport/?view=notices');}
   assert.equal(env.raw.prepare("SELECT COUNT(*) n FROM push_feed_messages WHERE message_key='transfer-notice:1'").get().n,2);
+  assert.match(env.raw.prepare("SELECT message FROM push_feed_messages WHERE user_id=2 AND message_key='transfer-notice:1'").get().message,/https:\/\/system\.banpadengschool\.ac\.th\/dmcreport\/\?view=notices/);
   // Retrying the same form and recurring delivery never duplicate a notification.
   await handleTransferNotices(request(body),env,'/api/public/transfer-notices','POST');await run();assert.equal(sent.length,2);
-  env.raw.exec('DELETE FROM student_transfer_access WHERE user_id=2');
+  env.raw.exec(`DELETE FROM student_transfer_access WHERE user_id=2; INSERT INTO tasks(id,title,created_by) VALUES(999,'งานร่วมในรอบเดียวกัน',2); INSERT INTO task_assignees(task_id,user_id) VALUES(999,1);`);
   await handleTransferNotices(request({...input(),direction:'in',destination_school:''}),env,'/api/public/transfer-notices','POST');await run();
-  assert.equal(sent.length,3);assert.deepEqual(sent[2].refs,['u:1']);assert.match(sent[2].title,/แจ้งย้ายเข้าใหม่/);
+  assert.equal(sent.length,3);assert.deepEqual(sent[2].refs,['u:1']);assert.match(sent[2].body,/แจ้งย้ายเข้าใหม่/);assert.equal(sent[2].body.match(/https:\/\/system\.banpadengschool\.ac\.th\/dmcreport\/\?view=notices/g).length,1);
  }finally{globalThis.fetch=original;}
 });

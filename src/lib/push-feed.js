@@ -258,8 +258,11 @@ async function deliver(env, user, origin, stats) {
     // เก็บข้อความไว้ให้หน้า "รายละเอียดแจ้งเตือน" (แบบ LINE OA) — กดแจ้งเตือนแล้วเห็นรายละเอียด + ปุ่มไปหน้างาน
     await env.DB.batch(items.map((r) => env.DB.prepare(`INSERT INTO push_feed_messages (user_id, message_key, title, message, url, details) VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT (user_id, message_key) DO UPDATE SET title = excluded.title, message = excluded.message, url = excluded.url, details = excluded.details, created_at = datetime('now')`)
-      .bind(user.id, r.message_key, trim(r.title, 200), String(r.message || "").slice(0, 2000), r.path, r.details ? JSON.stringify(r.details) : null)));
+      .bind(user.id, r.message_key, trim(r.title, 200), (String(r.message || "").slice(0, 1800) + (isTransferNotice(r.message_key) ? `\nตรวจสอบแจ้งย้าย: ${new URL(r.path, origin).href}` : "")), r.path, r.details ? JSON.stringify(r.details) : null)));
     const single = items.length === 1;
+    const transfer = single && isTransferNotice(items[0].message_key);
+    const transferItem = items.find(r => isTransferNotice(r.message_key));
+    const workLink = transferItem ? `\nตรวจสอบแจ้งย้าย: ${new URL(transferItem.path, origin).href}` : "";
     const renewal = single && isLicenseReminder(items[0].message_key);
     const lines = items.slice(0, MAX_LINES).map((r) => `• ${trim(r.title, 60)}: ${trim(r.message, 80)}`);
     if (items.length > MAX_LINES) lines.push(`และอีก ${items.length - MAX_LINES} รายการ`);
@@ -268,10 +271,10 @@ async function deliver(env, user, origin, stats) {
       method: "POST",
       body: JSON.stringify({
         title: single ? trim(items[0].title, 120) : `แจ้งเตือนใหม่ ${items.length} รายการ`,
-        body: single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500) : lines.join("\n"),
-        url: renewal ? LICENSE_RENEWAL_URL : new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
+        body: (single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500 - workLink.length) : lines.join("\n")) + workLink,
+        url: renewal ? LICENSE_RENEWAL_URL : transfer ? new URL(items[0].path, origin).href : new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
         // ปุ่มบนแจ้งเตือน: ไปหน้างานนั้นโดยตรง (Android/คอมพิวเตอร์; iPhone แตะแล้วเปิดหน้ารายละเอียดที่มีปุ่มเดียวกัน)
-        actions: renewal ? [{title:"ต่ออายุใบประกอบวิชาชีพ",url:LICENSE_RENEWAL_URL}] : single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
+        actions: renewal ? [{title:"ต่ออายุใบประกอบวิชาชีพ",url:LICENSE_RENEWAL_URL}] : transfer ? [{title:"ตรวจสอบแจ้งย้าย",url:new URL(items[0].path, origin).href}] : single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
           : [{ title: "ดูทั้งหมด", url: new URL("/notification.html", origin).href }],
         roles: ["all"],
         refs: [`u:${user.id}`],
