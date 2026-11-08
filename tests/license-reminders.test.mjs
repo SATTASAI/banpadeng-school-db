@@ -5,7 +5,7 @@ import {licenseReminderQuery, LICENSE_RENEWAL_URL} from '../src/lib/license-remi
 import {fixture, call} from './notifications.test.mjs';
 import {ensurePersonnelData} from '../src/lib/personnel-data.js';
 import {dispatchLineNotifications, buildLineDigest} from '../src/lib/line-feed.js';
-import {dispatchPushNotifications} from '../src/lib/push-feed.js';
+import {dispatchPushNotifications,pushPrefs} from '../src/lib/push-feed.js';
 
 function database() {
   const db = new DatabaseSync(':memory:');
@@ -58,6 +58,7 @@ test('daily keys survive same-day edits and LINE digest always includes renewal 
 test('LINE and School Notify deliver on first run once daily despite reading; renewing stops both',async()=>{
   const env=await fixture();
   await call(env,'/api/overview');await ensurePersonnelData(env);
+  await pushPrefs(env,{id:2});env.raw.exec("INSERT INTO push_feed_users(user_id,started_at) VALUES(2,'2000-01-01')");
   const today=env.raw.prepare("SELECT date('now','+7 hours') day").get().day;
   env.raw.exec(`UPDATE personnel_records SET license_expiry_date=NULL,user_id=CASE WHEN user_id=2 THEN NULL ELSE user_id END;
     DELETE FROM personnel_accounts WHERE user_id=2;

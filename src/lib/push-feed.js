@@ -28,7 +28,6 @@ const trim = (text, max) => { const v = String(text || "").replace(/\s+/g, " ").
 const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
 
 const isTransferNotice = (key) => String(key || "").startsWith("transfer-notice:");
-const sendOnFirstRun = (key) => isLicenseReminder(key) || isTransferNotice(key);
 const actionLabel = (key) => { const k = String(key || ""); return isTransferNotice(k) ? "ตรวจสอบแจ้งย้าย" : isLicenseReminder(k) ? "อัปเดตข้อมูลใบประกอบวิชาชีพ" : k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
 
 // หมวดแจ้งเตือน (ตาม message_key ในกระดิ่ง) — ผู้ใช้เลือกปิดบางหมวดได้ที่บัญชีของฉัน
@@ -65,7 +64,7 @@ export async function pushPrefs(env, user, body) {
 async function baselineUser(env, user) {
   await ensureSchema(env);
   await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
-  const rows = (await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50)).filter(r => !isLicenseReminder(r.message_key));
+  const rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50, {forDelivery:true});
   if (rows.length) await env.DB.batch(rows.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
 }
 
@@ -212,13 +211,17 @@ async function deliver(env, user, origin, stats) {
   let rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50, {forDelivery:true});
   rows = rows.filter((r) => Number(r.actor_id || 0) !== Number(user.id));
 
-  // First delivery baselines old work, except daily license reminders and pending transfer notices.
+  // A new connection receives its welcome from Notify, never a backlog of old work.
+
   const fresh = await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
   if (fresh.meta.changes) {
-    const old = rows.filter(r => !sendOnFirstRun(r.message_key));
+    const old = rows;
     if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
-    rows = rows.filter(r => sendOnFirstRun(r.message_key));
+    return;
   }
+  // Timestamp cutoff also excludes backlogs larger than the 50-row first baseline.
+  const connection=await env.DB.prepare('SELECT started_at FROM push_feed_users WHERE user_id=?').bind(user.id).first();
+  if(connection?.started_at)rows=rows.filter(r=>age(r.created_at)<=age(connection.started_at));
   if (!rows.length) return;
 
   const keys = rows.map((r) => r.message_key);
