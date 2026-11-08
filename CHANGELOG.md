@@ -21,7 +21,7 @@
 - ผู้เชื่อม Notify ใหม่ได้รับเฉพาะข้อความต้อนรับรายอุปกรณ์ ไม่ส่งคิวหรือข้อความค้างย้อนหลัง รวมใบประกอบวิชาชีพและแจ้งย้ายเดิม และไม่เพิ่มอุปกรณ์ใหม่เข้าไปในคิวข้อความเก่า
 - รักษา Passkey/รหัสผ่านเดิม ไม่คืน endpoint หรือคีย์ Push ในรายงาน; ผลส่งสำเร็จหมายถึงบริการ Push รับ ไม่ใช่เปิดอ่าน
 - ตรวจ Notify ด้วย npm test/SQLite/DOM และ Wrangler dry-run ผ่าน; System targeted tests 15/15 ผ่าน ชุดรวม 435/437 ผ่าน ติดข้อผิดพลาดเดิม navigation-catalog และ personnel-center; ยังไม่ทดสอบบน iPhone จริงและไม่ส่งข้อความทดสอบถึงผู้ใช้จริง
-- Notify: [PR #4](https://github.com/SATTASAI/school-notify/pull/4)
+- Notify: [PR #4](https://github.com/SATTASAI/school-notify/pull/4) · System: [PR #171](https://github.com/SATTASAI/banpadeng-school-db/pull/171)
 
 ### Patch 1.2 — 8 พฤศจิกายน 2569
 
