@@ -15,9 +15,41 @@
 .lp-subject b{display:block;margin-bottom:4px}
 .lp-unit{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;padding:3px 0}
 .lp-unit>span{min-width:72px;color:#4F5FE0;font-weight:600}
-.lp-files{display:grid;gap:3px;flex:1;min-width:220px}
+.lp-files{display:grid;gap:8px;flex:1;min-width:0}
 .lp-files div{overflow-wrap:anywhere}
-.lp-toggle{border:0;background:none;color:#4F5FE0;cursor:pointer;padding:0;font:inherit;text-decoration:underline}
+.lp-toggle,.lp-file-action{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:8px 12px;border:1px solid #cbdcf1;border-radius:10px;background:#eef5ff;color:#245a96;font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+.lp-toggle:hover,.lp-file-action:hover{background:#dfecff;text-decoration:none}
+.lp-toggle:focus-visible,.lp-file-action:focus-visible{outline:3px solid #2D7FD3;outline-offset:2px}
+.lp-file-card{padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;background:#fff;min-width:0}
+.lp-file-card strong{display:block;font-size:14px;overflow-wrap:anywhere}
+.lp-file-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.lp-file-action{font-size:13px}.lp-file-action.download{background:#fff}
+.lp-empty{padding:20px!important;text-align:center!important}
+@media(max-width:720px){
+  .tw-page,.tw-head>div,#body{min-width:0}
+  .tw-head h1{font-size:24px;overflow-wrap:anywhere}
+  .tw-actions,.tw-term{width:100%}.tw-term select{width:100%;min-width:0}
+  .tw-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.tw-card:last-child{grid-column:1/-1}
+  .tw-filter{align-items:stretch}.tw-filter input[type=search]{width:100%;max-width:none;min-width:0}
+  .tw-filter label{width:100%;align-items:center}
+  .tw-table.lp-table{overflow:visible;border:0;background:transparent;border-radius:0}
+  .tw-table table,.tw-table tbody{display:block;min-width:0;width:100%}
+  .tw-table thead{display:none}
+  .tw-table .lp-teacher{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 8px;padding:14px;margin-top:12px;border:1px solid var(--color-border);border-radius:16px;background:#fff}
+  .tw-table .lp-teacher td{display:block;min-width:0;padding:0;border:0;overflow-wrap:anywhere}
+  .tw-table .lp-teacher .lp-number{display:none}
+  .lp-name,.lp-latest,.lp-status,.lp-action{grid-column:1/-1}
+  .lp-name{font-size:16px}
+  .lp-stat::before,.lp-latest::before{content:attr(data-label);display:block;color:#6b7488;font-size:12px;margin-bottom:2px}
+  .lp-stat{padding:8px!important;border-radius:10px;background:#f3f8fc}
+  .lp-latest{font-size:13px}.lp-toggle{width:100%}
+  .tw-table .lp-detail{display:block;margin-top:8px;padding:12px;border:1px solid var(--color-border);border-radius:14px;background:#fafbff}
+  .tw-table .lp-detail td{display:block;padding:0;border:0;background:transparent}
+  .tw-table .lp-detail .lp-spacer{display:none}
+  .lp-unit{display:block}.lp-unit>span{display:block;margin-bottom:6px}
+  .lp-subject>b{overflow-wrap:anywhere}.lp-files{width:100%}
+  .tw-table .lp-empty-row,.tw-table .lp-empty{display:block}
+}
 .lp-muted{color:#6b7488;font-size:12.5px}
 </style>
 </head>
@@ -57,7 +89,7 @@ async function load(){
 }
 
 function detail(t){
-  return t.subjects.map(s=>`<div class="lp-subject"><b>${esc(s.label)}</b>${s.units.length?s.units.map(u=>`<div class="lp-unit"><span>หน่วยที่ ${u.unit_no}</span><div class="lp-files">${u.files.map(f=>`<div>${esc(f.file_name)} <span class="lp-muted">${size(f.file_size)} · ${when(f.created_at)}</span> · <a href="${viewUrl(f)}" target="_blank" rel="noopener">ดู</a> · <a href="/api/lesson-plans/files/${f.id}?download=1">ดาวน์โหลด</a></div>`).join('')}</div></div>`).join(''):'<span class="lp-muted">ยังไม่อัพโหลด</span>'}</div>`).join('')||'<span class="lp-muted">ไม่มีข้อมูลรายวิชา</span>';
+  return t.subjects.map(s=>`<div class="lp-subject"><b>${esc(s.label)}</b>${s.units.length?s.units.map(u=>`<div class="lp-unit"><span>หน่วยที่ ${u.unit_no}</span><div class="lp-files">${u.files.map(f=>`<div class="lp-file-card"><strong>${esc(f.file_name)}</strong><span class="lp-muted">${size(f.file_size)} · ${when(f.created_at)}</span><div class="lp-file-actions"><a class="lp-file-action" href="${viewUrl(f)}" target="_blank" rel="noopener" aria-label="ดู ${esc(f.file_name)}">ดูแผน ↗</a><a class="lp-file-action download" href="/api/lesson-plans/files/${f.id}?download=1" aria-label="ดาวน์โหลด ${esc(f.file_name)}">ดาวน์โหลด ↓</a></div></div>`).join('')}</div></div>`).join(''):'<span class="lp-muted">ยังไม่อัพโหลด</span>'}</div>`).join('')||'<span class="lp-muted">ไม่มีข้อมูลรายวิชา</span>';
 }
 
 function render(){
@@ -69,17 +101,17 @@ function render(){
     <div class="tw-card"><span>ไฟล์แผนฯ ทั้งหมด</span><strong>${files} ไฟล์</strong></div>`;
   if(!t.length){$('body').innerHTML='<div class="tw-empty"><b>ยังไม่มีข้อมูลครูผู้สอนของภาคเรียนนี้</b></div>';return;}
   $('body').innerHTML=`<div class="tw-filter"><input id="search" type="search" placeholder="ค้นหาชื่อครู / วิชา"><label><input type="checkbox" id="pending"> แสดงเฉพาะที่ยังไม่อัพโหลด</label></div>
-    <div class="tw-table"><table><thead><tr><th>ที่</th><th>ครู</th><th>วิชาที่อัพแล้ว</th><th>หน่วย</th><th>ไฟล์</th><th>ล่าสุด</th><th>สถานะ</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>`;
+    <div class="tw-table lp-table"><table><thead><tr><th>ที่</th><th>ครู</th><th>วิชาที่อัพแล้ว</th><th>หน่วย</th><th>ไฟล์</th><th>ล่าสุด</th><th>สถานะ</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>`;
   const rows=()=>{
     const q=$('search').value.trim(),pending=$('pending').checked;
     const list=t.filter(x=>(!q||(x.full_name+' '+x.subjects.map(s=>s.label).join(' ')).includes(q))&&(!pending||!x.files));
-    $('rows').innerHTML=list.map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.full_name)}</b></td><td>${x.subjects_done} / ${x.subjects.length}</td><td>${x.units}</td><td>${x.files}</td><td>${when(x.last_at)}</td>
-      <td>${x.files?'<span class="tw-badge ok">อัพโหลดแล้ว</span>':'<span class="tw-badge">ยังไม่อัพโหลด</span>'}</td>
-      <td><button class="lp-toggle" data-id="${x.user_id}">${open.has(x.user_id)?'ซ่อน':'ดูแผนฯ'}</button></td></tr>
-      ${open.has(x.user_id)?`<tr class="lp-detail"><td></td><td colspan="7">${detail(x)}</td></tr>`:''}`).join('')||'<tr><td colspan="8">ไม่พบข้อมูล</td></tr>';
+    $('rows').innerHTML=list.map((x,i)=>`<tr class="lp-teacher"><td class="lp-number">${i+1}</td><td class="lp-name"><b>${esc(x.full_name)}</b></td><td class="lp-stat" data-label="วิชาที่อัพแล้ว">${x.subjects_done} / ${x.subjects.length}</td><td class="lp-stat" data-label="หน่วย">${x.units}</td><td class="lp-stat" data-label="ไฟล์">${x.files}</td><td class="lp-latest" data-label="ล่าสุด">${when(x.last_at)||'—'}</td>
+      <td class="lp-status">${x.files?'<span class="tw-badge ok">อัพโหลดแล้ว</span>':'<span class="tw-badge">ยังไม่อัพโหลด</span>'}</td>
+      <td class="lp-action"><button class="lp-toggle" data-id="${x.user_id}" aria-expanded="${open.has(x.user_id)}" ${open.has(x.user_id)?`aria-controls="lp-detail-${x.user_id}"`:''} aria-label="${open.has(x.user_id)?'ซ่อนแผนของ':'ดูแผนของ'} ${esc(x.full_name)}">${open.has(x.user_id)?'ซ่อน':'ดูแผนฯ'}</button></td></tr>
+      ${open.has(x.user_id)?`<tr class="lp-detail" id="lp-detail-${x.user_id}"><td class="lp-spacer"></td><td colspan="7">${detail(x)}</td></tr>`:''}`).join('')||'<tr class="lp-empty-row"><td class="lp-empty" colspan="8">ไม่พบข้อมูล</td></tr>';
   };
   $('search').oninput=rows;$('pending').onchange=rows;
-  $('rows').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;const id=Number(b.dataset.id);open.has(id)?open.delete(id):open.add(id);rows();};
+  $('rows').onclick=e=>{const b=e.target.closest('[data-id]');if(!b)return;const id=Number(b.dataset.id);open.has(id)?open.delete(id):open.add(id);rows();$('rows').querySelector(`[data-id="${id}"]`)?.focus({preventScroll:true});};
   rows();
 }
 $('term').onchange=()=>{open.clear();load();};
