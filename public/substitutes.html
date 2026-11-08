@@ -9,9 +9,44 @@
   @media(max-width:760px){.page{padding:14px}.filters,.lesson{grid-template-columns:1fr}}@media print{@page{size:A4 portrait;margin:15mm}.app-topbar,.filters,.notice,.lesson-list,.actions,.lead,.mode,.cell-actions{display:none!important}.page{padding:0}h1{text-align:center;font-size:20pt}table{font-size:16pt}th,td{border:1px solid #aaa}.section-title{margin-top:15mm}}
 
 .mode{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:24px 0}.mode a{display:grid;gap:8px;padding:24px 18px;border:1px solid #cbdbe8;border-radius:18px;background:#fff;color:#163e67;text-decoration:none}.mode a strong{font-size:21px}.mode a span{color:#607991;font-size:14px}.mode a:hover{border-color:#1e5fc0;background:#f0f6ff}.special-fields{display:grid;gap:12px;margin:18px 0}.special-fields input,.special-fields select{width:100%;padding:10px;border:1px solid #cbdbe8;border-radius:10px;font:inherit}.special-fields label{display:grid;gap:6px}.special-fields select[multiple]{min-height:140px}.special-warn{color:#9b5a10}.page [hidden]{display:none!important}.page.mode-home #workspace{display:none}.back-modes{display:inline-block;margin:10px 0}@media(max-width:760px){.mode{grid-template-columns:1fr}.mode a{padding:18px}.filters.day-add{grid-template-columns:1fr}}@media print{.mode,.back-modes,.special-fields{display:none!important}}
+
+/* Category colors are shared by the entry cards, section heading and return card. */
+.page{--mode-color:#1d4ed8;--mode-dark:#1e3a8a;--mode-tint:#eff6ff;--mode-border:#93c5fd}
+#modeLeave,.page.mode-leave{--mode-color:#1d4ed8;--mode-dark:#1e3a8a;--mode-tint:#eff6ff;--mode-border:#93c5fd}
+#modeOther,.page.mode-other{--mode-color:#c2410c;--mode-dark:#9a3412;--mode-tint:#fff7ed;--mode-border:#fdba74}
+#modeSpecial,.page.mode-special{--mode-color:#7e22ce;--mode-dark:#581c87;--mode-tint:#faf5ff;--mode-border:#d8b4fe}
+.mode a{position:relative;border:1px solid var(--mode-border);border-top:6px solid var(--mode-color);background:var(--mode-tint);color:var(--mode-dark);box-shadow:0 4px 14px #163e670a;transition:transform .16s ease,box-shadow .16s ease}
+.mode a span{color:var(--mode-dark)}.mode a:hover{background:var(--mode-tint);border-color:var(--mode-color);box-shadow:0 8px 20px #163e6717;transform:translateY(-2px)}
+.back-modes{display:flex;align-items:center;gap:14px;width:fit-content;max-width:100%;box-sizing:border-box;margin:12px 0 20px;padding:16px 20px;border:2px solid var(--mode-color);border-radius:16px;background:var(--mode-color);color:#fff;text-decoration:none;box-shadow:0 5px 14px #163e6724;transition:background .16s ease,transform .16s ease}
+.back-modes:hover{background:var(--mode-dark);color:#fff;transform:translateY(-1px)}.back-modes .back-icon{display:grid;place-items:center;flex:0 0 40px;height:40px;border:1px solid #ffffff70;border-radius:12px;background:#ffffff20;font-size:24px;line-height:1}.back-modes .back-label{display:grid;gap:2px;min-width:0}.back-modes strong{font-size:17px}.back-modes small{font-size:13px;color:#fff}
+.mode a:focus-visible,.back-modes:focus-visible{outline:3px solid var(--mode-dark);outline-offset:4px}
+#modeTitle{padding:14px 18px;border-left:5px solid var(--mode-color);border-radius:0 12px 12px 0;background:var(--mode-tint);color:var(--mode-dark)}
+@media(max-width:760px){.back-modes{width:100%;padding:14px 16px}.back-modes strong{font-size:16px}}
+@media(prefers-reduced-motion:reduce){.mode a,.back-modes{transition:none}.mode a:hover,.back-modes:hover{transform:none}}
+
+@media screen and (max-width:760px){
+ .page,.lesson,.lesson>*,.filters>*{min-width:0}.page select{min-width:0;max-width:100%}.actions>*{max-width:100%;white-space:normal}
+ .table-wrap{overflow:visible}.table-wrap table,.day-teacher table{display:block;width:100%;table-layout:fixed}
+ .table-wrap thead,.day-teacher thead{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+ .table-wrap tbody,.day-teacher tbody{display:grid;gap:12px;width:100%}
+ .table-wrap tr,.day-teacher tr{display:block;min-width:0;padding:8px 12px;border:1px solid #d5e2ed;border-radius:14px;background:#fff}
+ .table-wrap td,.day-teacher td{display:grid;grid-template-columns:86px minmax(0,1fr);align-items:start;gap:8px;padding:9px 0;border-bottom:1px solid #edf2f7;min-width:0;overflow-wrap:anywhere;font-size:14px;line-height:1.5}
+ .table-wrap td:last-child,.day-teacher td:last-child{border-bottom:0}
+ .table-wrap td::before,.day-teacher td::before{color:#526b82;font-weight:600;font-size:13px}
+ .table-wrap td:nth-child(1)::before,.day-teacher td:nth-child(1)::before{content:'คาบ'}
+ .table-wrap td:nth-child(2)::before,.day-teacher td:nth-child(2)::before{content:'ชั้น/ห้อง'}
+ .table-wrap td:nth-child(3)::before,.day-teacher td:nth-child(3)::before{content:'วิชา'}
+ .table-wrap td:nth-child(4)::before{content:'ครูที่ไม่อยู่'}.table-wrap td:nth-child(5)::before,.day-teacher td:nth-child(4)::before{content:'ครูสอนแทน'}
+ .table-wrap td:nth-child(6)::before{content:'อ้างอิง'}
+ .table-wrap td.cell-actions{display:flex;justify-content:flex-end;padding-top:10px}.table-wrap td.cell-actions::before{content:none}
+ .day-teacher{padding:12px;min-width:0}.day-teacher h3{font-size:17px;overflow-wrap:anywhere}.day-teacher h3 small{display:block;font-size:13px;margin-top:4px}
+ .day-teacher td:has(select){grid-template-columns:minmax(0,1fr)}.day-teacher td select{width:100%;max-width:100%;font-size:14px;box-sizing:border-box}
+ .day-teacher td[colspan]{display:block}.day-teacher td[colspan]::before{content:none}
+ .day-teacher .done-row{background:#f6fcf8;border-color:#b9dcc4}
+}
 </style></head><body><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/dashboard.html">← กลับหน้าหลัก</a></div></div><main class="page"><h1>จัดสอนแทน</h1><p class="lead">เลือกประเภทการจัดสอนแทนจาก 3 การ์ด ใช้แบบฟอร์มคำสั่งและสถิติร่วมกัน รองรับครูอนุบาลที่ไม่มีตารางสอนโดยกำหนดคาบตามเวลาเรียนของโรงเรียน</p>
 <nav class="mode" id="modeCards" aria-label="ประเภทการจัดสอนแทน"><a id="modeLeave" href="?mode=leave"><strong>1. จากใบลา</strong><span>เลือกใบลาและจัดครูสอนแทนตามเงื่อนไขเดิม</span></a><a id="modeOther" href="?mode=other"><strong>2. ไม่มีใบลา</strong><span>ระบุเหตุที่ไม่อยู่ เช่น ไปราชการหรืออบรม</span></a><a id="modeSpecial" href="?mode=special"><strong>3. กรณีพิเศษ</strong><span>ระบุเรื่อง ผู้ไม่ว่าง และมอบหมายได้อิสระ</span></a></nav>
-<section id="workspace"><a class="back-modes" href="/substitutes.html">← เลือกประเภทการจัดสอนแทน</a><h2 id="modeTitle"></h2>
+<section id="workspace"><a class="back-modes" href="/substitutes.html"><span class="back-icon" aria-hidden="true">←</span><span class="back-label"><strong>กลับไปเลือกประเภทการจัดสอนแทน</strong><small>ดูการจัดสอนแทนทั้ง 3 ประเภท</small></span></a><h2 id="modeTitle"></h2>
 <button type="button" class="btn btn-ghost" id="modeDay" hidden>จัดทั้งวัน (หลายคนพร้อมกัน)</button><div class="leave-cal" id="leaveCalendar" aria-label="ปฏิทินวันที่มีการลา"></div>
 <div class="filters"><label>วันที่<input type="date" id="date"></label><label id="leaveWrap">ครูที่ลา / ใบลา<select id="absentTeacher"></select></label><label id="otherWrap" hidden>ครูที่ไม่อยู่<select id="otherTeacher"></select></label><button class="btn btn-primary" id="find">ค้นหาคาบ</button></div>
 <div class="filters" id="reasonRow" hidden><label>เหตุที่ไม่อยู่<select id="reasonType"><option value="ไปราชการ">ไปราชการ</option><option value="อบรม/ประชุม/สัมมนา">อบรม / ประชุม / สัมมนา</option><option value="พานักเรียนไปร่วมกิจกรรม/แข่งขัน">พานักเรียนไปร่วมกิจกรรม / แข่งขัน</option><option value="ปฏิบัติหน้าที่อื่นที่ได้รับมอบหมาย">ปฏิบัติหน้าที่อื่นที่ได้รับมอบหมาย</option><option value="other">อื่น ๆ (ระบุ)</option></select></label><label id="reasonTextWrap" hidden>ระบุเหตุผล<input id="reasonText" maxlength="200" placeholder="เช่น ไปส่งเอกสารที่ สพป."></label></div>
@@ -90,7 +125,7 @@ $("manualPrepare").onclick=async()=>{const teacher=selectedAbsent()?.teacher_id,
 function setupMode(){
  const titles={leave:'จากใบลา',other:'ไม่มีใบลา',special:'กรณีพิเศษ'};
  if(!titles[mode])mode='home';
- document.querySelector('.page').classList.toggle('mode-home',mode==='home');
+ document.querySelector('.page').classList.toggle('mode-home',mode==='home');for(const type of ['leave','other','special'])document.querySelector('.page').classList.toggle('mode-'+type,mode===type);
  $("modeCards").hidden=mode!=='home';$("modeTitle").textContent=titles[mode]||'';
  $("leaveWrap").hidden=mode!=='leave';$("otherWrap").hidden=mode!=='other'&&mode!=='special';
  $("reasonRow").hidden=mode!=='other';$("specialFields").hidden=mode!=='special';
