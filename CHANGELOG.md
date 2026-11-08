@@ -1,0 +1,426 @@
+# SYSTEM — Weekly Patch Update
+
+ระบบจัดการงานและข้อมูลโรงเรียนบ้านป่าเด็ง
+
+สรุปตั้งแต่ PR #1 ถึง #170 ณ 8 พฤศจิกายน 2569 จากรีโป [SATTASAI/banpadeng-school-db](https://github.com/SATTASAI/banpadeng-school-db)
+
+## ขอบเขตและวิธีนับ
+
+- ครอบคลุม **169 PR ที่ merge แล้ว** เริ่ม 19 กันยายน 2569 ถึง 8 พฤศจิกายน 2569; ไม่รวม PR #17 ที่ยังเปิดอยู่
+- แบ่งสัปดาห์จันทร์–อาทิตย์ตามวันที่ merge เวลาไทย ไม่ใช้วันที่สร้าง PR
+- กำหนด Patch 1.0 เริ่มวันที่ 2 พฤศจิกายน 2569 (สัปดาห์ 2–8 พฤศจิกายน) และใช้ Patch 0.1–0.7 สำหรับสัปดาห์ก่อนหน้า ตามรูปแบบเลขเวอร์ชันสำหรับบันทึกอัปเดตนี้
+- งานใหญ่ที่มีผลลัพธ์ต่อผู้ใช้อย่างเดียวกันนับ 1 รายการ รวม PR แก้ย่อย/ปรับหน้า/แก้ซ้ำที่เกี่ยวข้องในสัปดาห์นั้นไว้ด้วยกัน งานคนละส่วนใน PR เดียวอาจอ้างอิงได้หลายรายการ
+- หากมีการทดลอง ย้อนกลับ หรือเปลี่ยนขั้นตอนในสัปดาห์เดียวกัน จะบอกผลสุดท้ายของสัปดาห์ ไม่บวกเป็นฟีเจอร์ซ้ำ
+- รวม **58 รายการอัปเดต** ใน 8 สัปดาห์ โดยมี 1 สัปดาห์ที่ไม่พบ PR merge
+- PR #1 เป็นการเพิ่มหน้าสถานะให้ระบบที่มีอยู่แล้ว จึงไม่ใช่หลักฐานว่าเป็นวันเริ่มพัฒนาระบบทั้งหมด สรุปนี้เริ่มตามขอบเขต PR #1 ที่กำหนด
+- อ้างอิงสถานะ ชื่อ และคำอธิบาย PR; การ merge ไม่ใช่หลักฐานยืนยันว่าเปิดใช้จริงบน production ทุกฟีเจอร์ และไม่รวม commit ที่เข้าโดยตรงโดยไม่ผ่าน PR
+
+## ภาพรวมรายสัปดาห์
+
+| Patch | ช่วงเวลา พ.ศ. 2569 | PR ที่ merge | รายการอัปเดต |
+|---|---|---:|---:|
+| 0.1 | 14–20 กันยายน 2569 | 15 | 7 |
+| 0.2 | 21–27 กันยายน 2569 | 1 | 1 |
+| 0.3 | 28 กันยายน–4 ตุลาคม 2569 | 0 | 0 |
+| 0.4 | 5–11 ตุลาคม 2569 | 3 | 1 |
+| 0.5 | 12–18 ตุลาคม 2569 | 16 | 3 |
+| 0.6 | 19–25 ตุลาคม 2569 | 14 | 11 |
+| 0.7 | 26 ตุลาคม–1 พฤศจิกายน 2569 | 45 | 17 |
+| 1.0 | 2–8 พฤศจิกายน 2569 | 75 | 18 |
+
+## Patch 0.1 — 14–20 กันยายน 2569
+
+**7 รายการอัปเดต · 15 PR**
+
+1. **เพิ่มหน้าสถานะระบบ** — ผู้ดูแลตรวจสถานะฐานข้อมูล D1, Google Drive, R2 และ LINE พร้อมระดับเตือนการใช้งานสำหรับข้อมูลที่ตรวจได้จริง  
+   อ้างอิง: [#1](https://github.com/SATTASAI/banpadeng-school-db/pull/1)
+
+2. **สำรองและตรวจสอบฐานข้อมูล** — ส่งออกฐานข้อมูล D1 เป็น SQL แก้ข้อผิดพลาดระหว่างส่งออก แสดงสาเหตุที่ปลอดภัย และเพิ่มเครื่องมือตรวจความสมบูรณ์/ทดลองกู้คืนในฐานข้อมูลแยก  
+   อ้างอิง: [#2](https://github.com/SATTASAI/banpadeng-school-db/pull/2), [#3](https://github.com/SATTASAI/banpadeng-school-db/pull/3), [#4](https://github.com/SATTASAI/banpadeng-school-db/pull/4), [#5](https://github.com/SATTASAI/banpadeng-school-db/pull/5), [#6](https://github.com/SATTASAI/banpadeng-school-db/pull/6)
+
+3. **ตรวจสอบไฟล์แนบ** — ตรวจไฟล์ที่ลงทะเบียนไว้กับ Google Drive เพื่อค้นหาไฟล์หาย เข้าไม่ได้ อยู่ในถังขยะ หรือขนาดไม่ตรง  
+   อ้างอิง: [#7](https://github.com/SATTASAI/banpadeng-school-db/pull/7)
+
+4. **ตรวจสอบเวอร์ชันที่นำขึ้นใช้งาน** — เพิ่มรายงาน deployment ของ Cloudflare Worker ใน GitHub Actions พร้อมที่มาและเวลาของเวอร์ชัน  
+   อ้างอิง: [#8](https://github.com/SATTASAI/banpadeng-school-db/pull/8), [#9](https://github.com/SATTASAI/banpadeng-school-db/pull/9)
+
+5. **สำรองไฟล์ Google Drive** — ดาวน์โหลดไฟล์ที่ระบบลงทะเบียนไว้พร้อมรายการไฟล์ ตรวจขนาดและค่าแฮช และเพิ่มขั้นตอนทดลองกู้คืนแบบออฟไลน์  
+   อ้างอิง: [#10](https://github.com/SATTASAI/banpadeng-school-db/pull/10)
+
+6. **ลดการเปิดเผยข้อมูลส่วนบุคคล** — จำกัดข้อมูลที่ส่งในรายการนักเรียนและบุคลากร โดยอ่านรายละเอียดเพิ่มเติมเมื่อเปิดรายบุคคล  
+   อ้างอิง: [#11](https://github.com/SATTASAI/banpadeng-school-db/pull/11)
+
+7. **เพิ่มงานวิเคราะห์ผู้เรียนรายบุคคล** — บันทึกตามนักเรียน ภาคเรียน และผู้เขียน กรองระดับชั้น/ห้อง มอบหมายครูผู้รับผิดชอบ และพิมพ์ A4 รายคนหรือทั้งห้อง พร้อมฟอนต์ TH SarabunPSK  
+   อ้างอิง: [#12](https://github.com/SATTASAI/banpadeng-school-db/pull/12), [#13](https://github.com/SATTASAI/banpadeng-school-db/pull/13), [#14](https://github.com/SATTASAI/banpadeng-school-db/pull/14), [#15](https://github.com/SATTASAI/banpadeng-school-db/pull/15)
+
+
+## Patch 0.2 — 21–27 กันยายน 2569
+
+**1 รายการอัปเดต · 1 PR**
+
+1. **เชื่อมข้อมูลหลักกับ BPD Timetable** — เพิ่ม API อ่านปีการศึกษา ภาคเรียน ห้อง ครู รายวิชา และภาระสอน โดยมีระบบโรงเรียนเป็นแหล่งข้อมูลหลักและจำกัดการเข้าถึงด้วยโทเคน  
+   อ้างอิง: [#16](https://github.com/SATTASAI/banpadeng-school-db/pull/16)
+
+
+## Patch 0.3 — 28 กันยายน–4 ตุลาคม 2569
+
+**0 รายการอัปเดต · 0 PR**
+
+ไม่พบ PR ที่ merge ในสัปดาห์นี้ จึงไม่มีรายการอัปเดตที่ยืนยันได้จากประวัติ PR
+
+## Patch 0.4 — 5–11 ตุลาคม 2569
+
+**1 รายการอัปเดต · 3 PR**
+
+1. **เพิ่มระบบจัดตารางสอนอัตโนมัติ** — กำหนดภาระสอน คาบไม่ว่าง และคาบล็อก ตรวจครู/ห้องชน รองรับนำเข้าและส่งออก Excel ตรวจภาระสอนก่อนจัด คาบกิจกรรมและคาบคู่ แสดงตารางครู เก็บเป็นร่างก่อนเผยแพร่ และแก้หน้าโหลดค้างพร้อมปุ่มลองใหม่  
+   อ้างอิง: [#18](https://github.com/SATTASAI/banpadeng-school-db/pull/18), [#19](https://github.com/SATTASAI/banpadeng-school-db/pull/19), [#20](https://github.com/SATTASAI/banpadeng-school-db/pull/20)
+
+
+## Patch 0.5 — 12–18 ตุลาคม 2569
+
+**3 รายการอัปเดต · 16 PR**
+
+1. **เพิ่มและเชื่อมระบบประเมิน PA/ครูผู้ช่วย** — เริ่มระบบประเมิน แล้วแยกไป evaluatesystem เชื่อมบัญชีโรงเรียนโดยไม่ต้องยืนยันซ้ำ แก้ปัญหาการส่งต่อเข้าสู่ระบบ จำกัดคะแนนที่กรรมการภายนอกมองเห็น และแสดงผลที่เผยแพร่แล้วพร้อม PDF ในฝ่ายบุคคล  
+   อ้างอิง: [#21](https://github.com/SATTASAI/banpadeng-school-db/pull/21), [#22](https://github.com/SATTASAI/banpadeng-school-db/pull/22), [#23](https://github.com/SATTASAI/banpadeng-school-db/pull/23), [#24](https://github.com/SATTASAI/banpadeng-school-db/pull/24), [#25](https://github.com/SATTASAI/banpadeng-school-db/pull/25), [#26](https://github.com/SATTASAI/banpadeng-school-db/pull/26), [#27](https://github.com/SATTASAI/banpadeng-school-db/pull/27), [#28](https://github.com/SATTASAI/banpadeng-school-db/pull/28)
+
+2. **ปรับการส่ง LINE แจ้งใบลา** — แจ้งผู้รับผิดชอบและรอง ผอ. ที่กำหนด ใช้บัญชี LINE ที่จับคู่ไว้เดิม ลดการส่งซ้ำ ลองส่งใหม่ และเพิ่มสถานะตรวจสอบการส่ง แก้คำสั่งฐานข้อมูลที่ทำให้กระดิ่งและ LINE ส่งไม่ได้  
+   อ้างอิง: [#29](https://github.com/SATTASAI/banpadeng-school-db/pull/29), [#30](https://github.com/SATTASAI/banpadeng-school-db/pull/30), [#31](https://github.com/SATTASAI/banpadeng-school-db/pull/31), [#32](https://github.com/SATTASAI/banpadeng-school-db/pull/32), [#33](https://github.com/SATTASAI/banpadeng-school-db/pull/33), [#34](https://github.com/SATTASAI/banpadeng-school-db/pull/34), [#35](https://github.com/SATTASAI/banpadeng-school-db/pull/35)
+
+3. **เพิ่มแม่แบบข้อความและลิงก์ดูใบลา** — ตั้งข้อความ LINE พร้อมตัวอย่าง และลิงก์เฉพาะผู้รับสำหรับอ่านรายละเอียดใบลาโดยไม่ต้องล็อกอิน มีวันหมดอายุและตรวจสิทธิ์ผู้รับ  
+   อ้างอิง: [#36](https://github.com/SATTASAI/banpadeng-school-db/pull/36)
+
+
+## Patch 0.6 — 19–25 ตุลาคม 2569
+
+**11 รายการอัปเดต · 14 PR**
+
+1. **ปรับสิทธิ์และข้อมูลในแม่แบบแจ้งใบลา** — ให้เฉพาะ superadmin แก้แม่แบบ และเพิ่มตัวแปรเหตุผล วันที่ลา และเบอร์ติดต่อครู  
+   อ้างอิง: [#37](https://github.com/SATTASAI/banpadeng-school-db/pull/37), [#38](https://github.com/SATTASAI/banpadeng-school-db/pull/38), [#39](https://github.com/SATTASAI/banpadeng-school-db/pull/39)
+
+2. **เพิ่มระบบลงทะเบียนและประเมินนิเทศ** — ครูจองคาบและติดตามผล ผู้ประเมินรับงาน/ให้คะแนน ย้ายงานนิเทศไปฝ่ายวิชาการ เพิ่มหน้าสรุปสำหรับฝ่ายบริหารและส่งออก CSV พร้อมแก้ตารางจองและข้อผิดพลาดสิทธิ์ผู้ประเมิน  
+   อ้างอิง: [#40](https://github.com/SATTASAI/banpadeng-school-db/pull/40), [#44](https://github.com/SATTASAI/banpadeng-school-db/pull/44), [#45](https://github.com/SATTASAI/banpadeng-school-db/pull/45), [#50](https://github.com/SATTASAI/banpadeng-school-db/pull/50)
+
+3. **เพิ่มความปลอดภัยบัญชี** — จัดการอุปกรณ์ที่ล็อกอิน ออกจากระบบรายเครื่อง แจ้งกิจกรรมบัญชีผิดปกติ เพิ่ม Turnstile และ security headers  
+   อ้างอิง: [#41](https://github.com/SATTASAI/banpadeng-school-db/pull/41)
+
+4. **เพิ่มบัญชีผู้ชมภายนอก** — เข้าดูแบบอ่านอย่างเดียว ซ่อนข้อมูลส่วนบุคคล และกำหนดวันหมดอายุ  
+   อ้างอิง: [#42](https://github.com/SATTASAI/banpadeng-school-db/pull/42)
+
+5. **เพิ่มความทนทานของ LINE OA** — แก้จุดบกพร่องในกระบวนการส่งแจ้งเตือน รวมการป้องกันส่งซ้ำที่ปรับร่วมกับงานระบบอื่น  
+   อ้างอิง: [#43](https://github.com/SATTASAI/banpadeng-school-db/pull/43), [#47](https://github.com/SATTASAI/banpadeng-school-db/pull/47)
+
+6. **เพิ่มเจ้าหน้าที่การเงินสำรอง** — กำหนดเจ้าหน้าที่การเงินได้ 2 ตำแหน่ง ทำหน้าที่แทนกัน และส่งต่อให้คนอื่นเมื่อผู้รับผิดชอบเป็นผู้ยื่นเอง  
+   อ้างอิง: [#46](https://github.com/SATTASAI/banpadeng-school-db/pull/46)
+
+7. **เพิ่มสถิติวันลาและการสอนแทน** — ดูสถิติแยกช่วงเวลา ส่งออก/พิมพ์ได้ ใช้สถิติสอนแทนช่วยเรียงครูที่รับภาระน้อยก่อน  
+   อ้างอิง: [#47](https://github.com/SATTASAI/banpadeng-school-db/pull/47)
+
+8. **จัดระเบียบงานซ่อมและเบิกจ่าย** — ย้ายแจ้งซ่อมเข้าระบบสนับสนุน แยกหน้าขอเบิกจ่าย/จัดซื้อจัดจ้างกับงานบันทึกของฝ่ายงบประมาณ เพิ่มทะเบียนรับเรื่องรวมและการกรองตามขั้นดำเนินงาน  
+   อ้างอิง: [#47](https://github.com/SATTASAI/banpadeng-school-db/pull/47)
+
+9. **เพิ่มโหมดดูในมุมมองบัญชีอื่น** — superadmin ตรวจเมนูและสิทธิ์ของบัญชีเป้าหมายแบบอ่านอย่างเดียว มีเวลาหมดอายุและบันทึกการใช้งาน และย้ายเมนูจัดสอนแทนไปฝ่ายบุคคล  
+   อ้างอิง: [#48](https://github.com/SATTASAI/banpadeng-school-db/pull/48)
+
+10. **ปรับการใช้งานโครงการต่อเนื่อง** — ผูกปีงบประมาณเริ่มต้นกับปีการศึกษาปัจจุบัน เพื่อให้งานโครงการและเบิกจ่ายต่อเนื่องในภาคเรียนที่ 2 โดยยังเลือกปีอื่นได้  
+   อ้างอิง: [#48](https://github.com/SATTASAI/banpadeng-school-db/pull/48)
+
+11. **ปรับแดชบอร์ดและเชื่อมสถิติมาเรียน** — แบ่งหน้าตามแท็บ ลดความยาวหน้า และใช้ข้อมูลการมาเรียนจาก grades พร้อมสถานะข้อมูลที่ยังไม่ครบ  
+   อ้างอิง: [#49](https://github.com/SATTASAI/banpadeng-school-db/pull/49)
+
+
+## Patch 0.7 — 26 ตุลาคม–1 พฤศจิกายน 2569
+
+**17 รายการอัปเดต · 45 PR**
+
+1. **ปรับหน้าตารางและเมนูฝ่ายงาน** — จัดชื่อบุคคลในตารางให้อ่านง่าย และแสดงเมนูฝ่ายตามสังกัด/สิทธิ์ รวมฝ่ายปฐมวัย  
+   อ้างอิง: [#51](https://github.com/SATTASAI/banpadeng-school-db/pull/51), [#79](https://github.com/SATTASAI/banpadeng-school-db/pull/79)
+
+2. **เพิ่มปฏิทินปฏิบัติงานและปรับภาพรวม** — รวมตัวเลขสำคัญเป็นแผงเดียว วางปฏิทินด้านบน ดึงวันหยุดจาก grades และแสดงวันกิจกรรมสีเขียวโดยนับเป็นวันเรียน  
+   อ้างอิง: [#52](https://github.com/SATTASAI/banpadeng-school-db/pull/52), [#54](https://github.com/SATTASAI/banpadeng-school-db/pull/54), [#55](https://github.com/SATTASAI/banpadeng-school-db/pull/55), [#56](https://github.com/SATTASAI/banpadeng-school-db/pull/56)
+
+3. **ปรับนโยบายการใช้งาน** — อัปเดต Privacy Policy และ Terms of Service ให้ครอบคลุมระบบและผู้ให้บริการที่ใช้จริง  
+   อ้างอิง: [#53](https://github.com/SATTASAI/banpadeng-school-db/pull/53)
+
+4. **ปรับข้อมูลส่วนตัวและการเชื่อมระเบียนบุคลากร** — แก้ข้อมูลส่วนตัว/วิทยฐานะจากบัญชีของฉัน รวมระเบียนครูเดิมกับบัญชีสมัครใหม่เมื่อจับคู่ได้แน่นอน และให้แก้ชื่อในทะเบียนบุคลากรโดยไม่เปลี่ยนชื่อบัญชีผู้ใช้  
+   อ้างอิง: [#57](https://github.com/SATTASAI/banpadeng-school-db/pull/57), [#70](https://github.com/SATTASAI/banpadeng-school-db/pull/70), [#88](https://github.com/SATTASAI/banpadeng-school-db/pull/88), [#89](https://github.com/SATTASAI/banpadeng-school-db/pull/89)
+
+5. **ปรับระบบนิเทศและเอกสาร** — จำกัดคาบละ 3 คำขอ จัดการวันหยุด/วันกิจกรรมและการยกเลิก เพิ่มปฏิทินนัด รวมแบบประเมินการสอนและห้องเรียนเป็น 10 ข้อ ปรับเมนูงานนิเทศภายใน และส่งออก Word/PDF  
+   อ้างอิง: [#58](https://github.com/SATTASAI/banpadeng-school-db/pull/58), [#59](https://github.com/SATTASAI/banpadeng-school-db/pull/59), [#60](https://github.com/SATTASAI/banpadeng-school-db/pull/60), [#61](https://github.com/SATTASAI/banpadeng-school-db/pull/61), [#62](https://github.com/SATTASAI/banpadeng-school-db/pull/62), [#63](https://github.com/SATTASAI/banpadeng-school-db/pull/63), [#64](https://github.com/SATTASAI/banpadeng-school-db/pull/64), [#67](https://github.com/SATTASAI/banpadeng-school-db/pull/67), [#71](https://github.com/SATTASAI/banpadeng-school-db/pull/71)
+
+6. **เพิ่มจุดแจ้งเตือนในเมนู** — แสดงจุดแดงตามเมนูที่มีแจ้งเตือนยังไม่อ่าน และล้างสถานะเมื่อเปิดหน้าที่เกี่ยวข้อง  
+   อ้างอิง: [#65](https://github.com/SATTASAI/banpadeng-school-db/pull/65)
+
+7. **ป้องกันการส่งคำขอซ้ำ** — จำกัดการส่งข้อมูลเดิมและการส่ง–ยกเลิกถี่ผิดปกติ รวมงานเบิกจ่าย  
+   อ้างอิง: [#66](https://github.com/SATTASAI/banpadeng-school-db/pull/66)
+
+8. **จำกัดสิทธิ์ดูสถิติวันลา** — ครูทั่วไปดูเฉพาะของตนเอง ผู้รับผิดชอบฝ่ายบุคคล ผู้บริหาร และ superadmin ดูตามสิทธิ์  
+   อ้างอิง: [#68](https://github.com/SATTASAI/banpadeng-school-db/pull/68)
+
+9. **เพิ่มขั้นลงนามโครงการและเจ้าหน้าที่พัสดุสำรอง** — เพิ่มเจ้าหน้าที่พัสดุคนที่ 2 และบันทึกขออนุมัติโครงการ/ใช้เงินพร้อมขั้นลงนาม 6 ขั้นและแบบพิมพ์โรงเรียน  
+   อ้างอิง: [#69](https://github.com/SATTASAI/banpadeng-school-db/pull/69), [#72](https://github.com/SATTASAI/banpadeng-school-db/pull/72)
+
+10. **เพิ่มการจัดการอาคารและห้อง** — เพิ่ม แก้ไข เปิดหรือปิดใช้งานรายการสถานที่จากหน้าทะเบียน  
+   อ้างอิง: [#73](https://github.com/SATTASAI/banpadeng-school-db/pull/73)
+
+11. **ปรับป่าเด็งโมเดลเป็นแบบรายงาน** — กรอกแบบฟอร์มพร้อมรูปสูงสุด 4 ภาพ ส่งออก Word/PDF รายฉบับหรือรวมเล่ม เพิ่มลายเซ็นพื้นใสและแก้การตัดพื้นหลัง  
+   อ้างอิง: [#74](https://github.com/SATTASAI/banpadeng-school-db/pull/74), [#75](https://github.com/SATTASAI/banpadeng-school-db/pull/75), [#76](https://github.com/SATTASAI/banpadeng-school-db/pull/76)
+
+12. **เพิ่มแฟ้มเอกสารโครงการ** — ปรับการ์ดให้เห็นยอดคงเหลือ และจัดการเอกสารใน Google Drive แยกปี ฝ่าย และโครงการ ย้อนหลัง 4 ปี  
+   อ้างอิง: [#77](https://github.com/SATTASAI/banpadeng-school-db/pull/77)
+
+13. **ปรับเครื่องมือล้างข้อมูลทดสอบ** — ตรวจตารางที่เพิ่มใหม่อัตโนมัติและจัดการตารางลูกที่เกี่ยวข้อง  
+   อ้างอิง: [#78](https://github.com/SATTASAI/banpadeng-school-db/pull/78)
+
+14. **ขยายระบบจัดสอนแทน** — จัดได้แม้ไม่มีใบลา เปลี่ยน/ยกเลิกครูพร้อมประวัติและแจ้งเตือน เพิ่มคาบสอนแทนของฉัน เสนอครูอัตโนมัติตามช่วงชั้นและภาระงาน และปรับตามตารางสอนที่เผยแพร่ใหม่  
+   อ้างอิง: [#80](https://github.com/SATTASAI/banpadeng-school-db/pull/80), [#81](https://github.com/SATTASAI/banpadeng-school-db/pull/81)
+
+15. **เพิ่มระบบประกันอุบัติเหตุ** — กรอกข้อมูลรายคน/รายห้องจากทะเบียนนักเรียน สรุปยอด พิมพ์ Word/PDF และจำกัดการแก้ไขของครูประจำชั้นตามห้องและปีการศึกษา  
+   อ้างอิง: [#82](https://github.com/SATTASAI/banpadeng-school-db/pull/82), [#83](https://github.com/SATTASAI/banpadeng-school-db/pull/83), [#84](https://github.com/SATTASAI/banpadeng-school-db/pull/84), [#85](https://github.com/SATTASAI/banpadeng-school-db/pull/85)
+
+16. **เชื่อมบริการสื่อ แผนการสอน และธนาคาร** — เพิ่มปุ่มอัปโหลดสื่อผ่านบัญชีโรงเรียนโดยไม่ล็อกอินซ้ำ เมนูธนาคาร และหน้าติดตามการส่งแผนสำหรับผู้มีสิทธิ์  
+   อ้างอิง: [#86](https://github.com/SATTASAI/banpadeng-school-db/pull/86), [#87](https://github.com/SATTASAI/banpadeng-school-db/pull/87), [#90](https://github.com/SATTASAI/banpadeng-school-db/pull/90)
+
+17. **ปรับการดูและพิมพ์ตารางสอน** — แยกตารางรวมกับตารางของฉัน กำหนดสิทธิ์ดู ส่งออก PDF รายตาราง/รวม เพิ่มเวลาคาบและพักกลางวัน และแก้ข้อความทับกัน  
+   อ้างอิง: [#91](https://github.com/SATTASAI/banpadeng-school-db/pull/91), [#92](https://github.com/SATTASAI/banpadeng-school-db/pull/92), [#93](https://github.com/SATTASAI/banpadeng-school-db/pull/93), [#94](https://github.com/SATTASAI/banpadeng-school-db/pull/94), [#95](https://github.com/SATTASAI/banpadeng-school-db/pull/95)
+
+
+## Patch 1.0 — 2–8 พฤศจิกายน 2569
+
+**18 รายการอัปเดต · 75 PR**
+
+1. **ปรับกติกาและการนับวันลา** — แยกลาจริง/ลาอนุโลมและโควตารายภาคเรียน ปรับวันลาเป็นวันทำงาน โดยลาคลอดนับวันปฏิทิน ลาป่วย/ลาคลอดไม่จำกัดจำนวนครั้ง ตรวจโควตาจากใบอนุมัติ ตรึงยอดวันลา และแก้สถิติให้ตรงช่วงเวลา  
+   อ้างอิง: [#96](https://github.com/SATTASAI/banpadeng-school-db/pull/96), [#101](https://github.com/SATTASAI/banpadeng-school-db/pull/101), [#103](https://github.com/SATTASAI/banpadeng-school-db/pull/103), [#104](https://github.com/SATTASAI/banpadeng-school-db/pull/104)
+
+2. **ปรับการอนุมัติและมอบสิทธิ์ใบลา** — เพิ่มหน้าอนุมัติสำหรับฝ่ายบริหาร ผอ. มอบ/ถอนสิทธิ์รองเป็นรายคน แสดงประวัติเดิม ป้องกันอนุมัติของตนเอง และสรุปขั้นตอนสุดท้ายให้ฝ่ายบุคคลรับทราบก่อนผู้มีสิทธิ์อนุมัติ พร้อมรองรับกรณี ผอ. และหัวหน้าฝ่ายบุคคลเป็นผู้ลา ครูฝ่ายบุคคลดูคำร้องได้แบบอ่านอย่างเดียว  
+   อ้างอิง: [#97](https://github.com/SATTASAI/banpadeng-school-db/pull/97), [#98](https://github.com/SATTASAI/banpadeng-school-db/pull/98), [#99](https://github.com/SATTASAI/banpadeng-school-db/pull/99), [#100](https://github.com/SATTASAI/banpadeng-school-db/pull/100), [#103](https://github.com/SATTASAI/banpadeng-school-db/pull/103), [#119](https://github.com/SATTASAI/banpadeng-school-db/pull/119)
+
+3. **ปรับเอกสารใบลา ลายเซ็น และการเก็บสำเนา** — เพิ่มลายเซ็นพื้นใส ปรับ Word/PDF ตามแบบโรงเรียนให้พอดี A4 แก้ดาวน์โหลด PDF และอนุมัติไม่สำเร็จเพราะขนาดลายเซ็น เก็บ PDF ที่พิจารณาแล้วลง Drive และส่งลิงก์ผู้อนุมัติไปยังใบลาโดยตรง  
+   อ้างอิง: [#102](https://github.com/SATTASAI/banpadeng-school-db/pull/102), [#111](https://github.com/SATTASAI/banpadeng-school-db/pull/111), [#112](https://github.com/SATTASAI/banpadeng-school-db/pull/112), [#115](https://github.com/SATTASAI/banpadeng-school-db/pull/115), [#123](https://github.com/SATTASAI/banpadeng-school-db/pull/123), [#124](https://github.com/SATTASAI/banpadeng-school-db/pull/124), [#125](https://github.com/SATTASAI/banpadeng-school-db/pull/125)
+
+4. **เพิ่มทางเข้าระบบศิลปหัตถกรรมและรายงานพฤติกรรม** — เพิ่มเมนูการแข่งขัน และเชื่อมรายงานพฤติกรรมด้วยบัญชีโรงเรียนโดยไม่ต้องล็อกอินซ้ำ  
+   อ้างอิง: [#105](https://github.com/SATTASAI/banpadeng-school-db/pull/105), [#116](https://github.com/SATTASAI/banpadeng-school-db/pull/116)
+
+5. **ปรับทะเบียนบุคลากรและสิทธิ์นำเข้า** — ส่งออก Excel โดยเลือกฟิลด์ เรียงตำแหน่ง/วิทยฐานะ เพิ่มบทบาทบุคลากรทางการศึกษา ให้ superadmin แก้ชื่อทะเบียนได้ และปรับสิทธิ์/รูปแบบนำเข้า โดยงานประกันเปิดให้ครูผู้รับผิดชอบนำเข้าได้  
+   อ้างอิง: [#106](https://github.com/SATTASAI/banpadeng-school-db/pull/106), [#107](https://github.com/SATTASAI/banpadeng-school-db/pull/107), [#108](https://github.com/SATTASAI/banpadeng-school-db/pull/108), [#109](https://github.com/SATTASAI/banpadeng-school-db/pull/109), [#122](https://github.com/SATTASAI/banpadeng-school-db/pull/122), [#127](https://github.com/SATTASAI/banpadeng-school-db/pull/127), [#128](https://github.com/SATTASAI/banpadeng-school-db/pull/128)
+
+6. **ปรับประสบการณ์ใช้งานบนมือถือ** — เพิ่มไอคอน Home Screen และ manifest แถบเมนูล่าง ปุ่มบัญชี/View as เมนูย่อย การ์ดและตารางที่พอดีจอ แก้แผงแจ้งเตือน ลิงก์ และการเลื่อนล้นจอ รวมการจัดช่องตั้งค่าแจ้งเตือน  
+   อ้างอิง: [#110](https://github.com/SATTASAI/banpadeng-school-db/pull/110), [#137](https://github.com/SATTASAI/banpadeng-school-db/pull/137), [#138](https://github.com/SATTASAI/banpadeng-school-db/pull/138), [#139](https://github.com/SATTASAI/banpadeng-school-db/pull/139), [#140](https://github.com/SATTASAI/banpadeng-school-db/pull/140), [#144](https://github.com/SATTASAI/banpadeng-school-db/pull/144), [#145](https://github.com/SATTASAI/banpadeng-school-db/pull/145), [#146](https://github.com/SATTASAI/banpadeng-school-db/pull/146), [#147](https://github.com/SATTASAI/banpadeng-school-db/pull/147), [#148](https://github.com/SATTASAI/banpadeng-school-db/pull/148), [#149](https://github.com/SATTASAI/banpadeng-school-db/pull/149), [#150](https://github.com/SATTASAI/banpadeng-school-db/pull/150), [#153](https://github.com/SATTASAI/banpadeng-school-db/pull/153), [#154](https://github.com/SATTASAI/banpadeng-school-db/pull/154), [#168](https://github.com/SATTASAI/banpadeng-school-db/pull/168)
+
+7. **เพิ่มแท็บครูว่าง** — ดูจำนวนครูที่ไม่มีคาบสอนตามวันและคาบ แล้วเปิดรายชื่อจากช่องตาราง  
+   อ้างอิง: [#113](https://github.com/SATTASAI/banpadeng-school-db/pull/113)
+
+8. **ปรับป่าเด็งโมเดลและลายเซ็นผู้อนุมัติ** — กำหนดส่ง 2 ครั้งต่อวิชาและห้องในแต่ละภาคเรียน แยกความครบถ้วนรายครั้ง และให้ superadmin ตั้ง/ล็อกลายเซ็นผู้อนุมัติ รวมลายเซ็นเอกสารนิเทศ  
+   อ้างอิง: [#114](https://github.com/SATTASAI/banpadeng-school-db/pull/114)
+
+9. **แก้และขยายงานย้ายนักเรียน** — แก้ชื่อที่มีช่องว่างทำให้บันทึกย้ายไม่ได้ เพิ่มค้นหารายชื่อโรงเรียน สพฐ. และเก็บรหัสสถานศึกษา 10 หลัก  
+   อ้างอิง: [#117](https://github.com/SATTASAI/banpadeng-school-db/pull/117), [#118](https://github.com/SATTASAI/banpadeng-school-db/pull/118)
+
+10. **เพิ่มการจัดสอนแทนทั้งวันและปรับคำสั่ง** — เสนอครูหลายคนทุกคาบในครั้งเดียว ตรวจชนก่อนบันทึกทั้งชุด กระจายภาระและใช้ครูต่างช่วงชั้นเมื่อจำเป็น ปรับคำสั่ง Word/PDF ให้มีเหตุจากใบลา ข้อความอ้างอิง ลายเซ็น ผอ. และเลขไทย เพิ่มคำสั่งรวมและจุดแสดงการลาบนปฏิทิน  
+   อ้างอิง: [#120](https://github.com/SATTASAI/banpadeng-school-db/pull/120), [#121](https://github.com/SATTASAI/banpadeng-school-db/pull/121), [#126](https://github.com/SATTASAI/banpadeng-school-db/pull/126), [#119](https://github.com/SATTASAI/banpadeng-school-db/pull/119)
+
+11. **เพิ่มระบบทุนการศึกษา** — แยกประเภททุนและปีการศึกษา นำเข้า PDF/OCR พร้อมจับคู่นักเรียน รองรับแบบ กสศ./ทุนอุดหนุน ตรวจทานก่อนบันทึก ส่งออก PDF/Excel และบันทึกการรับทุนครั้งที่ 1–3 ต่อปี พร้อมจัดการข้อมูลปีเก่าอัตโนมัติตามการเปลี่ยนปีที่เปิดใช้  
+   อ้างอิง: [#129](https://github.com/SATTASAI/banpadeng-school-db/pull/129), [#130](https://github.com/SATTASAI/banpadeng-school-db/pull/130), [#131](https://github.com/SATTASAI/banpadeng-school-db/pull/131), [#132](https://github.com/SATTASAI/banpadeng-school-db/pull/132), [#133](https://github.com/SATTASAI/banpadeng-school-db/pull/133), [#134](https://github.com/SATTASAI/banpadeng-school-db/pull/134)
+
+12. **เพิ่มบันทึกความดีและการพบเงิน** — บันทึก 2 งานย่อย แยกสี มีสถิติ แนบภาพใน Drive เชื่อมเพิ่มคะแนนพฤติกรรม ส่งออก PDF/XLSX และปรับการใช้งานมือถือ  
+   อ้างอิง: [#135](https://github.com/SATTASAI/banpadeng-school-db/pull/135), [#136](https://github.com/SATTASAI/banpadeng-school-db/pull/136), [#156](https://github.com/SATTASAI/banpadeng-school-db/pull/156), [#157](https://github.com/SATTASAI/banpadeng-school-db/pull/157)
+
+13. **เพิ่มแฟ้มผลงานและการอบรมครู** — ครูบันทึกผลงานและรายงานอบรมจากบัญชีของฉัน แนบภาพ/PDF ใน Drive ฝ่ายบุคคลเปิดดูและดาวน์โหลดรายไฟล์หรือ ZIP ตามตัวกรอง  
+   อ้างอิง: [#141](https://github.com/SATTASAI/banpadeng-school-db/pull/141), [#142](https://github.com/SATTASAI/banpadeng-school-db/pull/142), [#143](https://github.com/SATTASAI/banpadeng-school-db/pull/143)
+
+14. **ปรับหน้าติดตามนิเทศ** — แก้ข้อความในตารางนัดซ้อนกัน จัดการ์ดมือถือ และเรียงงานรอผู้บริหารรับนิเทศไว้ด้านบน  
+   อ้างอิง: [#151](https://github.com/SATTASAI/banpadeng-school-db/pull/151), [#160](https://github.com/SATTASAI/banpadeng-school-db/pull/160), [#161](https://github.com/SATTASAI/banpadeng-school-db/pull/161)
+
+15. **เพิ่มทางลัดงานครูและแฟ้ม PA** — เพิ่มปุ่มอัปโหลดแผนการสอนในบัญชีของฉัน และช่องเก็บลิงก์ในแฟ้ม PA  
+   อ้างอิง: [#152](https://github.com/SATTASAI/banpadeng-school-db/pull/152), [#155](https://github.com/SATTASAI/banpadeng-school-db/pull/155)
+
+16. **ปรับหน้าจัดการผู้ใช้และสิทธิ์** — ปรับการ์ดมือถือและการกดค้างจัดการบัญชี เรียงผู้รอสิทธิ์ก่อน แสดงสถานะกำลังโหลด/โหลดไม่สำเร็จ โดยรวมการทดลองและย้อนรูปแบบในสัปดาห์เดียวเป็นรายการเดียว  
+   อ้างอิง: [#158](https://github.com/SATTASAI/banpadeng-school-db/pull/158), [#159](https://github.com/SATTASAI/banpadeng-school-db/pull/159), [#166](https://github.com/SATTASAI/banpadeng-school-db/pull/166), [#167](https://github.com/SATTASAI/banpadeng-school-db/pull/167)
+
+17. **เพิ่มจุดแดงติดตามงานค้างทั้งระบบ** — ปรับการ์ดลาและจุดแดงให้ค้างจนพิจารณาเสร็จ ขยายการนับงานค้างตามสิทธิ์ไปยังเมนู การ์ด แท็บ และแถบล่าง อัปเดตเมื่อทำรายการและทุก 60 วินาที  
+   อ้างอิง: [#162](https://github.com/SATTASAI/banpadeng-school-db/pull/162), [#163](https://github.com/SATTASAI/banpadeng-school-db/pull/163), [#164](https://github.com/SATTASAI/banpadeng-school-db/pull/164), [#165](https://github.com/SATTASAI/banpadeng-school-db/pull/165)
+
+18. **เพิ่มแจ้งเตือนต่ออายุใบประกอบวิชาชีพ** — แจ้งเจ้าของข้อมูลที่เหลือน้อยกว่า 90 วันหรือหมดอายุ ผ่าน LINE และ School Notify วันละครั้ง เริ่ม 08:00 เวลาไทย ป้องกันส่งซ้ำ หยุดเมื่ออัปเดตวันหมดอายุเป็นอย่างน้อย 90 วัน และใช้ปุ่มต่ออายุไป KSP Self-Service โดยตรง  
+   อ้างอิง: [#169](https://github.com/SATTASAI/banpadeng-school-db/pull/169), [#170](https://github.com/SATTASAI/banpadeng-school-db/pull/170)
+
+## หมายเหตุประกอบประวัติ
+
+- ระบบประเมิน PA/ครูผู้ช่วยใน Patch 0.5 มีข้อจำกัดของเกณฑ์ตั้งต้นตาม PR #21 และ #28 ต้องตรวจเทียบเกณฑ์ที่โรงเรียนใช้ การเพิ่มระบบไม่ได้รับรองว่าเกณฑ์ทุกชุดพร้อมประเมินจริง
+- ขั้นอนุมัติใบลาใน Patch 1.0 เคยเพิ่มปุ่มรับทราบและอนุมัติ ก่อนถูกเปลี่ยนใน PR #103 ให้ฝ่ายบุคคลรับทราบก่อน จึงสรุปเป็นผลสุดท้ายเดียวกัน
+- PR #88 เคยให้แก้ชื่อบัญชี ก่อน PR #89 ย้อนและเปลี่ยนเป็นแก้ชื่อทะเบียนบุคลากร สรุปจึงไม่ถือว่าการแก้ชื่อบัญชียังเปิดใช้งานจากชุดนี้
+- การแจ้งเตือนใบประกอบวิชาชีพใน PR #169 ผ่านการทดสอบเฉพาะส่วนตามคำอธิบาย PR แต่ยังไม่ยืนยันการส่งถึงบัญชีจริงบน production ในเอกสาร PR นั้น
+
+## ภาคผนวก — รายการ PR ครบทุกหมายเลขที่ merge
+
+ตารางนี้ใช้ตรวจสอบความครอบคลุม โดยจำนวน PR ไม่ใช่จำนวนรายการอัปเดต
+
+| PR | วันที่ merge เวลาไทย | รายการ |
+|---|---|---|
+| [#1](https://github.com/SATTASAI/banpadeng-school-db/pull/1) | 2026-09-19 | เพิ่มหน้าสถานะระบบสำหรับผู้ดูแล |
+| [#2](https://github.com/SATTASAI/banpadeng-school-db/pull/2) | 2026-09-19 | เพิ่มปุ่มส่งออกสำเนาฐานข้อมูล D1 สำหรับผู้ดูแลระบบ |
+| [#3](https://github.com/SATTASAI/banpadeng-school-db/pull/3) | 2026-09-19 | แสดงรหัสข้อผิดพลาดที่ปลอดภัยเมื่อส่งออก D1 ไม่สำเร็จ |
+| [#4](https://github.com/SATTASAI/banpadeng-school-db/pull/4) | 2026-09-19 | แสดงเหตุผลส่งออก D1 ที่ HTTP 200 แต่ผลภายในล้มเหลว |
+| [#5](https://github.com/SATTASAI/banpadeng-school-db/pull/5) | 2026-09-19 | แก้สำรอง D1 ล้มเหลวเมื่อส่งออกเสร็จแล้ว |
+| [#6](https://github.com/SATTASAI/banpadeng-school-db/pull/6) | 2026-09-19 | Verify D1 backups in an isolated SQLite database |
+| [#7](https://github.com/SATTASAI/banpadeng-school-db/pull/7) | 2026-09-19 | Add admin Drive attachment audit |
+| [#8](https://github.com/SATTASAI/banpadeng-school-db/pull/8) | 2026-09-19 | Report active Cloudflare Worker deployment in GitHub Actions |
+| [#9](https://github.com/SATTASAI/banpadeng-school-db/pull/9) | 2026-09-19 | Show Cloudflare deployment origin in status check |
+| [#10](https://github.com/SATTASAI/banpadeng-school-db/pull/10) | 2026-09-19 | Add offline Google Drive backup and restore drill |
+| [#11](https://github.com/SATTASAI/banpadeng-school-db/pull/11) | 2026-09-19 | Limit sensitive data in student and personnel directories |
+| [#12](https://github.com/SATTASAI/banpadeng-school-db/pull/12) | 2026-09-20 | Add per-student learner analysis and A4 classroom printing |
+| [#13](https://github.com/SATTASAI/banpadeng-school-db/pull/13) | 2026-09-20 | Bundle TH SarabunPSK for learner analysis A4 printing |
+| [#14](https://github.com/SATTASAI/banpadeng-school-db/pull/14) | 2026-09-20 | Add grade selection to learner analysis |
+| [#15](https://github.com/SATTASAI/banpadeng-school-db/pull/15) | 2026-09-20 | Restrict learner analysis to assigned classrooms and improve long printouts |
+| [#16](https://github.com/SATTASAI/banpadeng-school-db/pull/16) | 2026-09-21 | เพิ่ม API ซิงค์ข้อมูลหลักไปยัง BPD Timetable |
+| [#18](https://github.com/SATTASAI/banpadeng-school-db/pull/18) | 2026-10-06 | เพิ่มระบบจัดตารางสอนอัตโนมัติในฝ่ายวิชาการ |
+| [#19](https://github.com/SATTASAI/banpadeng-school-db/pull/19) | 2026-10-06 | แก้หน้าจัดตารางสอนค้างระหว่างโหลดข้อมูล |
+| [#20](https://github.com/SATTASAI/banpadeng-school-db/pull/20) | 2026-10-06 | Use teacher timetable workflow for Excel import and automatic scheduling |
+| [#21](https://github.com/SATTASAI/banpadeng-school-db/pull/21) | 2026-10-18 | เพิ่มระบบประเมินผลการปฏิบัติงาน PA/ครูผู้ช่วย และโดเมน evaluate |
+| [#22](https://github.com/SATTASAI/banpadeng-school-db/pull/22) | 2026-10-18 | จำกัดคะแนนกรรมการรายอื่นจาก session ผู้ทรงคุณวุฒิภายนอก |
+| [#23](https://github.com/SATTASAI/banpadeng-school-db/pull/23) | 2026-10-18 | ปรับหน้าเกณฑ์และเส้นทาง evaluate ให้ตรงกับ Cloudflare Assets |
+| [#24](https://github.com/SATTASAI/banpadeng-school-db/pull/24) | 2026-10-18 | เชื่อมบัญชีและผลกับ evaluatesystem ที่แยก repo และ Worker |
+| [#25](https://github.com/SATTASAI/banpadeng-school-db/pull/25) | 2026-10-18 | คงรูปแบบหน้าผลประเมินในฝ่ายบุคลากร |
+| [#26](https://github.com/SATTASAI/banpadeng-school-db/pull/26) | 2026-10-18 | ตัดหน้ายืนยันบัญชีซ้ำก่อนเข้าระบบประเมิน |
+| [#27](https://github.com/SATTASAI/banpadeng-school-db/pull/27) | 2026-10-18 | แก้ฟอร์มเชื่อมบัญชีค้างที่ authorize จาก Origin null |
+| [#28](https://github.com/SATTASAI/banpadeng-school-db/pull/28) | 2026-10-18 | เพิ่มสรุป PA/ครูผู้ช่วยและดาวน์โหลด PDF ในฝ่ายบุคคล |
+| [#29](https://github.com/SATTASAI/banpadeng-school-db/pull/29) | 2026-10-18 | Notify personnel deputy when teacher submits leave, without early approval rights |
+| [#30](https://github.com/SATTASAI/banpadeng-school-db/pull/30) | 2026-10-18 | ส่ง LINE แจ้งใบลาให้รอง ผอ. อย่างต่อเนื่อง |
+| [#31](https://github.com/SATTASAI/banpadeng-school-db/pull/31) | 2026-10-18 | ใช้ LINE ที่จับคู่เดิมของบุคลากรในการแจ้งใบลา |
+| [#32](https://github.com/SATTASAI/banpadeng-school-db/pull/32) | 2026-10-18 | Show actual LINE delivery state for each leave recipient |
+| [#33](https://github.com/SATTASAI/banpadeng-school-db/pull/33) | 2026-10-18 | Diagnose production notification feed failure for leave delivery |
+| [#34](https://github.com/SATTASAI/banpadeng-school-db/pull/34) | 2026-10-18 | Fix D1 notification query blocking leave LINE delivery |
+| [#35](https://github.com/SATTASAI/banpadeng-school-db/pull/35) | 2026-10-18 | Verify linked leave recipients against current LINE OA |
+| [#36](https://github.com/SATTASAI/banpadeng-school-db/pull/36) | 2026-10-18 | Configurable leave LINE messages with passwordless read-only links |
+| [#37](https://github.com/SATTASAI/banpadeng-school-db/pull/37) | 2026-10-19 | Allow only superadmin to configure leave LINE message text |
+| [#38](https://github.com/SATTASAI/banpadeng-school-db/pull/38) | 2026-10-19 | Add leave reason and dates to LINE message settings |
+| [#39](https://github.com/SATTASAI/banpadeng-school-db/pull/39) | 2026-10-19 | Add teacher phone to leave LINE message settings |
+| [#40](https://github.com/SATTASAI/banpadeng-school-db/pull/40) | 2026-10-21 | เพิ่มระบบลงทะเบียนนิเทศ (นิเทศการสอน / นิเทศห้องเรียน) |
+| [#41](https://github.com/SATTASAI/banpadeng-school-db/pull/41) | 2026-10-21 | ความปลอดภัยบัญชี: อุปกรณ์ แจ้งเตือนผิดปกติ กันบอท security headers |
+| [#42](https://github.com/SATTASAI/banpadeng-school-db/pull/42) | 2026-10-21 | บัญชีผู้ชมภายนอก (ดูอย่างเดียว) |
+| [#43](https://github.com/SATTASAI/banpadeng-school-db/pull/43) | 2026-10-21 | LINE OA: ความทนทานของการส่งแจ้งเตือน |
+| [#44](https://github.com/SATTASAI/banpadeng-school-db/pull/44) | 2026-10-21 | ย้ายงานนิเทศจากฝ่ายบุคคลไปฝ่ายวิชาการ และเพิ่มเมนูประเมินผลการนิเทศใน… |
+| [#45](https://github.com/SATTASAI/banpadeng-school-db/pull/45) | 2026-10-21 | ย้ายงานนิเทศไปฝ่ายวิชาการ + เมนูประเมินผลการนิเทศ (ฝ่ายบริหาร) |
+| [#46](https://github.com/SATTASAI/banpadeng-school-db/pull/46) | 2026-10-21 | ตั้งค่าผู้อนุมัติ: เพิ่มเจ้าหน้าที่การเงิน 2 ตำแหน่ง |
+| [#47](https://github.com/SATTASAI/banpadeng-school-db/pull/47) | 2026-10-22 | ฝ่ายบุคคล: สถิติวันลา/สอนแทน · ระบบสนับสนุน: แจ้งซ่อม + ขอเบิกจ่ายฯ · ฝ่ายงบประมาณ: บันทึกเบิกจ่ายฯ · กันส่งซ้ำ LINE |
+| [#48](https://github.com/SATTASAI/banpadeng-school-db/pull/48) | 2026-10-22 | ฝ่ายบุคคล: ย้ายเมนูจัดสอนแทน · โหมดมุมมองบุคคลอื่น · โครงการใช้ต่อได้ตลอดภาคเรียนที่ 2 |
+| [#49](https://github.com/SATTASAI/banpadeng-school-db/pull/49) | 2026-10-22 | แดชบอร์ดกระชับด้วยแท็บ · สถิติมาเรียนซิงค์จากระบบ grades |
+| [#50](https://github.com/SATTASAI/banpadeng-school-db/pull/50) | 2026-10-23 | นิเทศ: สลับตารางเลือกคาบ + แก้ error ผู้มีสิทธิ์ประเมิน |
+| [#51](https://github.com/SATTASAI/banpadeng-school-db/pull/51) | 2026-10-28 | ชื่อคนในตารางอยู่บรรทัดเดียว |
+| [#52](https://github.com/SATTASAI/banpadeng-school-db/pull/52) | 2026-10-28 | แดชบอร์ด: ตัวเลขภาพรวมแผงเดียว |
+| [#53](https://github.com/SATTASAI/banpadeng-school-db/pull/53) | 2026-10-28 | อัปเดต privacy policy และ terms of service |
+| [#54](https://github.com/SATTASAI/banpadeng-school-db/pull/54) | 2026-10-28 | Dashboard: ปฏิทินปฏิบัติงาน (วันหยุดจากระบบ grades) |
+| [#55](https://github.com/SATTASAI/banpadeng-school-db/pull/55) | 2026-10-28 | Dashboard: ย้ายปฏิทินปฏิบัติงานไปบนสุดของหน้าภาพรวม |
+| [#56](https://github.com/SATTASAI/banpadeng-school-db/pull/56) | 2026-10-29 | ปฏิทินปฏิบัติงาน: วันกิจกรรม (สีเขียว) |
+| [#57](https://github.com/SATTASAI/banpadeng-school-db/pull/57) | 2026-10-29 | บัญชีของฉัน: แก้ข้อมูลส่วนตัว + ปุ่มเลือกวิทยฐานะ |
+| [#58](https://github.com/SATTASAI/banpadeng-school-db/pull/58) | 2026-10-29 | นิเทศ: จำกัดคาบละไม่เกิน 3 คำขอ |
+| [#59](https://github.com/SATTASAI/banpadeng-school-db/pull/59) | 2026-10-29 | นิเทศ: แก้ปัญหาที่อาจเกิดระหว่างใช้งาน |
+| [#60](https://github.com/SATTASAI/banpadeng-school-db/pull/60) | 2026-10-29 | นิเทศ: เตือนวันกิจกรรม + ปฏิทินการจองในหน้าผลการนิเทศ |
+| [#61](https://github.com/SATTASAI/banpadeng-school-db/pull/61) | 2026-10-29 | เปลี่ยนชื่อเมนู นิเทศและคุณภาพ → ประกันคุณภาพ |
+| [#62](https://github.com/SATTASAI/banpadeng-school-db/pull/62) | 2026-10-29 | เปลี่ยนเมนูผลการนิเทศเป็นงานนิเทศภายใน และรวมเมนูผู้มีสิทธิ์ประเมิน |
+| [#63](https://github.com/SATTASAI/banpadeng-school-db/pull/63) | 2026-10-29 | รวมนิเทศการสอนและห้องเรียนเป็นแบบประเมินเดียว |
+| [#64](https://github.com/SATTASAI/banpadeng-school-db/pull/64) | 2026-10-29 | คำเตือนจองชนวันกิจกรรมเป็น pop up |
+| [#65](https://github.com/SATTASAI/banpadeng-school-db/pull/65) | 2026-10-29 | จุดแดงที่เมนูเมื่อมีงานใหม่ |
+| [#66](https://github.com/SATTASAI/banpadeng-school-db/pull/66) | 2026-10-29 | กันส่งงานเดิมซ้ำ และกดส่ง-ยกเลิกสลับไปมา |
+| [#67](https://github.com/SATTASAI/banpadeng-school-db/pull/67) | 2026-10-30 | นิเทศ: ปุ่มพิมพ์เอกสาร PDF/Word (ฝ่ายวิชาการ) |
+| [#68](https://github.com/SATTASAI/banpadeng-school-db/pull/68) | 2026-10-30 | สถิติวันลา: เห็นเฉพาะของตนเอง (ยกเว้นหัวหน้าฝ่ายบุคคล/ผู้บริหาร/superadmin) |
+| [#69](https://github.com/SATTASAI/banpadeng-school-db/pull/69) | 2026-10-30 | เพิ่มเจ้าหน้าที่พัสดุ 2 |
+| [#70](https://github.com/SATTASAI/banpadeng-school-db/pull/70) | 2026-10-30 | รวมข้อมูลครูเดิมกับบัญชีที่สมัครอัตโนมัติ |
+| [#71](https://github.com/SATTASAI/banpadeng-school-db/pull/71) | 2026-10-30 | นิเทศ: วงกลมสีช่วงชั้นมุมบนขวาการ์ด |
+| [#72](https://github.com/SATTASAI/banpadeng-school-db/pull/72) | 2026-10-30 | บันทึกขออนุมัติดำเนินโครงการ/ใช้เงิน + ขั้นลงนาม 6 ขั้น |
+| [#73](https://github.com/SATTASAI/banpadeng-school-db/pull/73) | 2026-10-30 | อาคารสถานที่: เพิ่ม/แก้ไข/ปิดใช้งานรายการสถานที่ |
+| [#74](https://github.com/SATTASAI/banpadeng-school-db/pull/74) | 2026-10-30 | ป่าเด็งโมเดล: แบบรายงานตามแบบฟอร์ม + ดาวน์โหลด PDF/Word |
+| [#75](https://github.com/SATTASAI/banpadeng-school-db/pull/75) | 2026-10-30 | ป่าเด็งโมเดล: ลายเซ็นครู (ตัดพื้นหลัง/ทำเส้นเข้ม) ในแบบรายงาน |
+| [#76](https://github.com/SATTASAI/banpadeng-school-db/pull/76) | 2026-10-30 | ป่าเด็งโมเดล: แก้การตัดพื้นหลังลายเซ็น |
+| [#77](https://github.com/SATTASAI/banpadeng-school-db/pull/77) | 2026-10-30 | โครงการทุกฝ่าย: การ์ดอ่านง่าย + เอกสารโครงการ (Drive) |
+| [#78](https://github.com/SATTASAI/banpadeng-school-db/pull/78) | 2026-10-30 | ล้างข้อมูลทดสอบ: ตรวจพบเมนู/ตารางใหม่อัตโนมัติ |
+| [#79](https://github.com/SATTASAI/banpadeng-school-db/pull/79) | 2026-10-31 | เมนูฝ่ายงาน: เห็นเฉพาะฝ่ายของตน + ครูอนุบาลเห็นปฐมวัย |
+| [#80](https://github.com/SATTASAI/banpadeng-school-db/pull/80) | 2026-10-31 | จัดสอนแทน: ไม่มีใบลา, ยกเลิก/เปลี่ยนครู, แจ้งยกเลิก, คาบสอนแทนของฉัน |
+| [#81](https://github.com/SATTASAI/banpadeng-school-db/pull/81) | 2026-10-31 | จัดสอนแทน: ระบบเสนอครูอัตโนมัติ ช่วงชั้น สิทธิ์สถิติ และอัปเดตตามตารางสอน |
+| [#82](https://github.com/SATTASAI/banpadeng-school-db/pull/82) | 2026-10-31 | เมนูประกันอุบัติเหตุ (ระบบสนับสนุน) |
+| [#83](https://github.com/SATTASAI/banpadeng-school-db/pull/83) | 2026-10-31 | ประกันอุบัติเหตุ: ตารางกระชับ |
+| [#84](https://github.com/SATTASAI/banpadeng-school-db/pull/84) | 2026-10-31 | ประกันอุบัติเหตุ: ปุ่มพิมพ์ Word/PDF |
+| [#85](https://github.com/SATTASAI/banpadeng-school-db/pull/85) | 2026-10-31 | ประกันอุบัติเหตุ: จำกัดสิทธิ์ครูประจำชั้น |
+| [#86](https://github.com/SATTASAI/banpadeng-school-db/pull/86) | 2026-10-31 | บัญชีของฉัน: ปุ่มอัพโหลดสื่อการสอน |
+| [#87](https://github.com/SATTASAI/banpadeng-school-db/pull/87) | 2026-10-31 | เพิ่มเมนูธนาคารโรงเรียนใต้ภาพกิจกรรม |
+| [#88](https://github.com/SATTASAI/banpadeng-school-db/pull/88) | 2026-10-31 | หน้าบัญชีของฉัน: แก้ชื่อ–นามสกุลของตัวเองได้ |
+| [#89](https://github.com/SATTASAI/banpadeng-school-db/pull/89) | 2026-10-31 | ย้อน #88 และให้แก้ชื่อในทะเบียนบุคลากรที่หน้าบัญชีของฉัน |
+| [#90](https://github.com/SATTASAI/banpadeng-school-db/pull/90) | 2026-10-31 | ฝ่ายวิชาการ: แผนการจัดการเรียนการสอน |
+| [#91](https://github.com/SATTASAI/banpadeng-school-db/pull/91) | 2026-11-01 | ตารางสอน: เมนูดูตารางรวม + ตารางสอนของฉัน |
+| [#92](https://github.com/SATTASAI/banpadeng-school-db/pull/92) | 2026-11-01 | ตารางสอน: ส่งออก PDF |
+| [#93](https://github.com/SATTASAI/banpadeng-school-db/pull/93) | 2026-11-01 | ตารางสอน: พักกลางวัน + เวลาคาบ + PDF เล็กลง |
+| [#94](https://github.com/SATTASAI/banpadeng-school-db/pull/94) | 2026-11-01 | แก้ไขตารางรายคาบ: พักกลางวัน + เวลาคาบ |
+| [#95](https://github.com/SATTASAI/banpadeng-school-db/pull/95) | 2026-11-01 | ตารางสอน: แก้ข้อความทับซ้อน |
+| [#96](https://github.com/SATTASAI/banpadeng-school-db/pull/96) | 2026-11-02 | กำหนดสิทธิ์ลาทั่วไปและลาอนุโลมแยกกลุ่มละ 2 ครั้งต่อเทอม |
+| [#97](https://github.com/SATTASAI/banpadeng-school-db/pull/97) | 2026-11-02 | รับทราบใบลาแล้วส่งต่อ ผอ. และรอง ผอ. อัตโนมัติ ให้ ผอ. อนุมัติทันที |
+| [#98](https://github.com/SATTASAI/banpadeng-school-db/pull/98) | 2026-11-02 | เพิ่มเมนูอนุมัติการลาและให้ ผอ. มอบสิทธิ์แก่รอง ผอ. รายคน |
+| [#99](https://github.com/SATTASAI/banpadeng-school-db/pull/99) | 2026-11-02 | แสดงข้อมูลลาเดิมทุกสถานะและให้แอดมินดูหน้าอนุมัติการลา |
+| [#100](https://github.com/SATTASAI/banpadeng-school-db/pull/100) | 2026-11-02 | เพิ่มปุ่มรับทราบและอนุมัติใบลาเพื่อบันทึกสถิติทันที |
+| [#101](https://github.com/SATTASAI/banpadeng-school-db/pull/101) | 2026-11-03 | นับวันลาเฉพาะวันทำงาน ไม่รวมเสาร์ อาทิตย์ และวันหยุด |
+| [#102](https://github.com/SATTASAI/banpadeng-school-db/pull/102) | 2026-11-03 | เพิ่มลายเซ็นพื้นใสและแยกลาจริง/ลาอนุโลม พร้อมปรับใบลา Word/PDF |
+| [#103](https://github.com/SATTASAI/banpadeng-school-db/pull/103) | 2026-11-04 | แก้ระบบการลา (ข้อ 1–3, 5–12 จากการตรวจ) |
+| [#104](https://github.com/SATTASAI/banpadeng-school-db/pull/104) | 2026-11-04 | หน้าการลา: เลือกการ์ดก่อนกรอกใบลา + สีการ์ด |
+| [#105](https://github.com/SATTASAI/banpadeng-school-db/pull/105) | 2026-11-04 | เพิ่มเมนูศิลปหัตถกรรม (สีส้ม) ใต้ธนาคารโรงเรียน |
+| [#106](https://github.com/SATTASAI/banpadeng-school-db/pull/106) | 2026-11-04 | จำกัดนำเข้าข้อมูลเฉพาะ superadmin |
+| [#107](https://github.com/SATTASAI/banpadeng-school-db/pull/107) | 2026-11-04 | ทะเบียนบุคลากร: ปุ่มดาวน์โหลด Excel |
+| [#108](https://github.com/SATTASAI/banpadeng-school-db/pull/108) | 2026-11-04 | ทะเบียนบุคลากร: เรียงตามตำแหน่ง/วิทยฐานะ + ตำแหน่งบุคลากรทางการศึกษา |
+| [#109](https://github.com/SATTASAI/banpadeng-school-db/pull/109) | 2026-11-04 | สิทธิ์การใช้งาน: บทบาทบุคลากรทางการศึกษา |
+| [#110](https://github.com/SATTASAI/banpadeng-school-db/pull/110) | 2026-11-04 | เพิ่มไอคอน Home screen + favicon + manifest |
+| [#111](https://github.com/SATTASAI/banpadeng-school-db/pull/111) | 2026-11-04 | ใบลา: เค้าโครงตามแบบฟอร์มโรงเรียน + Thai distribute |
+| [#112](https://github.com/SATTASAI/banpadeng-school-db/pull/112) | 2026-11-04 | ใบลา: แก้ดาวน์โหลด PDF ไม่ได้ |
+| [#113](https://github.com/SATTASAI/banpadeng-school-db/pull/113) | 2026-11-04 | ตารางสอน: เพิ่มแท็บครูว่าง |
+| [#114](https://github.com/SATTASAI/banpadeng-school-db/pull/114) | 2026-11-04 | ป่าเด็งโมเดล 2 ครั้ง/ภาค + ลายเซ็นผู้อนุมัติแบบล็อค |
+| [#115](https://github.com/SATTASAI/banpadeng-school-db/pull/115) | 2026-11-04 | ใบลา: 1 หน้า ไม่ตกขอบ + ลายเซ็นผู้บริหาร |
+| [#116](https://github.com/SATTASAI/banpadeng-school-db/pull/116) | 2026-11-04 | เพิ่มเมนู รายงานพฤติกรรม (SSO) |
+| [#117](https://github.com/SATTASAI/banpadeng-school-db/pull/117) | 2026-11-04 | fix: บันทึกย้ายออกไม่ได้เพราะชื่อเว้นวรรคไม่ตรง |
+| [#118](https://github.com/SATTASAI/banpadeng-school-db/pull/118) | 2026-11-04 | เพิ่มรายชื่อโรงเรียน สพฐ. และรหัสสถานศึกษาในทะเบียนย้าย |
+| [#119](https://github.com/SATTASAI/banpadeng-school-db/pull/119) | 2026-11-04 | สอนแทน: คำสั่งรวม + จุดลาบนปฏิทิน; ครูฝ่ายบุคคลดูคำร้องขอลาได้ |
+| [#120](https://github.com/SATTASAI/banpadeng-school-db/pull/120) | 2026-11-04 | ปรับแบบฟอร์มคำสั่งสอนแทน: สาเหตุจากใบลา อ้างอิง พ.ร.บ. ลายเซ็น ผอ. |
+| [#121](https://github.com/SATTASAI/banpadeng-school-db/pull/121) | 2026-11-04 | คำสั่งสอนแทน: ใช้เลขไทยทั้งฟอร์ม |
+| [#122](https://github.com/SATTASAI/banpadeng-school-db/pull/122) | 2026-11-04 | หน้าบุคลากร: Superadmin แก้คำนำหน้า ชื่อ นามสกุลได้ |
+| [#123](https://github.com/SATTASAI/banpadeng-school-db/pull/123) | 2026-11-05 | แก้ ผอ. อนุมัติการลาไม่ได้ (ลายเซ็นทำให้คำสั่งเกิน 100 KB) |
+| [#124](https://github.com/SATTASAI/banpadeng-school-db/pull/124) | 2026-11-05 | เก็บใบลา PDF ที่พิจารณาแล้วลง Google Drive |
+| [#125](https://github.com/SATTASAI/banpadeng-school-db/pull/125) | 2026-11-05 | LINE แจ้งเตือนการลา: ลิงก์ ผอ. เข้าหน้ากดอนุมัติโดยตรง |
+| [#126](https://github.com/SATTASAI/banpadeng-school-db/pull/126) | 2026-11-05 | จัดสอนแทนทั้งวัน (หลายคนพร้อมกัน) |
+| [#127](https://github.com/SATTASAI/banpadeng-school-db/pull/127) | 2026-11-05 | เปิดนำเข้าข้อมูลประกันให้ครูผู้รับผิดชอบและ Superadmin |
+| [#128](https://github.com/SATTASAI/banpadeng-school-db/pull/128) | 2026-11-05 | นำเข้าข้อมูลรองรับ xlsx/csv/json · ประกันทั้งโรงเรียน |
+| [#129](https://github.com/SATTASAI/banpadeng-school-db/pull/129) | 2026-11-05 | เพิ่มระบบข้อมูลทุนการศึกษา (ระบบสนับสนุน) |
+| [#130](https://github.com/SATTASAI/banpadeng-school-db/pull/130) | 2026-11-05 | แก้หน้าต่างทุนการศึกษาซ้อนกัน |
+| [#131](https://github.com/SATTASAI/banpadeng-school-db/pull/131) | 2026-11-05 | ทุนการศึกษา: รองรับแบบฟอร์ม กสศ. + แยกปุ่มนำเข้าตามทุน |
+| [#132](https://github.com/SATTASAI/banpadeng-school-db/pull/132) | 2026-11-05 | ทุนการศึกษา: ส่งออก PDF / Excel |
+| [#133](https://github.com/SATTASAI/banpadeng-school-db/pull/133) | 2026-11-05 | ทุนการศึกษา: รองรับแบบฟอร์มทุนอุดหนุน |
+| [#134](https://github.com/SATTASAI/banpadeng-school-db/pull/134) | 2026-11-05 | ทุนการศึกษา: ครั้งที่ 1–3 ต่อปี + ล้างปีเก่าอัตโนมัติ |
+| [#135](https://github.com/SATTASAI/banpadeng-school-db/pull/135) | 2026-11-05 | เพิ่มเมนู บันทึกความดี (บันทึกความดี + บันทึกการเจอเงิน) |
+| [#136](https://github.com/SATTASAI/banpadeng-school-db/pull/136) | 2026-11-05 | บันทึกความดี: แยกสีงานย่อย ฟ้า/ชมพู |
+| [#137](https://github.com/SATTASAI/banpadeng-school-db/pull/137) | 2026-11-06 | ย้ายปุ่มบัญชีของฉันไปมุมขวาบน |
+| [#138](https://github.com/SATTASAI/banpadeng-school-db/pull/138) | 2026-11-06 | ปุ่ม View as มุมขวาบน + แสดงชื่อ/สถานะ |
+| [#139](https://github.com/SATTASAI/banpadeng-school-db/pull/139) | 2026-11-06 | ปรับการ์ดผู้อนุมัติให้กระชับ + เอาเมนูรายงานออก |
+| [#140](https://github.com/SATTASAI/banpadeng-school-db/pull/140) | 2026-11-06 | ย้ายหัวข้อนำเข้าข้อมูลไปล่างสุดของเมนู |
+| [#141](https://github.com/SATTASAI/banpadeng-school-db/pull/141) | 2026-11-06 | เพิ่มเมนูผลงานครูและอบรมครู (ฝ่ายบุคคล) |
+| [#142](https://github.com/SATTASAI/banpadeng-school-db/pull/142) | 2026-11-06 | อบรมครู: ครูบันทึกรายงานการอบรมเอง + การ์ดแสดงผลฝ่ายบุคคล |
+| [#143](https://github.com/SATTASAI/banpadeng-school-db/pull/143) | 2026-11-06 | ผลงานของฉัน/บันทึกการอบรม ที่บัญชีของฉัน + หน้ารวมข้อมูลฝ่ายบุคคล |
+| [#144](https://github.com/SATTASAI/banpadeng-school-db/pull/144) | 2026-11-06 | ปรับ UX/UI บนมือถือ: โครงหลัก + แถบเมนูล่าง + สไตล์กลาง |
+| [#145](https://github.com/SATTASAI/banpadeng-school-db/pull/145) | 2026-11-06 | แถบเมนูล่าง: สูงขึ้น ค้างไว้ตลอด ลูกเล่นเมื่อกด |
+| [#146](https://github.com/SATTASAI/banpadeng-school-db/pull/146) | 2026-11-06 | แก้ปุ่มแจ้งเตือนในแถบเมนูล่างบนมือถือ |
+| [#147](https://github.com/SATTASAI/banpadeng-school-db/pull/147) | 2026-11-06 | มือถือ: กดเมนูฝ่ายเปิดเมนูย่อย + เมนูย่อยบุคลากรในฝ่าย |
+| [#148](https://github.com/SATTASAI/banpadeng-school-db/pull/148) | 2026-11-06 | แก้หน้าบัญชีของฉันล้นจอมือถือ |
+| [#149](https://github.com/SATTASAI/banpadeng-school-db/pull/149) | 2026-11-06 | ลิงก์ทั้งระบบเป็นปุ่มการ์ด ไม่มีขีดเส้นใต้ |
+| [#150](https://github.com/SATTASAI/banpadeng-school-db/pull/150) | 2026-11-06 | เมนูที่มีเมนูย่อย กดแล้วเปิดเมนูย่อยเท่านั้น |
+| [#151](https://github.com/SATTASAI/banpadeng-school-db/pull/151) | 2026-11-06 | แก้ตารางนัดนิเทศรวมข้อความซ้อนกัน |
+| [#152](https://github.com/SATTASAI/banpadeng-school-db/pull/152) | 2026-11-06 | บัญชีของฉัน: ปุ่มอัพโหลดแผนการสอน |
+| [#153](https://github.com/SATTASAI/banpadeng-school-db/pull/153) | 2026-11-06 | แก้ specificity CSS ปุ่มลิงก์ |
+| [#154](https://github.com/SATTASAI/banpadeng-school-db/pull/154) | 2026-11-06 | มือถือ: กันทุกหน้าเลื่อนซ้ายขวา |
+| [#155](https://github.com/SATTASAI/banpadeng-school-db/pull/155) | 2026-11-06 | แฟ้ม PA: ช่องใส่ลิงก์ |
+| [#156](https://github.com/SATTASAI/banpadeng-school-db/pull/156) | 2026-11-06 | บันทึกความดี/เจอเงิน: พิมพ์ PDF + XLSX |
+| [#157](https://github.com/SATTASAI/banpadeng-school-db/pull/157) | 2026-11-06 | บันทึกความดี/เจอเงิน มือถือ: การ์ดย่อ + กดค้างเพื่อลบ |
+| [#158](https://github.com/SATTASAI/banpadeng-school-db/pull/158) | 2026-11-06 | ผู้ใช้และสิทธิ์ มือถือ: การ์ดผู้ใช้ |
+| [#159](https://github.com/SATTASAI/banpadeng-school-db/pull/159) | 2026-11-06 | ผู้ใช้และสิทธิ์ มือถือ: กดค้างเพื่อจัดการผู้ใช้ |
+| [#160](https://github.com/SATTASAI/banpadeng-school-db/pull/160) | 2026-11-06 | นิเทศการ์ดมือถือ + เรียงผู้รออนุมัติบนสุด |
+| [#161](https://github.com/SATTASAI/banpadeng-school-db/pull/161) | 2026-11-06 | นิเทศ: รอผู้บริหารรับนิเทศขึ้นบนสุด |
+| [#162](https://github.com/SATTASAI/banpadeng-school-db/pull/162) | 2026-11-07 | การ์ดลา: ขอบนูนมินิมอล + จุดแดงเมื่อมีคำขอรอ |
+| [#163](https://github.com/SATTASAI/banpadeng-school-db/pull/163) | 2026-11-07 | จุดแดงการ์ดลา ค้างจนกว่าจะอนุมัติ |
+| [#164](https://github.com/SATTASAI/banpadeng-school-db/pull/164) | 2026-11-07 | การ์ดลา: เพิ่มความเข้มสี |
+| [#165](https://github.com/SATTASAI/banpadeng-school-db/pull/165) | 2026-11-07 | จุดแดงงานค้างทั้งระบบ |
+| [#166](https://github.com/SATTASAI/banpadeng-school-db/pull/166) | 2026-11-07 | ผู้ใช้และสิทธิ์: กลับเป็นตารางแบบเดิม |
+| [#167](https://github.com/SATTASAI/banpadeng-school-db/pull/167) | 2026-11-07 | ผู้ใช้และสิทธิ์: การ์ดพอดีจอมือถือ + แจ้งเมื่อโหลดไม่สำเร็จ |
+| [#168](https://github.com/SATTASAI/banpadeng-school-db/pull/168) | 2026-11-07 | หมวดแจ้งเตือนบนมือถือ: จัดช่องติ๊กให้ชิดข้อความ |
+| [#169](https://github.com/SATTASAI/banpadeng-school-db/pull/169) | 2026-11-08 | แจ้งเตือนต่ออายุใบประกอบวิชาชีพทุกวัน 08:00 ผ่าน LINE และ School Notify |
+| [#170](https://github.com/SATTASAI/banpadeng-school-db/pull/170) | 2026-11-08 | แทนลิงก์รายละเอียดด้วยลิงก์ต่ออายุใบประกอบวิชาชีพโดยตรง |
