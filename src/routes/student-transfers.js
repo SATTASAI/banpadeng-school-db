@@ -22,8 +22,12 @@ export async function ensureStudentTransfers(env) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       decided_at TEXT, UNIQUE(created_by,client_ref))`),
     env.DB
-      .prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_transfer_active ON student_transfer_requests
-      (student_code,direction,academic_year,term) WHERE status NOT IN ('rejected','cancelled')`),
+      .prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_transfer_active_with_code ON student_transfer_requests
+      (student_code,direction,academic_year,term) WHERE student_code<>'' AND status NOT IN ('rejected','cancelled')`),
+    env.DB.prepare("DROP INDEX IF EXISTS idx_transfer_active"),
+    env.DB.prepare(
+      `CREATE TABLE IF NOT EXISTS student_transfer_notice_links (notice_id INTEGER PRIMARY KEY REFERENCES student_transfer_notices(id), request_id INTEGER NOT NULL UNIQUE REFERENCES student_transfer_requests(id))`,
+    ),
     env.DB.prepare(
       `CREATE INDEX IF NOT EXISTS idx_transfer_status ON student_transfer_requests(status,id)`,
     ),
@@ -60,6 +64,8 @@ export function normalizeTransfer(input) {
       return { error: "กรุณากรอกข้อมูลให้ครบและไม่เกินความยาวที่กำหนด" };
     record[key] = value;
   }
+  if (record.client_ref.startsWith("notice:"))
+    return { error: "รหัสอ้างอิงนี้สงวนสำหรับหลักฐานแจ้งย้าย" };
   const schoolCode =
     typeof input?.school_code === "string" ? input.school_code.trim() : "";
   if (schoolCode && !/^\d{10}$/.test(schoolCode))
@@ -157,7 +163,7 @@ export async function handleStudentTransfers(
   );
   if (extraResponse) return extraResponse;
   const match = pathname.match(
-    /^\/api\/student-transfers(?:\/(\d+)(?:\/(decision|note|documents)(?:\/(referral|transcript|household)(?:\/(verify))?)?)?)?$/,
+    /^\/api\/student-transfers(?:\/(\d+)(?:\/(decision|note|details|documents)(?:\/(referral|transcript|household)(?:\/(verify))?)?)?)?$/,
   );
   if (!match) return response({ error: "ไม่พบเส้นทาง" }, 404);
   const [, rawId, action, kind, verify] = match,
@@ -308,7 +314,20 @@ export async function handleStudentTransfers(
         .bind(id)
         .all(),
     ]);
+    const source = await env.DB.prepare(
+      "SELECT notice_id FROM student_transfer_notice_links WHERE request_id=?",
+    )
+      .bind(id)
+      .first();
+    const notice = source
+      ? await env.DB.prepare(
+          "SELECT receipt,student_name,direction,destination_school,contact_phone,contact_address,created_at FROM student_transfer_notices WHERE id=?",
+        )
+          .bind(source.notice_id)
+          .first()
+      : null;
     return response({
+      notice,
       request: row,
       documents: docs.results,
       events: events.results,
@@ -398,6 +417,75 @@ export async function handleStudentTransfers(
   if (note.length > 2000)
     return response({ error: "บันทึกยาวเกิน 2,000 ตัวอักษร" }, 400);
   let statement, eventAction;
+  if (action === "details" && method === "PATCH") {
+    const parsed = normalizeTransfer({ ...body, client_ref: "edit" });
+    if (parsed.error) return response({ error: parsed.error }, 400);
+    const r = parsed.record;
+    if (r.direction === "out") {
+      const student = await env.DB.prepare(
+        "SELECT full_name,status FROM students WHERE student_code=?",
+      )
+        .bind(r.student_code)
+        .first();
+      if (
+        !student ||
+        student.status !== "enrolled" ||
+        comparableName(student.full_name) !== comparableName(r.student_name)
+      )
+        return response(
+          {
+            error:
+              "ย้ายออกต้องใช้เลขประจำตัวและชื่อที่ตรงกับนักเรียนที่กำลังศึกษาในทะเบียนกลาง",
+          },
+          400,
+        );
+      r.student_name = student.full_name.trim();
+    }
+    try {
+      const results = await env.DB.batch([
+        env.DB.prepare(
+          `UPDATE student_transfer_requests SET direction=?,student_code=?,student_name=?,grade_level=?,school_name=?,school_code=?,academic_year=?,term=?,move_date=?,reason=?,version=version+1,updated_at=datetime('now') WHERE id=? AND version=? AND status IN ('pending','needs_documents')`,
+        ).bind(
+          r.direction,
+          r.student_code,
+          r.student_name,
+          r.grade_level,
+          r.school_name,
+          r.school_code,
+          r.academic_year,
+          r.term,
+          r.move_date,
+          r.reason,
+          id,
+          body.version,
+        ),
+        event(
+          env,
+          id,
+          "details",
+          "แก้ไขข้อมูลคำร้อง",
+          user.id,
+          body.version + 1,
+        ),
+        env.DB.prepare(
+          `UPDATE student_transfer_documents SET verified=0,verified_by=NULL WHERE request_id=? AND changes()=1`,
+        ).bind(id),
+      ]);
+      return response(
+        results[0].meta.changes
+          ? { ok: true }
+          : { error: "ข้อมูลเปลี่ยนแล้ว กรุณาโหลดใหม่" },
+        results[0].meta.changes ? 200 : 409,
+      );
+    } catch (error) {
+      if (/UNIQUE constraint failed/.test(String(error)))
+        return response(
+          { error: "มีคำร้องของนักเรียนในภาคเรียนและประเภทนี้แล้ว" },
+          409,
+        );
+      throw error;
+    }
+  }
   if (action === "note" && method === "PATCH") {
     statement = env.DB.prepare(
       `UPDATE student_transfer_requests SET note=?,version=version+1,updated_at=datetime('now') WHERE id=? AND version=? AND status IN ('pending','needs_documents')`,
@@ -454,6 +542,28 @@ export async function handleStudentTransfers(
     )
       return response({ error: "กรุณาระบุเหตุผลประกอบ" }, 400);
     if (body.status === "approved") {
+      const complete = normalizeTransfer({ ...row, client_ref: "approval" });
+      if (complete.error)
+        return response(
+          { error: "กรุณากรอกข้อมูลคำร้องให้ครบก่อนอนุมัติ" },
+          400,
+        );
+      if (row.direction === "out") {
+        const student = await env.DB.prepare(
+          "SELECT full_name,status FROM students WHERE student_code=?",
+        )
+          .bind(row.student_code)
+          .first();
+        if (
+          !student ||
+          student.status !== "enrolled" ||
+          comparableName(student.full_name) !== comparableName(row.student_name)
+        )
+          return response(
+            { error: "ข้อมูลนักเรียนย้ายออกไม่ตรงกับทะเบียนกลาง" },
+            400,
+          );
+      }
       const docs = await env.DB.prepare(
         "SELECT kind FROM student_transfer_documents WHERE request_id=? AND verified=1",
       )

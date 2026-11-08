@@ -1,5 +1,6 @@
 import { getCurrentUser, jsonResponse } from '../lib/auth.js';
 import { ensureTransferAccess, mayUseTransfers } from '../lib/transfer-access.js';
+import { ensureStudentTransfers } from './student-transfers.js';
 const ready = new WeakSet();
 const reply = (data, status=200) => jsonResponse(data,status,{'Cache-Control':'no-store'});
 export async function ensureTransferNotices(env) {
@@ -75,15 +76,31 @@ export async function handleTransferNotices(request,env,path,method) {
   }
   if(path==='/api/student-transfers/notices'&&method==='GET'){
     const url=new URL(request.url),offset=Math.floor(Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)));
-    const rows=await env.DB.prepare(`SELECT n.id,n.receipt,n.student_name,n.direction,n.destination_school,n.contact_phone,n.contact_address,n.created_at,n.acknowledged_at,u.full_name acknowledged_name FROM student_transfer_notices n LEFT JOIN users u ON u.id=n.acknowledged_by ORDER BY (n.acknowledged_at IS NOT NULL), n.id DESC LIMIT 50 OFFSET ?`).bind(offset).all();
+    await ensureStudentTransfers(env);
+    const rows=await env.DB.prepare(`SELECT l.request_id,n.id,n.receipt,n.student_name,n.direction,n.destination_school,n.contact_phone,n.contact_address,n.created_at,n.acknowledged_at,u.full_name acknowledged_name FROM student_transfer_notices n LEFT JOIN student_transfer_notice_links l ON l.notice_id=n.id LEFT JOIN users u ON u.id=n.acknowledged_by ORDER BY (n.acknowledged_at IS NOT NULL), n.id DESC LIMIT 50 OFFSET ?`).bind(offset).all();
     const count=await env.DB.prepare('SELECT COUNT(*) total, COUNT(CASE WHEN acknowledged_at IS NULL THEN 1 END) pending FROM student_transfer_notices').first();
     return reply({notices:rows.results,total:count.total,pending:count.pending});
   }
   if(staffPath&&method==='POST'&&path.endsWith('/acknowledge')){
     const id=Number(path.split('/')[4]);
-    const result=await env.DB.prepare(`UPDATE student_transfer_notices SET acknowledged_by=?,acknowledged_at=datetime('now') WHERE id=? AND acknowledged_at IS NULL`).bind(user.id,id).run();
-    if(!result.meta.changes){const prior=await env.DB.prepare('SELECT id FROM student_transfer_notices WHERE id=?').bind(id).first();if(!prior)return reply({error:'ไม่พบรายการ'},404);}
-    return reply({ok:true});
+    if(!await env.DB.prepare('SELECT id FROM student_transfer_notices WHERE id=?').bind(id).first())return reply({error:'ไม่พบรายการ'},404);
+    await ensureStudentTransfers(env);
+    // D1 batch is atomic: acknowledgement is committed only with its request/link.
+    // Stable notice client_ref + first reviewer make concurrent retries idempotent.
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE student_transfer_notices SET acknowledged_by=?,acknowledged_at=datetime('now') WHERE id=? AND acknowledged_at IS NULL`).bind(user.id,id),
+      env.DB.prepare(`INSERT INTO student_transfer_requests(client_ref,direction,student_code,student_name,grade_level,school_name,school_code,academic_year,term,move_date,reason,created_by)
+        SELECT 'notice:'||n.id,n.direction,'',n.student_name,'',n.destination_school,'',
+        CAST(strftime('%Y','now','+7 hours') AS INTEGER)+543-CASE WHEN CAST(strftime('%m','now','+7 hours') AS INTEGER)<5 THEN 1 ELSE 0 END,
+        CASE WHEN CAST(strftime('%m','now','+7 hours') AS INTEGER)>=11 OR CAST(strftime('%m','now','+7 hours') AS INTEGER)<5 THEN 2 ELSE 1 END,
+        '','',n.acknowledged_by FROM student_transfer_notices n WHERE n.id=?
+        AND NOT EXISTS(SELECT 1 FROM student_transfer_notice_links l WHERE l.notice_id=n.id)
+        AND NOT EXISTS(SELECT 1 FROM student_transfer_requests r WHERE r.created_by=n.acknowledged_by AND r.client_ref='notice:'||n.id)`).bind(id),
+      env.DB.prepare(`INSERT OR IGNORE INTO student_transfer_notice_links(notice_id,request_id) SELECT n.id,r.id FROM student_transfer_notices n JOIN student_transfer_requests r ON r.created_by=n.acknowledged_by AND r.client_ref='notice:'||n.id WHERE n.id=?`).bind(id),
+      env.DB.prepare(`INSERT INTO student_transfer_events(request_id,action,note,user_id) SELECT l.request_id,'notice_intake','สร้างคำร้องจากหลักฐานแจ้งย้าย '||n.receipt,? FROM student_transfer_notice_links l JOIN student_transfer_notices n ON n.id=l.notice_id WHERE l.notice_id=? AND NOT EXISTS(SELECT 1 FROM student_transfer_events e WHERE e.request_id=l.request_id AND e.action='notice_intake')`).bind(user.id,id),
+    ]);
+    const linked=await env.DB.prepare('SELECT request_id FROM student_transfer_notice_links WHERE notice_id=?').bind(id).first();
+    return reply({ok:true,request_id:linked.request_id});
   }
   return reply({error:'Method not allowed'},405);
 }
