@@ -31,7 +31,7 @@ test('export refreshes the director from the current roster instead of an editab
  const html=fs.readFileSync('public/substitutes.html','utf8');assert.match(html,/id="directorName"[^>]*readonly/);
  const nodes=new Map(),node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',disabled:false,textContent:'',innerHTML:'',classList:{toggle(){}},style:{}});return nodes.get(id);};
  let staffReads=0,exported;
- const sandbox=vm.createContext({document:{getElementById:node},SubstituteOrderExport:{director:e.director,exportFile:async(format,rows,meta)=>{exported=meta;}},apiRequest:async url=>{
+ const sandbox=vm.createContext({URLSearchParams,location:{search:'?mode=leave'},SubstituteDayPlan:{init(){},reset(){},build(){}},document:{getElementById:node,querySelector:()=>node('page')},SubstituteOrderExport:{director:e.director,exportFile:async(format,rows,meta)=>{exported=meta;}},apiRequest:async url=>{
   if(url==='/api/auth/me')return {user:{id:1}};if(url==='/api/substitutes/permissions')return {can_manage:true};
   if(url==='/api/staff')return {staff:[{id:1,full_name:++staffReads===1?'ชื่อเดิม':'ชื่อปัจจุบัน',position:'ผู้อำนวยการโรงเรียน'}]};
   return {assignments:rows};
@@ -49,4 +49,9 @@ test('orders state leave reasons, cite the statute, and embed the director e-sig
  assert.equal(files['word/media/signature.png'].base64,sigPng);assert.match(files['word/_rels/document.xml.rels'],/rIdSignature/);assert.match(files['word/document.xml'],/r:embed="rIdSignature"/);
  assert(e.pdfDefinition(list,withSig).content.some(x=>x.image===withSig.director_signature));
  assert(!e.docxFiles(list,meta)['word/media/signature.png']);
+});
+
+test('special orders share the same template and use their own title instead of a leave reason',()=>{
+ const regular=e.order(rows,meta),special=e.order([{...rows[0],assignment_kind:'special',special_title:'เข้าร่วมกิจกรรมโรงเรียน',leave_reason:'เหตุจากใบลาเดิม'}],meta);
+ assert.equal(special.subject,regular.subject);assert.match(special.introduction,/เข้าร่วมกิจกรรมโรงเรียน/);assert.doesNotMatch(special.introduction,/เหตุจากใบลาเดิม/);assert.equal(special.rows[0].length,regular.rows[0].length);
 });

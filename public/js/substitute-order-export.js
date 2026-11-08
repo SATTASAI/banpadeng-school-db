@@ -13,7 +13,7 @@
  function absentNames(rows){return [...new Set(rows.map(r=>String(r.absent_name||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'th'));}
  function weekdayDate(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return 'วันที่ ........................';return new Date(value+'T12:00:00Z').toLocaleDateString('th-TH',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Bangkok'}).replace(/(\d{4})$/,'พ.ศ. $1');}
  // สาเหตุจากเหตุผลในใบลา (หรือเหตุที่บันทึกเอง) — ครูที่เหตุเดียวกันรวมกลุ่มเดียว
- function causes(rows){const groups=new Map();for(const r of rows){const name=String(r.absent_name||'').trim();if(!name)continue;const why=String(r.leave_reason||r.absence_reason||'').trim().replace(/\s+/g,' ')||'ไม่อยู่ปฏิบัติหน้าที่';if(!groups.has(why))groups.set(why,new Set());groups.get(why).add(name);}
+ function causes(rows){const groups=new Map();for(const r of rows){const name=String(r.absent_name||'').trim();if(!name)continue;const why=String(r.special_title||r.leave_reason||r.absence_reason||'').trim().replace(/\s+/g,' ')||'ไม่อยู่ปฏิบัติหน้าที่';if(!groups.has(why))groups.set(why,new Set());groups.get(why).add(name);}
   return [...groups].map(([why,names])=>[...names].sort((a,b)=>a.localeCompare(b,'th')).join(', ')+' '+why);}
  const AUTHORITY='อาศัยอำนาจตามมาตรา ๓๙(๑) แห่งพระราชบัญญัติระเบียบบริหารราชการ กระทรวงศึกษาธิการ พ.ศ.๒๕๔๖ จึงแต่งตั้งข้าราชการครูและบุคลากรทางการศึกษาปฏิบัติหน้าที่สอนแทน ดังนี้';
  // เลขไทยทั้งฟอร์ม

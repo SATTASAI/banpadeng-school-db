@@ -68,7 +68,7 @@ test('substitution UI loads leaves when dates change and uses their canonical te
  const html=fs.readFileSync('public/substitutes.html','utf8'),nodes=new Map(),calls=[];
  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',hidden:false,disabled:false,textContent:'',innerHTML:'',classList:{toggle(){}},querySelectorAll(){return []}});return nodes.get(id)};
  let delayed;const tick=()=>new Promise(resolve=>setImmediate(resolve));
- const sandbox=vm.createContext({document:{getElementById:node},SubstituteOrderExport:{director:()=> 'ผู้อำนวยการ'},apiRequest:async(url)=>{
+ const sandbox=vm.createContext({URLSearchParams,location:{search:'?mode=leave'},SubstituteDayPlan:{init(){},reset(){},build(){}},document:{getElementById:node,querySelector:()=>node('page')},SubstituteOrderExport:{director:()=> 'ผู้อำนวยการ'},apiRequest:async(url)=>{
   calls.push(url);if(url==='/api/auth/me')return {user:{id:3}};
   if(url==='/api/substitutes/permissions')return {can_manage:true};if(url==='/api/staff')return {staff:[]};
   if(url.includes('/leaves?'))return {leave_requests:[{leave_request_id:80,teacher_id:42,full_name:'ครูตัวอย่าง',leave_type:'lenient',leave_days:0.5,status:'pending',start_date:'2026-10-06',end_date:'2026-10-06'}]};
@@ -87,7 +87,7 @@ test('substitution UI loads leaves when dates change and uses their canonical te
 test('substitution without a leave request requires a reason and blocks the absent teacher as a substitute',async()=>{
  const {env,absent,free}=await setup();
  const teachers=(await (await call(env,path+'teachers?date=2026-10-06','GET',undefined,3)).json()).teachers;
- assert.deepEqual(teachers.map(t=>[t.id,t.lesson_count]),[[absent,2]]);
+ assert.deepEqual(teachers.find(t=>t.id===absent).lesson_count,2);assert(teachers.some(t=>t.id===free&&t.lesson_count===0));
  assert.equal((await call(env,path+'teachers?date=2026-10-06','GET',undefined,2)).status,403);
  const data={date:'2026-10-06',teacher_id:absent,entry_id:1,substitute_teacher_id:free,leave_request_id:null};
  assert.equal((await call(env,path+'assignments','POST',data,3)).status,400);
@@ -222,4 +222,82 @@ test('day plan covers several absent teachers at once without double-booking sub
  assert.equal((await call(env,path+'day-plan/save','POST',{date:'2026-10-06',items,extras},3)).status,409);
  const again=await (await call(env,path+'day-plan','POST',{date:'2026-10-06'},3)).json();
  assert(again.teachers.find(t=>t.teacher_id===away).lessons.every(l=>l.assignment_id));
+});
+
+test('special assignments override busy/leave/band conditions, retain the title, count each period, and notify teachers',async()=>{
+ const {env,absent,free,onLeave}=await setup();
+ let d=new Date(Date.now()+7*3600e3);while(d.getUTCDay()!==2)d=new Date(d.getTime()+864e5);const date=d.toISOString().slice(0,10);
+ env.raw.exec("UPDATE academic_terms SET end_date='2099-12-31' WHERE id=99");
+ env.raw.prepare('UPDATE leave_requests SET start_date=?,end_date=? WHERE id=81').run(date,date);
+ // On-leave teacher is excluded ordinarily, but visible with a warning in special mode.
+ const coverage=await (await call(env,path+`coverage?date=${date}&teacher_id=${absent}&mode=special`,'GET',undefined,3)).json();
+ assert(coverage.lessons[0].available_teachers.some(t=>t.id===onLeave&&t.warning));
+ const body={date,title:'เข้าร่วมกิจกรรมโรงเรียน',unavailable_ids:[onLeave],items:[1,2].map(entry_id=>({entry_id,teacher_id:absent,substitute_teacher_id:onLeave}))};
+ assert.equal((await call(env,path+'special/save','POST',body,2)).status,403);
+ for(const bad of [{title:''},{items:[{...body.items[0],substitute_teacher_id:absent}]},{unavailable_ids:[99999]},{items:[body.items[0],body.items[0]]}])assert([400,409].includes((await call(env,path+'special/save','POST',{...body,...bad},3)).status));
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments').get().n,0);
+ const res=await call(env,path+'special/save','POST',body,3);assert.equal(res.status,200,await res.clone().text());assert.equal((await res.json()).saved,2);
+ const rows=(await (await call(env,path+`assignments?date=${date}`,'GET',undefined,3)).json()).assignments;
+ assert.equal(rows.length,2);assert(rows.every(r=>r.assignment_kind==='special'&&r.special_title===body.title&&r.leave_request_id===null));
+ assert.deepEqual(JSON.parse(rows[0].unavailable_json),[onLeave]);
+ const {substituteLoad}=await import('../src/lib/personnel-stats.js');const load=await substituteLoad(env,{date});assert.equal(load.people.find(p=>p.personnel_id===onLeave).month,2);
+ const feed=await (await call(env,'/api/notifications','GET',undefined,5)).json();assert(feed.notifications.some(n=>n.message_key.startsWith('substitute:')));
+ assert.equal((await call(env,path+'special/save','POST',body,3)).status,409);
+ // A special assignment can also be changed to a teacher with their own teaching period.
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(20,99,'ป.1','1',2,1,'ไทย',?)").run(free);
+ assert.equal((await call(env,path+'assignments/'+rows[0].id,'PATCH',{substitute_teacher_id:free},3)).status,200);
+ const after=await (await call(env,path+`coverage?date=${date}&teacher_id=${absent}`,'GET',undefined,3)).json();assert(!after.lessons[0].available_teachers.some(t=>t.id===free));
+ assert.equal((await call(env,path+'assignments/'+rows[0].id,'DELETE',undefined,3)).status,200);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments').get().n,1);
+});
+
+test('special mode permits explicit same-period overlap and regular mode retains collision protection',async()=>{
+ const {env,absent,free,onLeave}=await setup(),date='2026-10-06';
+ env.raw.prepare("INSERT INTO timetable_entries(id,plan_id,grade_level,classroom,weekday,period,subject,teacher_id) VALUES(20,99,'ป.5','2',2,1,'ไทย',?)").run(onLeave);
+ const base={date,title:'กรณีพิเศษ',unavailable_ids:[],items:[{entry_id:1,teacher_id:absent,substitute_teacher_id:free},{entry_id:20,teacher_id:onLeave,substitute_teacher_id:free}]};
+ const res=await call(env,path+'special/save','POST',base,3);assert.equal(res.status,200,await res.clone().text());
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments WHERE period=1').get().n,2);
+ assert.throws(()=>env.raw.prepare("UPDATE substitute_assignments SET assignment_kind='regular' WHERE timetable_entry_id=20").run(),/UNIQUE constraint/);
+});
+
+test('kindergarten without a timetable supports manual periods in leave, no-leave and special workflows',async()=>{
+ const {env}=await setup();
+ for(const id of [8,9]){
+ env.raw.prepare("INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(?,?,'x','x',?,'teacher')").run(id,`k${id}`,`ครูอนุบาล ${id}`);
+ env.raw.prepare("INSERT INTO personnel_records(user_id,full_name,normalized_name,position) VALUES(?,?,?,'ครู')").run(id,`ครูอนุบาล ${id}`,`kindergarten-${id}`);
+ env.raw.prepare('INSERT INTO personnel_accounts(user_id,personnel_id) SELECT ?,id FROM personnel_records WHERE user_id=?').run(id,id);
+ }
+ const person=id=>env.raw.prepare('SELECT id FROM personnel_records WHERE user_id=?').get(id).id,teacher=person(8),sub=person(9);
+ env.raw.exec("INSERT INTO leave_requests(id,user_id,leave_type,start_date,end_date,status) VALUES(90,8,'sick','2026-10-06','2026-10-06','approved')");
+ const original=env.raw.prepare("SELECT COUNT(*) n FROM timetable_entries WHERE plan_id=99").get().n;
+ for(const [date,kind] of [['2026-10-06','leave'],['2026-10-13','other'],['2026-10-20','special']]){
+ const body={date,teacher_id:teacher,grade_level:'อ.2',classroom:'1',periods:[1,2]};
+ assert.equal((await call(env,path+'manual-lessons','POST',body,2)).status,403);
+ const res=await call(env,path+'manual-lessons','POST',body,3);assert.equal(res.status,200,await res.clone().text());
+ const cov=await (await call(env,path+`coverage?date=${date}&teacher_id=${teacher}${kind==='special'?'&mode=special':''}`,'GET',undefined,3)).json();
+ assert.equal(cov.lessons.length,2);assert.equal(cov.time_slots.length,6);assert(cov.lessons[0].available_teachers.some(t=>t.id===sub));
+ if(kind==='special')assert.equal((await call(env,path+'special/save','POST',{date,title:'กิจกรรมอนุบาล',unavailable_ids:[],items:cov.lessons.map(l=>({teacher_id:teacher,entry_id:l.id,substitute_teacher_id:sub}))},3)).status,200);
+ else for(const lesson of cov.lessons){const saved=await call(env,path+'assignments','POST',{date,teacher_id:teacher,entry_id:lesson.id,substitute_teacher_id:sub,leave_request_id:kind==='leave'?90:null,reason:kind==='other'?'อบรม':null},3);assert.equal(saved.status,200,await saved.clone().text())}
+ const assignments=(await (await call(env,path+`assignments?date=${date}`,'GET',undefined,3)).json()).assignments;
+ assert.equal(assignments.length,2);assert(assignments.every(a=>a.grade_level==='อ.2'&&a.classroom==='1'&&a.subject==='กิจกรรมปฐมวัย'));
+ assert.equal((await call(env,path+'manual-lessons','POST',body,3)).status,409);
+ }
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM substitute_assignments WHERE substitute_teacher_id=?').get(sub).n,6);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM timetable_entries WHERE plan_id=99').get().n,original);
+ const empty=await (await call(env,path+`coverage?date=2026-10-27&teacher_id=${teacher}`,'GET',undefined,3)).json();assert.equal(empty.lessons.length,0);
+});
+
+test('assignment schema migration retains existing IDs, source leaves and the notification ID sequence',async()=>{
+ const {env,absent,free}=await setup();
+ const saved=await call(env,path+'assignments','POST',{date:'2026-10-06',teacher_id:absent,entry_id:1,substitute_teacher_id:free,leave_request_id:80},3);assert.equal(saved.status,200);
+ const old=env.raw.prepare('SELECT * FROM substitute_assignments').get();
+ env.raw.exec(`DROP TRIGGER substitute_regular_insert; DROP TRIGGER substitute_regular_update;
+ CREATE TABLE legacy_assignments(id INTEGER PRIMARY KEY AUTOINCREMENT,absence_id INTEGER NOT NULL REFERENCES substitute_absences(id),timetable_entry_id INTEGER NOT NULL REFERENCES timetable_entries(id),substitute_teacher_id INTEGER NOT NULL REFERENCES personnel_records(id),weekday INTEGER NOT NULL,period INTEGER NOT NULL,absence_date TEXT NOT NULL,notes TEXT,created_by INTEGER NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT(datetime('now')),leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE SET NULL,UNIQUE(absence_id,timetable_entry_id),UNIQUE(absence_date,period,substitute_teacher_id));
+ INSERT INTO legacy_assignments SELECT id,absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by,created_at,leave_request_id FROM substitute_assignments;
+ DROP TABLE substitute_assignments; ALTER TABLE legacy_assignments RENAME TO substitute_assignments;
+ UPDATE sqlite_sequence SET seq=500 WHERE name='substitute_assignments';DELETE FROM substitute_schema_migrations;`);
+ env.DB={...env.DB};
+ assert.equal((await call(env,path+'assignments?date=2026-10-06','GET',undefined,3)).status,200);
+ const migrated=env.raw.prepare('SELECT * FROM substitute_assignments').get();assert.equal(migrated.id,old.id);assert.equal(migrated.leave_request_id,80);assert.equal(migrated.assignment_kind,'regular');
+ const next=await call(env,path+'assignments','POST',{date:'2026-10-06',teacher_id:absent,entry_id:2,substitute_teacher_id:free,leave_request_id:80},3);assert.equal(next.status,200,await next.clone().text());assert.equal(env.raw.prepare('SELECT MAX(id) n FROM substitute_assignments').get().n,501);
 });

@@ -65,6 +65,35 @@ async function ensureSchema(env){
     try{await env.DB.prepare("ALTER TABLE substitute_assignments ADD COLUMN leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE SET NULL").run();}
     catch(e){if(!/duplicate column name/i.test(String(e)))throw e;}
   }
+  // Preserve assignment IDs and references while replacing the old all-mode collision constraint.
+  if(!columns.some(c=>c.name==='assignment_kind')){
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS substitute_schema_migrations(version INTEGER PRIMARY KEY)').run();
+    try{await env.DB.batch([
+      env.DB.prepare('INSERT INTO substitute_schema_migrations(version) VALUES(2)'),
+      env.DB.prepare(`CREATE TABLE substitute_assignments_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        absence_id INTEGER NOT NULL REFERENCES substitute_absences(id),
+        timetable_entry_id INTEGER NOT NULL REFERENCES timetable_entries(id),
+        substitute_teacher_id INTEGER NOT NULL REFERENCES personnel_records(id),
+        weekday INTEGER NOT NULL, period INTEGER NOT NULL, absence_date TEXT NOT NULL,
+        notes TEXT, created_by INTEGER NOT NULL REFERENCES users(id),
+        created_at TEXT NOT NULL DEFAULT(datetime('now')),
+        leave_request_id INTEGER REFERENCES leave_requests(id) ON DELETE SET NULL,
+        assignment_kind TEXT NOT NULL DEFAULT 'regular', special_title TEXT, unavailable_json TEXT,
+        UNIQUE(absence_id,timetable_entry_id))`),
+      env.DB.prepare(`INSERT INTO substitute_assignments_v2(id,absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by,created_at,leave_request_id)
+        SELECT id,absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,notes,created_by,created_at,leave_request_id FROM substitute_assignments`),
+      env.DB.prepare("UPDATE sqlite_sequence SET seq=MAX(seq,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='substitute_assignments'),0)) WHERE name='substitute_assignments_v2'"),
+      env.DB.prepare('DROP TABLE substitute_assignments'),
+      env.DB.prepare('ALTER TABLE substitute_assignments_v2 RENAME TO substitute_assignments')
+    ]);}catch(e){const migrated=await env.DB.prepare("SELECT name FROM pragma_table_info('substitute_assignments') WHERE name='assignment_kind'").first();if(!migrated)throw e;}
+  }
+  // Ordinary assignments still reject collisions, including collisions with a special assignment.
+  for(const event of ['INSERT','UPDATE'])await env.DB.prepare(`CREATE TRIGGER IF NOT EXISTS substitute_regular_${event.toLowerCase()}
+    BEFORE ${event} ON substitute_assignments WHEN NEW.assignment_kind<>'special'
+    AND EXISTS(SELECT 1 FROM substitute_assignments a WHERE a.absence_date=NEW.absence_date
+      AND a.period=NEW.period AND a.substitute_teacher_id=NEW.substitute_teacher_id AND a.id<>NEW.id)
+    BEGIN SELECT RAISE(ABORT,'UNIQUE constraint failed: substitute_assignments collision'); END`).run();
   // บันทึกการยกเลิก/เปลี่ยนครูสอนแทน — ใช้แจ้งครูที่ถูกยกเลิก (กระดิ่ง + LINE) และเป็นประวัติ
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS substitute_cancellations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,6 +104,10 @@ async function ensureSchema(env){
     cancelled_by INTEGER NOT NULL REFERENCES users(id),
     created_at TEXT NOT NULL DEFAULT(datetime('now'))
   )`).run();
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS substitute_manual_plans (
+    absence_date TEXT NOT NULL, teacher_id INTEGER NOT NULL REFERENCES personnel_records(id),
+    plan_id INTEGER NOT NULL UNIQUE REFERENCES timetable_plans(id),
+    PRIMARY KEY(absence_date,teacher_id))`).run();
   ready.add(env.DB);
 }
 
@@ -209,7 +242,7 @@ async function publish(env,term,user){
 // - คาบเดิมยังอยู่ (ครู/ชั้น/ห้อง/วัน/คาบเดียวกัน) และครูสอนแทนยังว่าง → ย้ายไปผูกกับตารางใหม่อัตโนมัติ
 // - คาบถูกย้าย/ลบ หรือครูสอนแทนมีคาบสอนเองแล้ว → ยกเลิก แจ้งครูสอนแทน และให้ระบบเสนอครูใหม่ในหน้าจัดสอนแทน
 async function syncSubstitutes(env,oldPlanId,newPlanId,user){
-  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.substitute_teacher_id,e.teacher_id,e.grade_level,e.classroom,e.weekday,e.period
+  const {results}=await env.DB.prepare(`SELECT a.id,a.assignment_kind,a.absence_date,a.substitute_teacher_id,e.teacher_id,e.grade_level,e.classroom,e.weekday,e.period
     FROM substitute_assignments a JOIN timetable_entries e ON e.id=a.timetable_entry_id
     WHERE e.plan_id=? AND a.absence_date>=date('now','+7 hours')`).bind(oldPlanId).all();
   let remapped=0,cancelled=0;
@@ -218,7 +251,7 @@ async function syncSubstitutes(env,oldPlanId,newPlanId,user){
       .bind(newPlanId,r.teacher_id,r.grade_level,r.classroom,r.weekday,r.period).first();
     const busy=next&&await env.DB.prepare("SELECT 1 FROM timetable_entries WHERE plan_id=? AND teacher_id=? AND weekday=? AND period=?")
       .bind(newPlanId,r.substitute_teacher_id,r.weekday,r.period).first();
-    if(next&&!busy){await env.DB.prepare("UPDATE substitute_assignments SET timetable_entry_id=? WHERE id=?").bind(next.id,r.id).run();remapped++;continue;}
+    if(next&&(!busy||r.assignment_kind==='special')){await env.DB.prepare("UPDATE substitute_assignments SET timetable_entry_id=? WHERE id=?").bind(next.id,r.id).run();remapped++;continue;}
     const a=await assignmentDetail(env,r.id);if(!a)continue;
     await env.DB.batch([cancellationRow(env,a,'cancelled',user),env.DB.prepare("DELETE FROM substitute_assignments WHERE id=?").bind(r.id)]);
     cancelled++;
@@ -258,19 +291,19 @@ async function sourceLeave(env,id,date,teacherId){
     WHERE r.id=? AND a.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date
     AND r.status IN ('pending','approved')`).bind(id,teacherId,date).first();
 }
-async function coverage(env,date,teacherId){
+async function coverage(env,date,teacherId,special=false){
   if(!validDate(date)||!teacherId)return reply({error:"เลือกวันที่และครูให้ถูกต้อง"},400);
   const day=weekday(date);if(!day)return reply({error:"เลือกวันจันทร์ถึงศุกร์"},400);
   const term=await env.DB.prepare(`SELECT t.id,t.name,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
     WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
   if(!term)return reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404);
-  const published=await plan(env,term.id,"published");if(!published)return reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400);
+  const published=(await plan(env,term.id,"published"))||{id:0};
   const {results:lessons}=await env.DB.prepare(`SELECT e.id,e.grade_level,e.classroom,e.period,e.subject,e.room_name,
     a.id AS assignment_id,a.substitute_teacher_id,p.full_name AS substitute_name
     FROM timetable_entries e LEFT JOIN substitute_assignments a ON a.timetable_entry_id=e.id AND a.absence_date=?
     LEFT JOIN personnel_records p ON p.id=a.substitute_teacher_id
-    WHERE e.plan_id=? AND e.weekday=? AND e.teacher_id=? ORDER BY e.period,e.grade_level,e.classroom`)
-    .bind(date,published.id,day,teacherId).all();
+    WHERE (e.plan_id=? OR e.plan_id IN (SELECT plan_id FROM substitute_manual_plans WHERE absence_date=?)) AND e.weekday=? AND e.teacher_id=? ORDER BY e.period,e.grade_level,e.classroom`)
+    .bind(date,published.id,date,day,teacherId).all();
   const {results:teachers}=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id
     WHERE p.status='active' AND p.id<>? AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) ORDER BY p.full_name`).bind(teacherId).all();
   const {results:busy}=await env.DB.prepare(`SELECT teacher_id AS id,period FROM timetable_entries WHERE plan_id=? AND weekday=?
@@ -292,21 +325,21 @@ async function coverage(env,date,teacherId){
     SUM(CASE WHEN absence_date=? THEN 1 ELSE 0 END) AS day_count FROM substitute_assignments WHERE absence_date BETWEEN ? AND ? GROUP BY substitute_teacher_id`)
     .bind(date,term.start_date,term.end_date).all();
   const termById=new Map(termRows.map(r=>[r.id,r]));
-  const withLoad=teachers.filter(t=>bands.has(t.id)).map(t=>({...t,bands:[...bands.get(t.id)],week_count:loadById.get(t.id)?.week||0,month_count:loadById.get(t.id)?.month||0,
+  const withLoad=teachers.filter(t=>special||bands.has(t.id)||lessons.some(l=>gradeBand(l.grade_level)==='kindergarten')).map(t=>({...t,bands:[...(bands.get(t.id)||[])],week_count:loadById.get(t.id)?.week||0,month_count:loadById.get(t.id)?.month||0,
     term_count:termById.get(t.id)?.term_count||0,day_count:termById.get(t.id)?.day_count||0,last_date:termById.get(t.id)?.last_date||null}))
     .sort((a,b)=>a.term_count-b.term_count||a.month_count-b.month_count||a.week_count-b.week_count||String(a.full_name).localeCompare(String(b.full_name),'th'));
-  const result=lessons.map(l=>{const band=gradeBand(l.grade_level);return {...l,band,available_teachers:withLoad.filter(t=>t.bands.includes(band)&&!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))};});
+  const result=lessons.map(l=>{const band=gradeBand(l.grade_level);return {...l,band,available_teachers:withLoad.filter(t=>special||((t.bands.includes(band)||band==='kindergarten'&&!t.bands.length)&&!unavailable.has(t.id)&&!busy.some(b=>b.id===t.id&&b.period===l.period))).map(t=>({...t,warning:[unavailable.has(t.id)?"มีใบลาหรือไม่ว่าง":"",busy.some(b=>b.id===t.id&&b.period===l.period)?"มีคาบสอนหรือสอนแทนแล้ว":""].filter(Boolean).join(" · ")}))};});
   // ข้อเสนอของระบบ: ทีละคาบ เลือกครูที่ (1) ถูกจัดในวันนั้นน้อยสุด รวมข้อเสนอก่อนหน้า (2) สอนแทนทั้งภาคเรียนน้อยสุด
   // (3) เดือน/สัปดาห์น้อยสุด (4) ไม่ได้สอนแทนนานสุด — ค่าเฉลี่ยจึงใกล้กันและไม่จัดคนเดิมซ้ำ ผู้จัดยอมรับหรือเลือกเองได้
   const extra=new Map();
   for(const l of result){
-    if(l.assignment_id||!l.available_teachers.length){l.proposed_teacher_id=null;continue;}
+    if(special||l.assignment_id||!l.available_teachers.length){l.proposed_teacher_id=null;continue;}
     const score=t=>[(t.day_count||0)+(extra.get(t.id)||0),t.term_count+(extra.get(t.id)||0),t.month_count,t.week_count];
     const pick=[...l.available_teachers].sort((a,b)=>{const x=score(a),y=score(b);for(let i=0;i<x.length;i++)if(x[i]!==y[i])return x[i]-y[i];
       return String(a.last_date||'').localeCompare(String(b.last_date||''))||String(a.full_name).localeCompare(String(b.full_name),'th');})[0];
     l.proposed_teacher_id=pick.id;extra.set(pick.id,(extra.get(pick.id)||0)+1);
   }
-  return reply({term,date,teacher_id:teacherId,load:{week:load.week,month:load.month},lessons:result});
+  return reply({term,date,teacher_id:teacherId,load:{week:load.week,month:load.month},time_slots:(await loadStructure(env,term.id)).structure.times,lessons:result});
 }
 // ช่วงชั้น: อนุบาล / ป.1-3 / ป.4-6
 function gradeBand(grade){const s=String(grade||'');if(/^อ|อนุบาล/.test(s))return 'kindergarten';const n=Number((s.match(/\d+/)||[])[0]);
@@ -350,12 +383,12 @@ async function dayContext(env,date,extras){
   const term=await env.DB.prepare(`SELECT t.id,t.name,y.year_be,t.start_date,t.end_date FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id
     WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
   if(!term)return {error:reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404)};
-  const published=await plan(env,term.id,"published");if(!published)return {error:reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400)};
+  const published=(await plan(env,term.id,"published"))||{id:0};
   const {results:entries}=await env.DB.prepare(`SELECT e.id,e.teacher_id,e.grade_level,e.classroom,e.period,e.subject,e.room_name,
     a.id AS assignment_id,a.substitute_teacher_id,p.full_name AS substitute_name
     FROM timetable_entries e LEFT JOIN substitute_assignments a ON a.timetable_entry_id=e.id AND a.absence_date=?
     LEFT JOIN personnel_records p ON p.id=a.substitute_teacher_id
-    WHERE e.plan_id=? AND e.weekday=? AND e.teacher_id IS NOT NULL ORDER BY e.period,e.grade_level,e.classroom`).bind(date,published.id,day).all();
+    WHERE (e.plan_id=? OR e.plan_id IN (SELECT plan_id FROM substitute_manual_plans WHERE absence_date=?)) AND e.weekday=? AND e.teacher_id IS NOT NULL ORDER BY e.period,e.grade_level,e.classroom`).bind(date,published.id,date,day).all();
   const {results:saved}=await env.DB.prepare(`SELECT substitute_teacher_id AS id,period FROM substitute_assignments WHERE absence_date=?`).bind(date).all();
   const {results:absRows}=await env.DB.prepare(`SELECT ab.teacher_id,ab.reason,p.full_name FROM substitute_absences ab JOIN personnel_records p ON p.id=ab.teacher_id WHERE ab.absence_date=?`).bind(date).all();
   const leaves=(await (await leaveAbsences(env,date)).json()).leave_requests||[];
@@ -444,6 +477,52 @@ async function saveDayPlan(request,env,user){
   catch(error){if(/UNIQUE constraint/i.test(String(error)))return reply({error:"มีคาบที่ถูกจัดไปแล้วระหว่างบันทึก กรุณาโหลดข้อมูลใหม่"},409);throw error;}
   return reply({ok:true,saved:rows.length});
 }
+async function prepareManualLessons(request,env,user){
+  const body=await request.json().catch(()=>null),date=body?.date,teacherId=validId(body?.teacher_id),grade=text(body?.grade_level,20),room=text(body?.classroom,20);
+  const periods=Array.isArray(body?.periods)?[...new Set(body.periods)]:[];
+  if(!validDate(date)||!weekday(date)||!teacherId||!/^อ\.[1-3]$/.test(grade)||!room||room.length>20||!periods.length||periods.some(p=>!Number.isInteger(p)||p<1||p>6))return reply({error:"เลือกครู ระดับอนุบาล ห้อง และคาบ 1–6 ให้ถูกต้อง"},400);
+  const ctx=await dayContext(env,date,new Map());if(ctx.error)return ctx.error;
+  const person=await env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).bind(teacherId).first();
+  if(!person)return reply({error:"ไม่พบครูที่เลือก"},400);
+  if(ctx.entries.some(e=>e.teacher_id===teacherId&&!/^อ|อนุบาล/.test(e.grade_level)))return reply({error:"กำหนดคาบเองสำหรับครูอนุบาลที่ไม่มีตารางสอนเท่านั้น"},400);
+  if(ctx.entries.some(e=>e.teacher_id===teacherId&&periods.includes(e.period)))return reply({error:"มีคาบของครูในช่วงที่เลือกแล้ว กรุณาใช้คาบเดิม"},409);
+  let manual=await env.DB.prepare('SELECT plan_id FROM substitute_manual_plans WHERE absence_date=? AND teacher_id=?').bind(date,teacherId).first();
+  if(!manual){
+    try{await env.DB.batch([
+      env.DB.prepare("INSERT INTO timetable_plans(academic_term_id,status,created_by) VALUES(?,'archived',?)").bind(ctx.term.id,user.id),
+      env.DB.prepare('INSERT INTO substitute_manual_plans(absence_date,teacher_id,plan_id) VALUES(?,?,last_insert_rowid())').bind(date,teacherId)
+    ]);}catch(e){if(!/UNIQUE constraint/i.test(String(e)))throw e;}
+    manual=await env.DB.prepare('SELECT plan_id FROM substitute_manual_plans WHERE absence_date=? AND teacher_id=?').bind(date,teacherId).first();
+  }
+  try{await env.DB.batch(periods.map(period=>env.DB.prepare(`INSERT INTO timetable_entries(plan_id,grade_level,classroom,weekday,period,subject,teacher_id)
+    VALUES(?,?,?,?,?,'กิจกรรมปฐมวัย',?)`).bind(manual.plan_id,grade,room,weekday(date),period,teacherId)));}
+  catch(e){if(/UNIQUE constraint/i.test(String(e)))return reply({error:"คาบนี้ถูกกำหนดแล้ว กรุณาโหลดใหม่"},409);throw e;}
+  return reply({ok:true});
+}
+async function saveSpecial(request,env,user){
+  const body=await request.json().catch(()=>null),title=text(body?.title,300);
+  const items=Array.isArray(body?.items)?body.items:[],unavailable=body?.unavailable_ids;
+  if(!title||title.length>300||!items.length||items.length>200||!Array.isArray(unavailable)||unavailable.length>500||unavailable.some(id=>!validId(id)))
+    return reply({error:"ระบุเรื่อง ผู้ไม่ว่าง และรายการสอนแทนให้ถูกต้อง"},400);
+  const ctx=await dayContext(env,body.date,new Map());if(ctx.error)return ctx.error;
+  const {results:people}=await env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id
+    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).all();
+  const ids=new Set(people.map(p=>p.id)),seen=new Set(),rows=[];
+  if(unavailable.some(id=>!ids.has(Number(id))))return reply({error:"รายชื่อผู้ไม่ว่างไม่ถูกต้อง"},400);
+  for(const item of items){
+    const entry=ctx.entries.find(e=>e.id===validId(item?.entry_id)&&e.teacher_id===validId(item?.teacher_id)),subId=validId(item?.substitute_teacher_id);
+    if(!entry||!ids.has(subId)||entry.teacher_id===subId)return reply({error:"ข้อมูลครูหรือคาบไม่ถูกต้อง"},400);
+    if(entry.assignment_id||seen.has(entry.id))return reply({error:"คาบนี้ถูกจัดแล้ว กรุณาค้นหาใหม่"},409);
+    seen.add(entry.id);rows.push({entry,subId});
+  }
+  const stmts=[];
+  for(const id of new Set(rows.map(r=>r.entry.teacher_id)))stmts.push(env.DB.prepare(`INSERT OR IGNORE INTO substitute_absences(absence_date,teacher_id,reason,created_by) VALUES(?,?,?,?)`).bind(body.date,id,title,user.id));
+  for(const {entry,subId} of rows)stmts.push(env.DB.prepare(`INSERT INTO substitute_assignments(absence_id,timetable_entry_id,substitute_teacher_id,weekday,period,absence_date,created_by,assignment_kind,special_title,unavailable_json)
+    SELECT id,?,?,?,?,?,?,'special',?,? FROM substitute_absences WHERE absence_date=? AND teacher_id=?`)
+    .bind(entry.id,subId,weekday(body.date),entry.period,body.date,user.id,title,JSON.stringify([...new Set(unavailable.map(Number))]),body.date,entry.teacher_id));
+  try{await env.DB.batch(stmts);}catch(e){if(/UNIQUE constraint/i.test(String(e)))return reply({error:"มีผู้จัดคาบนี้แล้ว กรุณาค้นหาใหม่"},409);throw e;}
+  return reply({ok:true,saved:rows.length});
+}
 // ลายเซ็นอิเล็กทรอนิกส์ของ ผอ. สำหรับคำสั่งสอนแทน
 async function orderSignature(env){
   const director=(await executives(env)).filter(isDirector);
@@ -453,7 +532,7 @@ async function orderSignature(env){
 }
 async function assignments(env,date){
   if(!validDate(date))return reply({error:"เลือกวันที่ให้ถูกต้อง"},400);
-  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.leave_request_id,r.status AS leave_status,r.reason AS leave_reason,e.subject,e.grade_level,e.classroom,
+  const {results}=await env.DB.prepare(`SELECT a.id,a.absence_date,a.period,a.notes,a.assignment_kind,a.special_title,a.unavailable_json,a.leave_request_id,r.status AS leave_status,r.reason AS leave_reason,e.subject,e.grade_level,e.classroom,
     absent.full_name AS absent_name,sub.full_name AS substitute_name,ab.teacher_id AS absent_teacher_id,ab.reason AS absence_reason,
     a.substitute_teacher_id,a.timetable_entry_id AS entry_id
     FROM substitute_assignments a LEFT JOIN leave_requests r ON r.id=a.leave_request_id JOIN substitute_absences ab ON ab.id=a.absence_id
@@ -469,15 +548,16 @@ async function teachersForDay(env,date){
   const day=weekday(date);if(!day)return reply({error:"เลือกวันจันทร์ถึงศุกร์"},400);
   const term=await env.DB.prepare(`SELECT t.id FROM academic_terms t WHERE ? BETWEEN t.start_date AND t.end_date ORDER BY t.id DESC LIMIT 1`).bind(date).first();
   if(!term)return reply({error:"ไม่พบภาคเรียนที่ครอบคลุมวันที่นี้"},404);
-  const published=await plan(env,term.id,"published");if(!published)return reply({error:"ยังไม่มีตารางสอนที่เผยแพร่ในภาคเรียนนี้"},400);
+  const published=(await plan(env,term.id,"published"))||{id:0};
   const {results}=await env.DB.prepare(`SELECT p.id,p.full_name,COUNT(e.id) AS lesson_count,
     (SELECT ab.reason FROM substitute_absences ab WHERE ab.teacher_id=p.id AND ab.absence_date=?) AS absence_reason
-    FROM personnel_records p JOIN timetable_entries e ON e.teacher_id=p.id AND e.plan_id=? AND e.weekday=?
-    WHERE p.status='active' GROUP BY p.id ORDER BY p.full_name`).bind(date,published.id,day).all();
+    FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id LEFT JOIN timetable_entries e ON e.teacher_id=p.id AND e.weekday=?
+      AND (e.plan_id=? OR e.plan_id IN (SELECT plan_id FROM substitute_manual_plans WHERE absence_date=?))
+    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) GROUP BY p.id ORDER BY p.full_name`).bind(date,day,published.id,date).all();
   return reply({date,teachers:results});
 }
 async function assignmentDetail(env,id){
-  return env.DB.prepare(`SELECT a.id,a.absence_id,a.absence_date,a.period,a.timetable_entry_id,a.substitute_teacher_id,ab.teacher_id AS absent_teacher_id,
+  return env.DB.prepare(`SELECT a.id,a.assignment_kind,a.absence_id,a.absence_date,a.period,a.timetable_entry_id,a.substitute_teacher_id,ab.teacher_id AS absent_teacher_id,
     e.grade_level,e.classroom,e.subject,absent.full_name AS absent_name
     FROM substitute_assignments a JOIN substitute_absences ab ON ab.id=a.absence_id
     LEFT JOIN timetable_entries e ON e.id=a.timetable_entry_id LEFT JOIN personnel_records absent ON absent.id=ab.teacher_id WHERE a.id=?`).bind(id).first();
@@ -502,15 +582,15 @@ async function changeAssignment(request,env,id,user){
   if(!subId)return reply({error:"เลือกครูสอนแทนคนใหม่"},400);
   const a=await assignmentDetail(env,id);if(!a)return reply({error:"ไม่พบรายการสอนแทน กรุณารีเฟรช"},404);
   if(subId===a.substitute_teacher_id)return reply({error:"เป็นครูคนเดิมอยู่แล้ว"},400);
-  const result=await coverage(env,a.absence_date,a.absent_teacher_id);if(result.status!==200)return result;
+  const result=await coverage(env,a.absence_date,a.absent_teacher_id,a.assignment_kind==='special');if(result.status!==200)return result;
   const lesson=(await result.json()).lessons.find(x=>x.id===a.timetable_entry_id);
   if(!lesson||!lesson.available_teachers.some(t=>t.id===subId))return reply({error:"ครูที่เลือกไม่ว่างในคาบนี้ กรุณาเลือกใหม่"},409);
   try{
     // UPDATE ก่อน แล้วบันทึกการยกเลิกของครูเดิมเฉพาะเมื่อเปลี่ยนสำเร็จ (ทั้งหมดอยู่ใน transaction เดียวกัน)
     const [updated]=await env.DB.batch([
       env.DB.prepare(`UPDATE substitute_assignments SET substitute_teacher_id=?,created_by=?,created_at=datetime('now')
-        WHERE id=? AND substitute_teacher_id=? AND NOT EXISTS(SELECT 1 FROM leave_requests r JOIN personnel_accounts pa ON pa.user_id=r.user_id
-        WHERE pa.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved'))`)
+        WHERE id=? AND substitute_teacher_id=? AND (assignment_kind='special' OR NOT EXISTS(SELECT 1 FROM leave_requests r JOIN personnel_accounts pa ON pa.user_id=r.user_id
+        WHERE pa.personnel_id=? AND ? BETWEEN r.start_date AND r.end_date AND r.status IN ('pending','approved')))`)
         .bind(subId,user.id,id,a.substitute_teacher_id,subId,a.absence_date),
       env.DB.prepare(`INSERT INTO substitute_cancellations(assignment_id,substitute_teacher_id,absence_date,period,grade_level,classroom,subject,absent_name,action,cancelled_by)
         SELECT ?,?,?,?,?,?,?,?,'replaced',? WHERE EXISTS(SELECT 1 FROM substitute_assignments WHERE id=? AND substitute_teacher_id=?)`)
@@ -618,11 +698,16 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/timetable/publish"&&method==="POST")return publish(env,term,user);
   }else{
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
+    if(pathname==="/api/substitutes/manual-lessons"&&method==="POST")return prepareManualLessons(request,env,user);
+    if(pathname==="/api/substitutes/special/people"&&method==="GET"){
+      const {results}=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) ORDER BY p.full_name`).all();return reply({teachers:results});
+    }
+    if(pathname==="/api/substitutes/special/save"&&method==="POST")return saveSpecial(request,env,user);
     if(pathname==="/api/substitutes/day-plan"&&method==="POST")return dayPlan(request,env);
     if(pathname==="/api/substitutes/day-plan/save"&&method==="POST")return saveDayPlan(request,env,user);
     if(pathname==="/api/substitutes/order-signature"&&method==="GET")return orderSignature(env);
     if(pathname==="/api/substitutes/leave-days"&&method==="GET")return leaveDays(env,url.searchParams.get("month"));
-    if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")));
+    if(pathname==="/api/substitutes/coverage"&&method==="GET")return coverage(env,url.searchParams.get("date"),validId(url.searchParams.get("teacher_id")),url.searchParams.get("mode")==="special");
     if(pathname==="/api/substitutes/assignments"&&method==="GET")return assignments(env,url.searchParams.get("date"));
 
     if(pathname==="/api/substitutes/assignments"&&method==="POST")return assign(request,env,user);
