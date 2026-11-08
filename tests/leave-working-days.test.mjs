@@ -7,6 +7,19 @@ import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
 import {leaveStatistics} from '../src/lib/personnel-stats.js';
 
+test('maternity includes weekends/holidays while paternity excludes them, also across fiscal years',()=>{
+ assert.equal(leaveSpanDays('maternity','2026-11-06','2026-11-09'),4);
+ assert.equal(leaveSpanDays('paternity','2026-11-06','2026-11-09'),2);
+ assert.equal(leaveSpanDays('paternity','2026-11-07','2026-11-08'),0);
+ // Friday 23 October is a government holiday; Monday can also be a school holiday.
+ assert.equal(leaveSpanDays('maternity','2026-10-22','2026-10-26',['2026-10-26']),5);
+ assert.equal(leaveSpanDays('paternity','2026-10-22','2026-10-26'),2);
+ assert.equal(leaveSpanDays('paternity','2026-10-22','2026-10-26',['2026-10-26']),1);
+ const base={start_date:'2026-09-30',end_date:'2026-10-05'};
+ assert.equal(effectiveLeaveDays({...base,leave_type:'maternity',leave_days:6},[],'2026-10-01','2027-09-30'),5);
+ assert.equal(effectiveLeaveDays({...base,leave_type:'other',leave_subtype:'paternity',leave_days:4},[],'2026-10-01','2027-09-30'),3);
+});
+
 test('weekends, official/substitute holidays and cross-year periods use working days; half days survive',()=>{
  assert.equal(workingDays('2026-11-06','2026-11-09'),2);
  assert.equal(workingDays('2026-11-07','2026-11-08'),0);

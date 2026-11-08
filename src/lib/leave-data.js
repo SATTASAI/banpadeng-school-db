@@ -2,6 +2,24 @@ import {normalizeLeaves,leaveCalendar,legacyCappedDays,effectiveLeaveDays} from 
 import {ensureDepartmentStaff} from '../routes/department-staff.js';
 
 const ready = new WeakMap();
+// Early installs constrained this column to 'lenient'. Preserve that original
+// column instead of rebuilding a table referenced by leave events and reviews.
+export async function ensureLeaveSubtypeSchema(env) {
+ const row=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='leave_requests'").first();
+ const oldCheck=/\bleave_subtype\s+TEXT\s+CHECK\s*\(\s*leave_subtype\s+IS\s+NULL\s+OR\s+leave_subtype\s*=\s*'lenient'\s*\)/i;
+ if(!oldCheck.test(row?.sql||''))return;
+ try{
+  await env.DB.batch([
+   env.DB.prepare('ALTER TABLE leave_requests RENAME COLUMN leave_subtype TO legacy_leave_subtype'),
+   env.DB.prepare("ALTER TABLE leave_requests ADD COLUMN leave_subtype TEXT CHECK (leave_subtype IS NULL OR leave_subtype IN ('lenient','paternity'))"),
+   env.DB.prepare('UPDATE leave_requests SET leave_subtype=legacy_leave_subtype')
+  ]);
+ }catch(error){
+  // Another Worker may have completed the same atomic migration first.
+  const current=await env.DB.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='leave_requests'").first();
+  if(oldCheck.test(current?.sql||'')||!current?.sql?.includes('legacy_leave_subtype'))throw error;
+ }
+}
 export function ensureLeaveData(env) {
  if (ready.has(env.DB)) return ready.get(env.DB);
  const promise = (async()=>{
@@ -20,6 +38,7 @@ export function ensureLeaveData(env) {
    try {await env.DB.prepare(`ALTER TABLE leave_requests ADD COLUMN ${name} ${type}`).run();}
    catch(e) {if (!/duplicate column name/i.test(String(e.message))) throw e;}
   }
+  await ensureLeaveSubtypeSchema(env);
   await env.DB.batch([
    env.DB.prepare(`CREATE TABLE IF NOT EXISTS leave_approval_delegations (
     personnel_id INTEGER PRIMARY KEY REFERENCES personnel_records(id),
@@ -120,7 +139,7 @@ export async function leaveForm(env,row) {
   ORDER BY r.start_date DESC,r.id DESC`).bind(row.id,start,row.user_id,person?.id??null,person?.id??null).all();
  const holidays=await leaveCalendar(env),round=n=>Math.round(n*100)/100;
  const history=(await normalizeLeaves(env,storedHistory)).map(leaveRecord).filter(r=>(r.leave_type==='lenient')===(row.leave_type==='lenient'));
- const stats=(row.leave_type==='lenient'?['lenient']:['sick','personal','maternity',...(row.leave_type==='other'?['other']:[])]).map(type=>{
+ const stats=(['lenient','paternity'].includes(row.leave_type)?[row.leave_type]:['sick','personal','maternity',...(row.leave_type==='other'?['other']:[])]).map(type=>{
   // Same rule as statistics: a leave counts once in the year it starts; days follow the overlap.
   const typed=history.filter(r=>r.leave_type===type&&r.end_date>=from&&r.start_date<=to);
   const previous_count=typed.filter(r=>r.start_date>=from).length;

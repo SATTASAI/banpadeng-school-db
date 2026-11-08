@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {fixture,call} from './notifications.test.mjs';
 import {ensureLeaveData} from '../src/lib/leave-data.js';
 import {dashboardActivitySummary} from '../src/lib/dashboard-summary.js';
+import {leaveStatistics} from '../src/lib/personnel-stats.js';
 
 const form={substitute_teacher:'ครูผู้รับมอบหมาย',leave_type:'sick',reason:'มีไข้ ไปพบแพทย์',position:'ครู',request_date:'2026-10-06',start_date:'2026-10-06',end_date:'2026-10-06',leave_days:0.5,contact_address:'บ้านพักครู ที่อยู่ตัวอย่าง',contact_phone:'0000000000'};
 async function setup(){
@@ -351,4 +352,59 @@ test('decided leave forms are stored on Google Drive once, only by approvers/per
  // ฟิกซ์เจอร์ไม่มีการตั้งค่า Google Drive → ผู้มีสิทธิ์ได้ 503 (ไม่ใช่ 403)
  assert.equal((await call(env,path+'/drive-pdf','POST',undefined,4)).status,503);
  assert.equal((await call(env,path+'/drive-pdf','GET',undefined,4)).status,405);
+});
+
+test('paternity flows through approval and keeps a separate working-day type in forms and statistics',async()=>{
+ const {env}=await setup();
+ // The school's personal/other turn cap must not block this separate leave type.
+ await call(env,'/api/leave-settings','PATCH',{limits:[{leave_type:'general',max_count:0},{leave_type:'lenient',max_count:2}]});
+ env.raw.exec("CREATE TABLE gr_holidays(holiday_date TEXT,kind TEXT); INSERT INTO gr_holidays VALUES('2026-11-10','holiday')");
+ const request={...form,leave_type:'paternity',reason:'ช่วยเหลือภริยาหลังคลอดบุตร',start_date:'2026-11-06',end_date:'2026-11-10',leave_days:undefined};
+ const preview=await (await call(env,'/api/leave-working-days?start=2026-11-06&end=2026-11-10&type=paternity','GET',undefined,2)).json();
+ assert.equal(preview.working_days,2);assert.equal(preview.counts_calendar_days,false);
+ assert.equal((await call(env,'/api/leave-requests','POST',{...request,leave_days:5},2)).status,400);
+ assert.equal((await call(env,'/api/leave-requests','POST',{...request,start_date:'2026-11-07',end_date:'2026-11-08'},2)).status,400);
+ const response=await call(env,'/api/leave-requests','POST',request,2);assert.equal(response.status,201);
+ const {id}=await response.json(),path='/api/leave-requests/'+id;
+ const stored=env.raw.prepare('SELECT leave_type,leave_subtype,leave_days FROM leave_requests WHERE id=?').get(id);
+ assert.deepEqual({...stored},{leave_type:'other',leave_subtype:'paternity',leave_days:2});
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,409);
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();
+ assert.equal(list.leave_requests.find(r=>r.id===id).leave_type,'paternity');
+ const detail=await (await call(env,path,'GET',undefined,2)).json();
+ assert.equal(detail.leave_request.leave_type,'paternity');
+ assert.deepEqual(detail.leave_request.stats.map(s=>s.type),['paternity']);
+ assert.equal(detail.leave_request.stats[0].current_days,2);
+ const stats=await leaveStatistics(env,{fiscalYear:2570});
+ assert.equal(stats.by_type.find(r=>r.key==='paternity').days,2);
+ assert.equal(stats.by_type.find(r=>r.key==='other').days,0);
+ assert.equal(stats.summary.approved_days,2);
+ const summary=await dashboardActivitySummary(env,2570);
+ assert.equal(summary.leave_summary.by_type.find(r=>r.key==='paternity').approved_days,2);
+ assert.equal(summary.leave_summary.approved_days,2);
+});
+
+test('editing between maternity and paternity applies each day rule and clears obsolete subtypes',async()=>{
+ const {env}=await setup();
+ const created=await call(env,'/api/leave-requests','POST',{...form,leave_type:'maternity',start_date:'2026-11-06',end_date:'2026-11-09',leave_days:4},2);
+ assert.equal(created.status,201);const {id}=await created.json(),path='/api/leave-requests/'+id;
+ const edit={action:'edit',leave_type:'paternity',start_date:'2026-11-06',end_date:'2026-11-09',leave_days:4,note:'แก้ประเภทให้ตรงกับผู้ยื่น'};
+ assert.equal((await call(env,path,'PATCH',edit,2)).status,403);
+ assert.equal((await call(env,path,'PATCH',edit,1)).status,400);
+ assert.equal((await call(env,path,'PATCH',{...edit,leave_days:2},1)).status,200);
+ assert.deepEqual({...env.raw.prepare('SELECT leave_type,leave_subtype,leave_days FROM leave_requests WHERE id=?').get(id)},{leave_type:'other',leave_subtype:'paternity',leave_days:2});
+ assert.equal((await call(env,path,'PATCH',{...edit,leave_type:'maternity',leave_days:4},1)).status,200);
+ assert.deepEqual({...env.raw.prepare('SELECT leave_type,leave_subtype,leave_days FROM leave_requests WHERE id=?').get(id)},{leave_type:'maternity',leave_subtype:null,leave_days:4});
+});
+
+test('personnel overview retains leave types when prorating maternity and paternity through today',async t=>{
+ const {env}=await setup();t.mock.method(Date,'now',()=>Date.UTC(2026,10,8,5));
+ env.raw.exec(`INSERT INTO leave_requests(user_id,leave_type,leave_subtype,start_date,end_date,leave_days,status) VALUES
+ (2,'maternity',NULL,'2026-11-06','2026-11-09',4,'approved'),
+ (2,'other','paternity','2026-11-06','2026-11-09',2,'approved')`);
+ const response=await call(env,'/api/personnel/overview');assert.equal(response.status,200);
+ // Fri–Sun: 3 calendar days of maternity + Friday only for paternity.
+ assert.equal((await response.json()).summary.approved_leave_days_ytd,4);
 });

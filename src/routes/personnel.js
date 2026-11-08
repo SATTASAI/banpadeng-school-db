@@ -67,7 +67,7 @@ async function overview(request, env) {
   ]);
 
   const holidays=await leaveCalendar(env);
-  const {results:approvedLeaves}=await env.DB.prepare("SELECT start_date,end_date,leave_days FROM leave_requests WHERE status='approved' AND COALESCE(leave_subtype,leave_type)<>'lenient' AND end_date>=?").bind(fyStart).all();
+ const {results:approvedLeaves}=await env.DB.prepare("SELECT leave_type,leave_subtype,start_date,end_date,leave_days FROM leave_requests WHERE status='approved' AND COALESCE(leave_subtype,leave_type)<>'lenient' AND end_date>=?").bind(fyStart).all();
   leaveSummary.approved_days_ytd=approvedLeaves.reduce((n,r)=>n+effectiveLeaveDays(r,holidays,fyStart,bkToday),0);
   if(!workingDays(bkToday,bkToday,holidays))leaveSummary.absent_today=0;
   const today = bkToday;

@@ -1,7 +1,7 @@
 // จัดสอนแทนทั้งวัน — ครูที่ไม่อยู่หลายคนพร้อมกัน ระบบเสนอครูโดยไม่ชนคาบ ผู้จัดแก้แล้วบันทึกครั้งเดียว
 (function(){
 const $=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
-const leaveTypes={sick:"ลาป่วย",personal:"ลากิจ",maternity:"ลาคลอด",lenient:"ลาอนุโลม",other:"ลาอื่น ๆ"};
+const leaveTypes={sick:"ลาป่วย",personal:"ลากิจ",maternity:"ลาคลอด",paternity:"ลาช่วยภริยาคลอดบุตร",lenient:"ลาอนุโลม",other:"ลาอื่น ๆ"};
 let plan=null,extras=[],version=0,hooks={};
 function say(m,err=false){const el=$("dayStatus");el.hidden=!m;el.textContent=m||'';el.classList.toggle("error",err)}
 function reasonOf(){return $("dayReasonType").value==='other'?String($("dayReasonText").value||'').trim():$("dayReasonType").value}

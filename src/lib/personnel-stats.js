@@ -5,7 +5,7 @@ import {leaveCalendar,effectiveLeaveDays} from './leave-working-days.js';
 import { isPersonnelHead } from './leave-permissions.js';
 import { canManageSubstitutes } from './substitute-permissions.js';
 
-export const LEAVE_TYPES = { sick: 'ลาป่วย', personal: 'ลากิจ', maternity: 'ลาคลอด', lenient: 'ลาอนุโลม', other: 'ลาอื่น ๆ' };
+export const LEAVE_TYPES = { sick: 'ลาป่วย', personal: 'ลากิจ', maternity: 'ลาคลอด', paternity: 'ลาช่วยภริยาคลอดบุตร', lenient: 'ลาอนุโลม', other: 'ลาอื่น ๆ' };
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function bangkokToday() { return new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10); }

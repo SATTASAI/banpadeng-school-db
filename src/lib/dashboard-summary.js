@@ -24,7 +24,7 @@ export async function dashboardActivitySummary(env, fiscalYear = null) {
    approved_days:r.status==='approved'?effectiveLeaveDays(r,holidays,start||r.start_date,end||r.end_date):0}));
   const date=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
   if(!workingDays(date,date,holidays))today.people=0;
-  const labels={sick:'ลาป่วย',personal:'ลากิจ',maternity:'ลาคลอด',lenient:'ลาอนุโลม',other:'ลาอื่น ๆ'};
+  const labels={sick:'ลาป่วย',personal:'ลากิจ',maternity:'ลาคลอด',paternity:'ลาช่วยภริยาคลอดบุตร',lenient:'ลาอนุโลม',other:'ลาอื่น ๆ'};
   const byType=Object.entries(labels).map(([key,label])=>{
     const rows=leaveRows.results.filter(r=>r.leave_type===key);
     const count=status=>rows.filter(r=>r.status===status).reduce((n,r)=>n+Number(r.request_count),0);

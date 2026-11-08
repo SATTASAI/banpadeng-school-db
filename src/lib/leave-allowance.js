@@ -1,7 +1,7 @@
 export const leaveTypes=['general','lenient'];
-// ลาป่วยและลาคลอดปฏิเสธไม่ได้ จึงไม่ถูกจำกัดจำนวนครั้ง (กลุ่ม exempt ไม่มีแถวใน leave_term_limits)
-export const quotaGroupSql="CASE WHEN COALESCE(leave_subtype,leave_type)='lenient' THEN 'lenient' WHEN COALESCE(leave_subtype,leave_type) IN ('sick','maternity') THEN 'exempt' ELSE 'general' END";
-export function quotaGroupOf(type){return type==='lenient'?'lenient':['sick','maternity'].includes(type)?'exempt':'general';}
+// These types do not consume the school's general personal/other leave turn quota.
+export const quotaGroupSql="CASE WHEN COALESCE(leave_subtype,leave_type)='lenient' THEN 'lenient' WHEN COALESCE(leave_subtype,leave_type) IN ('sick','maternity','paternity') THEN 'exempt' ELSE 'general' END";
+export function quotaGroupOf(type){return type==='lenient'?'lenient':['sick','maternity','paternity'].includes(type)?'exempt':'general';}
 export async function leavePeriod(env,date){
  const {results}=await env.DB.prepare(`SELECT t.id,t.academic_year_id,t.name,t.term_number,y.year_be,t.start_date AS "from",t.end_date AS "to"
  FROM academic_terms t JOIN academic_years y ON y.id=t.academic_year_id

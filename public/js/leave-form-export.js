@@ -1,20 +1,20 @@
 (function(root){
  'use strict';
  const dotted='........................................';
- const labels={sick:'ป่วย',personal:'กิจส่วนตัว',maternity:'คลอดบุตร',lenient:'อนุโลม',other:'อื่น ๆ'};
+ const labels={sick:'ป่วย',personal:'กิจส่วนตัว',maternity:'คลอดบุตร',paternity:'ไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'อนุโลม',other:'อื่น ๆ'};
  const xml=v=>String(v??'').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]));
  function date(value){if(!/^\d{4}-\d{2}-\d{2}$/.test(value||''))return dotted;return new Date(value+'T12:00:00Z').toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric',timeZone:'Asia/Bangkok'});}
  function eventDate(value){if(!value||Number.isNaN(Date.parse(value)))return dotted;return date(new Date(value).toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'}));}
  function model(r){
   const tick=type=>r.leave_type===type?'( / )':'(   )',last=r.last_leave;
-  return {title:r.leave_type==='lenient'?'แบบใบลาอนุโลม':r.leave_type==='other'?'แบบใบลาอื่น ๆ':'แบบใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว',
+  return {title:r.leave_type==='paternity'?'แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร':r.leave_type==='lenient'?'แบบใบลาอนุโลม':r.leave_type==='other'?'แบบใบลาอื่น ๆ':'แบบใบลาป่วย ลาคลอดบุตร ลากิจส่วนตัว',
    written:['เขียนที่ โรงเรียนบ้านป่าเด็ง','อำเภอแก่งกระจาน จังหวัดเพชรบุรี','วันที่ '+date(r.request_date)],
    subject:'เรื่อง   ขอลา'+(labels[r.leave_type]||''),to:'เรียน   ผู้อำนวยการโรงเรียนบ้านป่าเด็ง',
    name:'ข้าพเจ้า '+(r.full_name||dotted)+'   ตำแหน่ง '+(r.position||dotted),
    agency:'สังกัด  สำนักงานเขตพื้นที่การศึกษาประถมศึกษาเพชรบุรี เขต 2',
-   choices:[tick('sick')+' ป่วย         เนื่องจาก '+(r.leave_type==='sick'?r.reason:dotted),tick('personal')+' กิจส่วนตัว  เนื่องจาก '+(r.leave_type==='personal'?r.reason:dotted),tick('maternity')+' คลอดบุตร'+(r.leave_type==='maternity'?'  เนื่องจาก '+r.reason:'')],
+   choices:r.leave_type==='paternity'?[tick('paternity')+' ไปช่วยเหลือภริยาที่คลอดบุตร  เนื่องจาก '+r.reason]:[tick('sick')+' ป่วย         เนื่องจาก '+(r.leave_type==='sick'?r.reason:dotted),tick('personal')+' กิจส่วนตัว  เนื่องจาก '+(r.leave_type==='personal'?r.reason:dotted),tick('maternity')+' คลอดบุตร'+(r.leave_type==='maternity'?'  เนื่องจาก '+r.reason:'')],
    other:r.leave_type==='lenient'?'( / ) อนุโลม  เนื่องจาก '+r.reason:r.leave_type==='other'?'( / ) อื่น ๆ  เนื่องจาก '+r.reason:null,
-   period:'ตั้งแต่วันที่ '+date(r.start_date)+' ถึงวันที่ '+date(r.end_date)+' มีกำหนด '+r.leave_days+' วัน',
+   period:'ตั้งแต่วันที่ '+date(r.start_date)+' ถึงวันที่ '+date(r.end_date)+' มีกำหนด '+r.leave_days+(r.leave_type==='paternity'?' วันทำการ':' วัน'),
    last:last?'ข้าพเจ้าได้ลา '+(labels[last.leave_type]||'')+' ครั้งสุดท้ายตั้งแต่วันที่ '+date(last.start_date):'ข้าพเจ้าได้ลา (   ) ป่วย (   ) กิจส่วนตัว (   ) คลอดบุตร ครั้งสุดท้ายตั้งแต่วันที่ '+dotted,
    lastEnd:last?'ถึงวันที่ '+date(last.end_date)+' มีกำหนด '+(last.leave_days??(Math.round((Date.parse(last.end_date)-Date.parse(last.start_date))/86400000)+1))+' วัน':'ถึงวันที่ '+dotted+' มีกำหนด ........ วัน',
    contact:'ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่ '+(r.contact_address||dotted),phone:'เบอร์โทรศัพท์ที่สามารถติดต่อได้ '+(r.contact_phone||dotted),
@@ -71,16 +71,16 @@
  function layout(r){
   const m=model(r),last=r.last_leave,isType=t=>r.leave_type===t,reason=t=>isType(t)?r.reason:'',[d,mo,y]=date3(r.request_date);
   const lastDays=last?(last.leave_days??(Math.round((Date.parse(last.end_date)-Date.parse(last.start_date))/86400000)+1)):'';
-  const choices=[[tick(isType('sick'))+' ป่วย','เนื่องจาก',F(reason('sick'))],[tick(isType('personal'))+' กิจส่วนตัว','เนื่องจาก',F(reason('personal'))],
+  const choices=isType('paternity')?[[tick(true)+' ไปช่วยเหลือภริยาที่คลอดบุตร','เนื่องจาก',F(r.reason)]]:[[tick(isType('sick'))+' ป่วย','เนื่องจาก',F(reason('sick'))],[tick(isType('personal'))+' กิจส่วนตัว','เนื่องจาก',F(reason('personal'))],
    isType('maternity')?[tick(true)+' คลอดบุตร','เนื่องจาก',F(r.reason)]:[tick(false)+' คลอดบุตร']];
   if(isType('lenient'))choices.push([tick(true)+' อนุโลม','เนื่องจาก',F(r.reason)]);
   if(isType('other'))choices.push([tick(true)+' อื่น ๆ','เนื่องจาก',F(r.reason)]);
-  const lastKinds=r.leave_type==='lenient'?[tick(!!last)+' อนุโลม']:[tick(last?.leave_type==='sick')+' ป่วย',tick(last?.leave_type==='personal')+' กิจส่วนตัว',tick(last?.leave_type==='maternity')+' คลอดบุตร',...(last?.leave_type==='other'?[tick(true)+' อื่น ๆ']:[])];
+  const lastKinds=r.leave_type==='lenient'?[tick(!!last)+' อนุโลม']:r.leave_type==='paternity'?[last?labels[last.leave_type]||'อื่น ๆ':labels.paternity]:[tick(last?.leave_type==='sick')+' ป่วย',tick(last?.leave_type==='personal')+' กิจส่วนตัว',tick(last?.leave_type==='maternity')+' คลอดบุตร',...(last?.leave_type==='paternity'?[tick(true)+' '+labels.paternity]:[]),...(last?.leave_type==='other'?[tick(true)+' อื่น ๆ']:[])];
   const specs=[
    {indent:72,segs:['ข้าพเจ้า',F(r.full_name,3),'ตำแหน่ง',F(r.position,2)]},
    {segs:['สังกัด  สำนักงานเขตพื้นที่การศึกษาประถมศึกษาเพชรบุรี เขต 2']},
    {choices},
-   {segs:['ตั้งแต่วันที่',F(r.start_date?date(r.start_date):'',3),'ถึงวันที่',F(r.end_date?date(r.end_date):'',3),'มีกำหนด',F(r.leave_days,1),'วัน']},
+   {segs:['ตั้งแต่วันที่',F(r.start_date?date(r.start_date):'',3),'ถึงวันที่',F(r.end_date?date(r.end_date):'',3),'มีกำหนด',F(r.leave_days,1),isType('paternity')?'วันทำการ':'วัน']},
    {segs:['ข้าพเจ้าได้ลา',...lastKinds,'ครั้งสุดท้ายตั้งแต่วันที่',F(last?date(last.start_date):'')]},
    {segs:['ถึงวันที่',F(last?date(last.end_date):'',3),'มีกำหนด',F(lastDays,1),'วัน ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่']},
    {segs:[F(r.contact_address,3),'เบอร์โทรที่สามารถติดต่อได้',F(r.contact_phone,2)]},

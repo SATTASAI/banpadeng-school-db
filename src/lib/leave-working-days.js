@@ -22,7 +22,8 @@ export function workingDays(start,end,holidays=[]) {
  }
  return count;
 }
-// ลาคลอดนับวันต่อเนื่องรวมวันหยุดตามระเบียบ ประเภทอื่นนับเฉพาะวันทำงาน
+// Maternity counts calendar days; paternity (helping a wife after childbirth)
+// and the other supported types count working days, excluding weekends/holidays.
 export function calendarDaysBetween(start,end){
  if(!start||!end||end<start)return 0;
  return Math.round((Date.parse(end+'T00:00:00Z')-Date.parse(start+'T00:00:00Z'))/86400000)+1;

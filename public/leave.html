@@ -34,14 +34,14 @@
    <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
    <form id="leaveForm" novalidate>
     <div class="leave-fields">
-     <div class="field"><label for="fType">ประเภทการลา</label><select id="fType" required><option value="sick">ลาป่วย</option><option value="personal">ลากิจส่วนตัว</option><option value="maternity">ลาคลอดบุตร</option><option value="lenient">ลาอนุโลม</option><option value="other">อื่น ๆ</option></select></div>
+     <div class="field"><label for="fType">ประเภทการลา</label><select id="fType" required><option value="sick">ลาป่วย</option><option value="personal">ลากิจส่วนตัว</option><option value="maternity">ลาคลอดบุตร</option><option value="paternity">ลาไปช่วยเหลือภริยาที่คลอดบุตร</option><option value="lenient">ลาอนุโลม</option><option value="other">อื่น ๆ</option></select></div>
      <div class="field"><label for="fDate">วันที่เขียนใบลา</label><input id="fDate" type="date" required></div>
      <div class="field"><label for="fName">ชื่อผู้ลา</label><input id="fName" readonly></div>
      <div class="field"><label for="fPosition">ตำแหน่ง *</label><input id="fPosition" maxlength="200" required></div>
      <div class="field leave-wide"><label for="fReason">เหตุผลการลา *</label><textarea id="fReason" rows="3" maxlength="2000" required></textarea></div>
      <div class="field"><label for="fStart">ตั้งแต่วันที่ *</label><input id="fStart" type="date" required></div>
      <div class="field"><label for="fEnd">ถึงวันที่ *</label><input id="fEnd" type="date" required></div>
-     <div class="field"><label for="fDays">จำนวนวันลา *</label><input id="fDays" type="number" min="0.5" step="0.5" required><small class="muted">นับเฉพาะวันทำงาน ไม่นับเสาร์ อาทิตย์ วันหยุดราชการ และวันหยุดในปฏิทินโรงเรียน ปรับได้ทีละครึ่งวัน</small></div>
+     <div class="field"><label for="fDays">จำนวนวันลา *</label><input id="fDays" type="number" min="0.5" step="0.5" required><small class="muted" id="leaveDaysHint">ลาคลอดบุตรนับรวมวันหยุด ส่วนลาช่วยภริยาคลอดบุตรนับเฉพาะวันทำงาน ไม่นับเสาร์ อาทิตย์ และวันหยุด</small></div>
      <div class="field"><label for="fPhone">เบอร์โทรศัพท์ที่ติดต่อได้ *</label><input id="fPhone" type="tel" maxlength="100" required></div>
      <div class="field leave-wide"><label for="fAddress">ที่อยู่ที่ติดต่อได้ระหว่างลา *</label><textarea id="fAddress" rows="2" maxlength="1000" required></textarea></div>
     </div>

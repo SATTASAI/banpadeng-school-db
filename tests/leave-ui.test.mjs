@@ -93,11 +93,11 @@ test('director sees approve and reject immediately without a deputy opinion',asy
  assert.match(node('pendingPanel').innerHTML,/ลาป่วย/);assert.doesNotMatch(node('pendingPanel').innerHTML,/รอรองผู้บริหาร|data-action="review"/);
 });
 
-function submissionHarness({reject=false,reloadFails=false}={}){
+function submissionHarness({reject=false,reloadFails=false,dayPreview=null}={}){
  const nodes=new Map(),calls=[];let loads=0;
  const node=id=>{if(!nodes.has(id))nodes.set(id,{id,value:'',innerHTML:'',textContent:'',hidden:false,disabled:false,attributes:{},classList:{add(){},remove(){}},scrollIntoView(){this.scrolled=true},focus(){this.focused=true},setAttribute(k,v){this.attributes[k]=v},removeAttribute(k){delete this.attributes[k]}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,window:{},document:{getElementById:node,querySelectorAll:()=>[],activeElement:{tagName:'BODY'},addEventListener(){}},setInterval(){},apiRequest:async(path,options)=>{
-  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return {working_days:q.get('end')==='2026-10-07'?2:1};}
+  if(path.startsWith('/api/leave-working-days')){const q=new URLSearchParams(path.split('?')[1]);return dayPreview?dayPreview(q):{working_days:q.get('end')==='2026-10-07'?2:1};}
   if(path.startsWith('/api/leave-allowance'))return {period:{from:'2026-10-01',to:'2027-09-30'},types:[{leave_type:'lenient',max_count:3,approved:1,pending:1,remaining:1}]};
   if(path==='/api/auth/me')return{user:{id:2,full_name:'ครูทดสอบ'}};
   if(options){calls.push(options.body);if(reject)throw Error('ฐานข้อมูลไม่พร้อมใช้งาน');return{id:42};}
@@ -146,4 +146,17 @@ test('superadmin inserts leave dates, reason and teacher phone at the cursor and
  assert.match(node('leaveLinePreview').textContent,/เหตุผล: ไม่สบาย ขอพักรักษาตัว/);
  assert.match(node('leaveLinePreview').textContent,/โทร: 0800000000/);
  await node('saveLeaveLineTemplate').onclick();assert.equal(saved,input.value);
+});
+
+test('personal leave form exposes paternity and switches its preview and hint independently of maternity',async()=>{
+ const h=submissionHarness({dayPreview:q=>({working_days:q.get('type')==='maternity'?4:2,counts_calendar_days:q.get('type')==='maternity'})});
+ const flush=()=>new Promise(r=>setImmediate(r));await flush();
+ h.node('realLeaveCard').onclick();assert.match(h.node('fType').innerHTML,/value="paternity"/);
+ h.fill();h.node('fStart').value='2026-11-06';h.node('fEnd').value='2026-11-09';
+ h.node('fType').value='paternity';h.node('fType').onchange();await flush();
+ assert.equal(h.node('fDays').value,'2');assert.match(h.node('leaveDaysHint').textContent,/ไม่นับเสาร์ อาทิตย์/);
+ h.node('fType').value='maternity';h.node('fType').onchange();await flush();
+ assert.equal(h.node('fDays').value,'4');assert.match(h.node('leaveDaysHint').textContent,/รวมเสาร์ อาทิตย์/);
+ h.node('fType').value='paternity';h.node('fType').onchange();await flush();await h.submit();
+ assert.equal(h.calls.length,1);assert.equal(h.calls[0].leave_type,'paternity');assert.equal(h.calls[0].leave_days,2);
 });

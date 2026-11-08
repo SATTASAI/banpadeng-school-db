@@ -18,3 +18,12 @@ test('data lines sit on dotted fields and use Thai distribute to the right margi
  const xml=e.docxFiles(r)['word/document.xml'];assert.match(xml,/w:jc w:val="thaiDistribute"/);assert.match(xml,/w:u w:val="dotted"/);assert.match(xml,/ไปติดต่อ|ติดต่อราชการ/);assert.match(xml,/เบอร์โทรที่สามารถติดต่อได้/);
  const pdf=e.pdfDefinition(r),lines=pdf.content.filter(x=>x.table&&x.table.widths.includes('*'));assert(lines.length>=5);assert(JSON.stringify(pdf).includes('ขอลา'));
 });
+
+test('paternity exports a distinct title, selected type and working-day units in Word and PDF',()=>{
+ const leave={...r,leave_type:'paternity',leave_days:2,stats:[{type:'paternity',previous_count:0,previous_days:0,current_days:2,total_count:1,total_days:2}]};
+ const m=e.model(leave);assert.equal(m.title,'แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร');
+ assert.equal(m.choices.length,1);assert.match(m.choices[0],/\( \/ \) ไปช่วยเหลือภริยาที่คลอดบุตร/);assert.match(m.period,/2 วันทำการ/);
+ assert.equal(m.stats[0][0],'ไปช่วยเหลือภริยาที่คลอดบุตร');
+ const xml=e.docxFiles(leave)['word/document.xml'];assert.match(xml,/แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร/);assert.match(xml,/วันทำการ/);
+ const pdf=JSON.stringify(e.pdfDefinition(leave));assert.match(pdf,/แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร/);assert.match(pdf,/วันทำการ/);
+});

@@ -8,7 +8,7 @@
    credentials:'omit',cache:'no-store',body:JSON.stringify({token})});
   if(!response.ok){target.textContent='ลิงก์นี้ไม่ถูกต้องหรือหมดอายุแล้ว กรุณาขอลิงก์ใหม่';return;}
   const {leave:r}=await response.json();
-  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
+  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
   const status=r.status==='approved'?'อนุญาตแล้ว':r.status==='rejected'?'ไม่อนุญาต':
    ({submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'หัวหน้าฝ่ายรับทราบแล้ว',forwarded:'ส่งต่อผู้บริหารแล้ว'})[r.workflow_stage]||'รอดำเนินการ';
   target.textContent='';

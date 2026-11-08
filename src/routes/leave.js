@@ -26,8 +26,11 @@ async function listSelect(env){
  const cols=results.map(c=>c.name).filter(n=>!heavyColumns.has(n)&&/^[a-z_]+$/.test(n));
  const sql=select.replace('SELECT r.*,',`SELECT ${cols.map(c=>'r.'+c).join(',')},`);listSelectCache.set(env.DB,sql);return sql;
 }
-const leaveInputTypes=['sick','personal','maternity','lenient','other'];
-const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
+const leaveInputTypes=['sick','personal','maternity','paternity','lenient','other'];
+const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
+// Additive subtypes retain the existing CHECK constraint shared with other systems.
+const storedType=type=>['lenient','paternity'].includes(type)?'other':type;
+const storedSubtype=type=>['lenient','paternity'].includes(type)?type:null;
 const spanError=type=>type==='maternity'?'จำนวนวันลาคลอดต้องมากกว่า 0 ไม่เกินจำนวนวันตามปฏิทิน (นับรวมวันหยุด) และระบุได้ทีละครึ่งวัน':'จำนวนวันลาต้องมากกว่า 0 ไม่เกินจำนวนวันทำงาน (ไม่นับเสาร์ อาทิตย์ และวันหยุด) และระบุได้ทีละครึ่งวัน';
 async function validLeaveDays(env,type,start,end,value){
  const maxDays=leaveSpanDays(type,start,end,await leaveCalendar(env));
@@ -307,7 +310,7 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,${signatureSql} WHERE
     (SELECT max_count FROM leave_term_limits WHERE leave_type=?) IS NULL OR
     (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved')
-    < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,body.leave_type==='lenient'?'other':body.leave_type,reason,body.start_date,body.end_date,position,date,days,address,phone,body.leave_type==='lenient'?'lenient':null,deputyForNotice?.id??null,applicantNote,substituteTeacher,user.id,user.id,user.id,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
+    < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,storedType(body.leave_type),reason,body.start_date,body.end_date,position,date,days,address,phone,storedSubtype(body.leave_type),deputyForNotice?.id??null,applicantNote,substituteTeacher,user.id,user.id,user.id,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) SELECT last_insert_rowid(),?,'submitted' WHERE changes()>0").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid() AND changes()>0").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);
@@ -409,9 +412,8 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
    if(days===null)return fail(spanError(body.leave_type));
    const before=`${typeLabels[row.leave_subtype||row.leave_type]||row.leave_type} ${row.start_date} ถึง ${row.end_date} ${Number(row.leave_days)} วัน`;
    const after=`${typeLabels[body.leave_type]} ${body.start_date} ถึง ${body.end_date} ${days} วัน`;
-   const lenient=body.leave_type==='lenient';
    const statements=[env.DB.prepare(`UPDATE leave_requests SET leave_type=?,leave_subtype=?,start_date=?,end_date=?,leave_days=? WHERE id=? AND status=? AND start_date=? AND end_date=?`)
-     .bind(lenient?'other':body.leave_type,lenient?'lenient':null,body.start_date,body.end_date,days,id,row.status,row.start_date,row.end_date),
+     .bind(storedType(body.leave_type),storedSubtype(body.leave_type),body.start_date,body.end_date,days,id,row.status,row.start_date,row.end_date),
     env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'edited',? WHERE changes()>0`).bind(id,user.id,`${note} (เดิม: ${before} → ใหม่: ${after})`),
     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'edit','leave_request',?,? WHERE changes()>0")
      .bind(user.id,id,JSON.stringify({before:{leave_type:row.leave_subtype||row.leave_type,start_date:row.start_date,end_date:row.end_date,leave_days:row.leave_days},after:{leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date,leave_days:days},note}))];

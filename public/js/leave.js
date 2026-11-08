@@ -3,10 +3,10 @@
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const approvalView=new URLSearchParams(location.search).get('view')==='approval';
  if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;$('leaveCategoryHint').hidden=true;}
- const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
- const quotaLabels={general:'ลาทั่วไป (ลากิจและอื่น ๆ — ลาป่วย ลาคลอดไม่จำกัดครั้ง)',lenient:'ลาอนุโลม'};
+ const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
+ const quotaLabels={general:'ลาทั่วไป (ลากิจและอื่น ๆ)',lenient:'ลาอนุโลม'};
  let leaveCategory=null;
- const categoryTypes={real:['sick','personal','maternity','other'],lenient:['lenient']};
+ const categoryTypes={real:['sick','personal','maternity','paternity','other'],lenient:['lenient']};
  let user,records=[],detailId=null,busy=false,first=true,deputies=[],lineConfigured=false,allowanceVersion=0;
  async function loadAllowance(){
   const version=++allowanceVersion;
@@ -14,7 +14,7 @@
    const data=await apiRequest('/api/leave-allowance?date='+encodeURIComponent($('fStart').value||$('fDate').value));
    if(version!==allowanceVersion)return;
    if(!data.period){$('leaveAllowance').textContent=data.message;return;}
-   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง นับเฉพาะใบที่อนุมัติแล้ว ระบบตรวจสิทธิ์อีกครั้งเมื่อ ผอ. อนุมัติ ลาป่วยและลาคลอดไม่จำกัดจำนวนครั้ง</p>`;
+   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง นับเฉพาะใบที่อนุมัติแล้ว ระบบตรวจสิทธิ์อีกครั้งเมื่อ ผอ. อนุมัติ ลาป่วย ลาคลอด และลาช่วยภริยาคลอดบุตรไม่ใช้เพดานจำนวนครั้งลาทั่วไป</p>`;
   }catch(e){if(version===allowanceVersion)$('leaveAllowance').textContent='โหลดสิทธิ์ลาไม่สำเร็จ: '+e.message;}
  }
  $('saveLeaveLimits').onclick=async()=>{
@@ -187,6 +187,8 @@
  let daysVersion=0,daysPending=false,daysValid=false;
  async function days(){
   const version=++daysVersion,a=$('fStart').value,b=$('fEnd').value;
+  const hint=$('leaveDaysHint');
+  if(hint)hint.textContent=$('fType').value==='maternity'?'ลาคลอดบุตรนับวันต่อเนื่อง รวมเสาร์ อาทิตย์ และวันหยุด':'นับเฉพาะวันทำงาน ไม่นับเสาร์ อาทิตย์ วันหยุดราชการ และวันหยุดในปฏิทินโรงเรียน ปรับได้ทีละครึ่งวัน';
   daysValid=false;$('fDays').value='';
   if(!a||!b||b<a){daysPending=false;return;}
   daysPending=true;
