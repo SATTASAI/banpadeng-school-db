@@ -34,3 +34,11 @@ Dashboard เพิ่มยอดคำร้องทุกปีการศ�
 - เจ้าหน้าที่เปิด `/transfer-notices.html` จากแผงทะเบียนย้ายบน dashboard ดูรายการครั้งละ 50 รายการและบันทึกว่าครูรับทราบแล้วได้ สิทธิ์ใช้ explicit grant เดียวกับทะเบียนย้าย; การรับทราบไม่แก้ข้อมูลผู้แจ้งหรือวันเวลาต้นฉบับ และคงผู้รับทราบคนแรก
 - QR Code `/transfer-notice-qr.svg` ชี้ไป `https://system.banpadengschool.ac.th/transfer-notice.html` มีปุ่มพิมพ์และดาวน์โหลดในหน้าเจ้าหน้าที่ สร้างไฟล์ไว้ในระบบ ไม่ส่งข้อมูลผู้ปกครองไปบริการสร้าง QR ภายนอก
 - ทดสอบ `node --test tests/transfer-notices.test.mjs tests/student-transfers.test.mjs tests/transfer-access-import.test.mjs tests/dashboard-live.test.mjs`
+
+## หน้าแจ้งย้ายในทะเบียนย้าย
+
+- เปิด `/dmcreport/` แล้วเลือก “แจ้งย้าย” ข้อมูลหลักฐานเดิมมาจาก `GET /api/student-transfers/notices` ครั้งละ 50 รายการ เรียงยังไม่ตรวจสอบก่อน
+- จุดแดงที่เมนูคงอยู่เมื่อ `GET /api/student-transfers/notices/summary` คืน `pending > 0` โดยนับจาก `acknowledged_at IS NULL` ทุกหน้า อัปเดตทุก 30 วินาทีและเมื่อกลับเข้าหน้าต่าง
+- การเปิดอ่านไม่เปลี่ยนสถานะ ต้องกด “ตรวจสอบแล้ว” เพื่อเรียก `POST /api/student-transfers/notices/:id/acknowledge` คงผู้ตรวจและเวลาครั้งแรก ใช้สิทธิ์เดียวกับทะเบียนย้ายทุก endpoint
+- รายการแสดงชื่อ ประเภทย้าย โรงเรียนปลายทาง เบอร์โทร ที่อยู่ เลขรับแจ้ง และวันที่แจ้ง ไม่สร้างคำร้องหรือเปลี่ยนทะเบียนหลัก
+- Frontend source: [dmcreport commit](https://github.com/SATTASAI/dmcreport/commit/31bd06bef5cc62cf17b3f30ddba2ab9fe9855d8a) build แล้ว sync มาที่ `public/dmcreport/`

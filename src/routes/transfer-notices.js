@@ -44,7 +44,7 @@ async function boundedJson(request) {
 }
 export async function handleTransferNotices(request,env,path,method) {
   const publicPath=path==='/api/public/transfer-notices';
-  const staffPath=path==='/api/student-transfers/notices' || /^\/api\/student-transfers\/notices\/\d+\/acknowledge$/.test(path);
+  const staffPath=path==='/api/student-transfers/notices' || path==='/api/student-transfers/notices/summary' || /^\/api\/student-transfers\/notices\/\d+\/acknowledge$/.test(path);
   if(!publicPath&&!staffPath)return null;
   if(publicPath && method!=='POST')return reply({error:'Method not allowed'},405);
   let user;
@@ -68,11 +68,15 @@ export async function handleTransferNotices(request,env,path,method) {
     const saved=await env.DB.prepare('SELECT receipt,created_at FROM student_transfer_notices WHERE client_ref=?').bind(r.client_ref).first();
     return reply(saved,201);
   }
+  if(path==='/api/student-transfers/notices/summary'&&method==='GET'){
+    const count=await env.DB.prepare('SELECT COUNT(*) pending FROM student_transfer_notices WHERE acknowledged_at IS NULL').first();
+    return reply({pending:count.pending});
+  }
   if(path==='/api/student-transfers/notices'&&method==='GET'){
     const url=new URL(request.url),offset=Math.floor(Math.max(0,Math.min(100000,Number(url.searchParams.get('offset'))||0)));
-    const rows=await env.DB.prepare(`SELECT n.id,n.receipt,n.student_name,n.direction,n.destination_school,n.contact_phone,n.contact_address,n.created_at,n.acknowledged_at,u.full_name acknowledged_name FROM student_transfer_notices n LEFT JOIN users u ON u.id=n.acknowledged_by ORDER BY n.id DESC LIMIT 50 OFFSET ?`).bind(offset).all();
-    const count=await env.DB.prepare('SELECT COUNT(*) total FROM student_transfer_notices').first();
-    return reply({notices:rows.results,total:count.total});
+    const rows=await env.DB.prepare(`SELECT n.id,n.receipt,n.student_name,n.direction,n.destination_school,n.contact_phone,n.contact_address,n.created_at,n.acknowledged_at,u.full_name acknowledged_name FROM student_transfer_notices n LEFT JOIN users u ON u.id=n.acknowledged_by ORDER BY (n.acknowledged_at IS NOT NULL), n.id DESC LIMIT 50 OFFSET ?`).bind(offset).all();
+    const count=await env.DB.prepare('SELECT COUNT(*) total, COUNT(CASE WHEN acknowledged_at IS NULL THEN 1 END) pending FROM student_transfer_notices').first();
+    return reply({notices:rows.results,total:count.total,pending:count.pending});
   }
   if(staffPath&&method==='POST'&&path.endsWith('/acknowledge')){
     const id=Number(path.split('/')[4]);

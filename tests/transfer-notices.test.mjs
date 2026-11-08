@@ -40,3 +40,22 @@ test('validates inputs and blocks cross origin, oversized bodies, bots and repea
  for(let i=0;i<19;i++)assert.equal((await call(env,undefined,undefined,body())).status,201);
  assert.equal((await call(env,undefined,undefined,body())).status,429);
 });
+test('pending summary requires registry permission and persists until explicit acknowledgement across pages',async()=>{
+ const {env}=await fixture();const path='/api/student-transfers/notices';
+ assert.equal((await call(env,path+'/summary','GET')).status,401);
+ assert.equal((await call(env,path+'/summary','GET',undefined,3)).status,403);
+ await call(env,undefined,undefined,body());
+ let first=(await (await call(env,path,'GET',undefined,2)).json()).notices[0];
+ assert.deepEqual(await (await call(env,path+'/summary','GET',undefined,2)).json(),{pending:1});
+ // Viewing the list does not clear the pending indicator.
+ assert.equal((await (await call(env,path,'GET',undefined,2)).json()).pending,1);
+ await call(env,path+'/'+first.id+'/acknowledge','POST',undefined,2);
+ assert.deepEqual(await (await call(env,path+'/summary','GET',undefined,2)).json(),{pending:0});
+ const stmt=env.raw.prepare(`INSERT INTO student_transfer_notices(receipt,client_ref,student_name,direction,contact_phone,contact_address,acknowledged_at) VALUES(?,?,?,'in','0812345678','ที่อยู่',?)`);
+ // Pending count must cover every page, and pending rows come first.
+ stmt.run('pending-old','pending-old','รอตรวจสอบ',null);
+ for(let i=0;i<51;i++)stmt.run('reviewed-'+i,'reviewed-'+i,'ตรวจแล้ว','2026-11-08 01:00:00');
+ const listed=await (await call(env,path,'GET',undefined,2)).json();
+ assert.equal(listed.total,53);assert.equal(listed.pending,1);assert.equal(listed.notices.length,50);assert.equal(listed.notices[0].student_name,'รอตรวจสอบ');
+ assert.deepEqual(await (await call(env,path+'/summary','GET',undefined,2)).json(),{pending:1});
+});
