@@ -1,4 +1,4 @@
-import {isLicenseReminder} from './license-reminders.js';
+import {isLicenseReminder, LICENSE_RENEWAL_URL} from './license-reminders.js';
 // แจ้งเตือนบนมือถือผ่าน Web Push (ระบบแจ้งเตือนกลาง school-notify — notify.banpadengschool.ac.th)
 // ส่งทุกรายการในกระดิ่ง (src/routes/notifications.js) ให้ผู้ที่เปิดรับไว้ รวมเป็นแจ้งเตือนเดียวต่อคนต่อรอบ
 // ทำงานคู่กับ LINE (line-feed.js) — LINE ส่งตามเดิม ไม่เปลี่ยน
@@ -257,6 +257,7 @@ async function deliver(env, user, origin, stats) {
       ON CONFLICT (user_id, message_key) DO UPDATE SET title = excluded.title, message = excluded.message, url = excluded.url, details = excluded.details, created_at = datetime('now')`)
       .bind(user.id, r.message_key, trim(r.title, 200), String(r.message || "").slice(0, 2000), r.path, r.details ? JSON.stringify(r.details) : null)));
     const single = items.length === 1;
+    const renewal = single && isLicenseReminder(items[0].message_key);
     const lines = items.slice(0, MAX_LINES).map((r) => `• ${trim(r.title, 60)}: ${trim(r.message, 80)}`);
     if (items.length > MAX_LINES) lines.push(`และอีก ${items.length - MAX_LINES} รายการ`);
     const leaveLine = (d) => d ? [d.start_date === d.end_date ? `วันที่ ${d.start_date}` : `${d.start_date} ถึง ${d.end_date}`, d.reason && `เหตุผล: ${trim(d.reason, 80)}`].filter(Boolean).join(" · ") : "";
@@ -265,9 +266,9 @@ async function deliver(env, user, origin, stats) {
       body: JSON.stringify({
         title: single ? trim(items[0].title, 120) : `แจ้งเตือนใหม่ ${items.length} รายการ`,
         body: single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500) : lines.join("\n"),
-        url: new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
+        url: renewal ? LICENSE_RENEWAL_URL : new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
         // ปุ่มบนแจ้งเตือน: ไปหน้างานนั้นโดยตรง (Android/คอมพิวเตอร์; iPhone แตะแล้วเปิดหน้ารายละเอียดที่มีปุ่มเดียวกัน)
-        actions: single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
+        actions: renewal ? [{title:"ต่ออายุใบประกอบวิชาชีพ",url:LICENSE_RENEWAL_URL}] : single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
           : [{ title: "ดูทั้งหมด", url: new URL("/notification.html", origin).href }],
         roles: ["all"],
         refs: [`u:${user.id}`],
