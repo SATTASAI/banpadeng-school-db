@@ -20,7 +20,7 @@
 - จำตำแหน่งเลื่อนแยกแท็บ คงแบบร่าง ลดการโหลดประวัติซ้ำและการวาดห้องแชทเดิมขณะ polling ไม่เล่น animation ข้อความเก่าซ้ำ และรวม keyboard viewport updates ผ่าน animation frame
 - เพิ่ม cross-document View Transitions เฉพาะเบราว์เซอร์รองรับ พร้อม fallback เดิม และปรับมือถือเป็นพื้นที่เลื่อนภายใน console
 - Notify npm test ผ่านทุกชุด รวม animation cancellation/dialog lifecycle, reduced motion, scroll/draft retention, stable room DOM และ viewport coalescing; Wrangler dry-run ผ่าน ยังไม่ได้วัด FPS/ทดสอบ movement บน iPhone จริง
-- Notify: [PR #6](https://github.com/SATTASAI/school-notify/pull/6)
+- Notify: [PR #6](https://github.com/SATTASAI/school-notify/pull/6) · System: [PR #173](https://github.com/SATTASAI/banpadeng-school-db/pull/173)
 
 ### Patch 1.2.2 — 8 พฤศจิกายน 2569
 
