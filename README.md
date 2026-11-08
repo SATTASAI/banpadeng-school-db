@@ -215,3 +215,11 @@ API ฝั่งระบบใช้ ID ของผู้ที่เข้า
 
 
 แผงข้อความเก็บ iframe เดิมไว้เมื่อสลับเมนู จึงคงร่างและตำแหน่งอ่าน เปิดกลับได้ทันที เมื่อแผงย่ออยู่จะหยุดตรวจข้อความและไม่บันทึกว่าอ่าน ระบบปรับความสูงแผงและตำแหน่ง bottom bar ตาม visual viewport ขณะคีย์บอร์ดเปิด ใช้ข้อความระหว่างหน้าต่างเฉพาะ origin ของ school-notify และ iframe ที่สร้างไว้เท่านั้น CSP อนุญาต frame เพิ่มเฉพาะ `https://notify.banpadengschool.ac.th` ส่วนลิงก์ `/notify-chat.html` ยังคงใช้กับการเปิดจากแบนเนอร์แจ้งเตือน
+
+## Face ID / Passkey — Patch 1.2
+
+เข้าสู่ระบบด้วยรหัสผ่านเดิม แล้วเปิด **ตั้งค่า Passkey** เพื่อเพิ่มอุปกรณ์ ครั้งต่อไปกด **Face ID / Passkey** ได้ รหัสผ่านเดิมยังใช้สำรองได้ บัญชีโรงเรียนใช้ Passkey ร่วมกันระหว่าง system, grades, teachingmedia, activity และ publicservice บนโดเมนโรงเรียน
+
+รัน `npm ci` ก่อนทดสอบ/build ตาราง Passkey สร้างแบบ additive ในคำขอแรก ใช้ HTTPS; ไม่มีการเก็บภาพใบหน้า ลายนิ้วมือ หรือ private key
+
+[รายละเอียด วิธีใช้ ขอบเขต และผลตรวจสอบ](https://github.com/SATTASAI/banpadeng-school-db/blob/main/docs/passkeys.md)

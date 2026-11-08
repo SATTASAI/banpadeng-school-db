@@ -1,3 +1,4 @@
+import {handleSchoolPasskeys} from './routes/passkeys.js';
 import { handleTransferNotices } from './routes/transfer-notices.js';
 import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from './routes/student-transfers.js';
 import { handleThaiSchools } from './routes/thai-schools.js';
@@ -4721,7 +4722,8 @@ const app = {
       if (pathname === "/api/line/webhook" && method === "POST") return await handleLineWebhook(request, env, context);
       if (pathname === "/api/line/webhook") return jsonResponse({ error: "Method not allowed" }, 405, { Allow: "POST" });
 
-      if (pathname.startsWith("/api/auth/")) await ensureAuthSecuritySchema(env);
+      if (pathname.startsWith("/api/auth/") || pathname.startsWith("/api/passkeys")) await ensureAuthSecuritySchema(env);
+      if(pathname.startsWith("/api/passkeys")) return await handleSchoolPasskeys(request,env);
       // บัญชีผู้ชมภายนอกใช้ร่วมกันหลายคน: ห้ามเปลี่ยนรหัสผ่านหรือออกจากระบบอุปกรณ์อื่นแทนกัน
       if (/^\/api\/auth\/(change-password|logout-all|sessions)(\/|$)/.test(pathname)) {
         const viewer = await getCurrentUser(request, env).catch(() => null);

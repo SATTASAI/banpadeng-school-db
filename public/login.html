@@ -36,6 +36,8 @@
       <button type="submit" class="btn btn-primary" id="submitBtn">เข้าสู่ระบบ</button>
     </form>
 
+    <button type="button" class="btn" id="passkeyLogin" data-error="errorBox" hidden style="margin-top:12px;width:100%">เข้าสู่ระบบด้วย Face ID / Passkey</button>
+    <p style="font-size:13px"><a href="/passkeys.html" target="_top">ตั้งค่า Passkey ครั้งแรก</a></p>
     <div style="text-align:right;margin-top:14px"><a href="/forgot-password.html">ลืมรหัสผ่าน?</a></div>
 
     <div class="auth-footer">
@@ -50,7 +52,7 @@
 </div>
 
 <script src="/js/turnstile.js"></script><script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit&onload=onSchoolTurnstile" async defer></script>
-<script src="/js/api.js"></script>
+<script src="/js/api.js"></script><script src="/passkeys-client.js"></script>
 <script>
   const form = document.getElementById("loginForm");
   const errorBox = document.getElementById("errorBox");
@@ -71,11 +73,7 @@
           turnstile_token: SchoolTurnstile.token(),
         },
       });
-      const requested=new URLSearchParams(location.search).get('next');
-      let destination=user.role ? "/dashboard.html" : "/pending.html";
-      if(user.role&&requested){try{const next=new URL(requested,location.origin);if(next.origin===location.origin&&next.pathname==='/evaluation-connect'&&/^[0-9a-f]{64}$/.test(next.searchParams.get('state')||''))destination=next.pathname+next.search;else if(next.origin===location.origin&&next.pathname==='/notify-chat.html'){const m=next.searchParams.get('message');destination='/notify-chat.html'+(/^\d+$/.test(m||'')?'?message='+m:'');}else if(next.origin===location.origin&&next.pathname==='/notification.html'){const k=next.searchParams.get('key');destination='/notification.html'+(k&&k.length<200?'?key='+encodeURIComponent(k):'');}else if(next.origin===location.origin&&next.pathname==='/leave.html'&&/^\d+$/.test(next.searchParams.get('request')||''))destination='/leave.html?request='+next.searchParams.get('request');}catch{}}
-      try{if(user.role)localStorage.setItem("bpdPushPrompt","1")}catch{}
-      window.location.href = destination;
+      finishSchoolLogin(user);
     } catch (err) {
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
@@ -84,6 +82,14 @@
       submitBtn.textContent = "เข้าสู่ระบบ";
     }
   });
+  function finishSchoolLogin(user) {
+      const requested=new URLSearchParams(location.search).get('next');
+      let destination=user.role ? "/dashboard.html" : "/pending.html";
+      if(user.role&&requested){try{const next=new URL(requested,location.origin);if(next.origin===location.origin&&next.pathname==='/evaluation-connect'&&/^[0-9a-f]{64}$/.test(next.searchParams.get('state')||''))destination=next.pathname+next.search;else if(next.origin===location.origin&&next.pathname==='/notify-chat.html'){const m=next.searchParams.get('message');destination='/notify-chat.html'+(/^\d+$/.test(m||'')?'?message='+m:'');}else if(next.origin===location.origin&&next.pathname==='/notification.html'){const k=next.searchParams.get('key');destination='/notification.html'+(k&&k.length<200?'?key='+encodeURIComponent(k):'');}else if(next.origin===location.origin&&next.pathname==='/leave.html'&&/^\d+$/.test(next.searchParams.get('request')||''))destination='/leave.html?request='+next.searchParams.get('request');}catch{}}
+      try{if(user.role)localStorage.setItem("bpdPushPrompt","1")}catch{}
+      window.location.href = destination;
+  }
+  SchoolPasskeys.mount(document.getElementById('passkeyLogin'),({user})=>finishSchoolLogin(user));
 </script>
 </body>
 </html>
