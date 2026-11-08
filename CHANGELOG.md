@@ -20,7 +20,7 @@
 - ปรับฟอร์ม ปุ่ม การ์ดประวัติ ผู้รับ และหน้ารายละเอียดให้เหมาะกับมือถือ โดยสลับแท็บใน console แล้วคงแบบร่าง; แตะข้อความซ้ำเพื่อกลับไปรายชื่อห้อง
 - PC คง sidebar และจัดความกว้างพื้นที่ทำงาน/รายการห้อง/ข้อความตามจอ เปิดแท็บตรงด้วย `/admin?view=...` ได้
 - ทดสอบ Notify ครบทุกชุดและ Wrangler dry-run ผ่าน รวม navigation state, deep link, draft retention, logout และแชท; ยังไม่ได้ทดสอบภาพและคีย์บอร์ดบน iPhone จริง
-- Notify: [PR #5](https://github.com/SATTASAI/school-notify/pull/5)
+- Notify: [PR #5](https://github.com/SATTASAI/school-notify/pull/5) · System: [PR #172](https://github.com/SATTASAI/banpadeng-school-db/pull/172)
 
 ### Patch 1.2.1 — 8 พฤศจิกายน 2569
 
