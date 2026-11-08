@@ -1,3 +1,4 @@
+import {isLicenseReminder} from './license-reminders.js';
 // แจ้งเตือนบนมือถือผ่าน Web Push (ระบบแจ้งเตือนกลาง school-notify — notify.banpadengschool.ac.th)
 // ส่งทุกรายการในกระดิ่ง (src/routes/notifications.js) ให้ผู้ที่เปิดรับไว้ รวมเป็นแจ้งเตือนเดียวต่อคนต่อรอบ
 // ทำงานคู่กับ LINE (line-feed.js) — LINE ส่งตามเดิม ไม่เปลี่ยน
@@ -26,10 +27,11 @@ const age = (value) => {
 const trim = (text, max) => { const v = String(text || "").replace(/\s+/g, " ").trim(); return v.length > max ? v.slice(0, max - 1) + "…" : v; };
 const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
 
-const actionLabel = (key) => { const k = String(key || ""); return k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
+const actionLabel = (key) => { const k = String(key || ""); return isLicenseReminder(k) ? "อัปเดตข้อมูลใบประกอบวิชาชีพ" : k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
 
 // หมวดแจ้งเตือน (ตาม message_key ในกระดิ่ง) — ผู้ใช้เลือกปิดบางหมวดได้ที่บัญชีของฉัน
 export const PUSH_CATEGORIES = [
+  { key: "license", label: "ต่ออายุใบประกอบวิชาชีพ", prefixes: ["license:"] },
   { key: "leave", label: "การลา", prefixes: ["leave:"] },
   { key: "maintenance", label: "แจ้งซ่อม", prefixes: ["maintenance:"] },
   { key: "supervision", label: "นิเทศ", prefixes: ["supervision:"] },
@@ -60,7 +62,7 @@ export async function pushPrefs(env, user, body) {
 async function baselineUser(env, user) {
   await ensureSchema(env);
   await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
-  const rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50);
+  const rows = (await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50)).filter(r => !isLicenseReminder(r.message_key));
   if (rows.length) await env.DB.batch(rows.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
 }
 
@@ -204,14 +206,15 @@ export async function dispatchPushNotifications(env, { trigger = "cron", origin 
 }
 
 async function deliver(env, user, origin, stats) {
-  let rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50);
+  let rows = await unreadNotificationsFor(env, { id: Number(user.id), role: user.role }, 50, {forDelivery:true});
   rows = rows.filter((r) => Number(r.actor_id || 0) !== Number(user.id));
 
   // ครั้งแรกที่เปิดรับ: รายการค้างเดิมไม่ต้องส่ง (ไม่ให้แจ้งเตือนท่วม)
   const fresh = await env.DB.prepare("INSERT OR IGNORE INTO push_feed_users (user_id) VALUES (?)").bind(user.id).run();
   if (fresh.meta.changes) {
-    if (rows.length) await env.DB.batch(rows.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
-    return;
+    const old = rows.filter(r => !isLicenseReminder(r.message_key));
+    if (old.length) await env.DB.batch(old.map((r) => env.DB.prepare("INSERT OR IGNORE INTO push_feed_sent (user_id, message_key, status) VALUES (?, ?, 'baseline')").bind(user.id, r.message_key)));
+    rows = rows.filter(r => isLicenseReminder(r.message_key));
   }
   if (!rows.length) return;
 

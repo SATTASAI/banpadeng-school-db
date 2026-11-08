@@ -5,6 +5,7 @@ import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
 import {isPersonnelHead} from '../lib/leave-permissions.js';
 import {ensureLeaveData} from '../lib/leave-data.js';
 import {ensureStudentDeletionSchema,isSchoolDirector} from './student-deletion.js';
+import {licenseReminderQuery} from '../lib/license-reminders.js';
 const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
@@ -14,7 +15,7 @@ export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
 }
-function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
+function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,forDelivery=false){
  const extra=[],extraValues=[];
  if(['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records'].every(t=>tables.has(t))){
   extra.push(`SELECT 'substitute:'||a.id||':'||a.substitute_teacher_id,'สอนแทน',
@@ -59,6 +60,10 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  c.created_at,'/my-substitutes.html',NULL,c.cancelled_by,1
  FROM substitute_cancellations c JOIN personnel_accounts pa ON pa.personnel_id=c.substitute_teacher_id
  WHERE pa.user_id=? AND c.absence_date>=date('now','+7 hours')`);tertiaryValues.push(user.id);}
+ if(tables.has('personnel_records')){
+  const license=licenseReminderQuery(user.id,tables.has('personnel_accounts'));
+  tertiaryTerms.push(license.sql);tertiaryValues.push(...license.values);
+ }
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}
@@ -108,7 +113,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
  )${tertiary}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}
- ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}`;
+ ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}${forLine||forDelivery?" OR m.message_key LIKE 'license:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,
@@ -116,10 +121,10 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false){
  user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
-export async function unreadNotificationsFor(env,user,limit=50,{forLine=false}={}){
+export async function unreadNotificationsFor(env,user,limit=50,{forLine=false,forDelivery=false}={}){
  await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);
- const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),forLine);
- const {results}=await env.DB.prepare(`SELECT * FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT ?`).bind(...q.values,limit).all();
+ const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),forLine,forDelivery);
+ const {results}=await env.DB.prepare(`SELECT * FROM (${q.sql}) ORDER BY ${forLine||forDelivery?"(message_key LIKE 'license:%') DESC,":""}created_at DESC,message_key DESC LIMIT ?`).bind(...q.values,limit).all();
  return results.map(({read_at,...r})=>r);
 }
 export async function handleNotifications(request,env,pathname,method){
