@@ -6,11 +6,21 @@
 
 ## การอัปเดตรายครั้ง — เริ่ม 8 พฤศจิกายน 2569
 
-**แพทช์ล่าสุด: 1.2.2**
+**แพทช์ล่าสุด: 1.2.3**
 
 ตั้งแต่เริ่มใช้กติกานี้ ทุกชุดการแก้ไขที่เสร็จและ merge หรือ push เข้าสาขาหลักต้องเพิ่มเลขแพทช์ทันที
 งานเล็กและกลางเพิ่มเลขส่วนที่สาม ส่วนงานใหญ่เพิ่มเลขส่วนที่สองและเริ่มเลขย่อยใหม่
 ยังสรุปรวมทุกแพทช์รายสัปดาห์จันทร์–อาทิตย์ตามเวลาไทย โดยเก็บประวัติฐาน 1.0 ด้านล่างไว้ตามเดิม
+
+### Patch 1.2.3 — 8 พฤศจิกายน 2569
+
+- **ขนาด:** เล็ก (ปรับความลื่นและหน้าตาแอดมิน Notify)
+- **รีโปที่แก้ไข:** `SATTASAI/school-notify`; `banpadeng-school-db` บันทึกแพทช์กลาง
+- ปรับฟอนต์ระบบและขนาดตัวอักษร ใช้ SVG ชุดเดียว เพิ่ม feedback ตอนแตะ ตัวชี้ bottom bar เคลื่อนตามแท็บ และ animation สั้นเมื่อเปลี่ยนหน้า/เปิดรายละเอียด พร้อม reduced motion
+- จำตำแหน่งเลื่อนแยกแท็บ คงแบบร่าง ลดการโหลดประวัติซ้ำและการวาดห้องแชทเดิมขณะ polling ไม่เล่น animation ข้อความเก่าซ้ำ และรวม keyboard viewport updates ผ่าน animation frame
+- เพิ่ม cross-document View Transitions เฉพาะเบราว์เซอร์รองรับ พร้อม fallback เดิม และปรับมือถือเป็นพื้นที่เลื่อนภายใน console
+- Notify npm test ผ่านทุกชุด รวม animation cancellation/dialog lifecycle, reduced motion, scroll/draft retention, stable room DOM และ viewport coalescing; Wrangler dry-run ผ่าน ยังไม่ได้วัด FPS/ทดสอบ movement บน iPhone จริง
+- Notify: [PR #6](https://github.com/SATTASAI/school-notify/pull/6) · System: [PR #173](https://github.com/SATTASAI/banpadeng-school-db/pull/173)
 
 ### Patch 1.2.2 — 8 พฤศจิกายน 2569
 
