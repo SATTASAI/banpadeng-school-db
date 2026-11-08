@@ -80,7 +80,7 @@
   const chatFrame = document.createElement('iframe');
   chatFrame.title = 'ห้องข้อความโรงเรียน';
   chatFrame.referrerPolicy = 'no-referrer';
-  chatFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+  chatFrame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox');
   chatPanel.prepend(chatFrame);
   document.body.append(chatPanel);
   const chatButton = bar.querySelector('[data-tab=messages]');
