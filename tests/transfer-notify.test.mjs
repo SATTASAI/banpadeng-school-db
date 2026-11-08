@@ -4,7 +4,7 @@ import worker from '../src/index.js';
 import {fixture,call} from './notifications.test.mjs';
 import {handleTransferNotices,ensureTransferNotices} from '../src/routes/transfer-notices.js';
 import {unreadNotificationsFor} from '../src/routes/notifications.js';
-import {dispatchPushNotifications} from '../src/lib/push-feed.js';
+import {dispatchPushNotifications,pushPrefs} from '../src/lib/push-feed.js';
 
 const input=()=>({client_ref:crypto.randomUUID(),student_name:'นักเรียนทดสอบ แจ้งย้าย',direction:'out',destination_school:'โรงเรียนทดสอบ',contact_phone:'0812345678',contact_address:'ที่อยู่ส่วนตัว'});
 const request=body=>new Request('https://school.test/api/public/transfer-notices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -28,6 +28,7 @@ test('transfer feed targets active registry grantees and superadmins; reading do
 });
 test('public intake schedules School Notify to each authorized user once, with inbox and work link; transient errors retry',async()=>{
  const env=await setup();env.NOTIFY_API_KEY='test';env.PUSH_PILOT_ROLES='all';
+ await pushPrefs(env,{id:1});env.raw.exec("INSERT INTO push_feed_users(user_id,started_at) VALUES(1,'2000-01-01'),(2,'2000-01-01'),(3,'2000-01-01')");
  const original=globalThis.fetch,sent=[];let fail=true;
  globalThis.fetch=async(url,init={})=>{
   const path=new URL(url).pathname;
