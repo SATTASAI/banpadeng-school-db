@@ -1,3 +1,4 @@
+import { handleTransferNotices } from './routes/transfer-notices.js';
 import { handleStudentTransfers, ensureStudentTransfers, transferSummary } from './routes/student-transfers.js';
 import { handleThaiSchools } from './routes/thai-schools.js';
 import { RANK_CHOICES, rankChoiceToRecord, recordToRankChoice } from "./lib/rank-choice.js";
@@ -4772,6 +4773,8 @@ const app = {
         if (viewer?.role === "viewer" && !viewerMayAccess(method, pathname)) return jsonResponse(VIEWER_BLOCKED, 403);
       }
 
+      const transferNoticeResponse = await handleTransferNotices(request, env, pathname, method);
+      if (transferNoticeResponse) return transferNoticeResponse;
       if (pathname.startsWith('/api/thai-schools')) {
         return await handleThaiSchools(request,env,pathname,method);
       }
