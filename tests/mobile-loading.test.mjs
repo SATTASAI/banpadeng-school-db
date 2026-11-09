@@ -96,6 +96,12 @@ test('details start independent aggregates concurrently without repeating core q
  const p=s.load('details');await tick();assert.equal(started.length,3);assert.equal(s.calls.length,0);pending.forEach(f=>f());
  const r=await p;assert.equal(r.data.attendance_summary.name,'attendance');assert.equal(r.data.details_pending,false);
 });
+test('overview read batches wait for lazy schema initialization to finish',async()=>{
+ let ready=false,finish;
+ const s=overviewServer({dashboardActivitySummary:()=>new Promise(resolve=>{finish=()=>{ready=true;resolve({leave_summary:{pending:0}});};})});
+ const pending=s.load('core');await tick();assert.equal(ready,false);assert.equal(s.calls.length,0);
+ finish();const result=await pending;assert.equal(result.status,200);assert.equal(s.calls.length,1);
+});
 test('legacy full overview retains every section; invalid selectors and unauthenticated users are rejected',async()=>{
  const s=overviewServer();const r=await s.load();assert.equal(r.data.substitute_summary.week_total,3);assert.equal(r.data.student_transfer_summary.total,2);
  assert.equal((await s.load('unknown')).status,400);

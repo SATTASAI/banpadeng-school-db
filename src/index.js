@@ -4543,7 +4543,10 @@ async function handleOverview(request, env) {
   if (typeof env.DB.withSession === "function") env = { ...env, DB: env.DB.withSession("first-primary") };
   const dataRevision = await dashboardRevision(env);
 
-  const [rows, activity, currentAcademicPeriod, financialRows, details] = await Promise.all([
+  // Finish lazy schema setup before batching reads; a batch must not race migrations.
+  const activity = await dashboardActivitySummary(env, budgetFiscalYear);
+  const currentAcademicPeriod = await getCurrentAcademicPeriod(env);
+  const [rows, financialRows, details] = await Promise.all([
     env.DB.batch([
     env.DB.prepare(
     "SELECT COUNT(*) as count FROM students WHERE status = 'enrolled'"
@@ -4607,8 +4610,6 @@ async function handleOverview(request, env) {
      ORDER BY days_remaining ASC, full_name ASC`
   )
     ]),
-    dashboardActivitySummary(env, budgetFiscalYear),
-    getCurrentAcademicPeriod(env),
     projectFinancialRows(env, budgetFiscalYear),
     section === "core" ? Promise.resolve({details_pending:true, substitute_summary:null, attendance_summary:null, student_transfer_summary:null}) : loadOverviewDetails(env, user),
   ]);
