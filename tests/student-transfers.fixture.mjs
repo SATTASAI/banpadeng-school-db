@@ -29,7 +29,9 @@ export async function fixture() {
         return { results: raw.prepare(sql).all(...values) };
       },
       async run() {
-        const r = raw.prepare(sql).run(...values);
+        const statement = raw.prepare(sql);
+        if (statement.columns().length) return { results: statement.all(...values) };
+        const r = statement.run(...values);
         return {
           meta: {
             changes: Number(r.changes),

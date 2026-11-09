@@ -14,7 +14,7 @@ async function fixture(){
  raw.prepare(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES
   (1,'admin@test',?,?,'ผู้ดูแล','superadmin'),(2,'teacher@test',?,?,'ครู ก','teacher'),(9,'guest@test',?,?,'ผู้ชมภายนอก',NULL)`).run(hash,salt,hash,salt,hash,salt);
  raw.exec('INSERT INTO viewer_accounts(user_id) VALUES (9)');
- function prepare(sql){let values=[];return{bind(...v){values=v;return this},async first(){return raw.prepare(sql).get(...values)||null},async all(){return{results:raw.prepare(sql).all(...values)}},async run(){const r=raw.prepare(sql).run(...values);return{meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}}}
+ function prepare(sql){let values=[];return{bind(...v){values=v;return this},async first(){return raw.prepare(sql).get(...values)||null},async all(){return{results:raw.prepare(sql).all(...values)}},async run(){const statement=raw.prepare(sql);if(statement.columns().length)return{results:statement.all(...values)};const r=statement.run(...values);return{results:[],meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}}}
  let tail=Promise.resolve();
  const env={raw,JWT_SECRET:'viewer-test',DB:{prepare,batch(statements){const next=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out}catch(e){raw.exec('ROLLBACK');throw e}});tail=next.catch(()=>{});return next}},
   ASSETS:{fetch:async()=>new Response('ok')}};
