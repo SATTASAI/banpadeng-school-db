@@ -34,6 +34,7 @@ window.ProjectBalance=(()=>{
   inboxes.push(refresh);refresh();return {refresh};
  }
  function refreshInboxes(){for(const refresh of inboxes)refresh()}
- setInterval(()=>{if(!document.hidden)refreshInboxes()},15000);
+ setInterval(()=>{if(!document.hidden)refreshInboxes()},60000);
+ window.addEventListener('school-app-resume',refreshInboxes);
  return {field,mountInbox,refreshInboxes};
 })();

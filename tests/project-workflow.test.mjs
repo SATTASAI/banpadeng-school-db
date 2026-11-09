@@ -18,7 +18,7 @@ async function fixture(){
     (12,'budget','งานรายได้',3000,2570,1,'school_income'),(13,'personnel','โครงการเดิม',400,2570,1,NULL);
     INSERT INTO project_owners(project_id,user_id) VALUES(10,2),(10,5),(11,2),(12,2);
     INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_review','',3,1),('director_approval','',6,1);`);
-  function prepare(sql){let values=[];return {bind(...v){values=v;return this;},async first(){return raw.prepare(sql).get(...values)||null;},async all(){return {results:raw.prepare(sql).all(...values)};},async run(){const r=raw.prepare(sql).run(...values);return {meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};}};}
+  function prepare(sql){let values=[];return {bind(...v){values=v;return this;},async first(){return raw.prepare(sql).get(...values)||null;},async all(){return {results:raw.prepare(sql).all(...values)};},async run(){const statement=raw.prepare(sql);if(statement.columns().length)return {results:statement.all(...values)};const r=statement.run(...values);return {results:[],meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}};}};}
   let tail=Promise.resolve();
   const env={raw,JWT_SECRET:secret,DB:{prepare,batch(statements){const task=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out;}catch(e){raw.exec('ROLLBACK');throw e;}});tail=task.catch(()=>{});return task;}}};
   await ensureBudgetSchema(env);return env;

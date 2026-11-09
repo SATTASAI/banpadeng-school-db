@@ -14,12 +14,24 @@ export async function fixture(){
  INSERT INTO projects(id,department,name,budget_amount,fiscal_year,created_by,funding_type) VALUES
  (10,'academic','โครงการปีเดิม',100,2569,1,'subsidy'),(11,'academic','โครงการปีใหม่',200,2570,1,'free_education');
  INSERT INTO project_owners(project_id,user_id) VALUES (10,2),(10,3),(11,2);`);
- function prepare(sql){let values=[];return{bind(...v){values=v;return this},async first(){return raw.prepare(sql).get(...values)||null},async all(){return{results:raw.prepare(sql).all(...values)}},async run(){const r=raw.prepare(sql).run(...values);return{meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}}}
+ function prepare(sql){let values=[];return{bind(...v){values=v;return this},async first(){return raw.prepare(sql).get(...values)||null},async all(){return{results:raw.prepare(sql).all(...values)}},async run(){const statement=raw.prepare(sql);if(statement.columns().length)return{results:statement.all(...values)};const r=statement.run(...values);return{results:[],meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)}}}}}
  let tail=Promise.resolve();const env={raw,JWT_SECRET:'dashboard-test',DB:{prepare,batch(statements){const next=tail.then(async()=>{raw.exec('BEGIN');try{const out=[];for(const s of statements)out.push(await s.run());raw.exec('COMMIT');return out}catch(e){raw.exec('ROLLBACK');throw e}});tail=next.catch(()=>{});return next}}};await ensureBudgetSchema(env);return env;
 }
 export async function call(env,path,method='GET',body,user=1){const token=await signJWT({sub:user},env.JWT_SECRET);return worker.fetch(new Request('https://school.test'+path,{method,headers:{Cookie:`bpd_session=${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),env,{})}
 
 const sharedEnv=await fixture();
+
+test('progressive core plus details preserves the complete authenticated overview',async()=>{
+ const env=sharedEnv;
+ const full=await (await call(env,'/api/overview?fiscal_year=2570')).json();
+ const core=await (await call(env,'/api/overview?section=core&fiscal_year=2570')).json();
+ const detailsResponse=await call(env,'/api/overview?section=details&fiscal_year=2570');
+ assert.equal(detailsResponse.status,200);assert.equal(detailsResponse.headers.get('Cache-Control'),'no-store');
+ const details=await detailsResponse.json();
+ assert.equal(core.details_pending,true);assert.equal(details.details_pending,false);
+ assert.deepEqual({...core,...details},full);
+ assert.equal((await worker.fetch(new Request('https://school.test/api/overview?section=details'),env,{})).status,401);
+});
 
 test('dashboard includes earlier-year projects and immediately reflects allocations, income and disbursement ledgers without duplicate owners',async()=>{
  const env=sharedEnv;let response=await call(env,'/api/overview');assert.equal(response.status,200);assert.equal(response.headers.get('Cache-Control'),'no-store');let data=await response.json();assert.equal(data.total_project_budget,300);assert.equal(data.fiscal_year,null);

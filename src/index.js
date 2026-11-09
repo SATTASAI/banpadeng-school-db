@@ -4515,6 +4515,15 @@ async function handleSecurityOverview(request, env) {
 }
 
 // ---------- /api/overview (GET) — ภาพรวมสำหรับหน้าแดชบอร์ด ----------
+// These independent statistics no longer delay the first overview render.
+async function loadOverviewDetails(env, user) {
+  const [substitute_summary, attendance_summary, student_transfer_summary] = await Promise.all([
+    user.role === "viewer" ? Promise.resolve(null) : substituteDashboardSummary(env, user).catch(() => null),
+    attendanceDashboard(env).catch(error => { console.error("attendance summary", error); return null; }),
+    transferSummary(env),
+  ]);
+  return {details_pending:false, substitute_summary, attendance_summary, student_transfer_summary};
+}
 async function handleOverview(request, env) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
@@ -4524,39 +4533,47 @@ async function handleOverview(request, env) {
   if (budgetFiscalYear !== null && (!Number.isInteger(budgetFiscalYear) || budgetFiscalYear < 2500 || budgetFiscalYear > 3000)) {
     return jsonResponse({ error: "ปีงบประมาณไม่ถูกต้อง" }, 400);
   }
+  const section = new URL(request.url).searchParams.get("section") || "all";
+  if (!["all", "core", "details"].includes(section)) return jsonResponse({error:"ส่วนข้อมูลไม่ถูกต้อง"},400);
+  if (section === "details") {
+    return jsonResponse(await loadOverviewDetails(env, user), 200, {"Cache-Control":"no-store"});
+  }
   await Promise.all([ensurePersonnelData(env), ensureAcademicData(env)]);
   await ensureDashboardRevision(env);
   if (typeof env.DB.withSession === "function") env = { ...env, DB: env.DB.withSession("first-primary") };
   const dataRevision = await dashboardRevision(env);
+
+  // Finish lazy schema setup before batching reads; a batch must not race migrations.
   const activity = await dashboardActivitySummary(env, budgetFiscalYear);
   const currentAcademicPeriod = await getCurrentAcademicPeriod(env);
-
-  const studentsEnrolled = await env.DB.prepare(
+  const [rows, financialRows, details] = await Promise.all([
+    env.DB.batch([
+    env.DB.prepare(
     "SELECT COUNT(*) as count FROM students WHERE status = 'enrolled'"
-  ).first();
-  const staffCount = await env.DB.prepare(
+  ),
+    env.DB.prepare(
     "SELECT COUNT(*) as count FROM personnel_records WHERE status = 'active'"
-  ).first();
-  const openTasks = await env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'").first();
-  const overdueTasks = await env.DB.prepare(
+  ),
+    env.DB.prepare("SELECT COUNT(*) as count FROM tasks WHERE status = 'open'"),
+    env.DB.prepare(
     "SELECT COUNT(*) as count FROM tasks WHERE status = 'open' AND due_date IS NOT NULL AND due_date < date('now','+7 hours')"
-  ).first();
-  const ongoingProjects = await env.DB.prepare(
+  ),
+    env.DB.prepare(
     `SELECT COUNT(*) as count FROM projects WHERE status = 'ongoing' AND ${projectVisibility(user,'projects').sql}`
-  ).bind(...projectVisibility(user,'projects').values).first();
-  const pendingProjectExpenses = await env.DB.prepare(
+  ).bind(...projectVisibility(user,'projects').values),
+    env.DB.prepare(
     `SELECT COUNT(*) AS count, COALESCE(SUM(CAST(ROUND(amount*100+0.000001) AS INTEGER)), 0)/100.0 AS total_amount
      FROM project_expenses WHERE status IN ('pending','approved') AND (? IS NULL OR fiscal_year=?)`
-  ).bind(budgetFiscalYear,budgetFiscalYear).first();
-  const inventoryAlerts = await env.DB.prepare(`SELECT
+  ).bind(budgetFiscalYear,budgetFiscalYear),
+    env.DB.prepare(`SELECT
     SUM(CASE WHEN status='active' AND minimum_quantity > 0 AND current_quantity <= minimum_quantity THEN 1 ELSE 0 END) AS low_stock_count,
     SUM(CASE WHEN status IN ('repair','lost') OR item_condition IN ('damaged','lost') THEN 1 ELSE 0 END) AS attention_count
-    FROM inventory_items`).first();
-  const overdueInventoryBorrows = await env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
+    FROM inventory_items`),
+    env.DB.prepare(`SELECT COUNT(*) AS count FROM inventory_transactions b
     WHERE b.transaction_type='borrow' AND b.due_date IS NOT NULL AND b.due_date < date('now','+7 hours')
       AND b.quantity > COALESCE((SELECT SUM(r.quantity) FROM inventory_transactions r
-        WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`).first();
-  const { results: departmentRows } = await env.DB.prepare(
+        WHERE r.transaction_type='return' AND r.related_transaction_id=b.id),0)`),
+    env.DB.prepare(
     `SELECT COALESCE(management_area,department) AS department,
             COUNT(*) AS project_count,
             ROUND(AVG(progress_percent), 0) AS average_progress,
@@ -4564,9 +4581,8 @@ async function handleOverview(request, env) {
             COALESCE(SUM((SELECT COALESCE(SUM(e.amount),0) FROM project_expenses e WHERE e.project_id=projects.id AND e.status='paid')), 0) AS spent_budget
      FROM projects WHERE (? IS NULL OR fiscal_year=?) AND ${projectVisibility(user,'projects').sql}
      GROUP BY COALESCE(management_area,department)`
-  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user,'projects').values).all();
-
-  const { results: projectBudgetRows } = await env.DB.prepare(
+  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user,'projects').values),
+    env.DB.prepare(
     `SELECT p.id, COALESCE(p.management_area,p.department) AS department, p.name, p.status, p.progress_percent, p.fiscal_year,
             COALESCE(p.budget_amount, 0) AS budget_amount,
             COALESCE((SELECT SUM(e.amount) FROM project_expenses e WHERE e.project_id=p.id AND e.status='paid'),0) AS spent_amount,
@@ -4584,18 +4600,22 @@ async function handleOverview(request, env) {
                 WHEN 'personnel' THEN 4 WHEN 'general' THEN 5 ELSE 6 END,
               CASE p.status WHEN 'ongoing' THEN 1 WHEN 'completed' THEN 2 ELSE 3 END,
               p.name`
-  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user).values).all();
-
-  const { results: licensesExpiring } = await env.DB.prepare(
+  ).bind(budgetFiscalYear,budgetFiscalYear,...projectVisibility(user).values),
+    env.DB.prepare(
     `SELECT full_name, license_expiry_date,
             CAST(julianday(license_expiry_date) - julianday(date('now','+7 hours')) AS INTEGER) AS days_remaining
      FROM personnel_records
      WHERE status = 'active'
        AND license_expiry_date IS NOT NULL
      ORDER BY days_remaining ASC, full_name ASC`
-  ).all();
+  )
+    ]),
+    projectFinancialRows(env, budgetFiscalYear),
+    section === "core" ? Promise.resolve({details_pending:true, substitute_summary:null, attendance_summary:null, student_transfer_summary:null}) : loadOverviewDetails(env, user),
+  ]);
+  const [{results:[studentsEnrolled]}, {results:[staffCount]}, {results:[openTasks]}, {results:[overdueTasks]}, {results:[ongoingProjects]}, {results:[pendingProjectExpenses]}, {results:[inventoryAlerts]}, {results:[overdueInventoryBorrows]}, {results:departmentRows}, {results:projectBudgetRows}, {results:licensesExpiring}] = rows;
 
-  const financials=await visibleFinancialRows(env,user,await projectFinancialRows(env,budgetFiscalYear));
+  const financials=await visibleFinancialRows(env,user,financialRows);
   const financeById=new Map(financials.map(p=>[p.id,p]));
   for(const p of projectBudgetRows) Object.assign(p,financeById.get(p.id));
   const departmentMap = Object.fromEntries(DEPARTMENTS.map(department=>{
@@ -4646,10 +4666,7 @@ async function handleOverview(request, env) {
     licenses_expiring: user.role === "viewer" ? [] : licensesExpiring,
     current_academic_period: currentAcademicPeriod,
     funding_summary: await projectFundingSummary(env,budgetFiscalYear,financials),
-    // สถิติสอนแทน: ชุดเดียวกับหน้าสถิติการสอนแทนและหน้าจัดสอนแทน (src/lib/personnel-stats.js)
-    substitute_summary: user.role === "viewer" ? null : await substituteDashboardSummary(env, user).catch(() => null),
-    attendance_summary: await attendanceDashboard(env).catch((error) => { console.error("attendance summary", error); return null; }),
-    student_transfer_summary: await transferSummary(env),
+    ...details,
     ...activity,
   },200,{ "Cache-Control": "no-store" });
 }
