@@ -16,10 +16,10 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!panel.hidden){panel.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus();}});
   root.querySelector('[data-read-all]').onclick=async()=>{try{await apiRequest('/api/notifications/read',{method:'POST',body:{all:true}});await refresh();window.ProjectBalance?.refreshInboxes?.();}catch(e){status.textContent=e.message;}};
   list.onclick=async e=>{const key=e.target.closest('[data-message]')?.dataset.message,n=items.find(i=>i.message_key===key);if(!n)return;try{await apiRequest('/api/notifications/read',{method:'POST',body:{message_key:key}});await refresh();panel.hidden=true;toggle.setAttribute('aria-expanded','false');if(typeof window.openNotificationPage==='function')window.openNotificationPage(n.url);else location.href=n.url;}catch(e){status.textContent=e.message;}};
-  window.addEventListener('school-data-changed',()=>refresh());window.addEventListener('focus',()=>refresh());document.addEventListener('visibilitychange',()=>refresh());
+  window.addEventListener('school-app-resume',()=>refresh());window.addEventListener('school-data-changed',()=>refresh());window.addEventListener('focus',()=>refresh());document.addEventListener('visibilitychange',()=>refresh());
   window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='school-data-changed')refresh();});
   try{const channel=new BroadcastChannel('school-data-changed');channel.onmessage=()=>refresh();}catch{}
-  refresh();setInterval(refresh,5000);window.SchoolNotifications={refresh};
+  refresh();setInterval(refresh,30000);window.SchoolNotifications={refresh};
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();

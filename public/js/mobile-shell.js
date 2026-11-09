@@ -217,6 +217,7 @@
   };
   refreshMessages();
   setInterval(refreshMessages, 30000);
+  window.addEventListener('school-app-resume', refreshMessages);
   window.addEventListener('pageshow', refreshMessages);
   window.addEventListener('focus', refreshMessages);
   document.addEventListener('visibilitychange', refreshMessages);

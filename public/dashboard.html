@@ -1106,35 +1106,7 @@
       ${viewer ? "" : `<p class="mini-sub">ใบประกอบวิชาชีพ: หมดอายุ/น้อยกว่า 90 วัน <b style="color:${licenseCounts.red ? "var(--color-danger)" : "inherit"}">${licenseCounts.red}</b> · 90–180 วัน <b>${licenseCounts.orange}</b> · ปกติ ${licenseCounts.green}</p>`}`;
   }
 
-  let overviewInFlight = false, overviewDirty = false, overviewRevision = null, revisionInFlight = false;
-  function refreshLiveOverview() { if (dashboardUser && !document.hidden) loadOverview().catch(() => {}); }
-  window.addEventListener("school-data-changed",refreshLiveOverview);
-  window.addEventListener("message",event=>{if(event.origin===location.origin && event.data?.type==="school-data-changed") refreshLiveOverview();});
-  window.addEventListener("focus",refreshLiveOverview);
-  document.addEventListener("visibilitychange",refreshLiveOverview);
-  try { if(typeof BroadcastChannel!=="undefined") {const channel=new BroadcastChannel("school-data-changed");channel.onmessage=refreshLiveOverview;} } catch {}
-  async function checkOverviewRevision() {
-    if (!dashboardUser || document.hidden || document.getElementById("overviewWrap").style.display === "none" || revisionInFlight || overviewInFlight) return;
-    revisionInFlight = true;
-    try {const data=await apiRequest("/api/overview/revision");if(data.revision!==overviewRevision) refreshLiveOverview();}
-    catch {refreshLiveOverview();} finally {revisionInFlight=false;}
-  }
-  setInterval(checkOverviewRevision,2000);
-  async function loadOverview() {
-    if (!dashboardUser) return;
-    if (overviewInFlight) { overviewDirty = true; return; }
-    overviewInFlight = true;
-    const selectedYear = document.getElementById("dashboardFiscalYear").value;
-    const errorBox = document.getElementById("errorBox");
-    const refreshButton = document.getElementById("refreshOverviewBtn");
-    errorBox.classList.remove("visible");
-    refreshButton.disabled = true;
-    refreshButton.textContent = "กำลังอัปเดต...";
-    try {
-      const data = await apiRequest(`/api/overview?fiscal_year=${encodeURIComponent(selectedYear)}`);
-      if (selectedYear !== document.getElementById("dashboardFiscalYear").value) {overviewDirty=true;return;}
-      overviewRevision=data.data_revision;
-      ProjectBalance.refreshInboxes();
+  function renderOverviewData(data, selectedYear) {
       const yearSelect=document.getElementById("dashboardFiscalYear");
       yearSelect.innerHTML='<option value="all">ทุกปีงบประมาณ</option>'+[...new Set([...(data.fiscal_years||[]),...(selectedYear!=="all"?[Number(selectedYear)]:[])])].sort((a,b)=>b-a).map(year=>`<option value="${Number(year)}">${Number(year)}</option>`).join('');
       yearSelect.value=selectedYear;
@@ -1281,28 +1253,96 @@
         </table>`;
       }
       const transfers=data.student_transfer_summary||{};
-      document.getElementById('studentTransferSummary').innerHTML=[['คำร้องทั้งหมด',transfers.total],['รอดำเนินการ',transfers.pending],['ย้ายเข้า · อนุมัติแล้ว',transfers.approved_in],['ย้ายออก · อนุมัติแล้ว',transfers.approved_out]].map(([label,value])=>`<div class="budget-summary-card"><span>${label}</span><strong>${Number(value||0)}</strong></div>`).join('');
-      renderAttendance(data.attendance_summary);
+      document.getElementById('studentTransferSummary').innerHTML=data.details_pending?'<p class="muted-line">กำลังโหลดสถิติการย้าย...</p>':[['คำร้องทั้งหมด',transfers.total],['รอดำเนินการ',transfers.pending],['ย้ายเข้า · อนุมัติแล้ว',transfers.approved_in],['ย้ายออก · อนุมัติแล้ว',transfers.approved_out]].map(([label,value])=>`<div class="budget-summary-card"><span>${label}</span><strong>${Number(value||0)}</strong></div>`).join('');
+      if (data.details_pending) {
+        document.getElementById("attendanceMini").innerHTML='<p class="muted-line">กำลังโหลดสถิติการมาเรียน...</p>';
+        document.getElementById("attendanceDetail").innerHTML='<p class="muted-line">กำลังโหลด...</p>';
+      } else renderAttendance(data.attendance_summary);
       renderOverviewMini(data, licenseCounts);
       document.getElementById("updatedAt").textContent = `อัปเดตล่าสุด ${new Intl.DateTimeFormat("th-TH", {
         dateStyle: "medium",
         timeStyle: "medium",
       }).format(new Date())}`;
+  }
+
+  let overviewController = null, revisionController = null;
+  let lastOverviewAt = 0;
+  let overviewInFlight = false, overviewDirty = false, overviewRevision = null, revisionInFlight = false;
+  function refreshLiveOverview() { if (dashboardUser && !document.hidden) loadOverview().catch(() => {}); }
+  window.addEventListener("school-data-changed",refreshLiveOverview);
+  window.addEventListener("message",event=>{if(event.origin===location.origin && event.data?.type==="school-data-changed") refreshLiveOverview();});
+  function resumeDashboard() {
+    overviewController?.abort(resumedReadError());
+    revisionController?.abort(resumedReadError());
+    // Wait until cancelled requests release their flags before starting the replacement.
+    setTimeout(() => { if (dashboardUser) refreshLiveOverview(); else bootstrapDashboard(); }, 0);
+  }
+  window.addEventListener("school-app-resume", resumeDashboard);
+  window.addEventListener("pageshow", () => { if (dashboardUser && Date.now()-lastOverviewAt>30000) refreshLiveOverview(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { overviewController?.abort(resumedReadError()); revisionController?.abort(resumedReadError()); }
+  });
+  try { if(typeof BroadcastChannel!=="undefined") {const channel=new BroadcastChannel("school-data-changed");channel.onmessage=refreshLiveOverview;} } catch {}
+  async function checkOverviewRevision() {
+    if (!dashboardUser || document.hidden || document.getElementById("overviewWrap").style.display === "none" || revisionInFlight || overviewInFlight) return;
+    revisionInFlight = true;
+    revisionController = new AbortController();
+    try {const data=await apiRequest("/api/overview/revision",{signal:revisionController.signal});if(data.revision!==overviewRevision) refreshLiveOverview();}
+    catch (error) {if(error.name!=="AbortError") refreshLiveOverview();} finally {revisionInFlight=false;revisionController=null;}
+  }
+  setInterval(checkOverviewRevision,30000);
+  async function loadOverview() {
+    if (!dashboardUser) return;
+    if (overviewInFlight) { overviewDirty = true; return; }
+    overviewInFlight = true;
+    const controller = new AbortController();
+    overviewController = controller;
+    const selectedYear = document.getElementById("dashboardFiscalYear").value;
+    const errorBox = document.getElementById("errorBox");
+    const refreshButton = document.getElementById("refreshOverviewBtn");
+    errorBox.classList.remove("visible");
+    refreshButton.disabled = true;
+    refreshButton.textContent = "กำลังอัปเดต...";
+    try {
+      const data = await apiRequest(`/api/overview?section=core&fiscal_year=${encodeURIComponent(selectedYear)}`, {signal:controller.signal});
+      lastOverviewAt = Date.now();
+      if (selectedYear !== document.getElementById("dashboardFiscalYear").value) {overviewDirty=true;return;}
+      overviewRevision=data.data_revision;
+      renderOverviewData(data, selectedYear);
+      // Expensive statistics follow the usable overview rather than blocking initial navigation.
+      const details = await apiRequest(`/api/overview?section=details&fiscal_year=${encodeURIComponent(selectedYear)}`, {signal:controller.signal});
+      if (selectedYear !== document.getElementById("dashboardFiscalYear").value) {overviewDirty=true;return;}
+      renderOverviewData({...data, ...details}, selectedYear);
     } catch (err) {
+      if (err.status === 401) { window.location.replace("/login.html"); return; }
+      if (err.name === "AbortError") return;
+      overviewRevision = null;
       errorBox.textContent = err.message;
       errorBox.classList.add("visible");
     } finally {
       refreshButton.disabled = false;
       refreshButton.textContent = "อัปเดตข้อมูล";
       overviewInFlight = false;
+      overviewController = null;
       if (overviewDirty) { overviewDirty=false;refreshLiveOverview(); }
     }
   }
 
   document.getElementById("dashboardFiscalYear").addEventListener("change",refreshLiveOverview);
-  document.getElementById("refreshOverviewBtn").addEventListener("click", loadOverview);
+  document.getElementById("refreshOverviewBtn").addEventListener("click", () => dashboardUser ? loadOverview() : bootstrapDashboard());
 
-  (async () => {
+  let bootstrapInFlight = null;
+  function bootstrapDashboard() {
+    if (bootstrapInFlight) return bootstrapInFlight;
+    bootstrapInFlight = initializeDashboard().catch(error => {
+      if (error.name === "AbortError") return;
+      const box = document.getElementById("errorBox");
+      box.textContent = error.message;
+      box.classList.add("visible");
+    }).finally(() => { bootstrapInFlight=null; });
+    return bootstrapInFlight;
+  }
+  async function initializeDashboard() {
     const { user } = await apiRequest("/api/auth/me");
     if (!user) {
       window.location.href = "/login.html";
@@ -1313,10 +1353,10 @@
       return;
     }
     dashboardUser = user;
-    const transferAccess=user.role==='viewer'?{allowed:false}:await apiRequest('/api/student-transfers/access').catch(()=>({allowed:false}));
-    if (!transferAccess.allowed) {
-      document.querySelectorAll('.nav-transfers, #studentTransferSection .inline-link').forEach(el=>el.remove());
-    }
+    document.querySelectorAll('.nav-transfers, #studentTransferSection .inline-link').forEach(el=>{el.hidden=true;el.style.display="none";});
+    if(user.role!=="viewer") loadNavigationPermission('/api/student-transfers/access',access=>{
+      document.querySelectorAll('.nav-transfers, #studentTransferSection .inline-link').forEach(el=>{el.hidden=!access.allowed;el.style.display=access.allowed?"":"none";});
+    });
     if (user.role === "viewer") enterViewerMode(user);
     else { ProjectBalance.mountInbox(document.getElementById("balanceRequestInbox")); window.WorkCalendar?.render(document.getElementById("workCalendar")); }
 
@@ -1340,13 +1380,13 @@
       document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
       document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
     });
-    await loadOverview();
-
     const initialKey = window.location.hash.replace("#", "");
     if (initialKey && PAGE_URLS[initialKey]) {
       showPage(initialKey, false);
     }
-  })();
+    await loadOverview();
+  }
+  bootstrapDashboard();
 
   // ผู้ชมภายนอก: เห็นเฉพาะภาพรวม ทำเนียบ/โครงการของฝ่ายงาน และตารางสอน (ดูอย่างเดียว ไม่มีข้อมูลส่วนบุคคล)
   function enterViewerMode(user) {
@@ -1417,4 +1457,3 @@
 <script>window.BpdPush&&BpdPush.loginPopup().then((shown)=>{if(!shown)return BpdPush.banner(document.getElementById("overviewWrap"))}).catch(()=>{});</script>
 </body>
 </html>
-

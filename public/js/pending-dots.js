@@ -9,8 +9,7 @@
  function cached(){try{const c=JSON.parse(sessionStorage.getItem(KEY)||'null');if(c&&Date.now()-c.at<TTL)return c.items;}catch{}return null;}
  async function load(force){
   const c=!force&&cached();if(c){items=c;return items;}
-  if(!inflight)inflight=fetch('/api/pending-work',{credentials:'same-origin',cache:'no-store'})
-   .then(r=>r.ok?r.json():{items:[]}).then(d=>{items=Array.isArray(d.items)?d.items:[];try{sessionStorage.setItem(KEY,JSON.stringify({at:Date.now(),items}));}catch{}return items;})
+  if(!inflight)inflight=apiRequest('/api/pending-work').then(d=>{items=Array.isArray(d.items)?d.items:[];try{sessionStorage.setItem(KEY,JSON.stringify({at:Date.now(),items}));}catch{}return items;})
    .catch(()=>items).finally(()=>{inflight=null;});
   return inflight;
  }
@@ -53,9 +52,10 @@
   document.head.appendChild(style);
   refresh(false);
   new MutationObserver(muts=>{if(muts.some(m=>[...m.addedNodes].some(n=>n.nodeType===1&&!n.classList?.contains('pending-dot'))))schedule();}).observe(document.body,{childList:true,subtree:true});
-  setInterval(()=>refresh(true),60000);
+  setInterval(()=>{if(!document.hidden)refresh(true);},60000);
   // ข้อมูลเปลี่ยน (อนุมัติ/บันทึก) ในหน้านี้ หน้าลูกใน iframe หรือแท็บอื่น → โหลดงานค้างใหม่
   let soon=null;const changed=()=>{clearTimeout(soon);soon=setTimeout(()=>refresh(true),600);};
+  window.addEventListener('school-app-resume',()=>refresh(true));
   window.addEventListener('school-data-changed',changed);
   window.addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='school-data-changed')changed();});
   try{const ch=new BroadcastChannel('school-data-changed');ch.onmessage=changed;}catch{}

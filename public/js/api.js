@@ -46,6 +46,64 @@ function apiRequest(path, options = {}) {
   if(key)pendingWrites.set(key,promise);
   return promise;
 }
+// Bound requests and release stale loading flags after an installed app resumes.
+const activeReads = new Set();
+const SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
+function resumedReadError() {
+  return Object.assign(new Error("กำลังเชื่อมต่อใหม่"), {name:"AbortError", code:"APP_RESUMED"});
+}
+function requestTimedOut() {
+  return Object.assign(new Error("โหลดข้อมูลนานเกินไป กรุณาลองใหม่"), {name:"TimeoutError", code:"REQUEST_TIMEOUT"});
+}
+async function boundedRequest(path, options, read) {
+  const controller = new AbortController(), callerSignal = options.signal;
+  const timeoutMs = options.timeoutMs ?? (read ? 15000 : 120000);
+  let rejectCancellation;
+  const cancellation = new Promise((_, reject) => { rejectCancellation = reject; });
+  const cancel = reason => { rejectCancellation(reason); controller.abort(reason); };
+  const callerAborted = () => cancel(callerSignal.reason || Object.assign(new Error("ยกเลิกคำขอ"), {name:"AbortError"}));
+  const entry = {cancel, started:Date.now()};
+  if (read) activeReads.add(entry);
+  if (callerSignal) {
+    if (callerSignal.aborted) callerAborted();
+    else callerSignal.addEventListener("abort", callerAborted, {once:true});
+  }
+  const timer = setTimeout(() => cancel(requestTimedOut()), timeoutMs);
+  try {
+    const request = (async () => {
+      if (controller.signal.aborted) throw controller.signal.reason;
+      const res = await fetch(path, {...options, signal:controller.signal});
+      let data = null;
+      try { data = await res.json(); } catch (error) {
+        if (controller.signal.aborted) throw controller.signal.reason;
+      }
+      return {res, data};
+    })();
+    return await Promise.race([request, cancellation]);
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", callerAborted);
+    activeReads.delete(entry);
+  }
+}
+(() => {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  let hiddenAt = document.hidden ? Date.now() : null, lastResume = 0;
+  const resume = event => {
+    if (document.hidden) return;
+    const now = Date.now(), stale = hiddenAt !== null && now-hiddenAt > 1000;
+    if (!stale && !event?.persisted && !event?.force && ![...activeReads].some(r => now-r.started >= 15000)) return;
+    if (lastResume && now-lastResume < 500) return;
+    hiddenAt = null; lastResume = now;
+    for (const read of [...activeReads]) read.cancel(resumedReadError());
+    setTimeout(() => window.dispatchEvent(new CustomEvent("school-app-resume")), 0);
+  };
+  document.addEventListener("visibilitychange", event => { if (document.hidden) hiddenAt=Date.now(); else resume(event); });
+  window.addEventListener("pageshow", resume);
+  window.addEventListener("focus", resume);
+  window.addEventListener("online", () => resume({force:true}));
+})();
+
 async function apiRequestNow(path, options = {}) {
   const quota=storedDatabaseQuota();
   const retryAllowed=["/api/auth/login","/api/auth/me","/api/auth/logout"].includes(path);
@@ -58,21 +116,30 @@ async function apiRequestNow(path, options = {}) {
     : isFormData || typeof options.body === "string"
       ? options.body
       : JSON.stringify(options.body);
-  const res = await fetch(path, {
-    method: options.method || "GET",
-    headers: {...headers,...(options.headers||{})},
-    body: requestBody,
-    credentials: "same-origin",
-    signal: options.signal,
-    cache: "no-store",
-  });
-
-  let data = null;
-  try {
-    data = await res.json();
-  } catch {
-    // ไม่มี body หรือไม่ใช่ JSON
+  const read = SAFE_METHODS.includes(String(options.method || "GET").toUpperCase());
+  let result;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      result = await boundedRequest(path, {
+        method: options.method || "GET",
+        headers: {...headers, ...(options.headers || {})},
+        body: requestBody,
+        credentials: "same-origin",
+        signal: options.signal,
+        timeoutMs: options.timeoutMs,
+        cache: "no-store",
+      }, read);
+      const transient = [502, 503, 504].includes(result.res.status)
+        && result.data?.code !== "DATABASE_DAILY_QUOTA_EXCEEDED";
+      if (read && attempt === 0 && transient && !options.signal?.aborted && !document.hidden) continue;
+      break;
+    } catch (error) {
+      const transient = error.name === "TypeError" || error.code === "REQUEST_TIMEOUT";
+      if (read && attempt === 0 && transient && !options.signal?.aborted && !document.hidden) continue;
+      throw error;
+    }
   }
+  const {res, data} = result;
 
   if (!res.ok) {
     if(data?.code==="DATABASE_DAILY_QUOTA_EXCEEDED")setDatabaseQuota(data);

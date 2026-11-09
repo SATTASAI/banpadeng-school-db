@@ -9,24 +9,7 @@
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="theme-color" content="#1E5FC0" />
 <meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
-<script src="/js/api.js"></script>
+<script>window.location.replace("/dashboard.html" + window.location.search + window.location.hash);</script>
 </head>
-<body>
-<script>
-  (async () => {
-    try {
-      const { user } = await apiRequest("/api/auth/me");
-      if (!user) {
-        window.location.replace("/login.html");
-      } else if (!user.role) {
-        window.location.replace("/pending.html");
-      } else {
-        window.location.replace("/dashboard.html");
-      }
-    } catch {
-      window.location.replace("/login.html");
-    }
-  })();
-</script>
-</body>
+<body><p><a href="/dashboard.html">เปิดระบบจัดการโรงเรียน</a></p></body>
 </html>
