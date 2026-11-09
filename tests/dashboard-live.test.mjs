@@ -51,3 +51,5 @@ test('leave counts update on request, approval and deletion and selected-year da
  assert.equal((await call(env,`/api/leave-requests/${draft.id}`,'DELETE',undefined,2)).status,200);
  data=await (await call(env,'/api/overview')).json();assert.equal(data.leave_summary.total,1);assert.equal(data.leave_summary.pending,0);
 });
+
+// Baseline validation for mobile loading recovery; no runtime changes.
