@@ -91,9 +91,9 @@ async function boundedRequest(path, options, read) {
   let hiddenAt = document.hidden ? Date.now() : null, lastResume = 0;
   const resume = event => {
     if (document.hidden) return;
-    const now = Date.now(), stale = hiddenAt !== null && now-hiddenAt > 1000;
+    const now = Date.now(), stale = hiddenAt !== null;
     if (!stale && !event?.persisted && !event?.force && ![...activeReads].some(r => now-r.started >= 15000)) return;
-    if (lastResume && now-lastResume < 500) return;
+    if (lastResume && now-lastResume < 500 && !stale && !event?.force) return;
     hiddenAt = null; lastResume = now;
     for (const read of [...activeReads]) read.cancel(resumedReadError());
     setTimeout(() => window.dispatchEvent(new CustomEvent("school-app-resume")), 0);

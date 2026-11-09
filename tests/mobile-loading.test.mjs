@@ -52,6 +52,14 @@ test('resume cancels reads without cancelling a write in progress',async()=>{
  c.document.hidden=true;c.event('visibilitychange');c.advance(5000);c.document.hidden=false;c.event('visibilitychange');
  finish(response({saved:true}));assert.equal((await p).saved,true);
 });
+test('a brief app switch still reconnects and duplicate focus events do not repeat resume',async()=>{
+ const c=client(()=>new Promise(()=>{}));let resumed=0;
+ c.window.addEventListener('school-app-resume',()=>resumed++);
+ c.document.hidden=true;c.event('visibilitychange');c.advance(100);c.document.hidden=false;c.event('visibilitychange');
+ c.fire(0);c.event('focus');assert.equal(resumed,1);assert.equal(c.timers.size,0);
+ c.document.hidden=true;c.event('visibilitychange');c.advance(100);c.document.hidden=false;c.event('visibilitychange');
+ c.fire(0);assert.equal(resumed,2);
+});
 test('network failures retry reads, but authentication and database quota errors do not',async()=>{
  let calls=0;const c=client(async()=>{if(++calls===1)throw new TypeError('network');return response({ready:true});});
  assert.equal((await c.request('/api/data')).ready,true);assert.equal(calls,2);
