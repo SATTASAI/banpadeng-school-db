@@ -37,6 +37,32 @@ export async function handleThaiSchools(request, env, pathname, method) {
   if (!user?.role) return response({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   await ensureThaiSchools(env);
 
+  if (pathname === "/api/thai-schools/verify" && method === "GET") {
+    const params = new URL(request.url).searchParams;
+    const code = params.get("code")?.trim();
+    const name = schoolName(params.get("name"));
+    if (!name || !code)
+      return response({ error: "กรุณาระบุชื่อและรหัสสถานศึกษา" }, 400);
+
+    const row = await env.DB.prepare(
+      `WITH lookup(code, name) AS (VALUES (?, ?))
+       SELECT CASE
+         WHEN EXISTS (
+           SELECT 1 FROM thai_schools
+           WHERE name = lookup.name AND (school_code = lookup.code OR smis_code = lookup.code)
+         ) THEN 'match'
+         WHEN EXISTS (
+           SELECT 1 FROM thai_schools
+           WHERE name = lookup.name OR school_code = lookup.code OR smis_code = lookup.code
+         ) THEN 'mismatch'
+         ELSE 'unknown'
+       END AS status FROM lookup`,
+    )
+      .bind(code, name)
+      .first();
+    return response({ status: row.status });
+  }
+
   if (pathname === "/api/thai-schools" && method === "GET") {
     const q = clean(new URL(request.url).searchParams.get("q"), 100)
       .replace(/^(โรงเรียน|ร\.ร\.)\s*/, "");

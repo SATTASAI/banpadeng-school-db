@@ -66,11 +66,8 @@ export function normalizeTransfer(input) {
   }
   if (record.client_ref.startsWith("notice:"))
     return { error: "รหัสอ้างอิงนี้สงวนสำหรับหลักฐานแจ้งย้าย" };
-  const schoolCode =
+  record.school_code =
     typeof input?.school_code === "string" ? input.school_code.trim() : "";
-  if (schoolCode && !/^\d{10}$/.test(schoolCode))
-    return { error: "รหัสสถานศึกษาต้องเป็นตัวเลข 10 หลัก" };
-  record.school_code = schoolCode;
   if (!["in", "out"].includes(input.direction))
     return { error: "กรุณาระบุย้ายเข้าหรือย้ายออก" };
   if (
