@@ -23,6 +23,9 @@ test("school code verification checks exact SMIS and ministry codes against the 
   }
 
   for (const [name, code, expected] of [
+    ["", "76020119", "code_match"],
+    ["", "1076370238", "code_match"],
+    ["", "7602011", "unknown"],
     [" โรงเรียนบ้านป่าเด็ง ", "76020119", "match"],
     ["ร.ร. บ้านป่าเด็ง", "1076370238", "match"],
     ["บ้านป่าเด็ง", "076020120", "match"],
@@ -37,6 +40,27 @@ test("school code verification checks exact SMIS and ministry codes against the 
   }
   assert.equal((await verify("บ้านป่าเด็ง", "")).status, 400);
   assert.equal((await verify("บ้านป่าเด็ง", "76020119", false)).status, 401);
+});
+
+test("code search prioritizes exact matches over a full page of prefix matches", async () => {
+  const { env } = await fixture();
+  await ensureThaiSchools(env);
+  const add = env.raw.prepare(
+    "INSERT INTO thai_schools (school_code, smis_code, name) VALUES (?, ?, ?)",
+  );
+  for (let n = 0; n < 21; n++) {
+    add.run("76020119" + String(n).padStart(2, "0"), "", "โรงเรียนทดสอบ " + n);
+  }
+  add.run("9999999999", "76020119", "โรงเรียนที่ค้นหา");
+  const token = await signJWT({ sub: 1 }, env.JWT_SECRET);
+  const pathname = "/api/thai-schools";
+  const request = new Request("https://school.test" + pathname + "?q=76020119", {
+    headers: { Cookie: "bpd_session=" + token },
+  });
+  const response = await handleThaiSchools(request, env, pathname, "GET");
+  const { schools } = await response.json();
+  assert.equal(schools.length, 20);
+  assert.equal(schools[0].smis_code, "76020119");
 });
 
 test("transfer registration and edits accept optional codes without a fixed format", async () => {
