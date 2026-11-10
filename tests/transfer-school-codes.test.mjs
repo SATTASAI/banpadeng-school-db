@@ -63,6 +63,60 @@ test("code search prioritizes exact matches over a full page of prefix matches",
   assert.equal(schools[0].smis_code, "76020119");
 });
 
+test("search and verification use the official SMIS page when the import lacks a code", async (t) => {
+  const { env } = await fixture();
+  await ensureThaiSchools(env);
+  env.raw.exec(`INSERT INTO thai_schools (school_code, name)
+    VALUES ('1076370238', 'บ้านป่าเด็ง')`);
+  const token = await signJWT({ sub: 1 }, env.JWT_SECRET);
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url) => {
+    assert.match(url, /^https:\/\/info\.bopp\.go\.th\/school\/\d{8}$/);
+    if (url.endsWith("/00000000")) return new Response(null, { status: 404 });
+    if (url.endsWith("/99999999")) return new Response(null, { status: 503 });
+    const smis = url.endsWith("/76020119") ? "76020119" : "12345678";
+    return new Response(`
+      <h1 class="school-title">สารสนเทศข้อมูลโรงเรียน</h1>
+      <p class="school-subtitle">บ้านป่าเด็ง</p>
+      <div class="kv"><strong>รหัสโรงเรียน (SMIS)</strong><div>${smis}</div></div>
+      <div class="kv"><strong>รหัสกระทรวง (10 หลัก)</strong><div>1076370238</div></div>
+      <div class="kv"><strong>จังหวัด</strong><div>เพชรบุรี</div></div>
+      <div class="kv"><strong>อำเภอ</strong><div>แก่งกระจาน</div></div>
+      <div class="kv"><strong>ตำบล</strong><div>ป่าเด็ง</div></div>`);
+  });
+
+  async function lookup(path, params) {
+    const pathname = "/api/thai-schools" + path;
+    const request = new Request("https://school.test" + pathname + "?" + new URLSearchParams(params), {
+      headers: { Cookie: "bpd_session=" + token },
+    });
+    return handleThaiSchools(request, env, pathname, "GET");
+  }
+
+  const search = await lookup("", { q: "76020119" });
+  assert.equal(search.status, 200);
+  assert.deepEqual(await search.json(), {
+    schools: [{
+      smis_code: "76020119", school_code: "1076370238", name: "บ้านป่าเด็ง",
+      district: "แก่งกระจาน", subdistrict: "ป่าเด็ง", province: "เพชรบุรี",
+    }],
+  });
+  for (const [name, expected] of [
+    ["", "code_match"],
+    ["โรงเรียนบ้านป่าเด็ง", "match"],
+    ["ชื่อโรงเรียนอื่น", "mismatch"],
+  ]) {
+    const response = await lookup("/verify", { name, code: "76020119" });
+    assert.deepEqual(await response.json(), { status: expected });
+  }
+  const calls = fetchMock.mock.callCount();
+  await lookup("", { q: "7602011" });
+  await lookup("/verify", { code: "1076370238" });
+  assert.equal(fetchMock.mock.callCount(), calls);
+  assert.deepEqual(await (await lookup("/verify", { code: "00000000" })).json(), { status: "unknown" });
+  assert.equal((await lookup("", { q: "99999999" })).status, 502);
+  assert.equal((await lookup("/verify", { code: "22222222" })).status, 502);
+});
+
 test("transfer registration and edits accept optional codes without a fixed format", async () => {
   const { call } = await fixture();
   const body = form({ school_code: "76020119" });
