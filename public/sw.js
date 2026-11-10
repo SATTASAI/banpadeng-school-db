@@ -23,7 +23,9 @@ function clickDestination(data, action) {
   if (!picked) return fallback.href;
   try {
     const target = new URL(picked, self.location.origin);
-    if (!['http:', 'https:'].includes(target.protocol) || (!action && target.origin !== 'https://system.banpadengschool.ac.th')) return fallback.href;
+    const schoolWork = target.origin === 'https://system.banpadengschool.ac.th' ||
+      (target.origin === 'https://activity.banpadengschool.ac.th' && target.pathname === '/' && /^#\/album\/\d+$/.test(target.hash));
+    if (!['http:', 'https:'].includes(target.protocol) || (!action && !schoolWork)) return fallback.href;
     return target.origin === self.location.origin ? target.href
       : new URL('/go.html?to=' + encodeURIComponent(target.href), self.location.origin).href;
   } catch { return fallback.href; }
