@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { signJWT } from "../src/lib/crypto.js";
 import { ensureThaiSchools, handleThaiSchools } from "../src/routes/thai-schools.js";
 import { fixture, form } from "./student-transfers.fixture.mjs";
@@ -63,25 +64,21 @@ test("code search prioritizes exact matches over a full page of prefix matches",
   assert.equal(schools[0].smis_code, "76020119");
 });
 
-test("search and verification use the official SMIS page when the import lacks a code", async (t) => {
+test("bundled OBEC directory finds and verifies schools when the imported table is empty", async (t) => {
   const { env } = await fixture();
-  await ensureThaiSchools(env);
-  env.raw.exec(`INSERT INTO thai_schools (school_code, name)
-    VALUES ('1076370238', 'บ้านป่าเด็ง')`);
   const token = await signJWT({ sub: 1 }, env.JWT_SECRET);
-  const fetchMock = t.mock.method(globalThis, "fetch", async (url) => {
-    assert.match(url, /^https:\/\/info\.bopp\.go\.th\/school\/\d{8}$/);
-    if (url.endsWith("/00000000")) return new Response(null, { status: 404 });
-    if (url.endsWith("/99999999")) return new Response(null, { status: 503 });
-    const smis = url.endsWith("/76020119") ? "76020119" : "12345678";
-    return new Response(`
-      <h1 class="school-title">สารสนเทศข้อมูลโรงเรียน</h1>
-      <p class="school-subtitle">บ้านป่าเด็ง</p>
-      <div class="kv"><strong>รหัสโรงเรียน (SMIS)</strong><div>${smis}</div></div>
-      <div class="kv"><strong>รหัสกระทรวง (10 หลัก)</strong><div>1076370238</div></div>
-      <div class="kv"><strong>จังหวัด</strong><div>เพชรบุรี</div></div>
-      <div class="kv"><strong>อำเภอ</strong><div>แก่งกระจาน</div></div>
-      <div class="kv"><strong>ตำบล</strong><div>ป่าเด็ง</div></div>`);
+  const assetPath = "/data/obec-schools-2569-1.json.gz";
+  const asset = await readFile(new URL("../public" + assetPath, import.meta.url));
+  let assetReads = 0;
+  env.ASSETS = {
+    async fetch(request) {
+      assert.equal(new URL(request.url).pathname, assetPath);
+      assetReads++;
+      return new Response(asset);
+    },
+  };
+  const outgoing = t.mock.method(globalThis, "fetch", () => {
+    throw new Error("The bundled catalog must work without external requests");
   });
 
   async function lookup(path, params) {
@@ -92,29 +89,30 @@ test("search and verification use the official SMIS page when the import lacks a
     return handleThaiSchools(request, env, pathname, "GET");
   }
 
-  const search = await lookup("", { q: "76020119" });
-  assert.equal(search.status, 200);
-  assert.deepEqual(await search.json(), {
-    schools: [{
-      smis_code: "76020119", school_code: "1076370238", name: "บ้านป่าเด็ง",
-      district: "แก่งกระจาน", subdistrict: "ป่าเด็ง", province: "เพชรบุรี",
-    }],
-  });
-  for (const [name, expected] of [
-    ["", "code_match"],
-    ["โรงเรียนบ้านป่าเด็ง", "match"],
-    ["ชื่อโรงเรียนอื่น", "mismatch"],
-  ]) {
-    const response = await lookup("/verify", { name, code: "76020119" });
-    assert.deepEqual(await response.json(), { status: expected });
+  const school = {
+    school_code: "1076370238", smis_code: "76020119", name: "บ้านป่าเด็ง",
+    subdistrict: "ป่าเด็ง", district: "แก่งกระจาน", province: "เพชรบุรี",
+  };
+  for (const q of ["76020119", "1076370238", "โรงเรียนบ้านป่าเด็ง"]) {
+    const result = await lookup("", { q });
+    assert.equal(result.status, 200);
+    assert.deepEqual((await result.json()).schools[0], school);
   }
-  const calls = fetchMock.mock.callCount();
-  await lookup("", { q: "7602011" });
-  await lookup("/verify", { code: "1076370238" });
-  assert.equal(fetchMock.mock.callCount(), calls);
-  assert.deepEqual(await (await lookup("/verify", { code: "00000000" })).json(), { status: "unknown" });
-  assert.equal((await lookup("", { q: "99999999" })).status, 502);
-  assert.equal((await lookup("/verify", { code: "22222222" })).status, 502);
+  const prefix = await lookup("", { q: "7602011" });
+  assert.ok((await prefix.json()).schools.some((row) => row.smis_code === "76020119"));
+  for (const [name, code, status] of [
+    ["", "76020119", "code_match"],
+    ["โรงเรียนบ้านป่าเด็ง", "1076370238", "match"],
+    ["โรงเรียนบ้านป่าเด็ง", "00000000", "mismatch"],
+    ["", "00000000", "unknown"],
+  ]) {
+    const result = await lookup("/verify", { name, code });
+    assert.equal(result.status, 200);
+    assert.deepEqual(await result.json(), { status });
+  }
+  assert.equal(assetReads, 1);
+  assert.equal(outgoing.mock.callCount(), 0);
+  assert.equal(env.raw.prepare("SELECT COUNT(*) count FROM thai_schools").get().count, 0);
 });
 
 test("transfer registration and edits accept optional codes without a fixed format", async () => {

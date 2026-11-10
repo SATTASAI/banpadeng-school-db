@@ -1,5 +1,4 @@
-// รายชื่อโรงเรียน สพฐ. ทั้งประเทศ (รหัสสถานศึกษา 10 หลัก) — ใช้ค้นหาโรงเรียนเดิม/ปลายทางในทะเบียนย้าย
-// นำเข้าจากไฟล์ Excel ของ สพฐ. ผ่านหน้า "นำเข้าข้อมูล" (superadmin เท่านั้น)
+// รายชื่อ สพฐ. สำหรับทะเบียนย้าย จากข้อมูลนำเข้าและชุดอ้างอิงที่เผยแพร่พร้อมระบบ
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
 
 const ready = new WeakSet();
@@ -31,47 +30,28 @@ const clean = (value, max) =>
 const schoolName = (value) =>
   clean(value, 200).replace(/^(โรงเรียน|ร\.ร\.)\s*/, "");
 
-const officialSchoolOrigin = "https://info.bopp.go.th";
-const exactSmis = /^\d{8}$/;
+const catalogPath = "/data/obec-schools-2569-1.json.gz";
+const catalogCache = new WeakMap();
+const exactCode = (school, code) => school.school_code === code || school.smis_code === code;
 const sourceUnavailable = () =>
-  response({ error: "ตรวจสอบกับฐานข้อมูล สพฐ. ไม่ได้ในขณะนี้" }, 502);
+  response({ error: "เปิดข้อมูลอ้างอิง สพฐ. ไม่ได้ในขณะนี้" }, 502);
 
-const htmlText = (value) =>
-  clean(value, 200).replace(/&(amp|quot|apos|lt|gt|nbsp|#39);/g, (entity) =>
-    ({ "&amp;": "&", "&quot;": '"', "&apos;": "'", "&lt;": "<",
-       "&gt;": ">", "&nbsp;": " ", "&#39;": "'" })[entity],
-  ).trim();
+async function bundledSchools(assets, url) {
+  if (!assets) return [];
+  const cached = catalogCache.get(assets);
+  if (cached) return cached;
 
-async function findOfficialSchool(code) {
-  if (!exactSmis.test(code)) return null;
-  const page = await fetch(officialSchoolOrigin + "/school/" + code, {
-    redirect: "error",
-    signal: AbortSignal.timeout(5000),
-  });
-  if (page.status === 404) return null;
-  if (!page.ok) throw new Error("School directory unavailable");
-
-  const html = await page.text();
-  const fields = new Map(
-    Array.from(
-      html.matchAll(/<strong>([^<]+)<\/strong>\s*<div>([^<]*)<\/div>/g),
-      ([, label, value]) => [htmlText(label), htmlText(value)],
-    ),
+  const file = await assets.fetch(new Request(new URL(catalogPath, url)));
+  if (!file.ok || !file.body) throw new Error("School directory asset unavailable");
+  const { schools } = await new Response(
+    file.body.pipeThrough(new DecompressionStream("gzip")),
+  ).json();
+  if (!Array.isArray(schools)) throw new Error("Invalid school directory asset");
+  const catalog = schools.map(([school_code, smis_code, name, subdistrict, district, province]) =>
+    ({ school_code, smis_code, name, subdistrict, district, province }),
   );
-  const smis_code = fields.get("รหัสโรงเรียน (SMIS)");
-  const school_code = fields.get("รหัสกระทรวง (10 หลัก)");
-  const name = schoolName(htmlText(html.match(/<p class="school-subtitle">([^<]+)<\/p>/)?.[1]));
-  if (smis_code !== code || !/^\d{10}$/.test(school_code) || !name) {
-    throw new Error("Unexpected school directory response");
-  }
-  return {
-    school_code,
-    smis_code,
-    name,
-    subdistrict: fields.get("ตำบล") || "",
-    district: fields.get("อำเภอ") || "",
-    province: fields.get("จังหวัด") || "",
-  };
+  catalogCache.set(assets, catalog);
+  return catalog;
 }
 
 export async function handleThaiSchools(request, env, pathname, method) {
@@ -90,24 +70,27 @@ export async function handleThaiSchools(request, env, pathname, method) {
     const { results } = await env.DB.prepare(
       "SELECT name FROM thai_schools WHERE school_code = ? OR smis_code = ?",
     ).bind(code, code).all();
-    let matches = results;
-    if (!matches.length) {
-      try {
-        const official = await findOfficialSchool(code);
-        if (official) matches = [official];
-      } catch {
-        return sourceUnavailable();
-      }
+    if (results.length && !name) return response({ status: "code_match" });
+    if (results.some((school) => school.name === name))
+      return response({ status: "match" });
+
+    let catalog;
+    try {
+      catalog = await bundledSchools(env.ASSETS, request.url);
+    } catch {
+      return results.length ? response({ status: "mismatch" }) : sourceUnavailable();
     }
-    if (matches.length) {
-      const status = !name
-        ? "code_match"
-        : matches.some((school) => school.name === name) ? "match" : "mismatch";
-      return response({ status });
-    }
-    const knownName = name && await env.DB.prepare(
-      "SELECT 1 FROM thai_schools WHERE name = ? LIMIT 1",
-    ).bind(name).first();
+    const matches = catalog.filter((school) => exactCode(school, code));
+    if (matches.length && !name) return response({ status: "code_match" });
+    if (matches.some((school) => school.name === name))
+      return response({ status: "match" });
+    if (matches.length || results.length) return response({ status: "mismatch" });
+
+    const knownName = name && (
+      catalog.some((school) => school.name === name) ||
+      await env.DB.prepare("SELECT 1 FROM thai_schools WHERE name = ? LIMIT 1")
+        .bind(name).first()
+    );
     return response({ status: knownName ? "mismatch" : "unknown" });
   }
 
@@ -131,20 +114,38 @@ export async function handleThaiSchools(request, env, pathname, method) {
     )
       .bind(...(digits ? [q + "%", q + "%", q, q] : [`%${q}%`, q, q + "%"]))
       .all();
-    const schools = rows.results;
-    if (exactSmis.test(q) && !schools.some((school) => school.smis_code === q)) {
-      try {
-        const official = await findOfficialSchool(q);
-        if (official) {
-          return response({
-            schools: [official, ...schools.filter((school) => school.school_code !== official.school_code)].slice(0, 20),
-          });
-        }
-      } catch {
-        if (!schools.length) return sourceUnavailable();
-      }
+    let catalog;
+    try {
+      catalog = await bundledSchools(env.ASSETS, request.url);
+    } catch {
+      return rows.results.length ? response({ schools: rows.results }) : sourceUnavailable();
     }
-    return response({ schools });
+
+    const query = q.toLowerCase();
+    const schools = new Map();
+    for (const school of catalog) {
+      const matches = digits
+        ? school.school_code.startsWith(q) || school.smis_code.startsWith(q)
+        : school.name.toLowerCase().includes(query);
+      if (matches) schools.set(school.school_code, school);
+    }
+    for (const school of rows.results) {
+      const official = schools.get(school.school_code);
+      // Keep the official SMIS when the imported row has no code or the official code was searched.
+      const smis_code = official?.smis_code === q ? q : school.smis_code || official?.smis_code || "";
+      schools.set(school.school_code, { ...school, smis_code });
+    }
+
+    const compare = digits
+      ? (a, b) => Number(exactCode(b, q)) - Number(exactCode(a, q)) || a.school_code.localeCompare(b.school_code)
+      : (a, b) => {
+          const an = a.name.toLowerCase(), bn = b.name.toLowerCase();
+          return Number(bn === query) - Number(an === query)
+            || Number(bn.startsWith(query)) - Number(an.startsWith(query))
+            || a.name.length - b.name.length
+            || a.name.localeCompare(b.name, "th");
+        };
+    return response({ schools: [...schools.values()].sort(compare).slice(0, 20) });
   }
 
   if (pathname === "/api/thai-schools/import" && method === "POST") {
