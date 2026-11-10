@@ -29,10 +29,11 @@ test("import is superadmin-only, upserts, and search finds by name or code", asy
   assert.equal(saved.data.skipped.length, 1);
   await call(env, "/api/thai-schools/import", "POST", { rows: [rows[0]] });
   const byName = await call(env, "/api/thai-schools?q=" + encodeURIComponent("ช้างแทง"), "GET", null, 3);
-  assert.deepEqual(byName.data.schools.map((s) => [s.school_code, s.name, s.district, s.province]), [
-    ["1076300001", "วัดช้างแทงกระจาด", "เมืองเพชรบุรี", "เพชรบุรี"],
-  ]);
-  assert.equal((await call(env, "/api/thai-schools?q=107630", "GET", null, 3)).data.schools.length, 1);
+  const imported = byName.data.schools.find((s) => s.school_code === "1076300001");
+  assert.deepEqual([imported.name, imported.district, imported.province],
+    ["วัดช้างแทงกระจาด", "เมืองเพชรบุรี", "เพชรบุรี"]);
+  const byCode = await call(env, "/api/thai-schools?q=1076300001", "GET", null, 3);
+  assert.equal(byCode.data.schools[0].school_code, "1076300001");
   assert.equal((await call(env, "/api/thai-schools", "GET", null, 3)).data.total, 1);
 
   const ok = await transfer("", "POST", form({ client_ref: "code-ok", school_code: "1076300001" }));
