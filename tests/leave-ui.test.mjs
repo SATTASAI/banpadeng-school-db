@@ -80,6 +80,25 @@ test('head inbox acknowledges and forwards in one action, escapes text and retai
  node('note-9').value='ตรวจแล้ว';await click({target:{closest:()=>({dataset:{id:'9',action:'acknowledge'},disabled:false})}});assert.equal(payload.action,'acknowledge');assert.equal(payload.note,'ตรวจแล้ว');assert(!node('pendingPanel').innerHTML.includes('data-action="forward"'));assert.match(node('historyPanel').innerHTML,/รอผู้อำนวยการอนุมัติ/);
 });
 
+test('an approval link opens the exact request and keeps its mode through sign-in',async()=>{
+ for(const signedIn of [false,true]){
+  const location={search:'?view=approval&request=9',href:''},nodes=new Map();
+  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',hidden:false,classList:{add(){},remove(){}},setAttribute(){},scrollIntoView(){}});return nodes.get(id);};
+  const ctx=vm.createContext({URLSearchParams,location,Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async path=>{
+   if(path==='/api/auth/me')return {user:signedIn?{id:3,role:'teacher'}:null};
+   if(path==='/api/leave-requests/9')return {leave_request:{full_name:'เจ้าของใบลาที่เปิด',statistics_period:{},stats:[]},events:[]};
+   assert.equal(path,'/api/leave-requests');
+   return {profile:{},is_personnel_head:true,can_view_pending:true,leave_requests:[{id:9,leave_type:'sick',status:'pending',can_acknowledge:true}]};
+  }});
+  vm.runInContext(fs.readFileSync('public/js/leave.js','utf8'),ctx);await new Promise(r=>setImmediate(r));
+  if(signedIn){
+   assert.match(node('detailPanel').innerHTML,/เจ้าของใบลาที่เปิด/);
+   assert.match(node('detailPanel').innerHTML,/data-action="acknowledge" data-id="9"/);
+   assert.doesNotMatch(node('detailPanel').innerHTML,/data-action="approved"/);
+  }else assert.equal(decodeURIComponent(location.href),'/login.html?next=/leave.html?view=approval&request=9');
+ }
+});
+
 test('director sees approve and reject immediately without a deputy opinion',async()=>{
  const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'',dataset:{},innerHTML:'',textContent:'',hidden:false,classList:{add(){},remove(){}}});return nodes.get(id);};
  const ctx=vm.createContext({URLSearchParams,location:{search:''},Date,document:{getElementById:node,querySelectorAll:()=>[],addEventListener(){}},setInterval(){},apiRequest:async(path)=>{

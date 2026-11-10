@@ -51,7 +51,7 @@ function facts(d){
 }
 const card=(r,cls="")=>`<article class="msg ${cls}"><div class="msg-head">🔔 แจ้งเตือนจากระบบ<time>${when(r.created_at)}</time></div>
   <div class="msg-body"><h2>${esc(r.title)}</h2>${r.message?`<p>${esc(r.message)}</p>`:""}${facts(r.details)}</div>
-  ${r.url?`<div class="msg-foot"><a href="${esc(r.url)}">${label(r.message_key)} →</a></div>`:""}</article>`;
+  ${r.url?`<div class="msg-foot"><a href="${esc(r.url)}">${esc(r.action_label||label(r.message_key))} →</a></div>`:""}</article>`;
 async function load(){
   const key=new URLSearchParams(location.search).get("key")||"";
   try{

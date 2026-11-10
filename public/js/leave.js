@@ -1,7 +1,9 @@
 (function(){
  'use strict';
  const $=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const approvalView=new URLSearchParams(location.search).get('view')==='approval';
+ const query=new URLSearchParams(location.search);
+ const approvalView=query.get('view')==='approval';
+ const requestId=/^\d+$/.test(query.get('request')||'')?Number(query.get('request')):null;
  if(approvalView){$('leaveTitle').textContent='อนุมัติการลา';document.title='อนุมัติการลา — โรงเรียนบ้านป่าเด็ง';$('newLeaveSection').hidden=true;$('leaveCategoryHint').hidden=true;}
  const types={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'},stages={submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'รายการเดิม: รอรับทราบและส่งต่อผู้บริหาร',forwarded:'หัวหน้าฝ่ายรับทราบแล้ว รอผู้อำนวยการอนุมัติ',completed:'ดำเนินการเสร็จแล้ว'};
  const quotaLabels={general:'ลาทั่วไป (ลากิจและอื่น ๆ)',lenient:'ลาอนุโลม'};
@@ -35,8 +37,13 @@
   if(field){target.setAttribute('aria-invalid','true');target.focus();}
  }
  function success(message){$('errorBox').classList.remove('visible');$('submitError').hidden=true;$('successBox').textContent=message;$('successBox').hidden=false;}
- function row(r){
+ function reviewButtons(r){
+  if(!r)return '';
   const decisionDisabled=user?.view_as?.read_only?'disabled title="โหมดดูบัญชีอื่นอ่านได้อย่างเดียว ต้องเข้าสู่ระบบด้วยบัญชีผู้มีสิทธิ์เพื่ออนุมัติจริง"':'';
+  return `${(!approvalView||r.id===requestId)&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}" ${decisionDisabled}>รับทราบและส่งต่ออัตโนมัติ</button>`:''}
+    ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}`;
+ }
+ function row(r){
   return `<article class="leave-row ${r.status==='pending'?'pending':''}" id="leave-${Number(r.id)}">
    <h4>${esc(r.full_name)} · ${esc(types[r.leave_type])}</h4>
    <p>${esc(r.start_date)} ถึง ${esc(r.end_date)} · ${esc(r.leave_days??'')} วัน</p>
@@ -48,8 +55,7 @@
    <div class="leave-actions">
     <button class="btn btn-ghost" data-detail="${Number(r.id)}">รายละเอียด / ใบลา</button>
     <button class="btn btn-ghost" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="btn btn-ghost" data-export="pdf" data-id="${Number(r.id)}">PDF</button>
-    ${!approvalView&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}">รับทราบและส่งต่ออัตโนมัติ</button>`:''}
-    ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}
+    ${reviewButtons(r)}
     ${!approvalView&&r.can_cancel?`<button class="btn btn-ghost" data-action="cancel" data-id="${Number(r.id)}">ยกเลิกคำขอ</button>`:''}
    </div></article>`;
  }
@@ -70,10 +76,11 @@
   const data=await apiRequest('/api/leave-requests');records=data.leave_requests;
   for(const r of records)if(r.can_store_drive&&!driveFailed.has(Number(r.id)))driveQueue.add(Number(r.id));
   if(driveQueue.size)setTimeout(()=>runDriveQueue(),1500);
-  if(approvalView){if(!data.can_view_all_leave)records=[];}
+  const canOpenApproval=data.can_view_all_leave||(requestId&&data.can_view_pending);
+  if(approvalView){if(!canOpenApproval)records=[];}
   else await loadAllowance();
   $('approvalAccess').hidden=!approvalView;
-  $('approvalAccess').textContent=!data.can_view_all_leave?'หน้านี้สำหรับแอดมิน ผอ. และรอง ผอ.':data.can_approve_leave?'อนุญาตได้เมื่อหัวหน้าฝ่ายบุคลากรรับทราบและส่งต่อแล้ว ผลอนุญาตนับเป็นสถิติการลาทันที':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':'คุณดูข้อมูลการลาทั้งหมดได้ ยังไม่มีสิทธิ์อนุมัติ กรุณาให้ ผอ. มอบสิทธิ์เป็นรายคน';
+  $('approvalAccess').textContent=!canOpenApproval?'หน้านี้สำหรับผู้รับผิดชอบการลา':data.can_approve_leave?'อนุญาตได้เมื่อหัวหน้าฝ่ายบุคลากรรับทราบและส่งต่อแล้ว ผลอนุญาตนับเป็นสถิติการลาทันที':user.role==='superadmin'?'แอดมินดูข้อมูลการลาทั้งหมดและดาวน์โหลดใบลาได้ สิทธิ์อนุมัติเป็นของ ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์':data.is_personnel_head?'ตรวจใบลาแล้วกดรับทราบเพื่อส่งต่อให้ผู้บริหาร':'คุณดูข้อมูลการลาตามสิทธิ์ของบัญชีได้ และยังไม่มีสิทธิ์อนุมัติ';
   if(user?.view_as?.read_only)$('approvalAccess').textContent+=' · ขณะนี้เป็นโหมดดูบัญชีอื่น ปุ่มอนุมัติแสดงเพื่อดูตัวอย่างและกดไม่ได้ ต้องเข้าสู่ระบบด้วยบัญชี ผอ. หรือรอง ผอ. ที่ได้รับมอบสิทธิ์เพื่ออนุมัติจริง';
   $('delegationSettings').hidden=!data.can_manage_delegations;
   if(data.can_manage_delegations){
@@ -101,8 +108,17 @@
   const isPend=r=>r.status==='pending'; // จุดแดงค้างจนกว่า ผอ. อนุมัติ (หรือไม่อนุมัติ)
   for(const [id,cat] of [['realLeaveCard','real'],['lenientLeaveCard','lenient']]){const n=records.filter(r=>(r.leave_type==='lenient')===(cat==='lenient')&&isPend(r)).length;$(id).classList[n>0?'add':'remove']('has-pending');$(id).title=n?'มีคำขอลารอดำเนินการ '+n+' รายการ':'';}
   renderRegisters();
+  const detailReviewActions=$('detailReviewActions');
+  if(detailReviewActions&&detailId===requestId)detailReviewActions.innerHTML=reviewButtons(records.find(r=>r.id===detailId));
   for(const [id,value] of draftNotes){const field=$(id);if(field)field.value=value;}
-  if(first){first=false;const id=Number(new URLSearchParams(location.search).get('request'));if(records.some(r=>r.id===id)){setCategory(records.find(r=>r.id===id).leave_type==='lenient'?'lenient':'real',false);await details(id);}}
+  if(first){
+   first=false;
+   if(requestId){
+    const record=records.find(r=>r.id===requestId);
+    if(record){setCategory(record.leave_type==='lenient'?'lenient':'real',false);await details(requestId);}
+    else error(Error('ไม่พบคำขอลานี้ หรือบัญชีของคุณไม่มีสิทธิ์เปิดรายการ'));
+   }
+  }
  }
  function renderRegisters(){
   const visible=leaveCategory?records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient')):records;
@@ -172,6 +188,7 @@
   <p class="muted">${r.leave_type==='lenient'?'สถิติลาอนุโลมแยกต่างหาก ไม่นับรวมปีงบประมาณ':'สถิติปีงบประมาณ'} ${esc(r.statistics_period.from)} ถึง ${esc(r.statistics_period.to)}</p>
   <div class="leave-stats"><table><thead><tr><th>ประเภท</th><th>ลามาแล้ว (ครั้ง)</th><th>ลามาแล้ว (วัน)</th><th>ลาครั้งนี้ (วัน)</th><th>รวม (ครั้ง)</th><th>รวม (วัน)</th></tr></thead><tbody>${r.stats.map(s=>`<tr>${[types[s.type],s.previous_count,s.previous_days,s.current_days,s.total_count,s.total_days].map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
   <h4>บันทึกการดำเนินการ</h4>${events.map(e=>`<p>${esc(e.created_at)} · ${esc(e.full_name)} · ${esc(({submitted:'ยื่นใบลา',acknowledged:'รับทราบ',recorded:'บันทึก',forwarded:'ส่งต่อ',reviewed:'ให้ความเห็น',approved:'อนุญาต',rejected:'ไม่อนุญาต',edited:'แก้ไขใบลา'})[e.action]||e.action)} ${esc(e.note||'')}</p>`).join('')}
+  ${approvalView&&id===requestId?`<div id="detailReviewActions" class="leave-actions">${reviewButtons(records.find(item=>item.id===id))}</div>`:''}
   <div class="leave-actions"><button class="btn btn-primary" data-export="docx" data-id="${Number(id)}">ดาวน์โหลดใบลา Word</button><button class="btn btn-primary" data-export="pdf" data-id="${Number(id)}">ดาวน์โหลดใบลา PDF</button></div>
   ${r.can_edit?`<h4>แก้ไข / ลบใบลา (หัวหน้าฝ่ายบุคลากร/ผู้ดูแลระบบ)</h4>
   <div class="leave-details">
@@ -260,7 +277,7 @@
  });
  $('closeDetail').onclick=()=>{$('detailSection').hidden=true;detailId=null;};
  $('backHomeLink').onclick=e=>{if(window.parent!==window&&window.parent.showOverview){e.preventDefault();window.parent.showOverview();}};
- (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(typeof SignatureUpload!=='undefined'&&!approvalView&&user&&!user.view_as?.read_only)SignatureUpload.mount($('teacherSignatureUpload'),{label:'อัปโหลดลายเซ็นครู'});if(!user){const req=new URLSearchParams(location.search).get('request');if(/^\d+$/.test(req||'')){location.href='/login.html?next='+encodeURIComponent('/leave.html?request='+req);return;}throw Error('กรุณาเข้าสู่ระบบ');}$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
+ (async()=>{try{const data=await apiRequest('/api/auth/me');user=data.user;if(typeof SignatureUpload!=='undefined'&&!approvalView&&user&&!user.view_as?.read_only)SignatureUpload.mount($('teacherSignatureUpload'),{label:'อัปโหลดลายเซ็นครู'});if(!user){if(requestId){location.href='/login.html?next='+encodeURIComponent('/leave.html?'+(approvalView?'view=approval&':'')+'request='+requestId);return;}throw Error('กรุณาเข้าสู่ระบบ');}$('fName').value=user.full_name;$('fDate').value=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Bangkok'});await load();
   setInterval(()=>{if(!document.hidden&&!busy&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName||''))load().catch(error);},15000);
  }catch(e){error(e);$('submitBtn').disabled=true;$('leaveLoginPrompt').hidden=false;}})();
 })();
