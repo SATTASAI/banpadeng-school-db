@@ -1,5 +1,6 @@
 // รายชื่อ สพฐ. สำหรับทะเบียนย้าย จากข้อมูลนำเข้าและชุดอ้างอิงที่เผยแพร่พร้อมระบบ
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
+import schoolRows from "../data/obec-schools-2569-1.js";
 
 const ready = new WeakSet();
 const response = (data, status = 200) =>
@@ -30,29 +31,10 @@ const clean = (value, max) =>
 const schoolName = (value) =>
   clean(value, 200).replace(/^(โรงเรียน|ร\.ร\.)\s*/, "");
 
-const catalogPath = "/data/obec-schools-2569-1.json.gz";
-const catalogCache = new WeakMap();
+const catalog = schoolRows.map(([school_code, smis_code, name, subdistrict, district, province]) =>
+  ({ school_code, smis_code, name, subdistrict, district, province }),
+);
 const exactCode = (school, code) => school.school_code === code || school.smis_code === code;
-const sourceUnavailable = () =>
-  response({ error: "เปิดข้อมูลอ้างอิง สพฐ. ไม่ได้ในขณะนี้" }, 502);
-
-async function bundledSchools(assets, url) {
-  if (!assets) return [];
-  const cached = catalogCache.get(assets);
-  if (cached) return cached;
-
-  const file = await assets.fetch(new Request(new URL(catalogPath, url)));
-  if (!file.ok || !file.body) throw new Error("School directory asset unavailable");
-  const { schools } = await new Response(
-    file.body.pipeThrough(new DecompressionStream("gzip")),
-  ).json();
-  if (!Array.isArray(schools)) throw new Error("Invalid school directory asset");
-  const catalog = schools.map(([school_code, smis_code, name, subdistrict, district, province]) =>
-    ({ school_code, smis_code, name, subdistrict, district, province }),
-  );
-  catalogCache.set(assets, catalog);
-  return catalog;
-}
 
 export async function handleThaiSchools(request, env, pathname, method) {
   if (!pathname.startsWith("/api/thai-schools")) return null;
@@ -74,12 +56,6 @@ export async function handleThaiSchools(request, env, pathname, method) {
     if (results.some((school) => school.name === name))
       return response({ status: "match" });
 
-    let catalog;
-    try {
-      catalog = await bundledSchools(env.ASSETS, request.url);
-    } catch {
-      return results.length ? response({ status: "mismatch" }) : sourceUnavailable();
-    }
     const matches = catalog.filter((school) => exactCode(school, code));
     if (matches.length && !name) return response({ status: "code_match" });
     if (matches.some((school) => school.name === name))
@@ -114,13 +90,6 @@ export async function handleThaiSchools(request, env, pathname, method) {
     )
       .bind(...(digits ? [q + "%", q + "%", q, q] : [`%${q}%`, q, q + "%"]))
       .all();
-    let catalog;
-    try {
-      catalog = await bundledSchools(env.ASSETS, request.url);
-    } catch {
-      return rows.results.length ? response({ schools: rows.results }) : sourceUnavailable();
-    }
-
     const query = q.toLowerCase();
     const schools = new Map();
     for (const school of catalog) {

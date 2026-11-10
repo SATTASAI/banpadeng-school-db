@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import { signJWT } from "../src/lib/crypto.js";
 import { ensureThaiSchools, handleThaiSchools } from "../src/routes/thai-schools.js";
 import { fixture, form } from "./student-transfers.fixture.mjs";
@@ -67,16 +66,6 @@ test("code search prioritizes exact matches over a full page of prefix matches",
 test("bundled OBEC directory finds and verifies schools when the imported table is empty", async (t) => {
   const { env } = await fixture();
   const token = await signJWT({ sub: 1 }, env.JWT_SECRET);
-  const assetPath = "/data/obec-schools-2569-1.json.gz";
-  const asset = await readFile(new URL("../public" + assetPath, import.meta.url));
-  let assetReads = 0;
-  env.ASSETS = {
-    async fetch(request) {
-      assert.equal(new URL(request.url).pathname, assetPath);
-      assetReads++;
-      return new Response(asset);
-    },
-  };
   const outgoing = t.mock.method(globalThis, "fetch", () => {
     throw new Error("The bundled catalog must work without external requests");
   });
@@ -110,9 +99,15 @@ test("bundled OBEC directory finds and verifies schools when the imported table 
     assert.equal(result.status, 200);
     assert.deepEqual(await result.json(), { status });
   }
-  assert.equal(assetReads, 1);
   assert.equal(outgoing.mock.callCount(), 0);
   assert.equal(env.raw.prepare("SELECT COUNT(*) count FROM thai_schools").get().count, 0);
+
+  env.raw.exec(`INSERT INTO thai_schools (school_code, name)
+    VALUES ('1076370238', 'บ้านป่าเด็ง')`);
+  const imported = await lookup("", { q: "1076370238" });
+  const { schools } = await imported.json();
+  assert.equal(schools.length, 1);
+  assert.equal(schools[0].smis_code, "76020119");
 });
 
 test("transfer registration and edits accept optional codes without a fixed format", async () => {
