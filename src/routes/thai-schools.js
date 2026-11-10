@@ -41,16 +41,17 @@ export async function handleThaiSchools(request, env, pathname, method) {
     const params = new URL(request.url).searchParams;
     const code = params.get("code")?.trim();
     const name = schoolName(params.get("name"));
-    if (!name || !code)
-      return response({ error: "กรุณาระบุชื่อและรหัสสถานศึกษา" }, 400);
+    if (!code)
+      return response({ error: "กรุณาระบุรหัสสถานศึกษา" }, 400);
 
     const row = await env.DB.prepare(
       `WITH lookup(code, name) AS (VALUES (?, ?))
        SELECT CASE
          WHEN EXISTS (
            SELECT 1 FROM thai_schools
-           WHERE name = lookup.name AND (school_code = lookup.code OR smis_code = lookup.code)
-         ) THEN 'match'
+           WHERE (lookup.name = '' OR name = lookup.name)
+             AND (school_code = lookup.code OR smis_code = lookup.code)
+         ) THEN CASE WHEN lookup.name = '' THEN 'code_match' ELSE 'match' END
          WHEN EXISTS (
            SELECT 1 FROM thai_schools
            WHERE name = lookup.name OR school_code = lookup.code OR smis_code = lookup.code
@@ -76,11 +77,12 @@ export async function handleThaiSchools(request, env, pathname, method) {
     const rows = await env.DB.prepare(
       digits
         ? `SELECT school_code,smis_code,name,subdistrict,district,province FROM thai_schools
-           WHERE school_code LIKE ? OR smis_code LIKE ? ORDER BY school_code LIMIT 20`
+           WHERE school_code LIKE ? OR smis_code LIKE ?
+           ORDER BY (school_code = ? OR smis_code = ?) DESC, school_code LIMIT 20`
         : `SELECT school_code,smis_code,name,subdistrict,district,province FROM thai_schools
            WHERE name LIKE ? ORDER BY (name=?) DESC, (name LIKE ?) DESC, length(name), name LIMIT 20`,
     )
-      .bind(...(digits ? [q + "%", q + "%"] : [`%${q}%`, q, q + "%"]))
+      .bind(...(digits ? [q + "%", q + "%", q, q] : [`%${q}%`, q, q + "%"]))
       .all();
     return response({ schools: rows.results });
   }
