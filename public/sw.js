@@ -8,7 +8,7 @@ self.addEventListener('push', e => {
   e.waitUntil(self.registration.showNotification(d.title || 'โรงเรียนบ้านป่าเด็ง', {
     body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: d.tag,
     actions: (d.actions || []).slice(0, 2).map((a, i) => ({ action: 'a' + i, title: a.title })),
-    data: { id: d.id, url: d.url || '/', actions: (d.actions || []).map(a => a.url) },
+    data: { id: d.id, url: d.url || '/', workUrl: d.workUrl, actions: (d.actions || []).map(a => a.url) },
   }));
 });
 
@@ -18,12 +18,12 @@ function clickDestination(data, action) {
   let id = data.id;
   try { id ||= new URL(data.url, self.location.origin).searchParams.get('message'); } catch {}
   if (/^\d+$/.test(String(id || ''))) fallback.searchParams.set('message', String(id));
-  // The banner body always opens the conversation; explicit action buttons retain their destinations.
-  const picked = /^a[01]$/.test(action || '') ? (data.actions || [])[Number(action.slice(1))] : null;
+  // School System messages can open their work from the banner, including on devices without action buttons.
+  const picked = /^a[01]$/.test(action || '') ? (data.actions || [])[Number(action.slice(1))] : data.workUrl;
   if (!picked) return fallback.href;
   try {
     const target = new URL(picked, self.location.origin);
-    if (!['http:', 'https:'].includes(target.protocol)) return fallback.href;
+    if (!['http:', 'https:'].includes(target.protocol) || (!action && target.origin !== 'https://system.banpadengschool.ac.th')) return fallback.href;
     return target.origin === self.location.origin ? target.href
       : new URL('/go.html?to=' + encodeURIComponent(target.href), self.location.origin).href;
   } catch { return fallback.href; }

@@ -5,8 +5,6 @@ import {isLicenseReminder, LICENSE_RENEWAL_URL} from './license-reminders.js';
 // ช่วงทดลอง: ส่งเฉพาะบทบาทใน PUSH_PILOT_ROLES (ค่าเริ่มต้น superadmin; ใส่ all = ทุกคน)
 // Secret ที่ต้องตั้ง: NOTIFY_API_KEY (ค่าเดียวกับ API_KEY ของ school-notify)
 import { unreadNotificationsFor } from "../routes/notifications.js";
-import { createLeaveAccessUrl } from "./leave-access.js";
-import { leaveApprover } from "./line-feed.js";
 
 const DEFAULT_NOTIFY_ORIGIN = "https://notify.banpadengschool.ac.th";
 const DEFAULT_ORIGIN = "https://system.banpadengschool.ac.th";
@@ -29,6 +27,16 @@ const b64u = (bytes) => { let s = ""; for (const b of new Uint8Array(bytes)) s +
 
 const isTransferNotice = (key) => String(key || "").startsWith("transfer-notice:");
 const actionLabel = (key) => { const k = String(key || ""); return isTransferNotice(k) ? "ตรวจสอบแจ้งย้าย" : isLicenseReminder(k) ? "อัปเดตข้อมูลใบประกอบวิชาชีพ" : k.startsWith("leave:") ? "เปิดใบลา" : k.startsWith("maintenance") ? "เปิดงานแจ้งซ่อม" : k.startsWith("supervision") ? "เปิดงานนิเทศ" : "เปิดหน้างาน"; };
+const leaveKey = (key) => /^leave:(\d+):(pending|forwarded|reviewed|approved|rejected)$/.exec(key);
+
+function leaveDestination(match, applicantId, recipientId) {
+  const [, id, stage] = match;
+  const review = Number(applicantId) !== Number(recipientId) && ['pending', 'forwarded', 'reviewed'].includes(stage);
+  return {
+    path: `/leave.html?${review ? 'view=approval&' : ''}request=${id}`,
+    label: review ? 'เปิดหน้าพิจารณาการลา' : 'เปิดคำขอลา',
+  };
+}
 
 // หมวดแจ้งเตือน (ตาม message_key ในกระดิ่ง) — ผู้ใช้เลือกปิดบางหมวดได้ที่บัญชีของฉัน
 export const PUSH_CATEGORIES = [
@@ -247,16 +255,16 @@ async function deliver(env, user, origin, stats) {
   let ok = false, permanent = false;
   try {
     const items = await Promise.all(mine.map(async (r) => {
-      const leaveId = String(r.message_key).match(/^leave:(\d+):/)?.[1];
-      let url = r.url || "/dashboard.html", details = null;
-      if (leaveId) {
-        details = await env.DB.prepare("SELECT reason, start_date, end_date, contact_phone, leave_days FROM leave_requests WHERE id = ?").bind(Number(leaveId)).first();
-        url = /:forwarded$/.test(r.message_key) && await leaveApprover(env, Number(leaveId), Number(user.id))
-          ? `/leave.html?request=${Number(leaveId)}`
-          : (await createLeaveAccessUrl(env, r.message_key, Number(user.id))) || url;
+      const match = leaveKey(r.message_key);
+      if (match) {
+        const details = await env.DB.prepare("SELECT user_id, reason, start_date, end_date, contact_phone, leave_days FROM leave_requests WHERE id = ?").bind(Number(match[1])).first();
+        if (details) {
+          const { user_id, ...facts } = details;
+          return { ...r, ...leaveDestination(match, user_id, user.id), details: facts, leave: true };
+        }
       }
-      const target = new URL(url, origin);
-      return { ...r, details, path: target.origin === new URL(origin).origin ? target.pathname + target.search + target.hash : target.href };
+      const target = new URL(r.url || "/dashboard.html", origin);
+      return { ...r, path: target.origin === new URL(origin).origin ? target.pathname + target.search + target.hash : target.href };
     }));
     // เก็บข้อความไว้ให้หน้า "รายละเอียดแจ้งเตือน" (แบบ LINE OA) — กดแจ้งเตือนแล้วเห็นรายละเอียด + ปุ่มไปหน้างาน
     await env.DB.batch(items.map((r) => env.DB.prepare(`INSERT INTO push_feed_messages (user_id, message_key, title, message, url, details) VALUES (?, ?, ?, ?, ?, ?)
@@ -275,9 +283,8 @@ async function deliver(env, user, origin, stats) {
       body: JSON.stringify({
         title: single ? trim(items[0].title, 120) : `แจ้งเตือนใหม่ ${items.length} รายการ`,
         body: (single ? trim([items[0].message, leaveLine(items[0].details)].filter(Boolean).join("\n"), 500 - workLink.length) : lines.join("\n")) + workLink,
-        url: renewal ? LICENSE_RENEWAL_URL : transfer ? new URL(items[0].path, origin).href : new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
-        // ปุ่มบนแจ้งเตือน: ไปหน้างานนั้นโดยตรง (Android/คอมพิวเตอร์; iPhone แตะแล้วเปิดหน้ารายละเอียดที่มีปุ่มเดียวกัน)
-        actions: renewal ? [{title:"ต่ออายุใบประกอบวิชาชีพ",url:LICENSE_RENEWAL_URL}] : transfer ? [{title:"ตรวจสอบแจ้งย้าย",url:new URL(items[0].path, origin).href}] : single ? [{ title: actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
+        url: renewal ? LICENSE_RENEWAL_URL : single && (transfer || items[0].leave) ? new URL(items[0].path, origin).href : new URL(single ? `/notification.html?key=${encodeURIComponent(items[0].message_key)}` : "/notification.html", origin).href,
+        actions: renewal ? [{title:"ต่ออายุใบประกอบวิชาชีพ",url:LICENSE_RENEWAL_URL}] : transfer ? [{title:"ตรวจสอบแจ้งย้าย",url:new URL(items[0].path, origin).href}] : single ? [{ title: items[0].label || actionLabel(items[0].message_key), url: new URL(items[0].path, origin).href }, { title: "ดูรายละเอียด", url: new URL(`/notification.html?key=${encodeURIComponent(items[0].message_key)}`, origin).href }]
           : [{ title: "ดูทั้งหมด", url: new URL("/notification.html", origin).href }],
         roles: ["all"],
         refs: [`u:${user.id}`],
@@ -332,12 +339,20 @@ export async function pushTestUser(env, userId) {
 // กล่องแจ้งเตือนของผู้ใช้ (หน้า notification.html)
 export async function pushInbox(env, user, key) {
   await ensureSchema(env);
-  const { results } = await env.DB.prepare("SELECT message_key, title, message, url, details, created_at FROM push_feed_messages WHERE user_id = ? ORDER BY id DESC LIMIT 50")
+  const select = `SELECT m.message_key, m.title, m.message, m.url, m.details, m.created_at, r.user_id AS applicant_id
+    FROM push_feed_messages m LEFT JOIN leave_requests r
+      ON m.message_key GLOB 'leave:[0-9]*:*' AND r.id = CAST(substr(m.message_key, 7) AS INTEGER)
+    WHERE m.user_id = ?`;
+  const { results } = await env.DB.prepare(`${select} ORDER BY m.id DESC LIMIT 50`)
     .bind(user.id).all();
   let items = results;
   if (key && !items.some((r) => r.message_key === key)) {
-    const one = await env.DB.prepare("SELECT message_key, title, message, url, details, created_at FROM push_feed_messages WHERE user_id = ? AND message_key = ?").bind(user.id, key).first();
+    const one = await env.DB.prepare(`${select} AND m.message_key = ?`).bind(user.id, key).first();
     if (one) items = [one, ...items];
   }
-  return items.map((r) => ({ ...r, details: r.details ? JSON.parse(r.details) : null }));
+  return items.map(({ applicant_id, ...r }) => {
+    const match = leaveKey(r.message_key);
+    const leave = match && applicant_id != null ? leaveDestination(match, applicant_id, user.id) : null;
+    return { ...r, url: leave?.path || r.url, action_label: leave?.label, details: r.details ? JSON.parse(r.details) : null };
+  });
 }
