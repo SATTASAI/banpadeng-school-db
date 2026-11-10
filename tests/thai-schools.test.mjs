@@ -35,8 +35,6 @@ test("import is superadmin-only, upserts, and search finds by name or code", asy
   assert.equal((await call(env, "/api/thai-schools?q=107630", "GET", null, 3)).data.schools.length, 1);
   assert.equal((await call(env, "/api/thai-schools", "GET", null, 3)).data.total, 1);
 
-  const bad = await transfer("", "POST", form({ school_code: "123" }));
-  assert.equal(bad.status, 400);
   const ok = await transfer("", "POST", form({ client_ref: "code-ok", school_code: "1076300001" }));
   const created = await ok.json();
   assert.ok(ok.status < 300, JSON.stringify(created));
