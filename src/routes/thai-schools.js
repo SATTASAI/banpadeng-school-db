@@ -31,6 +31,49 @@ const clean = (value, max) =>
 const schoolName = (value) =>
   clean(value, 200).replace(/^(โรงเรียน|ร\.ร\.)\s*/, "");
 
+const officialSchoolOrigin = "https://info.bopp.go.th";
+const exactSmis = /^\d{8}$/;
+const sourceUnavailable = () =>
+  response({ error: "ตรวจสอบกับฐานข้อมูล สพฐ. ไม่ได้ในขณะนี้" }, 502);
+
+const htmlText = (value) =>
+  clean(value, 200).replace(/&(amp|quot|apos|lt|gt|nbsp|#39);/g, (entity) =>
+    ({ "&amp;": "&", "&quot;": '"', "&apos;": "'", "&lt;": "<",
+       "&gt;": ">", "&nbsp;": " ", "&#39;": "'" })[entity],
+  ).trim();
+
+async function findOfficialSchool(code) {
+  if (!exactSmis.test(code)) return null;
+  const page = await fetch(officialSchoolOrigin + "/school/" + code, {
+    redirect: "error",
+    signal: AbortSignal.timeout(5000),
+  });
+  if (page.status === 404) return null;
+  if (!page.ok) throw new Error("School directory unavailable");
+
+  const html = await page.text();
+  const fields = new Map(
+    Array.from(
+      html.matchAll(/<strong>([^<]+)<\/strong>\s*<div>([^<]*)<\/div>/g),
+      ([, label, value]) => [htmlText(label), htmlText(value)],
+    ),
+  );
+  const smis_code = fields.get("รหัสโรงเรียน (SMIS)");
+  const school_code = fields.get("รหัสกระทรวง (10 หลัก)");
+  const name = schoolName(htmlText(html.match(/<p class="school-subtitle">([^<]+)<\/p>/)?.[1]));
+  if (smis_code !== code || !/^\d{10}$/.test(school_code) || !name) {
+    throw new Error("Unexpected school directory response");
+  }
+  return {
+    school_code,
+    smis_code,
+    name,
+    subdistrict: fields.get("ตำบล") || "",
+    district: fields.get("อำเภอ") || "",
+    province: fields.get("จังหวัด") || "",
+  };
+}
+
 export async function handleThaiSchools(request, env, pathname, method) {
   if (!pathname.startsWith("/api/thai-schools")) return null;
   const user = await getCurrentUser(request, env);
@@ -44,24 +87,28 @@ export async function handleThaiSchools(request, env, pathname, method) {
     if (!code)
       return response({ error: "กรุณาระบุรหัสสถานศึกษา" }, 400);
 
-    const row = await env.DB.prepare(
-      `WITH lookup(code, name) AS (VALUES (?, ?))
-       SELECT CASE
-         WHEN EXISTS (
-           SELECT 1 FROM thai_schools
-           WHERE (lookup.name = '' OR name = lookup.name)
-             AND (school_code = lookup.code OR smis_code = lookup.code)
-         ) THEN CASE WHEN lookup.name = '' THEN 'code_match' ELSE 'match' END
-         WHEN EXISTS (
-           SELECT 1 FROM thai_schools
-           WHERE name = lookup.name OR school_code = lookup.code OR smis_code = lookup.code
-         ) THEN 'mismatch'
-         ELSE 'unknown'
-       END AS status FROM lookup`,
-    )
-      .bind(code, name)
-      .first();
-    return response({ status: row.status });
+    const { results } = await env.DB.prepare(
+      "SELECT name FROM thai_schools WHERE school_code = ? OR smis_code = ?",
+    ).bind(code, code).all();
+    let matches = results;
+    if (!matches.length) {
+      try {
+        const official = await findOfficialSchool(code);
+        if (official) matches = [official];
+      } catch {
+        return sourceUnavailable();
+      }
+    }
+    if (matches.length) {
+      const status = !name
+        ? "code_match"
+        : matches.some((school) => school.name === name) ? "match" : "mismatch";
+      return response({ status });
+    }
+    const knownName = name && await env.DB.prepare(
+      "SELECT 1 FROM thai_schools WHERE name = ? LIMIT 1",
+    ).bind(name).first();
+    return response({ status: knownName ? "mismatch" : "unknown" });
   }
 
   if (pathname === "/api/thai-schools" && method === "GET") {
@@ -84,7 +131,20 @@ export async function handleThaiSchools(request, env, pathname, method) {
     )
       .bind(...(digits ? [q + "%", q + "%", q, q] : [`%${q}%`, q, q + "%"]))
       .all();
-    return response({ schools: rows.results });
+    const schools = rows.results;
+    if (exactSmis.test(q) && !schools.some((school) => school.smis_code === q)) {
+      try {
+        const official = await findOfficialSchool(q);
+        if (official) {
+          return response({
+            schools: [official, ...schools.filter((school) => school.school_code !== official.school_code)].slice(0, 20),
+          });
+        }
+      } catch {
+        if (!schools.length) return sourceUnavailable();
+      }
+    }
+    return response({ schools });
   }
 
   if (pathname === "/api/thai-schools/import" && method === "POST") {
