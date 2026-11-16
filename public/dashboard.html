@@ -173,6 +173,7 @@
   .main-content { padding:30px 34px 54px; max-width:1320px; margin:0 auto; }
   .content-frame { display:none; width:100%; height:100%; border:none; background:var(--color-bg); }
   .content-frame.active { display:block; }
+  .content-frame.frame-buffer { display:block; position:absolute; inset:0; visibility:hidden; pointer-events:none; }
   /* ตัวเลขภาพรวม: แผงเดียว 3×2 */
   .stat-panel { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); margin-top:16px; background:rgba(255,255,255,.86); border:1px solid rgba(70,94,118,.13); border-radius:15px; overflow:hidden; box-shadow:0 8px 24px rgba(52,89,127,.06); }
   .stat-cell { display:grid; grid-template-columns:auto 1fr; grid-template-rows:auto auto; column-gap:10px; align-items:center; padding:12px 14px; color:inherit; text-decoration:none; border-right:1px solid rgba(70,94,118,.10); transition:background .15s ease; }
@@ -744,6 +745,7 @@
   function showOverview() {
     setMobileMenu(false);
     document.getElementById("overviewWrap").style.display = "block";
+    document.querySelectorAll(".content-frame.frame-buffer").forEach((f) => f.remove());
     const frame = document.getElementById("contentFrame");
     frame.classList.remove("active");
     frame.src = "about:blank";
@@ -772,9 +774,7 @@
     if (!url) return;
     setMobileMenu(false);
     document.getElementById("overviewWrap").style.display = "none";
-    const frame = document.getElementById("contentFrame");
-    frame.src = url;
-    frame.classList.add("active");
+    loadFrame(url);
     clearMenuNotices(url);
     document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
     const matchingChild = [...document.querySelectorAll(".nav-child")].find((item) => SchoolNavigation.destinationKey(item.dataset.url) === SchoolNavigation.destinationKey(url));
@@ -800,7 +800,25 @@
     return { key, url: url && url.startsWith("/") && !url.startsWith("//") ? url : null };
   }
   // จำหน้าที่เปิดอยู่ (รวมการเปลี่ยนหน้าภายในกรอบ) เพื่อให้กดรีเฟรชแล้วกลับมาหน้าเดิม
-  document.getElementById("contentFrame").addEventListener("load", (e) => {
+  // เปลี่ยนเมนูไม่กระพริบ: โหลดหน้าใหม่ในกรอบสำรองที่ซ่อนอยู่ เสร็จแล้วค่อยสลับมาแทนกรอบเดิม
+  function loadFrame(url) {
+    const cur = document.getElementById("contentFrame");
+    document.querySelectorAll(".content-frame.frame-buffer").forEach((f) => f.remove());
+    const shown = cur.classList.contains("active") && cur.getAttribute("src") && cur.getAttribute("src") !== "about:blank";
+    if (!shown) { cur.src = url; cur.classList.add("active"); return; }
+    const next = document.createElement("iframe");
+    next.className = "content-frame frame-buffer"; next.title = cur.title;
+    next.addEventListener("load", () => {
+      if (!next.isConnected) return;
+      cur.remove(); next.id = "contentFrame"; next.classList.remove("frame-buffer"); next.classList.add("active");
+    }, { once: true });
+    next.addEventListener("load", rememberFramePage);
+    next.src = url;
+    cur.after(next);
+    setTimeout(() => { if (next.isConnected && next.classList.contains("frame-buffer")) next.dispatchEvent(new Event("load")); }, 8000);
+  }
+  document.getElementById("contentFrame").addEventListener("load", rememberFramePage);
+  function rememberFramePage(e) {
     try {
       const loc = e.target.contentWindow.location;
       if (loc.origin !== location.origin || loc.pathname === "/dashboard.html" || loc.href === "about:blank") return;
@@ -811,7 +829,7 @@
         history.replaceState(null, "", pageHash(saved.key, url));
       }
     } catch {}
-  });
+  }
 
   window.addEventListener('message',event=>{
     const frame=document.getElementById('contentFrame');
