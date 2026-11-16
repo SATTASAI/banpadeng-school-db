@@ -113,11 +113,14 @@
   /* เมนูผู้ใช้ (PC): กดชื่อแล้วกางเมนู */
   .user-menu { position:relative; }
   .user-menu .user-pill { cursor:pointer; font:inherit; text-align:left; }
-  .user-menu .user-pill:hover,.user-menu .user-pill[aria-expanded="true"] { background:#fff; border-color:rgba(26,112,205,.35); }
+  .user-menu:hover .user-pill,.user-menu:focus-within .user-pill { background:#fff; border-color:rgba(26,112,205,.35); }
   .um-caret { font-size:11px; color:#6d87a0; transition:transform .15s; }
-  .user-pill[aria-expanded="true"] .um-caret { transform:rotate(180deg); }
+  .user-menu:hover .um-caret,.user-menu:focus-within .um-caret { transform:rotate(180deg); }
   .user-menu-panel { position:absolute; right:0; top:calc(100% + 8px); width:250px; display:grid; gap:8px; padding:12px; background:#fff; border:1px solid rgba(84,111,138,.18); border-radius:14px; box-shadow:0 12px 30px rgba(24,49,83,.18); z-index:450; }
-  .user-menu-panel[hidden] { display:none; }
+  /* ชี้เมาส์แล้วกาง (CSS ล้วน) · โฟกัสด้วยคีย์บอร์ดก็กาง · ::before เชื่อมช่องว่างไม่ให้หุบระหว่างเลื่อนเมาส์ */
+  .user-menu-panel { visibility:hidden; opacity:0; transform:translateY(-4px); transition:opacity .15s,transform .15s,visibility 0s .15s; }
+  .user-menu:hover .user-menu-panel,.user-menu:focus-within .user-menu-panel { visibility:visible; opacity:1; transform:none; transition:opacity .15s,transform .15s; }
+  .user-menu-panel::before { content:""; position:absolute; left:0; right:0; top:-10px; height:10px; }
   .user-menu-panel .period-pill { justify-content:space-between; box-shadow:none; }
   .user-menu-panel .top-btn { justify-content:center; width:100%; box-sizing:border-box; }
   .user-menu-panel .view-as-wrap { flex-direction:column; }
@@ -433,8 +436,8 @@
       </div>
       <div class="topbar-actions">
         <div class="user-menu" id="userMenu">
-        <button type="button" class="user-pill" id="userMenuToggle" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuPanel"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span><span class="um-caret" aria-hidden="true">▾</span></button>
-        <div class="user-menu-panel" id="userMenuPanel" hidden>
+        <button type="button" class="user-pill" id="userMenuToggle" aria-haspopup="true"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span><span class="um-caret" aria-hidden="true">▾</span></button>
+        <div class="user-menu-panel" id="userMenuPanel">
         <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
         <div class="view-as-wrap superadmin-only" style="display:none;">
           <button type="button" class="top-btn top-viewas" id="viewAsToggle" aria-expanded="false" aria-controls="viewAsPanel" title="ดูระบบในสิทธิ์ของบัญชีอื่น (ดูได้อย่างเดียว)">View as</button>
@@ -1429,17 +1432,6 @@
     document.getElementById("overviewWrap").prepend(banner);
     document.querySelectorAll('#overviewWrap a[data-dashboard-page], #overviewWrap a[data-open-url]').forEach((a) => { a.style.display = "none"; });
   }
-
-  // เมนูผู้ใช้: กดชื่อแล้วกาง/หุบ
-  (() => {
-    const t = document.getElementById("userMenuToggle"), p = document.getElementById("userMenuPanel");
-    if (!t || !p) return;
-    const set = (open) => { p.hidden = !open; t.setAttribute("aria-expanded", String(open)); };
-    t.addEventListener("click", (e) => { e.stopPropagation(); set(p.hidden); });
-    p.addEventListener("click", (e) => { if (e.target.closest("a")) set(false); else e.stopPropagation(); });
-    document.addEventListener("click", () => set(false));
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
-  })();
 
   // View as (เฉพาะ superadmin): เลือกบัญชีแล้วเปิดระบบในมุมมองของบัญชีนั้น
   (() => {
