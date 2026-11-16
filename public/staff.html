@@ -41,6 +41,12 @@
   .export-fields label { display:flex; gap:8px; align-items:center; font-size:14px; cursor:pointer; }
   @media(max-width:640px){.export-fields{grid-template-columns:1fr}}
   .deleted-note { color:var(--color-text-muted); font-size:13px; margin:8px 0 4px; }
+  #staffPanel .staff-row{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;padding:14px 14px 12px 18px;border-bottom:0}
+  #staffPanel .staff-acts{display:flex;gap:6px;margin-top:auto;padding-top:4px}
+  #staffPanel .icon-btn{border:0;border-radius:10px;padding:5px 12px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:#eef3f8;color:#2f4b68}
+  #staffPanel .icon-btn:hover{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
+  #staffPanel .icon-btn.danger:hover{background:linear-gradient(135deg,#7a8ca3,#4b5d73)}
+  html[data-theme="dark"] #staffPanel .icon-btn:not(:hover){background:#24364b;color:#e3ecf5}
 </style>
 </head>
 <body>
@@ -72,7 +78,8 @@
         </select>
       </label>
     </div>
-    <div class="panel staff-panel" id="staffPanel"></div>
+    <p class="muted" style="font-size:12.5px;margin:0 0 10px">แถบสีด้านซ้าย: <b style="color:#13a88a">มิ้นต์</b> ใบประกอบปกติ · <b style="color:#3f37c9">น้ำเงินม่วง</b> หมดอายุภายใน 6 เดือน · <b style="color:#6b7f95">เทาน้ำเงิน</b> หมดอายุแล้ว · <b style="color:#1a8fd0">ฟ้า</b> ยังไม่มีข้อมูลใบประกอบ · <b style="color:#a9b6c4">เทาอ่อน</b> ไม่ได้ปฏิบัติงาน · ชี้เมาส์ที่การ์ดเพื่อดูรายละเอียด</p>
+    <div class="staff-panel pm-grid" id="staffPanel"></div>
     <details class="panel deleted-staff" id="deletedPanel" hidden>
       <summary>บุคลากรที่ลบแล้ว <span id="deletedCount"></span></summary>
       <p class="deleted-note">ลบแล้วจะไม่แสดงในทะเบียนและตัวเลือกต่าง ๆ แต่ประวัติเดิม (ตารางสอน การลา สอนแทน) ยังอยู่ — กู้คืนได้ทุกเมื่อ</p>
@@ -258,35 +265,32 @@
     panel.innerHTML = staff
       .map((s) => {
         const canEdit = !!currentUser.is_admin; // ครูแก้ข้อมูลของตัวเองที่หน้าบัญชีของฉัน
-        const details = [
-          s.personnel_type ? `ประเภท ${PERSONNEL_TYPE_LABELS[s.personnel_type] || s.personnel_type}` : null,
-          s.position,
-          s.academic_rank,
-          s.employment_status && s.employment_status !== "working" ? `สถานะ ${EMPLOYMENT_STATUS_LABELS[s.employment_status] || s.employment_status}` : null,
-          s.subjects,
-          s.phone,
-          s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null,
-          s.departments ? `ฝ่ายงาน ${s.departments}` : null,
-          s.responsible_projects ? `โครงการ ${s.responsible_projects}` : null,
-          s.teaching_periods !== null ? `${s.teaching_periods} คาบ/สัปดาห์` : null,
-          s.education_level ? `${s.education_level}${s.major ? ` · ${s.major}` : ""}` : null,
-          s.service_start_date ? `เริ่มงาน ${s.service_start_date}` : null,
-          s.license_issue_date ? `ออกใบประกอบ ${s.license_issue_date}` : null,
-          s.license_expiry_date ? `ใบประกอบวิชาชีพหมดอายุ ${s.license_expiry_date}` : null,
-        ]
-          .filter(Boolean)
-          .join(" · ");
+        const visible = [s.position, s.academic_rank, s.homeroom_classroom ? `ครูประจำชั้น ${s.homeroom_classroom}` : null, s.phone].filter(Boolean);
+        const more = [
+          s.personnel_type ? ["ประเภท", PERSONNEL_TYPE_LABELS[s.personnel_type] || s.personnel_type] : null,
+          s.employment_status && s.employment_status !== "working" ? ["สถานะ", EMPLOYMENT_STATUS_LABELS[s.employment_status] || s.employment_status] : null,
+          s.subjects ? ["วิชาที่สอน", s.subjects] : null,
+          s.teaching_periods !== null ? ["คาบสอน", `${s.teaching_periods} คาบ/สัปดาห์`] : null,
+          s.departments ? ["ฝ่ายงาน", s.departments] : null,
+          s.responsible_projects ? ["โครงการ", s.responsible_projects] : null,
+          s.education_level ? ["วุฒิ", `${s.education_level}${s.major ? ` · ${s.major}` : ""}`] : null,
+          s.service_start_date ? ["เริ่มงาน", s.service_start_date] : null,
+          s.license_issue_date ? ["ออกใบประกอบ", s.license_issue_date] : null,
+          s.license_expiry_date ? ["ใบประกอบหมดอายุ", s.license_expiry_date] : null,
+        ].filter(Boolean);
+        // แถบสี: ใบประกอบหมดอายุ = เทาน้ำเงิน · เหลือไม่ถึง 6 เดือน = น้ำเงินม่วง · ไม่ได้ปฏิบัติงาน = เทาอ่อน · ปกติ = มิ้นต์
+        const today = new Date().toISOString().slice(0, 10), soon = new Date(Date.now() + 183 * 864e5).toISOString().slice(0, 10);
+        const st = s.employment_status && s.employment_status !== "working" ? "st-off" : !s.license_expiry_date ? "st-work" : s.license_expiry_date < today ? "st-no" : s.license_expiry_date < soon ? "st-warn" : "st-ok";
         return `
-          <div class="staff-row" data-staff-id="${s.id}">
-            <div>
-              <div class="staff-name">${esc(s.full_name)} ${s.role ? `<span class="role-chip">${esc(ROLE_LABELS[s.role] || s.role)}</span>` : ""}</div>
-              <div class="staff-sub">${esc(details || "ยังไม่มีข้อมูลเพิ่มเติม")}</div>
-            </div>
+          <article class="staff-row pm-card ${st}" data-staff-id="${s.id}">
+            <div class="pm-head"><p class="pm-title">${esc(s.full_name)}</p>${s.role ? `<span class="pm-badge">${esc(ROLE_LABELS[s.role] || s.role)}</span>` : ""}</div>
+            <div class="pm-sub">${esc(visible.join(" · ") || "ยังไม่มีข้อมูลเพิ่มเติม")}</div>
+            ${more.length ? `<div class="pm-more">${more.map(([k, v]) => `<p><b>${esc(k)}:</b> ${esc(v)}</p>`).join("")}</div>` : ""}
             <div class="staff-acts">
-            ${!canEdit && (currentUser.id === s.user_id || s.can_edit) ? `<a href="/account.html#personal" style="font-size:13px;color:var(--color-forest-700)">แก้ที่บัญชีของฉัน</a>` : ""}${canEdit ? `<button class="icon-btn" data-edit="${s.id}" style="background:none; border:none; color:var(--color-forest-700); cursor:pointer; text-decoration:underline; font-size:13px;">แก้ไข</button>` : ""}
-            ${currentUser.role === "superadmin" ? `<button class="icon-btn" data-delete="${s.id}" style="background:none; border:none; color:var(--color-danger); cursor:pointer; text-decoration:underline; font-size:13px;">ลบ</button>` : ""}
+            ${!canEdit && (currentUser.id === s.user_id || s.can_edit) ? `<a href="/account.html#personal" style="font-size:13px;color:var(--color-forest-700)">แก้ที่บัญชีของฉัน</a>` : ""}${canEdit ? `<button class="icon-btn" data-edit="${s.id}">แก้ไข</button>` : ""}
+            ${currentUser.role === "superadmin" ? `<button class="icon-btn danger" data-delete="${s.id}">ลบ</button>` : ""}
             </div>
-          </div>`;
+          </article>`;
       })
       .join("");
 
