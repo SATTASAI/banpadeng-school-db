@@ -110,22 +110,33 @@
   .view-as-panel .top-btn { justify-content:center; cursor:pointer; font-family:inherit; }
   .view-as-panel .top-btn:disabled { opacity:.5; cursor:not-allowed; }
   .view-as-panel small { color:var(--color-text-muted); }
-  /* เมนูผู้ใช้ (PC): กดชื่อแล้วกางเมนู */
+  /* เมนูผู้ใช้ (PC): ชี้เมาส์แล้วกาง (CSS ล้วน) · สไตล์ปุ่มนูนแบบ premium */
   .user-menu { position:relative; }
-  .user-menu .user-pill { cursor:pointer; font:inherit; text-align:left; }
-  .user-menu:hover .user-pill,.user-menu:focus-within .user-pill { background:#fff; border-color:rgba(26,112,205,.35); }
-  .um-caret { font-size:11px; color:#6d87a0; transition:transform .15s; }
-  .user-menu:hover .um-caret,.user-menu:focus-within .um-caret { transform:rotate(180deg); }
-  .user-menu-panel { position:absolute; right:0; top:calc(100% + 8px); width:250px; display:grid; gap:8px; padding:12px; background:#fff; border:1px solid rgba(84,111,138,.18); border-radius:14px; box-shadow:0 12px 30px rgba(24,49,83,.18); z-index:450; }
-  /* ชี้เมาส์แล้วกาง (CSS ล้วน) · โฟกัสด้วยคีย์บอร์ดก็กาง · ::before เชื่อมช่องว่างไม่ให้หุบระหว่างเลื่อนเมาส์ */
-  .user-menu-panel { visibility:hidden; opacity:0; transform:translateY(-4px); transition:opacity .15s,transform .15s,visibility 0s .15s; }
-  .user-menu:hover .user-menu-panel,.user-menu:focus-within .user-menu-panel { visibility:visible; opacity:1; transform:none; transition:opacity .15s,transform .15s; }
-  .user-menu-panel::before { content:""; position:absolute; left:0; right:0; top:-10px; height:10px; }
-  .user-menu-panel .period-pill { justify-content:space-between; box-shadow:none; }
-  .user-menu-panel .top-btn { justify-content:center; width:100%; box-sizing:border-box; }
+  .user-menu .user-pill { cursor:pointer; font:inherit; text-align:right; gap:10px; padding:4px 4px 4px 12px; border-radius:999px; background:#fff; box-shadow:0 4px 14px rgba(36,72,112,.12); transition:box-shadow .2s,transform .2s; }
+  .user-menu:hover .user-pill,.user-menu:focus-within .user-pill { box-shadow:0 6px 18px rgba(36,72,112,.2); transform:translateY(-1px); }
+  .um-name { display:grid; line-height:1.2; }
+  .um-name strong { font-size:13px; }
+  .um-name small { font-size:11px; color:var(--color-text-muted); }
+  .user-menu .top-avatar { width:34px; height:34px; box-shadow:0 0 0 3px #fff,0 0 0 4px rgba(26,112,205,.25); }
+  .user-menu-panel { position:absolute; right:0; top:calc(100% + 10px); width:270px; display:grid; gap:9px; padding:12px; background:#f4f7fb; border:1px solid rgba(84,111,138,.12); border-radius:18px; box-shadow:0 18px 40px rgba(24,49,83,.2); z-index:450;
+    visibility:hidden; opacity:0; transform:translateY(-6px); transition:opacity .18s,transform .18s,visibility 0s .18s; }
+  .user-menu:hover .user-menu-panel,.user-menu:focus-within .user-menu-panel { visibility:visible; opacity:1; transform:none; transition:opacity .18s,transform .18s; }
+  .user-menu-panel::before { content:""; position:absolute; left:0; right:0; top:-12px; height:12px; }
+  .user-menu-panel .um-item { display:flex; align-items:center; gap:10px; width:100%; box-sizing:border-box; min-height:42px; padding:9px 12px; border:0; border-radius:12px; background:#fff; color:#28405a; font:inherit; font-size:13.5px; font-weight:600; text-align:left; text-decoration:none; cursor:pointer;
+    box-shadow:-3px -3px 7px #fff,3px 3px 8px #d3dde8; transition:background .2s,color .2s,transform .2s,box-shadow .2s; }
+  .user-menu-panel .um-item:not(.um-static):hover,.user-menu-panel .um-item:focus-visible,.user-menu-panel .top-viewas[aria-expanded="true"] { background:linear-gradient(135deg,#58A8F0,#1A70CD); color:#fff; transform:translateX(3px); box-shadow:0 6px 14px rgba(26,112,205,.35); outline:none; }
+  .user-menu-panel .um-static { cursor:default; }
+  .um-ic { flex:0 0 auto; }
+  .um-label { flex:1; }
+  .um-chev { font-size:18px; line-height:1; opacity:.55; }
+  .um-badge { padding:2px 9px; border-radius:999px; background:#e6f0fb; color:#1A70CD; font-size:12px; }
+  .um-pro { font-style:normal; padding:2px 7px; border-radius:6px; background:linear-gradient(135deg,#58A8F0,#1A70CD); color:#fff; font-size:10px; letter-spacing:.04em; }
+  .um-item:hover .um-pro,.top-viewas[aria-expanded="true"] .um-pro { background:#fff; color:#1A70CD; }
+  .um-sep { height:1px; margin:2px 4px; background:rgba(84,111,138,.15); }
   .user-menu-panel .view-as-wrap { flex-direction:column; }
-  .user-menu-panel .view-as-wrap .top-viewas { width:100%; justify-content:center; }
   .user-menu-panel .view-as-panel { position:static; width:auto; max-width:none; margin-top:8px; box-shadow:none; }
+  /* ไอคอน/ป้ายในปุ่มที่ย้ายไปเมนูด้านข้างบนมือถือ: ซ่อน */
+  .ma-viewas .um-ic,.ma-viewas .um-pro,.ma-viewas .um-chev { display:none; }
   .top-avatar { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; background:linear-gradient(145deg,#58A8F0,#1A70CD); box-shadow:inset 0 1px rgba(255,255,255,.3); }
   .workspace-stage { flex:1; min-height:0; overflow:auto; position:relative; }
   .main-content { padding:30px 34px 54px; max-width:1320px; margin:0 auto; }
@@ -436,11 +447,11 @@
       </div>
       <div class="topbar-actions">
         <div class="user-menu" id="userMenu">
-        <button type="button" class="user-pill" id="userMenuToggle" aria-haspopup="true"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span><span class="um-caret" aria-hidden="true">▾</span></button>
+        <button type="button" class="user-pill" id="userMenuToggle" aria-haspopup="true"><span class="um-name"><strong id="topUserName">—</strong><small id="topUserRole">—</small></span><span class="top-avatar" id="topAvatar">—</span></button>
         <div class="user-menu-panel" id="userMenuPanel">
-        <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
+        <div class="period-pill um-item um-static"><svg class="um-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/></svg><span class="um-label">ปีการศึกษา</span><strong class="um-badge" id="topAcademicYear">—</strong></div>
         <div class="view-as-wrap superadmin-only" style="display:none;">
-          <button type="button" class="top-btn top-viewas" id="viewAsToggle" aria-expanded="false" aria-controls="viewAsPanel" title="ดูระบบในสิทธิ์ของบัญชีอื่น (ดูได้อย่างเดียว)">View as</button>
+          <button type="button" class="top-btn top-viewas um-item" id="viewAsToggle" aria-expanded="false" aria-controls="viewAsPanel" title="ดูระบบในสิทธิ์ของบัญชีอื่น (ดูได้อย่างเดียว)"><svg class="um-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span class="um-label">View as</span><em class="um-pro">ADMIN</em><span class="um-chev" aria-hidden="true">›</span></button>
           <div class="view-as-panel" id="viewAsPanel" hidden>
             <label for="viewAsSelect">ดูในมุมมองของ</label>
             <select id="viewAsSelect"><option value="">กำลังโหลดรายชื่อ…</option></select>
@@ -448,8 +459,9 @@
             <small>ดูได้อย่างเดียว บันทึก/แก้ไขไม่ได้</small>
           </div>
         </div>
-        <a href="/account.html" class="top-btn top-account" id="topAccountLink">บัญชีของฉัน</a>
-        <a href="#" class="top-btn top-logout" id="logoutLink">ออกจากระบบ</a>
+        <a href="/account.html" class="top-btn top-account um-item" id="topAccountLink"><svg class="um-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="um-label">บัญชีของฉัน</span><span class="um-chev" aria-hidden="true">›</span></a>
+        <div class="um-sep" aria-hidden="true"></div>
+        <a href="#" class="top-btn top-logout um-item" id="logoutLink"><svg class="um-ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg><span class="um-label">ออกจากระบบ</span><span class="um-chev" aria-hidden="true">›</span></a>
         </div>
         </div>
       </div>
