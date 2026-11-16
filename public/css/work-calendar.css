@@ -95,3 +95,29 @@
 .work-cal .cal-more > summary { cursor: pointer; list-style: none; text-align: center; padding: 8px 12px; border-radius: 10px; color: var(--primary, #3b5bdb); font-weight: 600; font-size: 14px; background: rgba(59, 91, 219, .06); }
 .work-cal .cal-more > summary::-webkit-details-marker { display: none; }
 .work-cal .cal-more[open] > summary { margin-bottom: 6px; }
+
+/* ===== สไตล์ premium โทนเย็น: ช่องวันนูน · ชี้เมาส์ดูรายละเอียด ===== */
+.work-cal{--bad:#4f46c9;--bad-bg:#ecebff;--warn:#0e8a8f;--warn-bg:#ddf4f2;--ok:#0f8f6e;--ok-bg:#dcf5ec;--ink:#1a5fb4;--wash:#eaf2fb}
+.work-cal .cal-stat,.work-cal .cal-panel{border:0;background:#fff;box-shadow:-4px -4px 10px rgba(255,255,255,.9),4px 6px 16px rgba(170,190,212,.4)}
+.work-cal .cal-stat{transition:transform .18s,box-shadow .18s}.work-cal .cal-stat:hover{transform:translateY(-3px);box-shadow:0 12px 24px rgba(40,90,140,.18)}
+.work-cal .cal-stat.total{background:linear-gradient(135deg,#58A8F0,#1A70CD)}
+.work-cal .cal-arrow{border:0;border-radius:50%;background:#fff;box-shadow:0 3px 10px rgba(36,72,112,.15)}.work-cal .cal-arrow:hover{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
+.work-cal .cal-mchip{border:0;border-radius:999px;background:#fff;box-shadow:0 3px 10px rgba(36,72,112,.12)}.work-cal .cal-mchip:hover{background:#eaf2fb}
+.work-cal .cal-mchip.on{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
+.work-cal .cal-grid{gap:6px;border:0;background:none;overflow:visible}
+.work-cal .cal-wd{background:none;font-weight:700;color:#4c6a8a}
+.work-cal .cal-day{border-radius:12px;overflow:visible;box-shadow:-2px -2px 6px rgba(255,255,255,.9),2px 3px 8px rgba(170,190,212,.4);transition:transform .15s,box-shadow .15s}
+.work-cal .cal-day:hover{transform:translateY(-2px);box-shadow:0 0 0 2px #58A8F0,0 8px 16px rgba(26,112,205,.18);z-index:5}
+.work-cal .cal-day .hname,.work-cal .cal-day .aname,.work-cal .cal-day .iname{max-width:100%;overflow:hidden}
+.work-cal .cal-day.important,.work-cal .cal-day.important.off{background:#e1f3fb}.work-cal .cal-day.important .num,.work-cal .cal-day .iname{color:#0a6f99}.work-cal .cal-day .iname{background:#cdeaf7}
+.work-cal .lg.important{background:#e1f3fb;border-color:#8cc9e6}.work-cal .lg.hol{border-color:#c4c0f5}
+.work-cal .cal-item{border-radius:12px;box-shadow:-3px -3px 7px #fff,3px 3px 8px #d3dde8;border-top:0;border-right:0;border-bottom:0;transition:background .18s,color .18s,transform .18s}
+.work-cal .cal-item.important{border-left-color:#0a88b8}.work-cal .cal-item.important .cal-item-n{color:#0a6f99;background:#e1f3fb}
+.work-cal .cal-item:hover{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff;transform:translateX(3px)}.work-cal .cal-item:hover .cal-item-date{color:#e6f1ff}
+.work-cal .cal-tip{position:absolute;left:50%;top:calc(100% + 6px);transform:translate(-50%,-4px);z-index:30;width:max-content;max-width:220px;padding:8px 10px;border-radius:10px;background:#1d3550;color:#eaf3ff;font-size:12.5px;line-height:1.5;box-shadow:0 12px 24px rgba(20,40,70,.28);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s,transform .15s,visibility 0s .15s;white-space:normal}
+.work-cal .cal-day:hover .cal-tip{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .15s,transform .15s}
+.work-cal .cal-day:nth-child(7n+1) .cal-tip{left:0;transform:none}.work-cal .cal-day:nth-child(7n) .cal-tip{left:auto;right:0;transform:none}
+@media(hover:none){.work-cal .cal-tip{display:none}}
+html[data-theme="dark"] .work-cal{--surface:#162130;--text:#e3ecf5;--muted:#93a6ba;--wash:#1c2a3c;--line:rgba(148,170,196,.16);--bad-bg:#24224a;--ok-bg:#12352c;--warn-bg:#11333a}
+html[data-theme="dark"] .work-cal .cal-stat:not(.total),html[data-theme="dark"] .work-cal .cal-panel,html[data-theme="dark"] .work-cal .cal-day,html[data-theme="dark"] .work-cal .cal-item,html[data-theme="dark"] .work-cal .cal-mchip:not(.on),html[data-theme="dark"] .work-cal .cal-arrow{background:#1c2a3c;color:#e3ecf5;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+html[data-theme="dark"] .work-cal .cal-day.important{background:#123344}
