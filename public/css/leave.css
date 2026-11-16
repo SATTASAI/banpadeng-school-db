@@ -29,3 +29,20 @@
 .leave-category-card.has-pending::after{content:"";position:absolute;top:14px;right:14px;width:12px;height:12px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 3px #fff;animation:leavePing 1.6s ease-out infinite}
 @keyframes leavePing{0%{box-shadow:0 0 0 3px #fff,0 0 0 3px rgba(229,56,59,.5)}100%{box-shadow:0 0 0 3px #fff,0 0 0 12px rgba(229,56,59,0)}}
 @media(prefers-reduced-motion:reduce){.leave-category-card.has-pending::after{animation:none}}
+
+/* ทะเบียนและประวัติการลา: การ์ดย่อนูน เรียงหลายคอลัมน์ (โทนเย็น) */
+#historyPanel{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;padding:6px 2px 10px;background:none;border:0;box-shadow:none;overflow:visible;backdrop-filter:none}
+#historyPanel>.leave-row{grid-column:1/-1;border:0}
+.leave-mini{--lm:#58A8F0;display:flex;flex-direction:column;gap:6px;padding:14px 14px 12px 16px;border-radius:16px;background:#fff;position:relative;box-shadow:-4px -4px 10px rgba(255,255,255,.9),4px 6px 14px rgba(170,190,212,.45);transition:transform .18s,box-shadow .18s}
+.leave-mini::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:0 4px 4px 0;background:var(--lm)}
+.leave-mini:hover{transform:translateY(-3px);box-shadow:0 12px 24px rgba(40,90,140,.18)}
+.leave-mini.lm-approved{--lm:#13a88a}.leave-mini.lm-pending{--lm:#5b6be8}.leave-mini.lm-rejected{--lm:#6b7f95}.leave-mini.lm-cancelled{--lm:#a9b6c4}
+.lm-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lm-top strong{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1d3550}
+.lm-status{flex:0 0 auto;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:700;color:var(--lm);background:color-mix(in srgb,var(--lm) 12%,#fff)}
+.lm-type{font-size:13px;color:#3d5874}.lm-type b{color:#1d3550}
+.lm-date{font-size:12.5px;color:#6b8199}
+.lm-actions{display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.lm-actions button{border:0;border-radius:10px;padding:5px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:#eef3f8;color:#2f4b68;transition:background .18s,color .18s}
+.lm-actions .lm-open{flex:1;background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
+.lm-actions button:hover{background:linear-gradient(135deg,#4CC9F0,#0A88B8);color:#fff}

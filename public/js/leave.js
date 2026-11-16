@@ -43,6 +43,17 @@
   return `${(!approvalView||r.id===requestId)&&r.can_acknowledge?`<button class="btn btn-primary" data-action="acknowledge" data-id="${Number(r.id)}" ${decisionDisabled}>รับทราบและส่งต่ออัตโนมัติ</button>`:''}
     ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}`;
  }
+ // ทะเบียน/ประวัติ: การ์ดย่อเรียงหลายคอลัมน์ กด "รายละเอียด" เพื่อดูเต็ม
+ function miniRow(r){
+  const st=r.status==='approved'?'approved':r.status==='rejected'?'rejected':r.status==='cancelled'?'cancelled':'pending';
+  const label=r.status==='approved'?'อนุญาตแล้ว':r.status==='rejected'?'ไม่อนุญาต':r.status==='cancelled'?'ยกเลิก':stages[r.workflow_stage]||'รอดำเนินการ';
+  return `<article class="leave-mini lm-${st}" id="leave-${Number(r.id)}">
+   <div class="lm-top"><strong title="${esc(r.full_name)}">${esc(r.full_name)}</strong><span class="lm-status">${esc(label)}</span></div>
+   <div class="lm-type">${esc(types[r.leave_type])} · <b>${esc(r.leave_days??'')}</b> วัน</div>
+   <div class="lm-date">${esc(r.start_date)}${r.end_date&&r.end_date!==r.start_date?' – '+esc(r.end_date):''}</div>
+   <div class="lm-actions"><button class="lm-open" data-detail="${Number(r.id)}">รายละเอียด ›</button><button class="lm-file" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="lm-file" data-export="pdf" data-id="${Number(r.id)}">PDF</button>${!approvalView&&r.can_cancel?`<button class="lm-file" data-action="cancel" data-id="${Number(r.id)}">ยกเลิก</button>`:''}</div>
+  </article>`;
+ }
  function row(r){
   return `<article class="leave-row ${r.status==='pending'?'pending':''}" id="leave-${Number(r.id)}">
    <h4>${esc(r.full_name)} · ${esc(types[r.leave_type])}</h4>
@@ -124,7 +135,7 @@
   const visible=leaveCategory?records.filter(r=>(r.leave_type==='lenient')===(leaveCategory==='lenient')):records;
   const pending=visible.filter(r=>approvalView?r.status==='pending':r.can_acknowledge||r.can_decide);
   $('pendingSection').hidden=!pending.length;$('pendingPanel').innerHTML=pending.map(row).join('');
-  $('historyPanel').innerHTML=visible.filter(r=>!pending.some(p=>p.id===r.id)).map(row).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
+  $('historyPanel').innerHTML=visible.filter(r=>!pending.some(p=>p.id===r.id)).map(miniRow).join('')||'<p class="leave-row muted">ยังไม่มีรายการ</p>';
  }
  // ต้องเลือกการ์ดลาจริง/ลาอนุโลมก่อน จึงแสดงฟอร์มยื่นใบลา ประเภทในฟอร์มกรองตามการ์ด
  function setCategory(category,showForm=true){
