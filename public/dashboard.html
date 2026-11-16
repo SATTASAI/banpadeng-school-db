@@ -78,7 +78,32 @@
   .global-search { flex:1; max-width:500px; position:relative; z-index:204; margin-left:auto; }
   .global-search input { width:100%; height:36px; border:1px solid rgba(84,111,138,.17); border-radius:10px; padding:0 14px 0 37px; background:rgba(231,237,243,.76); font-family:var(--font-body); color:var(--color-text); box-shadow:inset 0 1px 2px rgba(42,70,100,.035),0 1px rgba(255,255,255,.7); }
   .global-search input:focus { outline:none; border-color:rgba(42,133,216,.55); background:#fff; box-shadow:0 0 0 3px rgba(42,133,216,.10),0 8px 24px rgba(48,82,118,.09); }
-  .global-search::before { content:"⌕"; position:absolute; left:13px; top:5px; font-size:20px; color:var(--color-text-muted); }
+  .gs-icon { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--color-text-muted); display:grid; pointer-events:none; z-index:1; }
+  .gs-clear,.gs-go { display:none; }
+  /* ===== ช่องค้นหา premium (PC): ปกติเป็นไอคอนแว่นขยาย ชี้เมาส์/โฟกัส/มีคำค้น แล้วขยายออก ===== */
+  @media (min-width:721px) {
+    .global-search { flex:0 0 auto; width:44px; height:44px; max-width:none; border-radius:999px; background:#fff; box-shadow:0 4px 14px rgba(36,72,112,.12); transition:width .32s cubic-bezier(.2,.8,.2,1),box-shadow .2s; }
+    .global-search .gs-icon { left:12.5px; color:#3d5a78; }
+    .global-search input { position:absolute; inset:0; width:100%; height:100%; border:0; border-radius:999px; padding:0 92px 0 44px; background:transparent; box-shadow:none; opacity:0; cursor:pointer; font-size:14px; transition:opacity .2s; }
+    .global-search input:focus { border:0; background:transparent; box-shadow:none; }
+    .global-search input::-webkit-search-cancel-button { display:none; }
+    .global-search:hover,.global-search:focus-within,.global-search.has-value { width:min(520px,42vw); box-shadow:0 0 0 2px #58A8F0,0 8px 22px rgba(26,112,205,.18); }
+    .global-search:hover input,.global-search:focus-within input,.global-search.has-value input { opacity:1; cursor:text; }
+    .gs-go,.gs-clear { display:grid; place-items:center; position:absolute; top:50%; transform:translateY(-50%); border:0; border-radius:50%; cursor:pointer; padding:0; opacity:0; pointer-events:none; transition:opacity .2s; }
+    .gs-go { right:4px; width:36px; height:36px; color:#fff; background:linear-gradient(135deg,#58A8F0,#1A70CD); box-shadow:0 4px 10px rgba(26,112,205,.35); }
+    .gs-go:hover { filter:brightness(1.08); }
+    .gs-clear { right:46px; width:28px; height:28px; font-size:18px; line-height:1; color:#5b7189; background:#eef3f8; }
+    .gs-clear:hover { background:#dfe8f2; }
+    .global-search:hover .gs-go,.global-search:focus-within .gs-go,.global-search.has-value .gs-go { opacity:1; pointer-events:auto; }
+    .global-search.has-value:hover .gs-clear,.global-search.has-value:focus-within .gs-clear,.global-search.has-value .gs-clear { opacity:1; pointer-events:auto; }
+    .global-search-results { top:52px; padding:10px; background:#f4f7fb; border-radius:18px; }
+    .global-search-results .search-group-label { display:flex; align-items:center; gap:6px; padding:8px 6px 6px; color:#28405a; font-size:12px; letter-spacing:0; text-transform:none; }
+    .global-search-results .search-group-label::before { content:""; width:6px; height:6px; border-radius:50%; background:linear-gradient(135deg,#58A8F0,#1A70CD); }
+    .global-search-results .search-result { margin-bottom:6px; background:#fff; border-radius:12px; box-shadow:-3px -3px 7px #fff,3px 3px 8px #d3dde8; transition:background .2s,color .2s,transform .2s; }
+    .global-search-results .search-result:hover,.global-search-results .search-result.active { background:linear-gradient(135deg,#58A8F0,#1A70CD); color:#fff; transform:translateX(3px); }
+    .global-search-results .search-result:hover small,.global-search-results .search-result.active small,.global-search-results .search-result:hover .search-result-type,.global-search-results .search-result.active .search-result-type { color:#e6f1ff; }
+    .global-search-results .search-result:hover .search-result-icon,.global-search-results .search-result.active .search-result-icon { background:rgba(255,255,255,.22); color:#fff; }
+  }
   .global-search-results { display:none; position:absolute; z-index:205; top:43px; left:0; right:0; max-height:min(560px,70vh); overflow:auto; overscroll-behavior:contain; padding:7px; border:1px solid rgba(84,111,138,.18); border-radius:14px; background:rgba(251,253,255,.97); box-shadow:0 24px 70px rgba(21,48,78,.25); backdrop-filter:blur(30px) saturate(145%); pointer-events:auto; }
   .global-search-results.open { display:block; }
   .global-search-backdrop { display:none; position:fixed; inset:0; z-index:200; background:rgba(22,43,66,.16); backdrop-filter:blur(2px); }
@@ -456,7 +481,10 @@
     <header class="global-topbar">
       <button type="button" class="mobile-menu-toggle" id="mobileMenuToggle" aria-controls="mobileSidebar" aria-expanded="false" aria-label="เปิดเมนูฝ่ายงาน">☰</button>
       <div class="global-search" id="globalSearch">
+        <span class="gs-icon"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
         <input type="search" id="globalSearchInput" placeholder="ค้นหานักเรียน บุคลากร เอกสาร หรืองาน..." aria-label="ค้นหาทั่วทั้งระบบ" aria-autocomplete="list" aria-controls="globalSearchResults" aria-expanded="false" autocomplete="off" />
+        <button type="button" class="gs-clear" id="globalSearchClear" aria-label="ล้างคำค้นหา">×</button>
+        <button type="button" class="gs-go" id="globalSearchGo" aria-label="ค้นหา"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
         <div class="global-search-results" id="globalSearchResults" role="listbox"></div>
       </div>
       <div class="topbar-actions">
@@ -929,6 +957,11 @@
   }
 
   const globalSearchInput=document.getElementById("globalSearchInput");
+  const globalSearchBox=document.getElementById("globalSearch");
+  const syncSearchValue=()=>globalSearchBox.classList[globalSearchInput.value?"add":"remove"]("has-value");
+  globalSearchInput.addEventListener("input",syncSearchValue);
+  document.getElementById("globalSearchClear").addEventListener("click",()=>{globalSearchInput.value="";syncSearchValue();closeGlobalSearch();globalSearchInput.focus()});
+  document.getElementById("globalSearchGo").addEventListener("click",()=>{globalSearchInput.focus();runGlobalSearch()});
   globalSearchInput.addEventListener("input",()=>{clearTimeout(globalSearchTimer);const version=++globalSearchVersion;globalSearchTimer=setTimeout(()=>runGlobalSearch(version),120)});
   globalSearchInput.addEventListener("focus",()=>{if(globalSearchInput.value.trim())runGlobalSearch()});
   globalSearchInput.addEventListener("keydown",event=>{
