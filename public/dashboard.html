@@ -370,6 +370,20 @@
     .dash-tabs button { padding:8px 11px; font-size:13px; }
     .mini-grid.three { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }
+  /* ===== สไตล์ premium: ปุ่มนูน + hover ไล่สีฟ้า (เมนูด้านข้าง · ตัวเลขภาพรวม) ===== */
+  .sidebar nav { gap:6px; }
+  .sidebar nav a { background:#fff; box-shadow:-3px -3px 7px rgba(255,255,255,.9),3px 3px 8px rgba(184,201,219,.55); border-radius:12px; padding:9px 12px; }
+  .sidebar nav a:hover { background:linear-gradient(135deg,#58A8F0,#1A70CD); color:#fff; transform:translateX(3px); box-shadow:0 6px 14px rgba(26,112,205,.3); }
+  .sidebar nav a.active { background:linear-gradient(135deg,#58A8F0,#1A70CD); color:#fff; box-shadow:0 6px 14px rgba(26,112,205,.3); }
+  .sidebar nav a:hover .nav-number,.sidebar nav a.active .nav-number { background:rgba(255,255,255,.22); border-color:rgba(255,255,255,.4); color:#fff; }
+  .sidebar nav a:hover .nav-chevron,.sidebar nav a.active .nav-chevron { color:#fff; }
+  .sidebar nav > a:not([class*="nav-"])::after,.nav-children-inner > a::after { content:"›"; margin-left:auto; font-size:17px; line-height:1; opacity:.45; }
+  .nav-children-inner { gap:5px; }
+  .nav-children-inner > a { padding:7px 11px; font-size:12.5px; }
+  .stat-panel { gap:10px; background:none; border:0; box-shadow:none; overflow:visible; }
+  .stat-cell, .stat-cell:nth-child(n) { border:0 !important; border-radius:14px; background:#fff; box-shadow:-3px -3px 8px rgba(255,255,255,.9),4px 4px 10px rgba(184,201,219,.5); transition:background .2s,transform .2s,box-shadow .2s; }
+  .stat-cell:hover,.stat-cell:focus-visible { background:linear-gradient(135deg,#58A8F0,#1A70CD); transform:translateY(-2px); box-shadow:0 8px 18px rgba(26,112,205,.3); outline:none; }
+  .stat-cell:hover svg,.stat-cell:hover .stat-num,.stat-cell:hover .stat-label,.stat-cell:focus-visible svg,.stat-cell:focus-visible .stat-num,.stat-cell:focus-visible .stat-label { color:#fff; }
 </style>
 <style>/* เมนูย่อยบันทึกความดี: ความดี = ฟ้า · เจอเงิน = ชมพู */.nav-child[data-url="/merit.html"]::before,.nav-child[data-url="/merit.html?tab=money"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;background:#2D7FD3}.nav-child[data-url="/merit.html?tab=money"]::before{background:#D9578A}</style>
 <style>.viewer-banner{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fff6e6;border:1px solid #f1dcb4;color:#7a5414;font-size:14px}.viewer-mode #balanceRequestInbox,.viewer-mode .license-section{display:none}</style>
