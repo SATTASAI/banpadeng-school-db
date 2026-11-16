@@ -57,19 +57,19 @@ test("homeroom records good deeds for own room, imports xlsx rows, others cannot
   r = await api(env, 2, "/api/merit/good"); assert.equal(r.status, 403, "money officer has no good-deed access");
 });
 
-test("good deeds and found money add +1 behaviour point once (ป.1–6 only)", async () => {
+test("good-deed points only via publicservice discipline approval; found money adds +1 once (ป.1–6 only)", async () => {
   const env = environment();
   await api(env, 1, "/api/merit/good", "POST", { records: [{ student_id: 10, deed_date: "2026-11-03", category: "ช่วยเหลือผู้อื่น", detail: "ช่วยครู" }] });
-  await api(env, 4, "/api/merit/good", "POST", { records: [{ student_id: 13, deed_date: "2026-11-03", category: "ช่วยเหลือผู้อื่น" }] });
-  let r = await api(env, 1, "/api/merit/good/points", "POST", { ids: [1, 1] });
-  assert.equal(r.data.added, 1);
-  r = await api(env, 1, "/api/merit/good/points", "POST", { ids: [1] }); assert.equal(r.data.added, 0); assert.match(r.data.skipped[0].reason, /ไปแล้ว/);
-  r = await api(env, 4, "/api/merit/good/points", "POST", { ids: [2] }); assert.match(r.data.skipped[0].reason, /ป\.1–6/);
-  const ps = env.db.prepare("SELECT * FROM ps_behavior_records").all();
-  assert.equal(ps.length, 1); assert.equal(ps[0].points, 1); assert.equal(ps[0].term_number, 2); assert.equal(ps[0].academic_year_id, 5); assert.match(ps[0].reason, /ทำความดี: ช่วยเหลือผู้อื่น/);
+  let r = await api(env, 1, "/api/merit/good/points", "POST", { ids: [1] });
+  assert.equal(r.status, 403); assert.match(r.data.error, /ฝ่ายปกครอง/);
+  assert.equal(env.db.prepare("SELECT COUNT(*) AS n FROM ps_behavior_records").get().n, 0);
+  // publicservice อนุมัติ (ps_merit_reviews + ps_behavior_records) → แสดงคะแนนที่นี่
+  env.db.exec("INSERT INTO ps_behavior_records (academic_year_id, term_number, student_id, points, reason, incident_date, created_by) VALUES (5, 2, 10, 5, 'ทำความดี: ช่วยเหลือผู้อื่น', '2026-11-03', 1)");
+  env.db.exec("UPDATE good_deeds SET ps_record_id = 1 WHERE id = 1; INSERT INTO ps_merit_reviews (deed_id, status, points, record_id, decided_by) VALUES (1, 'approved', 5, 1, 1)");
+  r = await api(env, 1, "/api/merit/good"); const g = r.data.records.find((x) => x.id === 1);
+  assert.equal(g.points_used, 1); assert.equal(g.ps_points, 5); assert.equal(g.ps_review, "approved");
   r = await api(env, 1, "/api/merit/good/1", "DELETE"); assert.equal(r.status, 409);
-  env.db.exec("UPDATE ps_behavior_records SET cancelled_at=datetime('now')");
-  r = await api(env, 1, "/api/merit/good"); assert.equal(r.data.records.find((x) => x.id === 1).points_used, 0, "cancelled points can be reused");
+  env.db.exec("DELETE FROM ps_behavior_records");
   // เจอเงิน (ผู้รับผิดชอบงาน = ทุกห้อง, ไม่มีภาพ)
   const fd = new FormData(); fd.append("student_id", "12"); fd.append("found_date", "2026-11-02"); fd.append("amount", "20"); fd.append("place", "โรงอาหาร");
   r = await api(env, 2, "/api/merit/money", "POST", fd); assert.equal(r.status, 200);
