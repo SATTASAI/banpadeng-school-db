@@ -11,6 +11,7 @@ import {EVALUATION_ORIGIN} from './evaluation/session-link.js';
 import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleNavVisibilityRoute} from './routes/nav-visibility.js';
+import {handleShortcutsRoute} from './routes/shortcuts.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
 import {handleTeachingWorksRoute} from './routes/teaching-works.js';
@@ -4872,6 +4873,8 @@ const app = {
       if (departmentStaffResponse) return departmentStaffResponse;
       const navVisibilityResponse = await handleNavVisibilityRoute(request, env, pathname, method);
       if (navVisibilityResponse) return navVisibilityResponse;
+      const shortcutsResponse = await handleShortcutsRoute(request, env, pathname, method);
+      if (shortcutsResponse) return shortcutsResponse;
       const personnelResponse = await handlePersonnelRoute(request, env, pathname, method);
       if (personnelResponse) return personnelResponse;
       const correspondenceResponse = await handleCorrespondenceRoute(request, env, pathname, method);
