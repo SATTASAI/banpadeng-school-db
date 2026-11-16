@@ -16,7 +16,7 @@
 @media(max-width:650px){.ak-hero-panel{padding:165px 18px 22px;background-size:100% 190px,auto 190px;background-image:linear-gradient(180deg,transparent 55px,#071b17 180px),url('/images/avada-duel-hero.webp')}.ak-hero-content{gap:12px}.ak-hero-panel .ak-image-button{width:min(100%,360px)}.ak-hero-panel .ak-admin-hint{font-size:15px}.sn-panel{top:116px;max-height:calc(100dvh - 130px)}.sn-list{max-height:calc(100dvh - 215px)}}
 @media(prefers-reduced-motion:reduce){.mobile-nav-open .layout>.sidebar{transition:none}}
 /* ===== โครงหลักบนมือถือ: แถบบนแถวเดียว + แถบเมนูล่าง ===== */
-.mobile-tabbar,.mobile-shortcuts,.ms-picker{display:none}
+.mobile-tabbar,.ms-picker{display:none}
 @media(max-width:720px){
  .layout .global-topbar{flex-wrap:nowrap;align-items:center;padding:8px 10px;padding-top:max(8px,env(safe-area-inset-top));gap:8px;border-bottom:1px solid #dbe6ef;background:rgba(246,250,253,.96)}
  .layout .global-search{order:0;flex:1 1 auto;min-width:0}
@@ -193,8 +193,8 @@
 }
 @media(prefers-reduced-motion:reduce){.acct-sheet,.acct-sheet-backdrop{transition:none}}
 
-/* เมนูลัดของฉัน (แทนส่วนบัญชีในเมนูด้านข้างมือถือ) */
-@media(max-width:720px){
+/* เมนูลัดของฉัน (เมนูด้านซ้าย ทั้ง PC และมือถือ) */
+@media all{
  .mobile-shortcuts{display:block;margin-top:14px;padding:14px 2px calc(96px + env(safe-area-inset-bottom));border-top:1px solid #d3e0ec}
  .ms-head{display:flex;align-items:center;justify-content:space-between;margin:0 4px 10px}
  .ms-head strong{font-size:14px;color:#24415e}
@@ -257,3 +257,19 @@
  html[data-theme="dark"] .layout #globalSearch input{color:#e3ecf4}
 }
 @media(max-width:720px) and (prefers-reduced-motion:reduce){.layout #globalSearch{transition:none}}
+/* เมนูลัดบน PC: ไอคอนเล็กลงให้พอดีแถบซ้าย ตัวเลือกเป็นหน้าต่างกลางจอ */
+@media(min-width:721px){
+ .mobile-shortcuts{margin-top:12px;padding:12px 0 6px}
+ .ms-grid{gap:10px 4px}
+ .ms-ic{width:44px;height:44px;border-radius:14px}
+ .ms-ic svg{width:20px;height:20px}.ms-ic b{font-size:17px}
+ .ms-add .ms-ic{font-size:24px}
+ .ms-label{font-size:11px}
+ .ms-del,.ms-left{width:20px;height:20px;font-size:13px}
+ .ms-del{right:calc(50% - 30px)}.ms-left{left:calc(50% - 30px)}
+ .ms-go:hover .ms-ic,.ms-add:hover .ms-ic{transform:translateY(-2px)}
+ .ms-picker:not([hidden]){align-items:center;justify-content:center}
+ .msp-card{width:min(460px,92vw);max-height:80vh;border-radius:22px;padding:16px;box-shadow:0 24px 60px rgba(15,30,50,.3);animation:mspPop .22s cubic-bezier(.2,.9,.3,1.1)}
+ .msp-item:hover:not([disabled]){background:#eef6ff}
+ @keyframes mspPop{from{transform:scale(.95);opacity:0}to{transform:none;opacity:1}}
+}
