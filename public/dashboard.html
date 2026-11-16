@@ -82,7 +82,8 @@
   .gs-clear,.gs-go { display:none; }
   /* ===== ช่องค้นหา premium (PC): ปกติเป็นไอคอนแว่นขยาย ชี้เมาส์/โฟกัส/มีคำค้น แล้วขยายออก ===== */
   @media (min-width:721px) {
-    .global-search { flex:0 0 auto; width:44px; height:44px; max-width:none; border-radius:999px; background:#fff; box-shadow:0 4px 14px rgba(36,72,112,.12); transition:width .32s cubic-bezier(.2,.8,.2,1),box-shadow .2s; }
+    .topbar-actions { flex-shrink:0; }
+    .global-search { flex:0 1 auto; min-width:44px; width:44px; height:44px; max-width:none; border-radius:999px; background:#fff; box-shadow:0 4px 14px rgba(36,72,112,.12); transition:width .32s cubic-bezier(.2,.8,.2,1),box-shadow .2s; }
     .global-search .gs-icon { left:12.5px; color:#3d5a78; }
     .global-search input { position:absolute; inset:0; width:100%; height:100%; border:0; border-radius:999px; padding:0 92px 0 44px; background:transparent; box-shadow:none; opacity:0; cursor:pointer; font-size:14px; transition:opacity .2s; }
     .global-search input:focus { border:0; background:transparent; box-shadow:none; }
