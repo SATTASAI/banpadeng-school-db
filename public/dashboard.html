@@ -750,6 +750,7 @@
     document.querySelectorAll(".sidebar nav a").forEach((a) => a.classList.remove("active"));
     document.getElementById("overviewNav").classList.add("active");
     history.replaceState(null, "", "#");
+    try { sessionStorage.removeItem("school-last-page"); } catch {}
     loadOverview().catch(() => {});
   }
   window.showOverview = showOverview;
@@ -787,7 +788,17 @@
       openOnlyNavGroup(parentLink.closest(".nav-group"));
     }
     if (updateHash !== false) history.pushState(null, "", "#" + key);
+    try { sessionStorage.setItem("school-last-page", JSON.stringify({ key, url })); } catch {}
   }
+  // จำหน้าที่เปิดอยู่ (รวมการเปลี่ยนหน้าภายในกรอบ) เพื่อให้กดรีเฟรชแล้วกลับมาหน้าเดิม
+  document.getElementById("contentFrame").addEventListener("load", (e) => {
+    try {
+      const loc = e.target.contentWindow.location;
+      if (loc.origin !== location.origin || loc.pathname === "/dashboard.html" || loc.href === "about:blank") return;
+      const saved = JSON.parse(sessionStorage.getItem("school-last-page") || "null");
+      if (saved) sessionStorage.setItem("school-last-page", JSON.stringify({ ...saved, url: loc.pathname + loc.search + loc.hash }));
+    } catch {}
+  });
 
   window.addEventListener('message',event=>{
     const frame=document.getElementById('contentFrame');
@@ -1466,7 +1477,11 @@
       document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
     });
     const initialKey = window.location.hash.replace("#", "");
-    if (initialKey && PAGE_URLS[initialKey]) {
+    let lastPage = null;
+    try { lastPage = JSON.parse(sessionStorage.getItem("school-last-page") || "null"); } catch {}
+    if (lastPage?.url && (!initialKey || initialKey === lastPage.key) && typeof lastPage.url === "string" && lastPage.url.startsWith("/")) {
+      showPage(lastPage.key, false, lastPage.url);
+    } else if (initialKey && PAGE_URLS[initialKey]) {
       showPage(initialKey, false);
     }
     await loadOverview();
