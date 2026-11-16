@@ -40,12 +40,52 @@
   copy();
   acct.querySelector('[data-ma=logout]').onclick = () => $('logoutLink')?.click();
 
+  // ปุ่มบัญชีที่แถบล่าง → เมนูเลื่อนขึ้น (เหมือนเมนูชื่อบน PC)
+  const sheetBackdrop = document.createElement('div');
+  sheetBackdrop.className = 'acct-sheet-backdrop';
+  const sheet = document.createElement('section');
+  sheet.className = 'acct-sheet'; sheet.id = 'acctSheet';
+  sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-label', 'เมนูบัญชี'); sheet.setAttribute('aria-hidden', 'true'); sheet.inert = true;
+  const chev = '<i class="as-chev" aria-hidden="true"></i>';
+  sheet.innerHTML = `<span class="as-grab" aria-hidden="true"></span>
+    <div class="as-user"><span class="as-avatar" data-as="avatar">—</span><span><strong data-as="name">—</strong><small data-as="role">—</small></span></div>
+    <div class="as-item as-static"><span class="as-ic c-mint">${icon('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>')}</span><span>ปีการศึกษา</span><b class="as-badge" data-as="year">—</b></div>
+    <div class="as-viewas"></div>
+    <hr class="as-sep">
+    <button type="button" class="as-item" data-as="account"><span class="as-ic c-indigo">${icon('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>')}</span><span>บัญชีของฉัน</span>${chev}</button>
+    <button type="button" class="as-item as-danger" data-as="logout"><span class="as-ic c-slate">${icon('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>')}</span><span>ออกจากระบบ</span>${chev}</button>`;
+  document.body.append(sheetBackdrop, sheet);
+  let sheetOpen = false, sheetPrevTab = 'home';
+  const syncSheet = () => {
+    sheet.querySelector('[data-as=avatar]').textContent = $('topAvatar')?.textContent || '—';
+    sheet.querySelector('[data-as=name]').textContent = $('topUserName')?.textContent || '—';
+    sheet.querySelector('[data-as=role]').textContent = $('topUserRole')?.textContent || '';
+    sheet.querySelector('[data-as=year]').textContent = $('topAcademicYear')?.textContent || '—';
+    sheet.querySelector('[data-as=account]').hidden = $('topAccountLink')?.style.display === 'none';
+  };
+  const setSheet = (on) => {
+    if (on === sheetOpen) return;
+    sheetOpen = on;
+    if (on) { syncSheet(); sheetPrevTab = bar.querySelector('[data-tab].active')?.dataset.tab || ''; }
+    sheet.classList.toggle('is-open', on); sheetBackdrop.classList.toggle('is-open', on);
+    sheet.setAttribute('aria-hidden', String(!on)); sheet.inert = !on;
+    bar.querySelector('[data-tab=account]')?.setAttribute('aria-expanded', String(on));
+    if (on) setActive('account'); else if (bar.querySelector('[data-tab=account]').classList.contains('active') && !accountPageOpen) setActive(sheetPrevTab);
+  };
+  let accountPageOpen = false;
+  sheetBackdrop.onclick = () => setSheet(false);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSheet(false); });
+  phone.addEventListener('change', () => { if (!phone.matches) setSheet(false); });
+  sheet.querySelector('[data-as=account]').onclick = () => { accountPageOpen = true; setSheet(false); closeChat(); window.setMobileMenu?.(false); openAccount(); setActive('account'); };
+  sheet.querySelector('[data-as=logout]').onclick = () => { setSheet(false); $('logoutLink')?.click(); };
+  document.addEventListener('click', (e) => { if (e.target.closest('.sidebar nav a, #overviewNav, .global-search-results')) accountPageOpen = false; }, true);
+
   // ย้ายปุ่ม View as เข้าเมนูด้านข้างเมื่อเป็นมือถือ แล้วย้ายกลับเมื่อจอกว้าง
   const viewAs = document.querySelector('.view-as-wrap');
   const viewAsHome = viewAs?.parentElement, viewAsNext = viewAs?.nextSibling;
   const placeViewAs = () => {
     if (!viewAs) return;
-    if (phone.matches) acct.querySelector('.ma-viewas').append(viewAs);
+    if (phone.matches) sheet.querySelector('.as-viewas').append(viewAs);
     else if (viewAs.parentElement !== viewAsHome) viewAsHome.insertBefore(viewAs, viewAsNext);
   };
   placeViewAs(); phone.addEventListener('change', placeViewAs);
@@ -182,13 +222,14 @@
     const b = e.target.closest('[data-tab]'); if (!b) return;
     const tab = b.dataset.tab;
     if (tab !== 'messages') closeChat();
+    if (tab !== 'account') { setSheet(false); accountPageOpen = false; }
     b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
     try { navigator.vibrate?.(8); } catch {}
     if (tab === 'home') { window.showOverview?.(); history.replaceState(null, '', location.pathname); setActive('home'); }
     else if (tab === 'search') { const input = $('globalSearchInput'); window.setMobileMenu?.(false); input?.focus(); input?.select?.(); }
     else if (tab === 'messages') { if (chatOpen) closeChat(); else openChat(); }
     else if (tab === 'notify') { e.stopPropagation(); placeNotifications(); window.setMobileMenu?.(false); document.querySelector('#schoolNotifications .sn-toggle')?.click(); }
-    else if (tab === 'account') { openAccount(); setActive('account'); }
+    else if (tab === 'account') { closeChat(); window.setMobileMenu?.(false); setSheet(!sheetOpen); }
     else if (tab === 'menu') window.setMobileMenu?.(!document.body.classList.contains('mobile-nav-open'));
   });
   // ไปหน้าอื่นจากเมนูด้านข้าง → ปุ่มภาพรวมไม่ active

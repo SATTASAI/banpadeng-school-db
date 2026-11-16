@@ -1529,7 +1529,7 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
 
     if (user.is_admin) {
       document.querySelectorAll(".admin-only").forEach((element) => {
-        element.style.display = element.classList.contains("nav-label") || element.classList.contains("nav-group") ? "block" : "flex";
+        element.style.display = element.classList.contains("nav-group") ? "block" : "flex";
       });
     }
     if (user.role === "superadmin") {
