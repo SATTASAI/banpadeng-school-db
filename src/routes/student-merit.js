@@ -2,7 +2,8 @@
 // 1) บันทึกความดี: ครูประจำชั้นบันทึกการทำความดีของนักเรียนห้องตน (วันที่ + ประเภท + รายละเอียด) หรืออัปโหลด xlsx จากแม่แบบ
 // 2) บันทึกการเจอเงิน: นักเรียน จำนวนเงิน สถานที่ ภาพถ่าย (Google Drive: บันทึกเจอเงิน / <ปี> / ภาคเรียนที่ <n>)
 // สิทธิ์: ครูประจำชั้น = ดู/บันทึกเฉพาะห้องตน · ผู้รับผิดชอบงาน (ตั้งค่าผู้อนุมัติ งานละ 1 คน) + superadmin = ทุกห้อง · ผู้บริหาร = ดูทั้งหมด
-// ใช้เพิ่มคะแนนพฤติกรรม: 1 รายการ = +1 คะแนน ใน ps_behavior_records (ระบบ publicservice ใช้ D1 เดียวกัน) ใช้ได้ครั้งเดียวต่อรายการ (ป.1–6 เท่านั้น)
+// บันทึกความดีซิงค์กับระบบคะแนนพฤติกรรม: ครูฝ่ายปกครองอนุมัติ = เพิ่มคะแนนตามประเภท (ps_merit_reviews) · ไม่อนุมัติ = ยังเป็นบันทึกความดี
+// การเจอเงิน: 1 รายการ = +1 คะแนน ใน ps_behavior_records (ระบบ publicservice ใช้ D1 เดียวกัน) ใช้ได้ครั้งเดียวต่อรายการ (ป.1–6 เท่านั้น)
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { homeroomRooms, roomKey } from "../lib/student-access.js";
 
@@ -52,6 +53,10 @@ export async function ensureMeritSchema(env) {
       created_by INTEGER NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       cancelled_at TEXT, cancelled_by INTEGER, cancel_reason TEXT)`,
+    // ผลพิจารณาความดีของครูฝ่ายปกครอง (ระบบ publicservice) — โครงสร้างต้องตรงกับ publicservice/src/lib/schema.js
+    `CREATE TABLE IF NOT EXISTS ps_merit_reviews (
+      deed_id INTEGER PRIMARY KEY, status TEXT NOT NULL CHECK (status IN ('approved', 'rejected')),
+      points INTEGER, record_id INTEGER, decided_by INTEGER NOT NULL, decided_at TEXT NOT NULL DEFAULT (datetime('now')), note TEXT)`,
   ]) await env.DB.prepare(sql).run();
   ready.add(env.DB);
 }
@@ -140,7 +145,9 @@ async function listPayload(env, user, access, kind, year) {
   const all = await visibleStudents(env, access);
   const ids = new Set(all.map((s) => s.id));
   const sql = kind === "good"
-    ? `SELECT r.id, r.student_id, r.deed_date AS date, r.category, r.detail, r.term, r.created_at, ${PS_COLS} FROM good_deeds r ${PS_JOIN} WHERE r.academic_year = ? ORDER BY r.deed_date DESC, r.id DESC`
+    ? `SELECT r.id, r.student_id, r.deed_date AS date, r.category, r.detail, r.term, r.created_at, ${PS_COLS}, p.points AS ps_points,
+         v.status AS ps_review, v.note AS ps_review_note, vu.full_name AS ps_reviewer
+         FROM good_deeds r ${PS_JOIN} LEFT JOIN ps_merit_reviews v ON v.deed_id = r.id LEFT JOIN users vu ON vu.id = v.decided_by WHERE r.academic_year = ? ORDER BY r.deed_date DESC, r.id DESC`
     : `SELECT r.id, r.student_id, r.found_date AS date, r.amount, r.place, r.detail, r.term, r.created_at, ${PS_COLS} FROM found_money r ${PS_JOIN} WHERE r.academic_year = ? ORDER BY r.found_date DESC, r.id DESC`;
   const records = ((await env.DB.prepare(sql).bind(year).all()).results || []).filter((r) => ids.has(r.student_id));
   if (kind === "money" && records.length) {
@@ -410,6 +417,8 @@ async function handleDelete(env, user, access, drive, kind, id) {
 // ---------- ใช้เพิ่มคะแนนพฤติกรรม ----------
 // POST /api/merit/points { kind:'good'|'money', ids:[...] } — +1 คะแนน/รายการ ใช้ได้ครั้งเดียว · ป.1–6 · ภาคเรียนตามวันที่ของรายการ
 async function handlePoints(request, env, user, access, kind) {
+  // บันทึกความดี: เพิ่มคะแนนได้เฉพาะครูฝ่ายปกครองที่ระบบคะแนนพฤติกรรม (publicservice) — รายการที่บันทึกที่นี่ขึ้นไปรออนุมัติที่นั่นอัตโนมัติ
+  if (kind === "good") return jsonResponse({ error: "การเพิ่มคะแนนจากบันทึกความดีทำได้เฉพาะครูฝ่ายปกครองในระบบคะแนนพฤติกรรม (รายการรออนุมัติที่นั่นอัตโนมัติ)" }, 403);
   const body = await readJson(request);
   const ids = [...new Set((body?.ids || []).map(Number))].filter((n) => Number.isInteger(n) && n > 0);
   if (!ids.length) return jsonResponse({ error: "กรุณาเลือกรายการ" }, 400);
