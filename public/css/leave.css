@@ -46,3 +46,11 @@
 .lm-actions button{border:0;border-radius:10px;padding:5px 10px;font:inherit;font-size:12px;font-weight:600;cursor:pointer;background:#eef3f8;color:#2f4b68;transition:background .18s,color .18s}
 .lm-actions .lm-open{flex:1;background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
 .lm-actions button:hover{background:linear-gradient(135deg,#4CC9F0,#0A88B8);color:#fff}
+
+/* ชี้เมาส์ที่การ์ดแล้วแสดงรายละเอียด (CSS ล้วน) */
+.lm-more{position:absolute;left:8px;right:8px;top:calc(100% - 6px);z-index:20;padding:10px 12px;border-radius:12px;background:#1d3550;color:#eaf3ff;font-size:12.5px;line-height:1.55;box-shadow:0 14px 28px rgba(20,40,70,.28);opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity .16s,transform .16s,visibility 0s .16s;pointer-events:none}
+.lm-more::before{content:"";position:absolute;top:-6px;left:22px;border:6px solid transparent;border-top:0;border-bottom-color:#1d3550}
+.lm-more p{margin:0 0 3px;white-space:pre-wrap;overflow-wrap:anywhere}.lm-more p:last-child{margin:0}.lm-more b{color:#8fd3ff;font-weight:700}
+.leave-mini:hover{z-index:21}
+.leave-mini:hover .lm-more,.leave-mini:focus-within .lm-more{opacity:1;visibility:visible;transform:none;transition:opacity .16s,transform .16s}
+@media(hover:none){.lm-more{display:none}}

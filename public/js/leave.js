@@ -51,6 +51,7 @@
    <div class="lm-top"><strong title="${esc(r.full_name)}">${esc(r.full_name)}</strong><span class="lm-status">${esc(label)}</span></div>
    <div class="lm-type">${esc(types[r.leave_type])} · <b>${esc(r.leave_days??'')}</b> วัน</div>
    <div class="lm-date">${esc(r.start_date)}${r.end_date&&r.end_date!==r.start_date?' – '+esc(r.end_date):''}</div>
+   <div class="lm-more" role="tooltip"><p><b>เหตุผล:</b> ${esc(r.reason||'ไม่ระบุ')}</p>${r.acknowledged_name?`<p><b>รับทราบ:</b> ${esc(r.acknowledged_name)} · ${esc(r.acknowledged_at)}</p>`:''}${r.deputy_name?`<p><b>ส่งต่อ:</b> ${esc(r.director_name)} และ ${esc(r.deputy_name)}</p>`:''}${r.reviewer_comment?`<p><b>ความเห็น:</b> ${esc(r.reviewer_comment)}</p>`:''}</div>
    <div class="lm-actions"><button class="lm-open" data-detail="${Number(r.id)}">รายละเอียด ›</button><button class="lm-file" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="lm-file" data-export="pdf" data-id="${Number(r.id)}">PDF</button>${!approvalView&&r.can_cancel?`<button class="lm-file" data-action="cancel" data-id="${Number(r.id)}">ยกเลิก</button>`:''}</div>
   </article>`;
  }
