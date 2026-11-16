@@ -417,22 +417,40 @@
   .stat-cell:hover,.stat-cell:focus-visible { background:linear-gradient(135deg,#3DD6A8,#109A78); transform:translateY(-2px); box-shadow:0 8px 18px rgba(16,154,120,.3); outline:none; }
   .stat-cell:hover svg,.stat-cell:hover .stat-num,.stat-cell:hover .stat-label,.stat-cell:focus-visible svg,.stat-cell:focus-visible .stat-num,.stat-cell:focus-visible .stat-label { color:#fff; }
 </style>
-<style>/* เมนูพับตามหมวด */
+<style>/* เมนูพับตามหมวด (premium) */
 .sidebar nav>[data-sec]:not(.sec-on){display:none!important}
-.sidebar nav>[data-sec].sec-on{animation:secIn .22s ease both}
-@keyframes secIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
-.sidebar nav>.sec-head{position:relative;display:flex;align-items:center;gap:8px;margin:4px 0 2px;padding:10px 34px 10px 12px;border-radius:12px;cursor:pointer;user-select:none;font-size:11px;letter-spacing:.06em;color:#3E6283;transition:background .15s,color .15s,box-shadow .15s}
-.sidebar nav>.sec-head:hover{background:rgba(26,112,205,.08);color:#1A70CD}
-.sidebar nav>.sec-head:focus-visible{outline:2px solid #58A8F0;outline-offset:1px}
-.sidebar nav>.sec-head.sec-open{color:#1A70CD;background:#fff;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}
-.sidebar nav>.sec-head::before{content:"";position:absolute;right:16px;top:50%;margin-top:-6px;width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);transition:transform .2s;opacity:.7}
-.sidebar nav>.sec-head.sec-open::before{transform:rotate(45deg)}
-.sec-head.sec-dot::after{content:"";position:absolute;right:30px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 2px #fff}
+.sidebar nav>[data-sec].sec-on{margin-left:14px;animation:secIn .26s cubic-bezier(.2,.8,.3,1) both;animation-delay:calc(var(--sec-i,0) * 22ms)}
+.sidebar nav>[data-sec].sec-last{margin-bottom:8px}
+@keyframes secIn{from{opacity:0;transform:translateY(-6px) scale(.98)}to{opacity:1;transform:none}}
+.sidebar nav>.sec-head{position:relative;display:flex;align-items:center;gap:11px;margin:2px 0;padding:9px 10px;border-radius:16px;cursor:pointer;user-select:none;text-transform:none;letter-spacing:0;color:#24415e;background:linear-gradient(145deg,#ffffff,#eef4fa);box-shadow:-4px -4px 9px #fff,4px 4px 10px #cfdbe7;transition:transform .18s,box-shadow .2s,background .2s}
+.sidebar nav>.sec-head:hover{transform:translateY(-1px);box-shadow:-4px -4px 10px #fff,6px 6px 14px #c5d3e1}
+.sidebar nav>.sec-head:active{transform:scale(.985)}
+.sidebar nav>.sec-head:focus-visible{outline:2px solid #58A8F0;outline-offset:2px}
+.sec-head .sh-ic{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:11px;color:#fff;background:linear-gradient(135deg,var(--a),var(--b));box-shadow:0 5px 12px color-mix(in srgb,var(--b) 35%,transparent);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
+.sec-head .sh-text{display:grid;gap:1px;min-width:0;line-height:1.25}
+.sec-head .sh-text b{font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec-head .sh-text small{font-size:11px;font-weight:500;color:#7890a6}
+.sec-head .sh-chev{margin-left:auto;flex:none;display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#e9f0f7;transition:background .2s,transform .25s}
+.sec-head .sh-chev::before{content:"";width:6px;height:6px;border-right:2px solid #5f7b97;border-bottom:2px solid #5f7b97;transform:translate(-1px,0) rotate(-45deg);transition:transform .25s,border-color .2s}
+.sidebar nav>.sec-head.sec-open{color:#fff;background:linear-gradient(135deg,var(--a),var(--b));box-shadow:0 10px 22px color-mix(in srgb,var(--b) 32%,transparent)}
+.sec-head.sec-open .sh-ic{background:rgba(255,255,255,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);transform:rotate(-6deg) scale(1.04)}
+.sec-head.sec-open .sh-text small{color:rgba(255,255,255,.8)}
+.sec-head.sec-open .sh-chev{background:rgba(255,255,255,.22)}
+.sec-head.sec-open .sh-chev::before{border-color:#fff;transform:translate(0,-1px) rotate(45deg)}
+.sec-head.sec-dot::after{content:"";position:absolute;left:38px;top:7px;width:10px;height:10px;border-radius:50%;background:#e5383b;box-shadow:0 0 0 2px #fff}
 .sec-head.sec-open.sec-dot::after{display:none}
-html[data-theme="dark"] .sidebar nav>.sec-head{color:#9fb6cc}
-html[data-theme="dark"] .sidebar nav>.sec-head:hover{background:rgba(88,168,240,.12);color:#8cc4f5}
-html[data-theme="dark"] .sidebar nav>.sec-head.sec-open{background:#1b2a3b;color:#8cc4f5;box-shadow:none}
-@media(prefers-reduced-motion:reduce){.sidebar nav>[data-sec].sec-on{animation:none}}
+.sec-head[data-tone=c-blue]{--a:#58A8F0;--b:#1A70CD}
+.sec-head[data-tone=c-indigo]{--a:#8C8AF5;--b:#4F4BC9}
+.sec-head[data-tone=c-teal]{--a:#2CC4B8;--b:#0E8A8F}
+.sec-head[data-tone=c-violet]{--a:#7AA2F7;--b:#3550C9}
+.sec-head[data-tone=c-mint]{--a:#3DD6A8;--b:#109A78}
+html[data-theme="dark"] .sidebar nav>.sec-head{color:#d6e2ee;background:linear-gradient(145deg,#1d2b3b,#162230);box-shadow:0 4px 12px rgba(0,0,0,.35)}
+html[data-theme="dark"] .sidebar nav>.sec-head.sec-open{color:#fff;background:linear-gradient(135deg,var(--a),var(--b))}
+html[data-theme="dark"] .sec-head .sh-text small{color:#8ea4ba}
+html[data-theme="dark"] .sec-head .sh-chev{background:rgba(255,255,255,.08)}
+html[data-theme="dark"] .sec-head .sh-chev::before{border-color:#9fb6cc}
+html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
+@media(prefers-reduced-motion:reduce){.sidebar nav>[data-sec].sec-on{animation:none}.sec-head .sh-ic,.sec-head .sh-chev::before{transition:none}}
 </style>
 <style>/* เมนูย่อยบันทึกความดี: ความดี = ฟ้า · เจอเงิน = ชมพู */.nav-child[data-url="/merit.html"]::before,.nav-child[data-url="/merit.html?tab=money"]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle;background:#2D7FD3}.nav-child[data-url="/merit.html?tab=money"]::before{background:#D9578A}</style>
 <style>.viewer-banner{margin:0 0 16px;padding:12px 14px;border-radius:12px;background:#fff6e6;border:1px solid #f1dcb4;color:#7a5414;font-size:14px}.viewer-mode #balanceRequestInbox,.viewer-mode .license-section{display:none}</style>
