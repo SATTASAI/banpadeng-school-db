@@ -77,7 +77,7 @@
         <div class="cal-legend">
           <span><i class="lg hol"></i>วันหยุด (ราชการ / โรงเรียน / เสาร์–อาทิตย์)</span><span><i class="lg act"></i>วันกิจกรรม (นับเป็นวันเรียน)</span><span><i class="lg important"></i>วันสำคัญที่ไม่ใช่วันหยุด</span><span><i class="lg off"></i>ปิดภาคเรียน</span>
         </div>
-        <p class="cal-hint">สีแดง = วันหยุด · สีเขียว = วันกิจกรรม (ยังนับเป็นวันเรียน) · สีเหลือง = วันสำคัญที่ยังนับเป็นวันเรียนเมื่ออยู่ในภาคเรียน · หากตรงวันหยุด ช่องวันเป็นสีแดงและแสดงชื่อวันสำคัญประกอบ</p>
+        <p class="cal-hint">สีคราม = วันหยุด · สีเขียวมิ้นต์ = วันกิจกรรม (ยังนับเป็นวันเรียน) · สีฟ้า = วันสำคัญที่ยังนับเป็นวันเรียนเมื่ออยู่ในภาคเรียน · หากตรงวันหยุด ช่องวันเป็นสีครามและแสดงชื่อวันสำคัญประกอบ</p>
         <p class="cal-hint">ดูอย่างเดียว · วันหยุดดึงจากระบบผลการเรียน (grades) — วันหยุดราชการระบบใส่ให้ทุกปี ส่วนวันหยุดอื่นและวันกิจกรรมกำหนดโดยฝ่ายวัดผล</p>
       </div>
       <div class="cal-panel">
@@ -116,7 +116,7 @@
         const cls = ["cal-day", other && "other", weekend && "we", name && "hol", aname && "act", event && !name && !aname && !weekend && "important", govSet.has(iso) && "gov", !term && "off", iso === today && "today"].filter(Boolean).join(" ");
         const marks = terms.flatMap((t) => [iso === t.start_date && `<em class="mark open">เปิดภาค ${t.term_number}</em>`, iso === t.end_date && `<em class="mark close">ปิดภาค ${t.term_number}</em>`]).filter(Boolean).join("");
         const label = `${TH_WD[wd]} ${cd} ${TH_MONTHS[cm - 1]} ${Number(iso.slice(0, 4)) + 543}${name ? ` วันหยุด ${name}` : aname ? ` วันกิจกรรม ${aname}` : weekend ? " วันหยุดประจำสัปดาห์" : ""}${event ? ` วันสำคัญ ${event}` : ""}`;
-        html += `<div class="${cls}" title="${esc(label)}" aria-label="${esc(label)}"><span class="num">${cd}</span>${marks}${name ? `<span class="hname">${esc(name)}</span>` : aname ? `<span class="aname">${esc(aname)}</span>` : ""}${event ? `<span class="iname">${esc(event)}</span>` : ""}</div>`;
+        html += `<div class="${cls}" aria-label="${esc(label)}"><span class="num">${cd}</span>${marks}${name ? `<span class="hname">${esc(name)}</span>` : aname ? `<span class="aname">${esc(aname)}</span>` : ""}${event ? `<span class="iname">${esc(event)}</span>` : ""}${name || aname || event || marks ? `<span class="cal-tip">${esc(label)}</span>` : ""}</div>`;
       }
       grid.innerHTML = html;
     }
