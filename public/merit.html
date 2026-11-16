@@ -175,7 +175,7 @@ function render(){
   $('pageSub').textContent=money_?'นักเรียนเจอเงินแล้วนำส่งคืน — สถิติ ยอดรวมรายภาคเรียน/ปีการศึกษา และอันดับผู้เจอเงิน':'บันทึกการทำความดีของนักเรียน แยกรายห้อง สายชั้น และสถิตินักเรียนที่ทำความดีบ่อยที่สุด';
   $('info').innerHTML=`ผู้รับผิดชอบงาน: <b>${esc(data.officer?.name||'ยังไม่กำหนด')}</b>${p.is_admin?' (ตั้งที่ <a href="/budget.html?view=roles">ตั้งค่าผู้อนุมัติ</a>)':''} · สิทธิ์ของท่าน: ${p.manage_all?'บันทึก/แก้ไขได้ทุกห้อง':p.view_all?'ดูได้ทุกห้อง':'ครูประจำชั้น ห้อง '+(p.homerooms||[]).map(label).join(', ')}`;
   $('actions').innerHTML=p.can_write?(money_?'<button class="btn btn-primary" type="button" id="addBtn">+ บันทึกการเจอเงิน</button>':'<button class="btn btn-primary" type="button" id="addBtn">+ บันทึกความดี</button><button class="btn btn-ghost" type="button" id="impBtn">อัปโหลด xlsx / แม่แบบ</button>')+(money_?'<button class="btn btn-ghost" type="button" id="ptsBtn" disabled>ใช้เพิ่มคะแนนพฤติกรรม (+1/รายการ)</button><small>เลือกรายการในตารางด้านล่าง · ป.1–6 · ใช้ได้รายการละครั้ง</small>':'<small>ความดี ป.1–6 ขึ้นไปรอครูฝ่ายปกครองอนุมัติเพิ่มคะแนนที่ระบบคะแนนพฤติกรรมอัตโนมัติ (คะแนนตามประเภทความดี)</small>'):'';
-  if(p.can_write){$('addBtn').onclick=money_?()=>openMoney(null):()=>openGood();if($('impBtn'))$('impBtn').onclick=openImport;$('ptsBtn').onclick=addPoints}
+  if(p.can_write){$('addBtn').onclick=money_?()=>openMoney(null):()=>openGood();if($('impBtn'))$('impBtn').onclick=openImport;if($('ptsBtn'))$('ptsBtn').onclick=addPoints}
   const list=records();
   const termLabel=$('term').value==='all'?`ปีการศึกษา ${data.academic_year}`:`ภาคเรียนที่ ${$('term').value}/${data.academic_year}`;
   if(money_){
