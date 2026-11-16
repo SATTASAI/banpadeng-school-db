@@ -239,3 +239,21 @@
  html[data-theme="dark"] .msp-close{background:#22313f;color:#c4d2df}
 }
 @media(prefers-reduced-motion:reduce){.editing .ms-ic,.msp-card{animation:none}}
+/* ช่องค้นหามือถือ: ปกติเป็นแว่นขยายกลม กดแล้วกางเป็นช่องค้นหาเต็มแถว */
+@media(max-width:720px){
+ .layout #globalSearch{flex:0 0 42px;flex-grow:0;width:42px;height:42px;min-width:42px;margin-left:auto;border-radius:999px;background:#fff;box-shadow:0 4px 12px rgba(36,72,112,.12);transition:flex-grow .32s cubic-bezier(.2,.8,.2,1),box-shadow .2s}
+ .layout #globalSearch .gs-icon{left:11.5px;color:#3d5a78}
+ .layout #globalSearch input{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:999px;padding:0 84px 0 42px;background:transparent;box-shadow:none;opacity:0;font-size:16px;cursor:pointer;transition:opacity .2s}
+ .layout #globalSearch input:focus{border:0;outline:none;background:transparent;box-shadow:none}
+ .layout #globalSearch input::-webkit-search-cancel-button{display:none}
+ .layout #globalSearch:focus-within,.layout #globalSearch.has-value{flex-grow:1;box-shadow:0 0 0 2px #2CC4B8,0 8px 20px rgba(14,138,143,.18)}
+ .layout #globalSearch:focus-within input,.layout #globalSearch.has-value input{opacity:1;cursor:text}
+ .layout #globalSearch .gs-go,.layout #globalSearch .gs-clear{display:grid;place-items:center;position:absolute;top:50%;transform:translateY(-50%);border:0;border-radius:50%;padding:0;opacity:0;pointer-events:none;transition:opacity .2s}
+ .layout #globalSearch .gs-go{right:3px;width:36px;height:36px;color:#fff;background:linear-gradient(135deg,#2CC4B8,#0E8A8F)}
+ .layout #globalSearch .gs-clear{right:44px;width:28px;height:28px;font-size:18px;line-height:1;color:#5b7189;background:#eef3f8}
+ .layout #globalSearch:focus-within .gs-go,.layout #globalSearch.has-value .gs-go,.layout #globalSearch.has-value .gs-clear{opacity:1;pointer-events:auto}
+ html[data-theme="dark"] .layout #globalSearch{background:#1d2b3b;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+ html[data-theme="dark"] .layout #globalSearch .gs-icon{color:#b7c8d8}
+ html[data-theme="dark"] .layout #globalSearch input{color:#e3ecf4}
+}
+@media(max-width:720px) and (prefers-reduced-motion:reduce){.layout #globalSearch{transition:none}}
