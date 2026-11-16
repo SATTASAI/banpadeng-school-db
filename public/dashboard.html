@@ -82,21 +82,26 @@
   .gs-clear,.gs-go { display:none; }
   /* ===== ช่องค้นหา premium (PC): ปกติเป็นไอคอนแว่นขยาย ชี้เมาส์/โฟกัส/มีคำค้น แล้วขยายออก ===== */
   @media (min-width:721px) {
-    .topbar-actions { flex-shrink:0; }
+    .topbar-actions { flex-shrink:0; position:relative; z-index:206; }
     .global-search { flex:0 1 auto; min-width:44px; width:44px; height:44px; max-width:none; border-radius:999px; background:#fff; box-shadow:0 4px 14px rgba(36,72,112,.12); transition:width .32s cubic-bezier(.2,.8,.2,1),box-shadow .2s; }
     .global-search .gs-icon { left:12.5px; color:#3d5a78; }
-    .global-search input { position:absolute; inset:0; width:100%; height:100%; border:0; border-radius:999px; padding:0 92px 0 44px; background:transparent; box-shadow:none; opacity:0; cursor:pointer; font-size:14px; transition:opacity .2s; }
-    .global-search input:focus { border:0; background:transparent; box-shadow:none; }
+    #globalSearch input { position:absolute; inset:0; width:100%; height:100%; border:0; border-radius:999px; padding:0 92px 0 44px; background:transparent; box-shadow:none; opacity:0; cursor:pointer; font-size:14px; transition:opacity .2s; }
+    #globalSearch input:focus,#globalSearch input:hover { border:0; outline:none; background:transparent; box-shadow:none; }
     .global-search input::-webkit-search-cancel-button { display:none; }
-    .global-search:hover,.global-search:focus-within,.global-search.has-value { width:min(520px,42vw); box-shadow:0 0 0 2px #2CC4B8,0 8px 22px rgba(14,138,143,.18); }
-    .global-search:hover input,.global-search:focus-within input,.global-search.has-value input { opacity:1; cursor:text; }
+    .global-search:focus-within,.global-search.has-value { width:min(520px,42vw); box-shadow:0 0 0 2px #2CC4B8,0 8px 22px rgba(14,138,143,.18); }
+    #globalSearch:focus-within input,#globalSearch.has-value input { opacity:1; cursor:text; }
     .gs-go,.gs-clear { display:grid; place-items:center; position:absolute; top:50%; transform:translateY(-50%); border:0; border-radius:50%; cursor:pointer; padding:0; opacity:0; pointer-events:none; transition:opacity .2s; }
     .gs-go { right:4px; width:36px; height:36px; color:#fff; background:linear-gradient(135deg,#2CC4B8,#0E8A8F); box-shadow:0 4px 10px rgba(14,138,143,.3); }
     .gs-go:hover { filter:brightness(1.08); }
     .gs-clear { right:46px; width:28px; height:28px; font-size:18px; line-height:1; color:#5b7189; background:#eef3f8; }
     .gs-clear:hover { background:#dfe8f2; }
-    .global-search:hover .gs-go,.global-search:focus-within .gs-go,.global-search.has-value .gs-go { opacity:1; pointer-events:auto; }
+    .global-search:focus-within .gs-go,.global-search.has-value .gs-go { opacity:1; pointer-events:auto; }
     .global-search.has-value:hover .gs-clear,.global-search.has-value:focus-within .gs-clear,.global-search.has-value .gs-clear { opacity:1; pointer-events:auto; }
+    @media (hover:hover) {
+      .global-search:hover { width:min(520px,42vw); box-shadow:0 0 0 2px #2CC4B8,0 8px 22px rgba(14,138,143,.18); }
+      #globalSearch:hover input { opacity:1; cursor:text; }
+      .global-search:hover .gs-go { opacity:1; pointer-events:auto; }
+    }
     .global-search-results { top:52px; padding:10px; background:#f4f7fb; border-radius:18px; }
     .global-search-results .search-group-label { display:flex; align-items:center; gap:6px; padding:8px 6px 6px; color:#28405a; font-size:12px; letter-spacing:0; text-transform:none; }
     .global-search-results .search-group-label::before { content:""; width:6px; height:6px; border-radius:50%; background:linear-gradient(135deg,#2CC4B8,#0E8A8F); }
