@@ -17,28 +17,96 @@
     <button type="button" data-tab="account" aria-label="บัญชี"><i class="mt-avatar" aria-hidden="true">—</i><span>บัญชี</span></button>`;
   document.body.append(bar);
 
-  // ส่วนบัญชีในเมนูด้านข้าง (มือถือ): ชื่อ ปีการศึกษา View as ออกจากระบบ
+  // เมนูลัดของฉัน (มือถือ, ในเมนูด้านข้าง): เจ้าของบัญชีเลือกเอง เก็บตามบัญชี
   const drawer = $('mobileSidebar');
-  const acct = document.createElement('div');
-  acct.className = 'mobile-account';
-  acct.innerHTML = `<div class="ma-user"><span class="top-avatar" data-ma="avatar">—</span><span><strong data-ma="name">—</strong><small data-ma="role">—</small></span></div>
-    <div class="ma-year">ปีการศึกษา <strong data-ma="year">—</strong></div>
-    <div class="ma-actions"><a class="btn" href="/account.html">บัญชีของฉัน</a><button type="button" class="btn" data-ma="logout">ออกจากระบบ</button></div>
-    <div class="ma-viewas"></div>`;
-  drawer?.querySelector('nav')?.after(acct);
-  const copy = () => {
-    acct.querySelector('[data-ma=avatar]').textContent = $('topAvatar')?.textContent || '—';
-    acct.querySelector('[data-ma=name]').textContent = $('topUserName')?.textContent || '—';
-    acct.querySelector('[data-ma=role]').textContent = $('topUserRole')?.textContent || '';
-    bar.querySelector('.mt-avatar').textContent = $('topAvatar')?.textContent || '—';
-    acct.querySelector('[data-ma=year]').textContent = $('topAcademicYear')?.textContent || '—';
-    const accountHidden = $('topAccountLink')?.style.display === 'none';
-    acct.querySelector('a[href="/account.html"]').hidden = accountHidden;
-    bar.querySelector('[data-tab=account]').hidden = accountHidden;
+  const sc = document.createElement('section');
+  sc.className = 'mobile-shortcuts';
+  sc.innerHTML = `<div class="ms-head"><strong>เมนูลัดของฉัน</strong><button type="button" class="ms-edit" hidden>แก้ไข</button></div>
+    <div class="ms-grid"></div><p class="ms-msg" role="status" hidden></p>`;
+  drawer?.querySelector('nav')?.after(sc);
+  const scGrid = sc.querySelector('.ms-grid'), scEdit = sc.querySelector('.ms-edit'), scMsg = sc.querySelector('.ms-msg');
+  let shortcuts = [], scMax = 12, scEditing = false, scLoaded = false;
+  const navLinks = () => [...document.querySelectorAll('.sidebar nav a[href]')].filter((a) => {
+    if (a.id === 'overviewNav') return false;
+    const h = a.getAttribute('href'); if (!h || h === '#' || h.startsWith('javascript:')) return false;
+    for (let el = a; el && el !== document.body; el = el.parentElement) if (el.hidden || el.style.display === 'none') return false;
+    return true;
+  });
+  const linkUrl = (a) => a.dataset.url || a.getAttribute('href');
+  const linkLabel = (a) => { const c = a.cloneNode(true); c.querySelectorAll('.nav-number,.nav-chevron,.nav-external,.nav-new-dot,small').forEach((x) => x.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); };
+  const findLink = (url) => navLinks().find((a) => linkUrl(a) === url);
+  const iconFor = (url, label) => {
+    const a = findLink(url); const own = a?.classList.contains('nav-child') ? a.closest('.nav-group')?.querySelector(':scope > a .nav-number') : a?.querySelector('.nav-number');
+    return own ? own.innerHTML : `<b>${(label || '?').trim().charAt(0)}</b>`;
   };
-  ['topUserName', 'topUserRole', 'topAcademicYear', 'topAvatar'].forEach((id) => { const el = $(id); if (el) new MutationObserver(copy).observe(el, { childList: true, characterData: true, subtree: true }); });
-  copy();
-  acct.querySelector('[data-ma=logout]').onclick = () => $('logoutLink')?.click();
+  const TONES = ['t-blue', 't-teal', 't-indigo', 't-cyan', 't-mint', 't-violet'];
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const scSay = (t) => { scMsg.textContent = t || ''; scMsg.hidden = !t; };
+  const renderShortcuts = () => {
+    sc.classList.toggle('editing', scEditing);
+    scEdit.hidden = !shortcuts.length; scEdit.textContent = scEditing ? 'เสร็จ' : 'แก้ไข';
+    scGrid.innerHTML = shortcuts.map((it, i) => `<div class="ms-item ${TONES[i % TONES.length]}" data-i="${i}">
+      <button type="button" class="ms-go" data-url="${esc(it.url)}"><span class="ms-ic">${iconFor(it.url, it.label)}</span><span class="ms-label">${esc(it.label)}</span></button>
+      <button type="button" class="ms-del" aria-label="ลบ ${esc(it.label)}">×</button>
+      <button type="button" class="ms-left" aria-label="เลื่อนไปก่อนหน้า"${i ? '' : ' disabled'}>‹</button></div>`).join('')
+      + (shortcuts.length < scMax ? '<button type="button" class="ms-add"><span class="ms-ic">+</span><span class="ms-label">เพิ่ม</span></button>' : '');
+  };
+  const saveShortcuts = async () => {
+    renderShortcuts();
+    try { const d = await apiRequest('/api/shortcuts', { method: 'PUT', body: { items: shortcuts } }); shortcuts = d.items || shortcuts; scSay(''); renderShortcuts(); }
+    catch (e) { scSay(e.message || 'บันทึกเมนูลัดไม่สำเร็จ'); }
+  };
+  const loadShortcuts = async () => {
+    try { const d = await apiRequest('/api/shortcuts'); shortcuts = d.items || []; scMax = d.max || 12; scLoaded = true; }
+    catch { scLoaded = false; }
+    renderShortcuts();
+  };
+  scEdit.onclick = () => { scEditing = !scEditing; renderShortcuts(); };
+  // ตัวเลือกเมนูสำหรับเพิ่ม
+  const picker = document.createElement('section');
+  picker.className = 'ms-picker'; picker.setAttribute('role', 'dialog'); picker.setAttribute('aria-label', 'เลือกเมนูลัด'); picker.hidden = true;
+  picker.innerHTML = '<div class="msp-card"><div class="msp-head"><strong>เพิ่มเมนูลัด</strong><button type="button" class="msp-close" aria-label="ปิด">×</button></div><div class="msp-list"></div></div>';
+  document.body.append(picker);
+  const closePicker = () => { picker.hidden = true; };
+  picker.addEventListener('click', (e) => { if (e.target === picker || e.target.closest('.msp-close')) closePicker(); });
+  const openPicker = () => {
+    const have = new Set(shortcuts.map((s) => s.url)); const groups = new Map();
+    navLinks().forEach((a) => {
+      const sec = a.closest('.sidebar nav > [data-sec]')?.dataset.sec ?? a.dataset.sec;
+      const head = sec != null ? document.querySelector(`.sidebar nav > [data-sec-head="${sec}"] .sh-text b`)?.textContent || '' : '';
+      const parent = a.classList.contains('nav-child') ? linkLabel(a.closest('.nav-group').querySelector(':scope > a')) : '';
+      const g = parent ? `${head} · ${parent}` : head;
+      const url = linkUrl(a), label = linkLabel(a), on = have.has(url);
+      if (!groups.has(g)) groups.set(g, '');
+      groups.set(g, groups.get(g) + `<button type="button" class="msp-item${on ? ' on' : ''}" data-url="${esc(url)}" data-label="${esc(label)}"${on ? ' disabled' : ''}><span>${esc(label)}</span><i>${on ? '✓' : '+'}</i></button>`);
+    });
+    const html = [...groups].map(([g, items]) => `<h4>${esc(g || 'เมนู')}</h4>${items}`).join('');
+    picker.querySelector('.msp-list').innerHTML = html || '<p>ไม่มีเมนูให้เลือก</p>';
+    picker.hidden = false;
+  };
+  picker.querySelector('.msp-list').addEventListener('click', (e) => {
+    const b = e.target.closest('.msp-item:not([disabled])'); if (!b) return;
+    if (shortcuts.length >= scMax) { scSay(`เพิ่มได้สูงสุด ${scMax} เมนู`); closePicker(); return; }
+    shortcuts.push({ url: b.dataset.url, label: b.dataset.label }); closePicker(); saveShortcuts();
+  });
+  scGrid.addEventListener('click', (e) => {
+    if (e.target.closest('.ms-add')) { if (!scLoaded) { loadShortcuts(); return; } openPicker(); return; }
+    const item = e.target.closest('.ms-item'); if (!item) return; const i = +item.dataset.i;
+    if (e.target.closest('.ms-del')) { shortcuts.splice(i, 1); if (!shortcuts.length) scEditing = false; saveShortcuts(); return; }
+    if (e.target.closest('.ms-left')) { if (i > 0) { [shortcuts[i - 1], shortcuts[i]] = [shortcuts[i], shortcuts[i - 1]]; saveShortcuts(); } return; }
+    if (scEditing) return;
+    const url = e.target.closest('.ms-go')?.dataset.url; if (!url) return;
+    const a = findLink(url);
+    if (a) a.click(); else if (/^https:/.test(url)) window.open(url, '_blank', 'noopener'); else location.href = url;
+    window.setMobileMenu?.(false);
+  });
+  // กดค้างที่เมนูลัด = เข้าโหมดแก้ไข
+  let pressT; scGrid.addEventListener('pointerdown', (e) => { if (!e.target.closest('.ms-item')) return; pressT = setTimeout(() => { scEditing = true; renderShortcuts(); try { navigator.vibrate?.(12); } catch {} }, 550); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => scGrid.addEventListener(t, () => clearTimeout(pressT)));
+  loadShortcuts();
+  const syncAvatar = () => { bar.querySelector('.mt-avatar').textContent = $('topAvatar')?.textContent || '—'; };
+  if ($('topAvatar')) new MutationObserver(syncAvatar).observe($('topAvatar'), { childList: true, characterData: true, subtree: true });
+  syncAvatar();
 
   // ปุ่มบัญชีที่แถบล่าง → เมนูเลื่อนขึ้น (เหมือนเมนูชื่อบน PC)
   const sheetBackdrop = document.createElement('div');
