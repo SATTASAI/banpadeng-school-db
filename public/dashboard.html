@@ -110,6 +110,19 @@
   .view-as-panel .top-btn { justify-content:center; cursor:pointer; font-family:inherit; }
   .view-as-panel .top-btn:disabled { opacity:.5; cursor:not-allowed; }
   .view-as-panel small { color:var(--color-text-muted); }
+  /* เมนูผู้ใช้ (PC): กดชื่อแล้วกางเมนู */
+  .user-menu { position:relative; }
+  .user-menu .user-pill { cursor:pointer; font:inherit; text-align:left; }
+  .user-menu .user-pill:hover,.user-menu .user-pill[aria-expanded="true"] { background:#fff; border-color:rgba(26,112,205,.35); }
+  .um-caret { font-size:11px; color:#6d87a0; transition:transform .15s; }
+  .user-pill[aria-expanded="true"] .um-caret { transform:rotate(180deg); }
+  .user-menu-panel { position:absolute; right:0; top:calc(100% + 8px); width:250px; display:grid; gap:8px; padding:12px; background:#fff; border:1px solid rgba(84,111,138,.18); border-radius:14px; box-shadow:0 12px 30px rgba(24,49,83,.18); z-index:450; }
+  .user-menu-panel[hidden] { display:none; }
+  .user-menu-panel .period-pill { justify-content:space-between; box-shadow:none; }
+  .user-menu-panel .top-btn { justify-content:center; width:100%; box-sizing:border-box; }
+  .user-menu-panel .view-as-wrap { flex-direction:column; }
+  .user-menu-panel .view-as-wrap .top-viewas { width:100%; justify-content:center; }
+  .user-menu-panel .view-as-panel { position:static; width:auto; max-width:none; margin-top:8px; box-shadow:none; }
   .top-avatar { width:28px; height:28px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:700; background:linear-gradient(145deg,#58A8F0,#1A70CD); box-shadow:inset 0 1px rgba(255,255,255,.3); }
   .workspace-stage { flex:1; min-height:0; overflow:auto; position:relative; }
   .main-content { padding:30px 34px 54px; max-width:1320px; margin:0 auto; }
@@ -419,8 +432,10 @@
         <div class="global-search-results" id="globalSearchResults" role="listbox"></div>
       </div>
       <div class="topbar-actions">
+        <div class="user-menu" id="userMenu">
+        <button type="button" class="user-pill" id="userMenuToggle" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuPanel"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span><span class="um-caret" aria-hidden="true">▾</span></button>
+        <div class="user-menu-panel" id="userMenuPanel" hidden>
         <div class="period-pill"><span>ปีการศึกษา</span><strong id="topAcademicYear">—</strong></div>
-        <div class="user-pill"><span class="top-avatar" id="topAvatar">—</span><span><strong id="topUserName">—</strong><br><small id="topUserRole">—</small></span></div>
         <div class="view-as-wrap superadmin-only" style="display:none;">
           <button type="button" class="top-btn top-viewas" id="viewAsToggle" aria-expanded="false" aria-controls="viewAsPanel" title="ดูระบบในสิทธิ์ของบัญชีอื่น (ดูได้อย่างเดียว)">View as</button>
           <div class="view-as-panel" id="viewAsPanel" hidden>
@@ -432,6 +447,8 @@
         </div>
         <a href="/account.html" class="top-btn top-account" id="topAccountLink">บัญชีของฉัน</a>
         <a href="#" class="top-btn top-logout" id="logoutLink">ออกจากระบบ</a>
+        </div>
+        </div>
       </div>
     </header>
     <div class="workspace-stage">
@@ -1412,6 +1429,17 @@
     document.getElementById("overviewWrap").prepend(banner);
     document.querySelectorAll('#overviewWrap a[data-dashboard-page], #overviewWrap a[data-open-url]').forEach((a) => { a.style.display = "none"; });
   }
+
+  // เมนูผู้ใช้: กดชื่อแล้วกาง/หุบ
+  (() => {
+    const t = document.getElementById("userMenuToggle"), p = document.getElementById("userMenuPanel");
+    if (!t || !p) return;
+    const set = (open) => { p.hidden = !open; t.setAttribute("aria-expanded", String(open)); };
+    t.addEventListener("click", (e) => { e.stopPropagation(); set(p.hidden); });
+    p.addEventListener("click", (e) => { if (e.target.closest("a")) set(false); else e.stopPropagation(); });
+    document.addEventListener("click", () => set(false));
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") set(false); });
+  })();
 
   // View as (เฉพาะ superadmin): เลือกบัญชีแล้วเปิดระบบในมุมมองของบัญชีนั้น
   (() => {
