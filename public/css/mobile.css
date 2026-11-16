@@ -160,3 +160,12 @@
  html[data-theme="dark"] .ig-bar button.active .mt-avatar{box-shadow:0 0 0 2px #000,0 0 0 3.5px #f5f5f5}
  html[data-theme="dark"] .ig-bar .mt-badge,html[data-theme="dark"] .ig-bar .mt-dot{box-shadow:0 0 0 2px #000}
 }
+/* แถบล่างลอย (IG ใหม่): แคปซูลโปร่งแสง เว้นขอบรอบด้าน */
+@media(max-width:720px){
+ .layout>.content-area{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+ .mobile-tabbar.ig-bar{left:12px;right:12px;bottom:calc(10px + env(safe-area-inset-bottom));padding:0 6px;border:.5px solid rgba(0,0,0,.08);border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);box-shadow:0 8px 28px rgba(20,40,70,.18),inset 0 1px 0 rgba(255,255,255,.6)}
+ .ig-bar button{min-height:56px;border-radius:999px}
+ .ig-bar .mt-badge{box-shadow:0 0 0 2px rgba(255,255,255,.9)}
+ html[data-theme="dark"] .mobile-tabbar.ig-bar{background:rgba(22,22,24,.72);border-color:rgba(255,255,255,.1);box-shadow:0 8px 28px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.08)}
+ .mobile-chat-open .mobile-tabbar.ig-bar{bottom:calc(10px + var(--chat-keyboard-inset,0px) + env(safe-area-inset-bottom))}
+}
