@@ -644,11 +644,26 @@ a[hidden]{display:none!important}
 /* ===== หน้าเข้าสู่ระบบ/สมัคร/ลืมรหัส: สไตล์ premium (ปุ่มนูน + hover ไล่สีฟ้า) ===== */
 .auth-shell{background:radial-gradient(circle at 20% 10%,#f7fbff,#e6eef7 70%)}
 .auth-card{background:#f4f7fb;border:1px solid rgba(84,111,138,.12);border-radius:22px;box-shadow:0 24px 50px rgba(24,49,83,.16),-6px -6px 16px rgba(255,255,255,.7)}
-.auth-card .auth-mark{border-radius:50%;background:#fff;box-shadow:0 0 0 4px #fff,0 0 0 5px rgba(26,112,205,.25),0 8px 18px rgba(36,72,112,.18)}
+.auth-card .auth-mark{border-radius:50%;background:#fff;box-shadow:0 0 0 4px #fff,0 0 0 5px rgba(53,80,201,.25),0 8px 18px rgba(36,72,112,.18)}
 .auth-card input:not([type=checkbox]):not([type=radio]),.auth-card select{border:0;border-radius:12px;background:#eef3f8;box-shadow:inset 3px 3px 7px #d3dde8,inset -3px -3px 7px #fff;transition:box-shadow .2s,background .2s}
-.auth-card input:not([type=checkbox]):not([type=radio]):focus,.auth-card select:focus{outline:none;background:#fff;box-shadow:inset 2px 2px 5px #d3dde8,inset -2px -2px 5px #fff,0 0 0 3px rgba(26,112,205,.25)}
+.auth-card input:not([type=checkbox]):not([type=radio]):focus,.auth-card select:focus{outline:none;background:#fff;box-shadow:inset 2px 2px 5px #d3dde8,inset -2px -2px 5px #fff,0 0 0 3px rgba(53,80,201,.25)}
 .auth-card .btn{border:0;border-radius:12px;background:#fff;color:#28405a;font-weight:600;box-shadow:-3px -3px 7px #fff,3px 3px 8px #d3dde8;transition:background .2s,color .2s,transform .2s,box-shadow .2s}
-.auth-card .btn:hover:not(:disabled),.auth-card .btn:focus-visible{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff;transform:translateY(-2px);box-shadow:0 8px 18px rgba(26,112,205,.3);outline:none}
-.auth-card .btn-primary{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff;box-shadow:0 6px 16px rgba(26,112,205,.3)}
+.auth-card .btn:hover:not(:disabled),.auth-card .btn:focus-visible{background:linear-gradient(135deg,#7AA2F7,#3550C9);color:#fff;transform:translateY(-2px);box-shadow:0 8px 18px rgba(53,80,201,.3);outline:none}
+.auth-card .btn-primary{background:linear-gradient(135deg,#7AA2F7,#3550C9);color:#fff;box-shadow:0 6px 16px rgba(53,80,201,.3)}
 .auth-card .btn-primary:hover:not(:disabled){filter:brightness(1.05)}
 .auth-card .btn:active:not(:disabled){transform:translateY(0);box-shadow:inset 2px 2px 6px rgba(0,0,0,.15)}
+
+/* ===== สไตล์ premium ทั้งระบบ (โทนเย็น): ปุ่มนูน · ช่องกรอกยุบ · การ์ดนูน · hover ไล่สี =====
+   สีหลักของหน้าทั่วไป = ฟ้า (--pm-a/--pm-b) ส่วนต่าง ๆ ใช้สีของตัวเอง: ค้นหา=เทอร์ควอยซ์ เมนูผู้ใช้=คราม แจ้งเตือน=ฟ้าน้ำทะเล ตัวเลขภาพรวม=เขียวมิ้นต์ */
+:root{--pm-a:#58A8F0;--pm-b:#1A70CD;--pm-shadow:rgba(26,112,205,.3);--pm-raise:-3px -3px 7px rgba(255,255,255,.9),3px 3px 8px rgba(184,201,219,.55)}
+.btn,.btn-ghost{border-color:transparent;border-radius:12px;background:#fff;color:#28405a;box-shadow:var(--pm-raise)}
+.btn:hover:not(:disabled),.btn-ghost:hover:not(:disabled){background:linear-gradient(135deg,var(--pm-a),var(--pm-b));color:#fff;border-color:transparent;transform:translateY(-2px);box-shadow:0 8px 18px var(--pm-shadow)}
+.btn-primary{background:linear-gradient(135deg,var(--pm-a),var(--pm-b));color:#fff;border-color:transparent;box-shadow:0 6px 16px var(--pm-shadow)}
+.btn-primary:hover:not(:disabled){background:linear-gradient(135deg,var(--pm-a),var(--pm-b));filter:brightness(1.06)}
+.btn:active:not(:disabled){transform:translateY(0);box-shadow:inset 2px 2px 6px rgba(0,0,0,.14)}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.global-search *),textarea,select{border-color:transparent;border-radius:12px;background-color:#eef3f8;box-shadow:inset 3px 3px 7px #d6e0ea,inset -3px -3px 7px #fff}
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.global-search *):focus,textarea:focus,select:focus{border-color:transparent;background-color:#fff;box-shadow:inset 2px 2px 5px #d6e0ea,inset -2px -2px 5px #fff,0 0 0 3px rgba(26,112,205,.22)}
+.panel,.module-card{border-color:rgba(84,111,138,.1);border-radius:18px;box-shadow:-6px -6px 16px rgba(255,255,255,.75),6px 8px 22px rgba(160,182,206,.35)}
+.module-card:hover{transform:translateY(-3px);border-color:transparent;box-shadow:0 14px 30px var(--pm-shadow)}
+table tbody tr{transition:background .15s}
+table tbody tr:hover{background:rgba(88,168,240,.07)}

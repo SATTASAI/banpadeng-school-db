@@ -133,6 +133,6 @@
 @media(prefers-reduced-motion:reduce){.mobile-chat-panel{transition:none}}
 
 /* ส่วนบัญชีในเมนูมือถือ: สไตล์ premium */
-.ma-actions{grid-template-columns:1fr;gap:8px}.ma-actions .btn{justify-content:space-between;border:0;border-radius:12px;background:#fff;color:#28405a;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}.ma-actions .btn::after{content:"›";font-size:18px;opacity:.45}.ma-actions .btn:active,.ma-actions .btn:hover{background:linear-gradient(135deg,#58A8F0,#1A70CD);color:#fff}
-.ma-year{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:#fff;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}.ma-year strong{padding:2px 9px;border-radius:999px;background:#e6f0fb;color:#1A70CD;font-size:12px}
+.ma-actions{grid-template-columns:1fr;gap:8px}.ma-actions .btn{justify-content:space-between;border:0;border-radius:12px;background:#fff;color:#28405a;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}.ma-actions .btn::after{content:"›";font-size:18px;opacity:.45}.ma-actions .btn:active,.ma-actions .btn:hover{background:linear-gradient(135deg,#8C8AF5,#4F4BC9);color:#fff}
+.ma-year{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:12px;background:#fff;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}.ma-year strong{padding:2px 9px;border-radius:999px;background:#ecebff;color:#4F4BC9;font-size:12px}
 .ma-viewas .top-viewas{border:0;border-radius:12px;box-shadow:-3px -3px 7px #fff,3px 3px 8px #cdd9e5}
