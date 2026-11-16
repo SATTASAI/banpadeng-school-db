@@ -21,3 +21,8 @@
 .wf-reg-body{padding:0 14px 14px}.wf-reg-body .wf-request{margin-top:0}
 .wf-reg-row>summary>.wf-state{justify-self:end;text-align:center}
 @media(max-width:760px){.wf-reg-row>summary{grid-template-columns:1fr auto}.wf-reg-main{grid-column:1/-1;order:-1}.wf-reg-amount{text-align:left}}
+
+/* แถบสีสถานะ + ชี้เมาส์ดูคำอธิบาย + พับรายการคำขอ */
+.wf-project.pm-bar{--st:#58A8F0}.wf-project.pm-bar::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:4px;border-radius:0 4px 4px 0;background:var(--st)}
+.wf-project-info{position:relative}.wf-project:hover .pm-more{opacity:1;visibility:visible;transform:none;transition:opacity .16s,transform .16s}.wf-project:hover{z-index:21}
+.wf-req-fold{grid-column:1/-1;border-radius:14px;background:#f4f7fb;padding:4px 12px}.wf-req-fold>summary{cursor:pointer;padding:9px 2px;font-weight:700;color:#1d5f9e;list-style:none}.wf-req-fold>summary::before{content:"›";display:inline-block;margin-right:8px;transition:transform .15s}.wf-req-fold[open]>summary::before{transform:rotate(90deg)}
