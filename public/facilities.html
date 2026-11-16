@@ -16,14 +16,14 @@ body{background:inherit}.fc-page{max-width:1240px;margin:auto;padding:24px}
 .fc-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
 .fc-card{padding:14px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88);text-align:left;font:inherit;cursor:default}.fc-card span{display:block;font-size:12px;color:var(--color-text-muted)}.fc-card strong{display:block;margin-top:4px;font-size:24px;color:var(--color-forest-900);font-variant-numeric:tabular-nums}
 button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
-.fc-card.wait{border-left:5px solid #F2A922}.fc-card.work{border-left:5px solid #2B86E5}.fc-card.done{border-left:5px solid #1AA36F}.fc-card.cancel{border-left:5px solid #A3B0BD}
+.fc-card.wait{border-left:5px solid #5b6be8}.fc-card.work{border-left:5px solid #2B86E5}.fc-card.done{border-left:5px solid #13a88a}.fc-card.cancel{border-left:5px solid #A3B0BD}
 .fc-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px;padding:12px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.75)}
 .fc-filters label{display:grid;gap:4px;font-size:13px;color:var(--color-text-muted)}.fc-filters select,.fc-filters input{width:100%}
 .fc-table{overflow:auto;border:1px solid var(--color-border);border-radius:16px;background:#fff}.fc-table table{width:100%;border-collapse:collapse;min-width:980px;font-size:14px}
 .fc-table th,.fc-table td{padding:9px 10px;border-bottom:1px solid #e3ecf3;text-align:left;vertical-align:top;font-variant-numeric:tabular-nums}.fc-table th{background:#f3f8fc;color:#244e72;font-weight:600;position:sticky;top:0;white-space:nowrap}
 .fc-table td.n,.fc-table th.n{text-align:center}.fc-table tbody tr[data-id]{cursor:pointer}.fc-table tbody tr[data-id]:hover td{background:#f7fbff}.fc-table td small{display:block;color:var(--color-text-muted)}
 .st{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap}
-.st.wait{background:#FFF1D2;color:#9A5B00}.st.work{background:#DCEBFF;color:#1458A8}.st.done{background:#DDF5E9;color:#137A50}.st.cancel{background:#EEF1F4;color:#6B7C8E}
+.st.wait{background:#ecebff;color:#4a4fc4}.st.work{background:#DCEBFF;color:#1458A8}.st.done{background:#DDF5E9;color:#137A50}.st.cancel{background:#EEF1F4;color:#6B7C8E}
 .fc-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-bottom:14px}.fc-panel{padding:16px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.88);min-width:0}.fc-panel h2{font-size:16px;margin:0 0 10px}.fc-panel.wide{grid-column:1/-1}
 .bar-row{display:grid;grid-template-columns:120px 1fr 64px;gap:8px;align-items:center;font-size:13px;margin:7px 0}.bar-row>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar-row em{font-style:normal;text-align:right;color:var(--color-text-muted);font-variant-numeric:tabular-nums}
 .bar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:#EEF3F8}.bar i{display:block;height:100%}.bar .wait{background:#F2A922}.bar .work{background:#2B86E5}.bar .done{background:#1AA36F}
@@ -38,6 +38,7 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
 .rg-act{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}.rg-act .btn{padding:4px 10px;font-size:12.5px}tr.closed td{color:#8A99A8}
 @media(max-width:620px){.fm-grid{grid-template-columns:1fr}}
 @media(max-width:820px){.fc-page{padding:14px}.fc-grid{grid-template-columns:1fr}.bar-row{grid-template-columns:90px 1fr 56px}}
+#rows .pm-card{cursor:pointer}
 </style></head>
 <body>
 <main class="fc-page">
@@ -60,8 +61,8 @@ button.fc-card{cursor:pointer}button.fc-card.on{outline:2px solid #183153}
       <label>อาคาร/สถานที่<select id="place"></select></label>
       <label>ประเภทงาน<select id="cat"></select></label>
     </div>
-    <div class="fc-table"><table><thead><tr><th>เลขที่</th><th>วันที่แจ้ง</th><th>เรื่อง</th><th>อาคาร/สถานที่</th><th>ประเภท</th><th>ผู้แจ้ง</th><th>ช่าง/ผู้รับผิดชอบ</th><th class="n">สถานะ</th><th>ซ่อมเสร็จ</th><th class="n">ใช้เวลา</th></tr></thead><tbody id="rows"><tr><td colspan="10" class="empty">กำลังโหลด...</td></tr></tbody></table></div>
-    <p class="fc-note">แตะแถวเพื่อเปิดใบแจ้งซ่อม · <span class="st wait">รอซ่อมแซม</span> = รับแจ้งแล้ว ยังไม่มีผู้รับงาน · <span class="st work">กำลังซ่อม</span> = ช่างรับงาน/กำลังซ่อม/รออะไหล่ · <span class="st done">ซ่อมแล้ว</span> = ซ่อมเสร็จ/ตรวจรับแล้ว</p>
+    <div class="pm-grid" id="rows"><div class="empty">กำลังโหลด...</div></div>
+    <p class="fc-note">แตะการ์ดเพื่อเปิดใบแจ้งซ่อม · <span class="st wait">รอซ่อมแซม</span> = รับแจ้งแล้ว ยังไม่มีผู้รับงาน · <span class="st work">กำลังซ่อม</span> = ช่างรับงาน/กำลังซ่อม/รออะไหล่ · <span class="st done">ซ่อมแล้ว</span> = ซ่อมเสร็จ/ตรวจรับแล้ว</p>
   </section>
 
   <section id="tab-stats" hidden>
@@ -136,9 +137,10 @@ function renderReport(){
   $("statusCards").innerHTML=`<button type="button" class="fc-card${statusFilter===""?" on":""}" data-g=""><span>ทั้งหมด</span><strong>${base.length}</strong></button>`
     +["wait","work","done","cancel"].map(g=>`<button type="button" class="fc-card ${g}${statusFilter===g?" on":""}" data-g="${g}"><span>${GROUP_LABEL[g]}</span><strong>${count(g)}</strong></button>`).join("");
   const list=base.filter(r=>!statusFilter||GROUP[r.status]===statusFilter).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  const ST={wait:"st-wait",work:"st-work",done:"st-ok",cancel:"st-off"};
   $("rows").innerHTML=list.map(r=>{const g=GROUP[r.status]||"cancel",done=g==="done"&&r.completed_at;
-    return `<tr data-id="${r.id}"><td>${esc(r.request_no)}</td><td>${thDate(dayOf(r.created_at))}</td><td>${esc(r.title)}</td><td>${esc(r.facility_name||r.custom_location||r.inventory_name||"-")}${r.building_name&&r.building_name!==r.facility_name?`<small>${esc(r.building_name)}${r.floor?" ชั้น "+esc(r.floor):""}</small>`:""}</td><td>${esc(CATEGORY[r.category]||r.category)}</td><td>${esc(r.reporter_name||"-")}</td><td>${esc(r.assignee_name||"-")}</td><td class="n"><span class="st ${g}">${GROUP_LABEL[g]}</span><small>${esc(STATUS[r.status]||r.status)}</small></td><td>${done?thDate(dayOf(r.completed_at)):"-"}</td><td class="n">${done?fmtDays(daysBetween(r.created_at,r.completed_at)):"-"}</td></tr>`}).join("")
-    ||'<tr><td colspan="10" class="empty">ไม่มีใบแจ้งซ่อมที่ตรงกับตัวกรอง</td></tr>';
+    return `<article class="pm-card ${ST[g]||"st-off"}" data-id="${r.id}" tabindex="0"><div class="pm-head"><p class="pm-title">${esc(r.title)}</p><span class="pm-badge">${GROUP_LABEL[g]}</span></div><div class="pm-sub">${esc(r.facility_name||r.custom_location||r.inventory_name||"-")} · ${esc(CATEGORY[r.category]||r.category)}</div><div class="pm-sub">${thDate(dayOf(r.created_at))} · ${esc(r.request_no)}${done?` · ใช้เวลา ${fmtDays(daysBetween(r.created_at,r.completed_at))}`:""}</div><div class="pm-more"><p><b>สถานะ:</b> ${esc(STATUS[r.status]||r.status)}</p>${r.building_name&&r.building_name!==r.facility_name?`<p><b>อาคาร:</b> ${esc(r.building_name)}${r.floor?" ชั้น "+esc(r.floor):""}</p>`:""}<p><b>ผู้แจ้ง:</b> ${esc(r.reporter_name||"-")}</p><p><b>ช่าง/ผู้รับผิดชอบ:</b> ${esc(r.assignee_name||"-")}</p>${done?`<p><b>ซ่อมเสร็จ:</b> ${thDate(dayOf(r.completed_at))}</p>`:""}</div></article>`}).join("")
+    ||'<div class="empty" style="grid-column:1/-1">ไม่มีใบแจ้งซ่อมที่ตรงกับตัวกรอง</div>';
 }
 function groupTable(items,keyFn,labelFn=k=>k){
   const m=new Map();for(const r of items){const k=keyFn(r);if(!m.has(k))m.set(k,[]);m.get(k).push(r)}
@@ -199,7 +201,7 @@ $("tabs").onclick=e=>{const b=e.target.closest("[data-tab]");if(!b)return;docume
 $("statusCards").onclick=e=>{const b=e.target.closest("[data-g]");if(!b)return;statusFilter=b.dataset.g;renderReport()};
 ["q","month","place","cat"].forEach(id=>$(id).addEventListener(id==="q"?"input":"change",renderReport));
 $("statYear").onchange=renderStats;$("statExport").onclick=exportStats;
-$("rows").onclick=e=>{const tr=e.target.closest("tr[data-id]");if(tr)location.href=`/maintenance.html?request=${tr.dataset.id}`};
+$("rows").onclick=e=>{const tr=e.target.closest("[data-id]");if(tr)location.href=`/maintenance.html?request=${tr.dataset.id}`};
 let editId=null;
 function openForm(f){
   editId=f?f.id:null;const fm=$("fmForm");fm.reset();$("fmErr").style.display="none";
