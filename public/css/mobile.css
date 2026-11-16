@@ -22,7 +22,7 @@
  .layout .global-search{order:0;flex:1 1 auto;min-width:0}
  .layout .global-search input{height:42px;border-radius:12px}
  .layout .topbar-actions{flex:0 0 auto;margin-left:0}
- .layout .topbar-actions>:not(#schoolNotifications){display:none!important}
+ .layout .topbar-actions>:not(#schoolNotifications):not(.theme-toggle){display:none!important}
  .layout #schoolNotifications .sn-toggle,.layout .mobile-menu-toggle{display:none}
  .layout .sn-panel{position:fixed;top:auto;bottom:calc(66px + env(safe-area-inset-bottom));left:8px;right:8px;width:auto;max-height:calc(100dvh - 150px)}
  .layout .sn-list{max-height:calc(100dvh - 230px)}
