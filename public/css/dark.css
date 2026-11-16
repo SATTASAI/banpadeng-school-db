@@ -1,0 +1,79 @@
+/* ปุ่มสลับโหมด (ทั้งสองโหมด) */
+.theme-toggle{display:grid;place-items:center;flex:0 0 auto;width:40px;height:40px;padding:0;border:0;border-radius:50%;cursor:pointer;background:#fff;color:#3d5a78;box-shadow:0 4px 14px rgba(36,72,112,.12);transition:transform .2s,box-shadow .2s,background .2s}
+.theme-toggle:hover{transform:translateY(-1px) rotate(-12deg);box-shadow:0 6px 18px rgba(36,72,112,.2)}
+
+/* ===== โหมดกลางคืน (โทนเย็น) ===== */
+html[data-theme="dark"]{
+  --color-bg:#0e1621;--color-surface:rgba(23,34,49,.92);--color-border:rgba(148,170,196,.16);
+  --color-text:#e3ecf5;--color-text-muted:#93a6ba;--color-forest-900:#e3ecf5;--color-forest-700:#a9c3de;
+  --color-danger-bg:#3a1f27;--color-teal-100:#12343a;
+  --shadow-card:0 1px 2px rgba(0,0,0,.3),0 16px 42px rgba(0,0,0,.35);
+  --pm-raise:0 6px 16px rgba(0,0,0,.35);--pm-shadow:rgba(40,120,220,.35);
+  --dk-bg:#0e1621;--dk-1:#162130;--dk-2:#1c2a3c;--dk-3:#24364b;--dk-text:#e3ecf5;--dk-muted:#93a6ba;--dk-line:rgba(148,170,196,.16);
+}
+html[data-theme="dark"],html[data-theme="dark"] body{background:var(--dk-bg)!important;color:var(--dk-text)}
+html[data-theme="dark"].embedded,html[data-theme="dark"].embedded body{background:transparent!important}
+html[data-theme="dark"] body{background-image:none}
+html[data-theme="dark"] h1,html[data-theme="dark"] h2,html[data-theme="dark"] h3,html[data-theme="dark"] h4,html[data-theme="dark"] strong,html[data-theme="dark"] label{color:var(--dk-text)}
+html[data-theme="dark"] a:not(.btn):not([class*="nav-"]){color:#7cc0ff}
+html[data-theme="dark"] .muted,html[data-theme="dark"] small{color:var(--dk-muted)}
+
+/* โครงหน้าหลัก */
+html[data-theme="dark"] .layout{background:rgba(18,28,40,.9);border-color:var(--dk-line);box-shadow:0 28px 80px rgba(0,0,0,.5)}
+html[data-theme="dark"] .content-area,html[data-theme="dark"] .content-frame{background:var(--dk-bg)}
+html[data-theme="dark"] .sidebar{background:linear-gradient(180deg,#131e2b,#101a26);border-color:var(--dk-line)}
+html[data-theme="dark"] .sidebar::after{display:none}
+html[data-theme="dark"] .sidebar-brand,html[data-theme="dark"] .nav-label{color:var(--dk-muted)}
+html[data-theme="dark"] .sidebar-brand strong,html[data-theme="dark"] .sidebar-brand{color:var(--dk-text)}
+html[data-theme="dark"] .sidebar nav a:not([class*="nav-grades"]):not(.nav-activity):not(.nav-bank):not(.nav-handicraft):not(.nav-cleanup):not(.active):not(:hover){background:var(--dk-2);color:var(--dk-text);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+html[data-theme="dark"] .nav-number{background:var(--dk-3);border-color:var(--dk-line);color:#9cc9f5}
+html[data-theme="dark"] .global-topbar,html[data-theme="dark"] .app-topbar{background:rgba(16,25,37,.85);border-color:var(--dk-line);box-shadow:none}
+html[data-theme="dark"] .mobile-tabbar{background:rgba(16,25,37,.95);border-color:var(--dk-line)}
+
+/* ปุ่มบนแถบบน */
+html[data-theme="dark"] .theme-toggle,html[data-theme="dark"] .sn-toggle,html[data-theme="dark"] .user-menu .user-pill,html[data-theme="dark"] .global-search{background:var(--dk-2);color:var(--dk-text);border-color:transparent;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+html[data-theme="dark"] .theme-toggle{color:#ffd57a}
+html[data-theme="dark"] .gs-icon{color:var(--dk-muted)}
+html[data-theme="dark"] #globalSearch input{color:var(--dk-text)}
+html[data-theme="dark"] .gs-clear{background:var(--dk-3);color:var(--dk-text)}
+html[data-theme="dark"] .user-menu .top-avatar{box-shadow:0 0 0 3px var(--dk-2),0 0 0 4px rgba(124,192,255,.35)}
+
+/* แผงที่กางลง */
+html[data-theme="dark"] .user-menu-panel,html[data-theme="dark"] .sn-panel,html[data-theme="dark"] .global-search-results,html[data-theme="dark"] .view-as-panel{background:var(--dk-1);border-color:var(--dk-line);box-shadow:0 18px 40px rgba(0,0,0,.5)}
+html[data-theme="dark"] .sn-head{background:var(--dk-2);border-color:var(--dk-line)}
+html[data-theme="dark"] .user-menu-panel .um-item:not(:hover):not(.top-viewas[aria-expanded="true"]),html[data-theme="dark"] .sn-item:not(:hover),html[data-theme="dark"] .global-search-results .search-result:not(:hover):not(.active){background:var(--dk-2);color:var(--dk-text);box-shadow:0 4px 12px rgba(0,0,0,.3)}
+html[data-theme="dark"] .user-menu-panel .um-static{background:var(--dk-2)!important;color:var(--dk-text)!important}
+html[data-theme="dark"] .um-badge{background:#2a2f5a;color:#b9b8ff}
+html[data-theme="dark"] .global-search-results .search-group-label{color:var(--dk-muted)}
+html[data-theme="dark"] .search-result-icon{background:var(--dk-3);color:#9cc9f5}
+html[data-theme="dark"] .global-search-backdrop{background:rgba(0,0,0,.4)}
+
+/* การ์ด กรอบ ตาราง */
+html[data-theme="dark"] .panel,html[data-theme="dark"] .module-card,html[data-theme="dark"] .auth-card,html[data-theme="dark"] .snapshot-card,html[data-theme="dark"] .department-card,html[data-theme="dark"] .budget-summary-card,html[data-theme="dark"] .overview-card,html[data-theme="dark"] .stat-cell:not(:hover),html[data-theme="dark"] .pm-card,html[data-theme="dark"] .leave-mini,html[data-theme="dark"] .task-card,html[data-theme="dark"] .request-card,html[data-theme="dark"] .fc-card,html[data-theme="dark"] .wf-project,html[data-theme="dark"] .card,html[data-theme="dark"] .tablebox,html[data-theme="dark"] .leave-panel,html[data-theme="dark"] .leave-category-card{background:var(--dk-1)!important;border-color:var(--dk-line)!important;color:var(--dk-text);box-shadow:0 8px 22px rgba(0,0,0,.35)!important}
+html[data-theme="dark"] .pm-title,html[data-theme="dark"] .lm-top strong,html[data-theme="dark"] .lm-type b,html[data-theme="dark"] .stat-num{color:var(--dk-text)}
+html[data-theme="dark"] .pm-sub,html[data-theme="dark"] .lm-type,html[data-theme="dark"] .lm-date,html[data-theme="dark"] .stat-label{color:var(--dk-muted)}
+html[data-theme="dark"] .lm-actions button:not(.lm-open):not(:hover){background:var(--dk-3);color:var(--dk-text)}
+html[data-theme="dark"] .pm-badge,html[data-theme="dark"] .lm-status{background:color-mix(in srgb,var(--st,var(--lm)) 22%,#162130)}
+html[data-theme="dark"] .wf-req-fold{background:var(--dk-2)}
+html[data-theme="dark"] table th{background:var(--dk-2)!important;color:var(--dk-muted)!important;border-color:var(--dk-line)!important}
+html[data-theme="dark"] table td{border-color:var(--dk-line)!important;color:var(--dk-text)}
+html[data-theme="dark"] table tbody tr:hover,html[data-theme="dark"] table tbody tr:hover td{background:rgba(124,192,255,.07)!important}
+html[data-theme="dark"] .notice,html[data-theme="dark"] .empty{background:var(--dk-2);color:var(--dk-muted);border-color:var(--dk-line)}
+html[data-theme="dark"] .error-box{background:#3a1f27;color:#ffb8c0}
+html[data-theme="dark"] .dash-tabs{border-color:var(--dk-line)}
+html[data-theme="dark"] .dash-tabs button:hover{background:var(--dk-2)}
+
+/* ปุ่มและช่องกรอก */
+html[data-theme="dark"] .btn:not(.btn-primary):not(.btn-danger):not(:hover),html[data-theme="dark"] .btn-ghost:not(:hover){background:var(--dk-2);color:var(--dk-text);box-shadow:0 4px 12px rgba(0,0,0,.35)}
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.global-search *),html[data-theme="dark"] textarea,html[data-theme="dark"] select{background-color:#0b121b;color:var(--dk-text);border-color:var(--dk-line);box-shadow:inset 2px 2px 6px rgba(0,0,0,.5),inset -1px -1px 2px rgba(255,255,255,.04)}
+html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.global-search *):focus,html[data-theme="dark"] textarea:focus,html[data-theme="dark"] select:focus{background-color:#101a26;box-shadow:inset 2px 2px 6px rgba(0,0,0,.5),0 0 0 3px rgba(124,192,255,.3)}
+html[data-theme="dark"] input::placeholder,html[data-theme="dark"] textarea::placeholder{color:#62778d}
+html[data-theme="dark"] option{background:#162130;color:var(--dk-text)}
+
+/* ส่วนบัญชีบนมือถือ */
+html[data-theme="dark"] .ma-actions .btn:not(:hover),html[data-theme="dark"] .ma-year,html[data-theme="dark"] .ma-viewas .top-viewas{background:var(--dk-2);color:var(--dk-text);box-shadow:0 4px 12px rgba(0,0,0,.35)}
+
+/* สีพื้นขาวที่เขียนไว้ในหน้า */
+html[data-theme="dark"] [style*="background:#fff"],html[data-theme="dark"] [style*="background: #fff"],html[data-theme="dark"] [style*="background:white"]{background:var(--dk-1)!important;color:var(--dk-text)}
+html[data-theme="dark"] img:not([src$=".svg"]){filter:brightness(.92)}
+html[data-theme="dark"] .academic-context,html[data-theme="dark"] .alert-item,html[data-theme="dark"] .quick-actions .btn{background:var(--dk-2)!important;color:var(--dk-text);border-color:var(--dk-line)!important}
