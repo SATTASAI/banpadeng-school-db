@@ -18,12 +18,14 @@
  const AUTHORITY='อาศัยอำนาจตามมาตรา ๓๙(๑) แห่งพระราชบัญญัติระเบียบบริหารราชการ กระทรวงศึกษาธิการ พ.ศ.๒๕๔๖ จึงแต่งตั้งข้าราชการครูและบุคลากรทางการศึกษาปฏิบัติหน้าที่สอนแทน ดังนี้';
  // เลขไทยทั้งฟอร์ม
  const thaiDigits=v=>String(v??'').replace(/\d/g,d=>'๐๑๒๓๔๕๖๗๘๙'[d]);
+ // เรียงตามชั้น (อนุบาล → ประถม → มัธยม) แล้วห้อง แล้วคาบ
+ function gradeKey(g){const t=String(g||'').trim();return /^อ/.test(t)?0:/^ป/.test(t)?1:/^ม/.test(t)?2:3;}
  function order(rows,meta){
   if(!rows.length)throw Error('ยังไม่มีรายการสอนแทนสำหรับส่งออก');
   const o={title:'คำสั่งโรงเรียนบ้านป่าเด็ง',number:'ที่ '+(meta.order_number?.trim()||'........ / ........'),subject:'เรื่อง แต่งตั้งครูเข้าสอนแทน',
    introduction:'ด้วย '+causes(rows).join(' และ ')+' ใน'+weekdayDate(meta.date)+' เพื่อให้การเรียนการสอนดำเนินไปด้วยความเรียบร้อย',
    authority:AUTHORITY,
-   rows:[...rows].sort((a,b)=>Number(a.period)-Number(b.period)||String(a.grade_level).localeCompare(String(b.grade_level),'th')).map(r=>[String(r.period),[r.grade_level,r.classroom].filter(Boolean).join('/'),r.subject||'',r.absent_name||'',r.substitute_name||'']),
+   rows:[...rows].sort((a,b)=>gradeKey(a.grade_level)-gradeKey(b.grade_level)||String(a.grade_level).localeCompare(String(b.grade_level),'th',{numeric:true})||String(a.classroom??'').localeCompare(String(b.classroom??''),'th',{numeric:true})||Number(a.period)-Number(b.period)).map(r=>[String(r.period),[r.grade_level,r.classroom].filter(Boolean).join('/'),r.subject||'',r.absent_name||'',r.substitute_name||'']),
    effective:'ทั้งนี้ ตั้งแต่วันที่ '+thaiDate(meta.date)+' เป็นต้นไป',
    issued:'สั่ง ณ วันที่ '+thaiDate(meta.issue_date||meta.date),signature:'('+(meta.director_name?.trim()||'........................................')+')',position:'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง'};
   return Object.fromEntries(Object.entries(o).map(([k,v])=>[k,Array.isArray(v)?v.map(r=>r.map(thaiDigits)):thaiDigits(v)]));
