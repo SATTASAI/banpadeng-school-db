@@ -3,16 +3,18 @@
   const phone = window.matchMedia('(max-width:720px)');
   const $ = (id) => document.getElementById(id);
   const icon = (d) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const fill = (d) => `<svg class="i-f" viewBox="0 0 24 24" width="24" height="24" fill="currentColor" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const pair = (o, f) => icon(o).replace('<svg ', '<svg class="i-o" ') + fill(f);
   const bar = document.createElement('nav');
-  bar.className = 'mobile-tabbar';
+  bar.className = 'mobile-tabbar ig-bar';
   bar.setAttribute('aria-label', 'เมนูลัด');
   bar.innerHTML = `
-    <button type="button" data-tab="home" class="active">${icon('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>')}<span>ภาพรวม</span></button>
-    <button type="button" data-tab="search">${icon('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>')}<span>ค้นหา</span></button>
-    <button type="button" data-tab="messages" aria-label="ข้อความ">${icon('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')}<span>ข้อความ</span></button>
-    <button type="button" data-tab="notify">${icon('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/>')}<span>แจ้งเตือน</span><b class="mt-badge" hidden>0</b></button>
-    <button type="button" data-tab="account">${icon('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>')}<span>บัญชี</span></button>
-    <button type="button" data-tab="menu">${icon('<path d="M4 6h16M4 12h16M4 18h16"/>')}<span>เมนู</span></button>`;
+    <button type="button" data-tab="home" class="active" aria-label="ภาพรวม">${pair('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>', '<path d="M12 2.6 2.4 10.6a1 1 0 0 0 1.3 1.5L5 11v9.5A1.5 1.5 0 0 0 6.5 22H10v-6h4v6h3.5a1.5 1.5 0 0 0 1.5-1.5V11l1.3 1.1a1 1 0 0 0 1.3-1.5z" stroke="none"/>')}<span>ภาพรวม</span></button>
+    <button type="button" data-tab="search" aria-label="ค้นหา">${pair('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>', '<circle cx="11" cy="11" r="7" fill="none" stroke-width="3"/><path d="m20 20-3.5-3.5" stroke-width="3"/>')}<span>ค้นหา</span></button>
+    <button type="button" data-tab="messages" aria-label="ข้อความ">${pair('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>', '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>')}<span>ข้อความ</span></button>
+    <button type="button" data-tab="notify" aria-label="แจ้งเตือน">${pair('<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/>', '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a2 2 0 0 0 3.4 0" fill="none"/>')}<span>แจ้งเตือน</span><b class="mt-badge" hidden>0</b></button>
+    <button type="button" data-tab="menu" aria-label="เมนู">${pair('<path d="M4 6h16M4 12h16M4 18h16"/>', '<path d="M4 6h16M4 12h16M4 18h16" stroke-width="2.8"/>')}<span>เมนู</span></button>
+    <button type="button" data-tab="account" aria-label="บัญชี"><i class="mt-avatar" aria-hidden="true">—</i><span>บัญชี</span></button>`;
   document.body.append(bar);
 
   // ส่วนบัญชีในเมนูด้านข้าง (มือถือ): ชื่อ ปีการศึกษา View as ออกจากระบบ
@@ -28,6 +30,7 @@
     acct.querySelector('[data-ma=avatar]').textContent = $('topAvatar')?.textContent || '—';
     acct.querySelector('[data-ma=name]').textContent = $('topUserName')?.textContent || '—';
     acct.querySelector('[data-ma=role]').textContent = $('topUserRole')?.textContent || '';
+    bar.querySelector('.mt-avatar').textContent = $('topAvatar')?.textContent || '—';
     acct.querySelector('[data-ma=year]').textContent = $('topAcademicYear')?.textContent || '—';
     const accountHidden = $('topAccountLink')?.style.display === 'none';
     acct.querySelector('a[href="/account.html"]').hidden = accountHidden;
