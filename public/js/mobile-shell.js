@@ -142,7 +142,7 @@
   };
   let accountPageOpen = false;
   sheetBackdrop.onclick = () => setSheet(false);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSheet(false); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { setSheet(false); if (!picker.hidden) picker.hidden = true; } });
   phone.addEventListener('change', () => { if (!phone.matches) setSheet(false); });
   sheet.querySelector('[data-as=account]').onclick = () => { accountPageOpen = true; setSheet(false); closeChat(); window.setMobileMenu?.(false); openAccount(); setActive('account'); };
   sheet.querySelector('[data-as=logout]').onclick = () => { setSheet(false); $('logoutLink')?.click(); };
