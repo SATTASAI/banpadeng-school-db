@@ -787,8 +787,17 @@
     } else if (parentLink?.closest(".nav-group")) {
       openOnlyNavGroup(parentLink.closest(".nav-group"));
     }
-    if (updateHash !== false) history.pushState(null, "", "#" + key);
+    if (updateHash !== false) history.pushState(null, "", pageHash(key, url));
     try { sessionStorage.setItem("school-last-page", JSON.stringify({ key, url })); } catch {}
+  }
+  // ที่อยู่หน้า: #key หรือ #key@/url (เมนูย่อย/หน้าที่เปิดต่อ) — รีเฟรช/คัดลอกลิงก์แล้วกลับมาหน้าเดิม
+  function pageHash(key, url) { return "#" + key + (url && url !== SchoolNavigation.canonicalUrl(PAGE_URLS[key] || "") ? "@" + encodeURIComponent(url) : ""); }
+  function readHash() {
+    const raw = window.location.hash.replace("#", ""), at = raw.indexOf("@");
+    const key = at < 0 ? raw : raw.slice(0, at);
+    let url = null;
+    if (at >= 0) { try { url = decodeURIComponent(raw.slice(at + 1)); } catch {} }
+    return { key, url: url && url.startsWith("/") && !url.startsWith("//") ? url : null };
   }
   // จำหน้าที่เปิดอยู่ (รวมการเปลี่ยนหน้าภายในกรอบ) เพื่อให้กดรีเฟรชแล้วกลับมาหน้าเดิม
   document.getElementById("contentFrame").addEventListener("load", (e) => {
@@ -796,7 +805,11 @@
       const loc = e.target.contentWindow.location;
       if (loc.origin !== location.origin || loc.pathname === "/dashboard.html" || loc.href === "about:blank") return;
       const saved = JSON.parse(sessionStorage.getItem("school-last-page") || "null");
-      if (saved) sessionStorage.setItem("school-last-page", JSON.stringify({ ...saved, url: loc.pathname + loc.search + loc.hash }));
+      if (saved) {
+        const url = loc.pathname + loc.search + loc.hash;
+        sessionStorage.setItem("school-last-page", JSON.stringify({ ...saved, url }));
+        history.replaceState(null, "", pageHash(saved.key, url));
+      }
     } catch {}
   });
 
@@ -1038,9 +1051,9 @@
   });
 
   window.addEventListener("popstate", () => {
-    const key = window.location.hash.replace("#", "");
+    const { key, url } = readHash();
     if (key && PAGE_URLS[key]) {
-      showPage(key, false);
+      showPage(key, false, url || undefined);
     } else {
       showOverview();
     }
@@ -1476,10 +1489,12 @@
       document.querySelectorAll('.personnel-only').forEach(element=>{const ok=!!substitutePermission.can_manage;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
       document.querySelectorAll('.substitute-stats-only').forEach(element=>{const ok=!!substitutePermission.can_view_stats;element.hidden=!ok;element.style.display=ok?(element.classList.contains('nav-child')?'':'flex'):'none';});
     });
-    const initialKey = window.location.hash.replace("#", "");
+    const { key: initialKey, url: initialUrl } = readHash();
     let lastPage = null;
     try { lastPage = JSON.parse(sessionStorage.getItem("school-last-page") || "null"); } catch {}
-    if (lastPage?.url && (!initialKey || initialKey === lastPage.key) && typeof lastPage.url === "string" && lastPage.url.startsWith("/")) {
+    if (initialKey && initialUrl && PAGE_URLS[initialKey]) {
+      showPage(initialKey, false, initialUrl);
+    } else if (lastPage?.url && (!initialKey || initialKey === lastPage.key) && typeof lastPage.url === "string" && lastPage.url.startsWith("/")) {
       showPage(lastPage.key, false, lastPage.url);
     } else if (initialKey && PAGE_URLS[initialKey]) {
       showPage(initialKey, false);
