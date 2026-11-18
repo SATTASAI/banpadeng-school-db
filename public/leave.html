@@ -27,8 +27,28 @@
   <div class="leave-category-cards" aria-label="ประเภทการลา">
    <button type="button" class="leave-category-card" id="realLeaveCard" aria-pressed="false"><strong>ลาจริง</strong><span>นับรวมสถิติปีงบประมาณ</span><b id="realLeaveTotal">—</b></button>
    <button type="button" class="leave-category-card" id="lenientLeaveCard" aria-pressed="false"><strong>ลาอนุโลม</strong><span>ไม่นับรวมสถิติปีงบประมาณ</span><b id="lenientLeaveTotal">—</b></button>
+   <button type="button" class="leave-category-card" id="dutyCard" aria-pressed="false"><strong>ไปราชการ</strong><span>ไม่นับวันลา · แจ้งระบบเพื่อจัดสอนแทน</span><b id="dutyTotal">—</b></button>
   </div>
-  <p class="muted" id="leaveCategoryHint">กดเลือกการ์ด “ลาจริง” หรือ “ลาอนุโลม” เพื่อกรอกใบลา</p>
+  <p class="muted" id="leaveCategoryHint">กดเลือกการ์ด “ลาจริง” “ลาอนุโลม” หรือ “ไปราชการ”</p>
+  <section class="panel leave-panel" id="dutySection" hidden>
+   <h3>บันทึกการไปราชการ</h3>
+   <p class="muted">ไม่นับเป็นวันลา บันทึกเพื่อแจ้งระบบว่าไม่อยู่ ฝ่ายบุคคลจะเห็นในหน้าจัดสอนแทน และแจ้ง ผอ. ให้กดรับทราบ</p>
+   <form id="dutyForm" novalidate>
+    <div class="leave-fields">
+     <div class="field leave-wide"><label for="dTitle">เรื่อง *</label><input id="dTitle" maxlength="300" placeholder="เช่น ประชุม/อบรม …"></div>
+     <div class="field leave-wide"><label for="dLocation">สถานที่ *</label><input id="dLocation" maxlength="300" placeholder="เช่น สพป.…"></div>
+     <div class="field"><label for="dStart">ตั้งแต่วันที่ *</label><input id="dStart" type="date"></div>
+     <div class="field"><label for="dEnd">ถึงวันที่ *</label><input id="dEnd" type="date"></div>
+     <div class="field"><label for="dPart">ช่วงเวลา</label><select id="dPart"><option value="full">เต็มวัน</option><option value="morning">ครึ่งวันเช้า (คาบ 1–3)</option><option value="afternoon">ครึ่งวันบ่าย (คาบ 4 เป็นต้นไป)</option></select><small class="muted">ครึ่งวันใช้ได้เมื่อไปวันเดียว</small></div>
+     <div class="field"><label for="dFile">หนังสือคำสั่ง/ต้นเรื่อง (ถ้ามี)</label><input id="dFile" type="file" accept=".pdf,.doc,.docx,image/*"><small class="muted">PDF รูปภาพ หรือ Word ไม่เกิน 10 MB</small></div>
+     <div class="field leave-wide"><label for="dNote">หมายเหตุ</label><textarea id="dNote" rows="2" maxlength="1000"></textarea></div>
+    </div>
+    <p id="dutyError" class="leave-submit-error" role="alert" hidden></p>
+    <button class="btn btn-primary" id="dutySubmit" type="submit">บันทึกการไปราชการ</button>
+   </form>
+   <h3>ทะเบียนการไปราชการ</h3>
+   <div id="dutyList" class="duty-list"></div>
+  </section>
   <section class="panel leave-panel" id="newLeaveSection" hidden>
    <h3 id="newLeaveTitle">ยื่นใบลาใหม่</h3>
    <div id="leaveAllowance" class="leave-stats" aria-live="polite"></div>
@@ -79,5 +99,5 @@
   <h3>ทะเบียนและประวัติการลา</h3><div class="panel" id="historyPanel"></div>
  </main>
 </div>
-<script src="/js/api.js"></script><script src="/js/leave-form-export.js"></script><script src="/js/signature-upload.js"></script><script src="/js/leave.js"></script>
+<script src="/js/api.js"></script><script src="/js/leave-form-export.js"></script><script src="/js/signature-upload.js"></script><script src="/js/leave.js"></script><script src="/js/official-duty.js"></script>
 </body></html>
