@@ -24,7 +24,7 @@
   // ระบบสนับสนุน: ผู้ขอยื่นเอกสารเบิกจ่าย ติดตามจัดซื้อจัดจ้าง และคำขอแบบลงนามเดิม
   'finance-requests':[item('ยื่นขอเบิกจ่าย','/project-documents.html'),item('ติดตามจัดซื้อจัดจ้าง','/procurement.html?mine=1'),item('คำขอใช้งบ (แบบลงนาม)','/budget.html?view=requests')],
   // ระบบสนับสนุน: บันทึกความดี 2 งานย่อย
-  merit:[item('บันทึกความดี','/merit.html'),item('บันทึกการเจอเงิน','/merit.html?tab=money')],
+  merit:[item('บันทึกความดี','/merit.html?tab=good'),item('บันทึกการเจอเงิน','/merit.html?tab=money')],
   // งานนำเข้าข้อมูลหลักทั้งหมดอยู่ที่เมนูเดียว (ศูนย์นำเข้าข้อมูล) — นักเรียนนำเข้าที่ระบบรายงานผลการเรียน
   imports:[item('ทะเบียนครูและบุคลากร','/import-center.html?template=staff'),item('โครงการ','/import-center.html?template=projects'),
    item('คำขอใช้งบประมาณ','/import-center.html?template=budget_requests'),item('แหล่งเงินและรายรับ','/import-center.html?template=budget_income'),
