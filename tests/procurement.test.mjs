@@ -253,7 +253,7 @@ test("similar names need a decision, chosen register is merged, and the owner cl
   items[0].inventory_match = "item"; items[0].inventory_item_id = oldId;
   assert.equal((await call(env, 3, `/api/procurement/cases/${id}`, "PATCH", casePayload(expenseId, { items, inspectors: [3, 9] }))).status, 200);
   for (const [user, action] of [[3, "submit"], [4, "head_approve"], [6, "approve"], [3, "order"]])
-    assert.equal((await call(env, user, `/api/procurement/cases/${id}/action`, "POST", { action })).status, 200, action);
+    assert.equal((await call(env, user, `/api/procurement/cases/${id}/action`, "POST", { action, ...(action === "order" ? { order_date: "2026-11-02" } : {}) })).status, 200, action);
   await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "record_delivery", delivered_date: "2026-11-09" });
   await call(env, 3, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" });
   assert.equal((await call(env, 9, `/api/procurement/cases/${id}/action`, "POST", { action: "inspect", decision: "accept" })).body.accepted, true);
