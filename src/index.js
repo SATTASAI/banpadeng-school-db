@@ -13,6 +13,7 @@ import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/depart
 import {handleNavVisibilityRoute} from './routes/nav-visibility.js';
 import {handleShortcutsRoute} from './routes/shortcuts.js';
 import {handleLeaveRoute} from './routes/leave.js';
+import {handleOfficialDutyRoute} from './routes/official-duty.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
 import {handleTeachingWorksRoute} from './routes/teaching-works.js';
 import {handleLessonPlansRoute} from './routes/lesson-plans.js';
@@ -5048,6 +5049,8 @@ const app = {
       if (topicMatch && method === "PATCH") return await handleUpdateTopic(request, env, Number(topicMatch[1]));
       if (topicMatch && method === "DELETE") return await handleDeleteTopic(request, env, Number(topicMatch[1]));
 
+      const dutyResponse=await handleOfficialDutyRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
+      if(dutyResponse)return dutyResponse;
       const leaveResponse=await handleLeaveRoute(request,env,pathname,method,TEACHING_WORKS_DRIVE);
       if(leaveResponse)return leaveResponse;
       const activitySsoResponse=await handleActivitySsoRoute(request,env,pathname,method);

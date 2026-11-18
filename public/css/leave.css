@@ -54,3 +54,16 @@
 .leave-mini:hover{z-index:21}
 .leave-mini:hover .lm-more,.leave-mini:focus-within .lm-more{opacity:1;visibility:visible;transform:none;transition:opacity .16s,transform .16s}
 @media(hover:none){.lm-more{display:none}}
+
+/* การ์ดที่สาม: ไปราชการ (โทนม่วง) — ไม่นับวันลา */
+.leave-category-cards{grid-template-columns:repeat(3,minmax(0,1fr))}@media(max-width:800px){.leave-category-cards{grid-template-columns:1fr}}
+#dutyCard{background:linear-gradient(145deg,#efeafd,#e0d8f8);color:#3b2a73}#dutyCard b{color:#5b3fc4}
+#dutyCard.active{background:#dcd2f6;border-color:rgba(255,255,255,.7);box-shadow:inset 4px 4px 10px rgba(130,115,190,.3),inset -4px -4px 10px rgba(255,255,255,.95),0 0 0 2px rgba(91,63,196,.35)}
+#dutySection{border-top:4px solid #5b3fc4}
+.duty-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:10px}
+.duty-item{background:#f7f5fe;border-radius:14px;padding:14px;box-shadow:4px 4px 10px rgba(163,177,198,.35),-4px -4px 10px rgba(255,255,255,.9)}
+.duty-item h4{margin:0 0 6px;font-size:16px}.duty-item p{margin:3px 0;font-size:14px}
+.duty-status{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;background:#ffe9c7;color:#8a5a00}
+.duty-status.ack{background:#dcf3e3;color:#1d6b3b}.duty-status.cancelled{background:#eceff3;color:#66707a}
+.duty-item.focus{outline:2px solid #5b3fc4}
+.duty-item .leave-actions{margin-top:8px}

@@ -2,7 +2,7 @@ import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {FINANCE_ROLE_SQL} from '../lib/finance-roles.js';
 import {ensureProcurementSchema} from './procurement.js';
 import {getCurrentUser,isAdmin,jsonResponse} from '../lib/auth.js';
-import {isPersonnelHead} from '../lib/leave-permissions.js';
+import {isPersonnelHead,isPersonnelMember} from '../lib/leave-permissions.js';
 import {ensureLeaveData} from '../lib/leave-data.js';
 import {ensureStudentDeletionSchema,isSchoolDirector} from './student-deletion.js';
 import {licenseReminderQuery} from '../lib/license-reminders.js';
@@ -10,12 +10,12 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access','official_duties'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
 }
-function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,forDelivery=false){
+function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,forDelivery=false,personnelMember=false){
  const extra=[],extraValues=[];
  if(['substitute_assignments','substitute_absences','timetable_entries','personnel_accounts','personnel_records'].every(t=>tables.has(t))){
   extra.push(`SELECT 'substitute:'||a.id||':'||a.substitute_teacher_id,'สอนแทน',
@@ -76,6 +76,20 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  AND me.role IS NOT NULL AND me.role NOT IN ('','viewer')
  AND (me.role='superadmin' OR EXISTS(SELECT 1 FROM student_transfer_access a WHERE a.user_id=me.id))
  )`:'';
+ // ไปราชการ: ผอ. รอรับทราบ · ฝ่ายบุคคลจัดสอนแทน · ผู้บันทึกได้รับแจ้งเมื่อ ผอ. รับทราบ
+ const duties=tables.has('official_duties');
+ const dutyCte=duties?`, duty_messages AS (
+ SELECT 'duty:'||d.id||':pending','ไปราชการ: '||u.full_name,'รอ ผอ. รับทราบ · '||d.title||' · '||d.start_date||CASE WHEN d.end_date<>d.start_date THEN ' ถึง '||d.end_date ELSE '' END,
+ d.created_at,'/leave.html?duty='||d.id,NULL,d.user_id,1
+ FROM official_duties d JOIN users u ON u.id=d.user_id WHERE ?=1 AND d.status='pending' AND d.user_id<>?
+ UNION ALL
+ SELECT 'duty:'||d.id||':sub','ไปราชการ: '||u.full_name,'โปรดจัดสอนแทน · '||d.title||' · '||d.start_date||CASE WHEN d.end_date<>d.start_date THEN ' ถึง '||d.end_date ELSE '' END,
+ d.created_at,'/substitutes.html?date='||d.start_date,NULL,d.user_id,1
+ FROM official_duties d JOIN users u ON u.id=d.user_id WHERE ?=1 AND d.status<>'cancelled' AND d.user_id<>? AND d.end_date>=date('now','+7 hours')
+ UNION ALL
+ SELECT 'duty:'||d.id||':ack','ไปราชการ','ผอ. รับทราบการไปราชการแล้ว · '||d.title,d.acknowledged_at,'/leave.html?duty='||d.id,NULL,d.acknowledged_by,1
+ FROM official_duties d WHERE d.user_id=? AND d.status='acknowledged' AND COALESCE(d.acknowledged_by,0)<>d.user_id
+ )`:'';
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
  ${tertiaryTerms.join('\n UNION ALL\n ')}
@@ -124,25 +138,25 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
- )${tertiary}${transferCte}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}${transfers?' UNION ALL SELECT * FROM transfer_messages':''}
+ )${tertiary}${transferCte}${dutyCte}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}${transfers?' UNION ALL SELECT * FROM transfer_messages':''}${duties?' UNION ALL SELECT * FROM duty_messages':''}
  ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}${forLine||forDelivery?" OR m.message_key LIKE 'license:%'":''}${forDelivery?" OR m.message_key LIKE 'transfer-notice:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,
  user.role==='superadmin'?1:0,personnelHead?1:0,user.id,executive,user.id,
- user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,...(transfers?[user.id]:[]),user.id]};
+ user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,...(transfers?[user.id]:[]),...(duties?[director?1:0,user.id,personnelMember?1:0,user.id,user.id]:[]),user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50,{forLine=false,forDelivery=false}={}){
  await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);
- const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),forLine,forDelivery);
+ const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),forLine,forDelivery,await isPersonnelMember(env,user));
  const {results}=await env.DB.prepare(`SELECT * FROM (${q.sql}) ORDER BY ${forLine||forDelivery?"(message_key LIKE 'license:%') DESC,":""}created_at DESC,message_key DESC LIMIT ?`).bind(...q.values,limit).all();
  return results.map(({read_at,...r})=>r);
 }
 export async function handleNotifications(request,env,pathname,method){
  if(pathname!=='/api/notifications'&&pathname!=='/api/notifications/read')return null;
  const user=await getCurrentUser(request,env);if(!user?.role)return jsonResponse({error:'กรุณาเข้าสู่ระบบ'},401);
- await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env));
+ await ensure(env);await ensureProcurementSchema(env);await ensureLeaveData(env);await ensureStudentDeletionSchema(env);const q=feed(env,user,await isPersonnelHead(env,user),await isSchoolDirector(env,user),await optionalFeedTables(env),false,false,await isPersonnelMember(env,user));
  if(pathname==='/api/notifications'&&method==='GET'){
   await ensureFinanceQueueNotifications(env,user);
   const {results}=await env.DB.prepare(`SELECT *,COUNT(*) OVER() unread_count FROM (${q.sql}) ORDER BY created_at DESC,message_key DESC LIMIT 50`).bind(...q.values).all();

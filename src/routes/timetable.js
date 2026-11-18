@@ -8,6 +8,7 @@ import {normalizeRoomName,roomNameKey} from "../lib/timetable-solver.js";
 import {ensureLeaveData,executives,isDirector} from "../lib/leave-data.js";
 import {signatureFor} from "../lib/signatures.js";
 import {canManageSubstitutes} from "../lib/substitute-permissions.js";
+import {dutyAbsences,dutyDateRanges,dutyPeriods,DUTY_PARTS} from "./official-duty.js";
 import { getCurrentUser, jsonResponse } from "../lib/auth.js";
 import { ensurePersonnelData, linkExistingAccounts } from "../lib/personnel-data.js";
 import { teachingMaster, subjectsOfRoom, normalizeSubject } from "../lib/teaching-master.js";
@@ -269,7 +270,7 @@ async function leaveDays(env,month){
     JOIN personnel_records p ON p.id=a.personnel_id AND p.status='active'
     WHERE r.status IN ('pending','approved') AND r.start_date<=? AND r.end_date>=?`).bind(last,first).all();
   const dates=new Set();
-  for(const r of results){
+  for(const r of [...results,...await dutyDateRanges(env,first,last)]){
     const from=r.start_date>first?r.start_date:first,to=r.end_date<last?r.end_date:last;
     for(let d=new Date(from+"T12:00:00Z");d.toISOString().slice(0,10)<=to;d.setUTCDate(d.getUTCDate()+1)){const w=d.getUTCDay();if(w!==0&&w!==6)dates.add(d.toISOString().slice(0,10));}
   }
@@ -313,7 +314,7 @@ async function coverage(env,date,teacherId,special=false){
     .bind(published.id,day,date,published.id,day,date).all();
   const {results:absences}=await env.DB.prepare("SELECT teacher_id FROM substitute_absences WHERE absence_date=?").bind(date).all();
   const leaveData=await (await leaveAbsences(env,date)).json();
-  const unavailable=new Set([...absences.map(a=>a.teacher_id),...leaveData.leave_requests.map(r=>r.teacher_id)]);
+  const unavailable=new Set([...absences.map(a=>a.teacher_id),...leaveData.leave_requests.map(r=>r.teacher_id),...(await dutyAbsences(env,date)).map(d=>d.teacher_id)]);
   // ภาระสอนแทนของสัปดาห์/เดือนของวันที่เลือก — ตัวเลขชุดเดียวกับหน้าสถิติการสอนแทนและแดชบอร์ด
   // เรียงครูที่ถูกจัดน้อยก่อน เพื่อกระจายงานสอนแทนให้เท่ากัน
   const load=await substituteLoad(env,{date});const loadById=new Map((load.people||[]).map(p=>[p.personnel_id,p]));
@@ -397,6 +398,9 @@ async function dayContext(env,date,extras){
   // ครูที่ไม่อยู่: ใบลา → บันทึกไว้แล้ว → เพิ่มเอง
   const absent=new Map();
   for(const r of leaves)if(!absent.has(r.teacher_id))absent.set(r.teacher_id,{teacher_id:r.teacher_id,full_name:r.full_name,source:'leave',leave_request_id:r.leave_request_id,leave_type:r.leave_type,leave_status:r.status,reason:null});
+  // ไปราชการ (ไม่ใช่ใบลา) — ครึ่งวันนับเฉพาะคาบช่วงนั้น
+  for(const d of await dutyAbsences(env,date))if(!absent.has(d.teacher_id))absent.set(d.teacher_id,{teacher_id:d.teacher_id,full_name:d.full_name,source:'duty',duty_id:d.duty_id,leave_request_id:null,
+    periods:dutyPeriods(d.day_part),reason:'ไปราชการ'+(d.day_part!=='full'?' ('+DUTY_PARTS[d.day_part]+')':'')+': '+d.title+(d.location?' ณ '+d.location:'')});
   for(const r of absRows)if(!absent.has(r.teacher_id))absent.set(r.teacher_id,{teacher_id:r.teacher_id,full_name:r.full_name,source:'saved',leave_request_id:null,reason:r.reason||''});
   for(const [id,why] of extras)if(names.has(id)&&!absent.has(id))absent.set(id,{teacher_id:id,full_name:names.get(id),source:'extra',leave_request_id:null,reason:why});
   const busy=new Set([...entries.map(e=>e.teacher_id+':'+e.period),...saved.map(s=>s.id+':'+s.period)]);
@@ -419,7 +423,7 @@ async function dayPlan(request,env){
   const body=await request.json().catch(()=>null);
   const ctx=await dayContext(env,body?.date,cleanExtras(body?.extras));if(ctx.error)return ctx.error;
   const taken=new Set(),extra=new Map(),teachers=[];
-  const lessonsOf=id=>ctx.entries.filter(e=>e.teacher_id===id);
+  const lessonsOf=id=>{const p=ctx.absent.get(id)?.periods;return ctx.entries.filter(e=>e.teacher_id===id&&(!p||p.includes(e.period)));};
   // จัดทีละคาบตามลำดับเวลา ครูช่วงชั้นเดียวกันก่อน ถ้าไม่มีค่อยใช้ครูว่างต่างช่วงชั้น — คนที่ถูกจัดน้อยก่อน
   const all=[...ctx.absent.values()].flatMap(a=>lessonsOf(a.teacher_id).map(l=>({a,l}))).sort((x,y)=>x.l.period-y.l.period);
   const proposals=new Map();
