@@ -12,7 +12,7 @@ test('menu destinations are unique, concise, and implemented; budget tabs remain
  for(const [key,links] of Object.entries(n.groups)) {assert(parents.includes(key),key);urls.push(...links.map(i=>i.url));}
  const signature=url=>{const u=new URL(url,'https://school.test');u.searchParams.sort();return u.origin+u.pathname+'?'+u.searchParams;};
  assert.equal(new Set(urls.map(signature)).size,urls.length,'duplicate destinations');
- for(const url of urls){const u=new URL(url,'https://school.test');if(u.origin==='https://school.test'){assert(fs.existsSync('public'+u.pathname),url);assert(!u.searchParams.has('section'),url);assert.notEqual(u.pathname,'/modules.html');}}
+ for(const url of urls){const u=new URL(url,'https://school.test');if(u.origin==='https://school.test'){if(u.pathname==='/api/publicservice-sso'){assert(fs.readFileSync('src/index.js','utf8').includes('"/api/publicservice-sso"'),url);}else assert(fs.existsSync('public'+u.pathname),url);assert(!u.searchParams.has('section'),url);assert.notEqual(u.pathname,'/modules.html');}}
  const segmenter=new Intl.Segmenter('th',{granularity:'grapheme'});
  for(const label of [...Object.values(n.labels),...Object.values(n.groups).flatMap(links=>links.map(i=>i.label))])assert([...segmenter.segment(label)].length<=24,label);
  const views=[...n.groups.budget,...n.groups['finance-requests']].filter(i=>i.url.startsWith('/budget.html')).map(i=>new URL(i.url,'https://school.test').searchParams.get('view'));
@@ -21,7 +21,7 @@ test('menu destinations are unique, concise, and implemented; budget tabs remain
  // คำขอฝั่งผู้ขออยู่ใน ระบบสนับสนุน; ฝ่ายงบประมาณรับเรื่องที่เมนู บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง (ทะเบียนเบิกจ่าย/จัดซื้อเป็นแท็บในหน้านั้น)
  assert(n.groups.budget.some(i=>i.url==='/finance-register.html'&&i.label==='บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง'));
  assert(!n.groups.budget.some(i=>['/procurement.html','/budget.html?view=requests','/budget.html?view=disbursements'].includes(i.url)));
- assert.deepEqual(plain(n.groups['finance-requests'].map(i=>i.url)),['/project-documents.html','/procurement.html?mine=1','/budget.html?view=requests']);
+ assert.deepEqual(plain(n.groups['finance-requests'].map(i=>i.url)),['/finance-requests.html?view=overview','/project-documents.html','/procurement.html?mine=1','/budget.html?view=requests']);
  const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];
  assert(support.includes('data-page="maintenance"')&&support.includes('data-page="finance-requests"'));
  assert(!n.groups.general.some(i=>i.url==='/maintenance.html'));
