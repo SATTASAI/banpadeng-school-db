@@ -368,6 +368,10 @@ async function action(request, env, user, id) {
     if (kind === "approve") {
       sql = "UPDATE project_expenses SET status='approved',current_step='finance_ready',approved_by=?,approved_at=datetime('now'),workflow_completed_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='pending' AND current_step='director_approval'";
       args = [user.id,id]; message = "ผู้อำนวยการอนุมัติแล้ว รอเจ้าหน้าที่ยืนยันการเบิกจ่าย"; audience = "finance";
+      // ผู้ขอเบิกก็ต้องทราบว่าผ่านการอนุมัติแล้ว (แจ้งในกลุ่ม owners เพื่อให้ LINE ส่งถึงได้ทุกคน)
+      extra.push(env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+        SELECT e.token,u.id,'owners' FROM project_workflow_events e JOIN project_expenses x ON x.id=e.expense_id
+        JOIN users u ON u.id=x.created_by AND u.status='active' AND u.deleted_at IS NULL WHERE e.token=?`).bind(token));
     } else {
       const note = clean(body.review_note);
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);

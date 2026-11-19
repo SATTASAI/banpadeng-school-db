@@ -596,7 +596,7 @@ async function action(request, env, user, id) {
     if (row.status !== "head_review" || Number(row.head_user_id) !== Number(user.id)) return jsonResponse({ error: "เฉพาะหัวหน้าเจ้าหน้าที่ที่ได้รับมอบหมาย" }, 403);
     if (!ctx.directors.length) return jsonResponse({ error: "ยังไม่มีบัญชีผู้อำนวยการสำหรับอนุมัติ" }, 409);
     return change("UPDATE procurement_cases SET status='director_review',head_signed_at=datetime('now'),updated_at=datetime('now') WHERE id=? AND status='head_review'",
-      [id], "head_approve", note ? `หัวหน้าเจ้าหน้าที่เห็นชอบ: ${note}` : "หัวหน้าเจ้าหน้าที่เห็นชอบ เสนอผู้อำนวยการ", ctx.directors, `มีรายงานขอซื้อ/ขอจ้างรออนุมัติ: ${row.subject}`);
+      [id], "head_approve", note ? `หัวหน้าเจ้าหน้าที่เห็นชอบ: ${note}` : "หัวหน้าเจ้าหน้าที่เห็นชอบ เสนอผู้อำนวยการ", [row.created_by, ...ctx.directors], `หัวหน้าเจ้าหน้าที่เห็นชอบรายงานขอซื้อ/ขอจ้าง ${row.case_no} แล้ว รอผู้อำนวยการอนุมัติ: ${row.subject}`);
   }
   if (kind === "approve") {
     if (row.status !== "director_review") return jsonResponse({ error: "รายการนี้ไม่ได้รอผู้อำนวยการอนุมัติ" }, 409);
