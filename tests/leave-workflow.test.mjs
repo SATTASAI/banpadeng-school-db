@@ -408,3 +408,18 @@ test('personnel overview retains leave types when prorating maternity and patern
  // Fri–Sun: 3 calendar days of maternity + Friday only for paternity.
  assert.equal((await response.json()).summary.approved_leave_days_ytd,4);
 });
+test('deputy own leave skips the deputy reviewer slot: director alone reviews, signs and decides',async()=>{
+ const {env}=await setup();
+ const deputyForm={...form,position:'รองผู้อำนวยการ'};
+ const {id}=await (await call(env,'/api/leave-requests','POST',deputyForm,5)).json(),path='/api/leave-requests/'+id;
+ assert.equal((await call(env,path,'PATCH',{action:'acknowledge'},3)).status,200);
+ let row=env.raw.prepare('SELECT * FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.workflow_stage,'forwarded');assert.equal(row.deputy_personnel_id,null);assert.equal(row.deputy_name,null);
+ assert.deepEqual(env.raw.prepare('SELECT user_id,kind FROM leave_reviewers WHERE leave_id=?').all(id).map(r=>[r.user_id,r.kind]),[[4,'director']]);
+ assert(!await notice(env,5,'leave:'+id+':forwarded'));assert(await notice(env,4,'leave:'+id+':forwarded'));
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},5)).status,403);
+ assert.equal((await call(env,path,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ row=env.raw.prepare('SELECT status,deputy_name,deputy_signature FROM leave_requests WHERE id=?').get(id);
+ assert.equal(row.status,'approved');assert.equal(row.deputy_name,null);assert.equal(row.deputy_signature,null);
+ assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').get().deputy_personnel_id!=null,true);
+});
