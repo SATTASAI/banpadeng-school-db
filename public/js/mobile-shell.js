@@ -207,10 +207,12 @@
     const height = viewport?.height || window.innerHeight;
     const top = viewport?.offsetTop || 0;
     const keyboardInset = Math.max(0, window.innerHeight - top - height);
-    const barHeight = bar.getBoundingClientRect().height || 84;
     document.documentElement.style.setProperty('--chat-keyboard-inset', keyboardInset + 'px');
+    // The floating bar sits above the bottom edge (margin + safe area), so end the panel at the bar's top, not at height - barHeight.
+    const barRect = bar.getBoundingClientRect();
+    const bottom = barRect.height ? Math.min(top + height, barRect.top) : top + height - 84;
     chatPanel.style.top = top + 'px';
-    chatPanel.style.height = Math.max(0, height - barHeight) + 'px';
+    chatPanel.style.height = Math.max(0, bottom - top) + 'px';
   };
   const chatError = (text) => {
     chatLoaded = false;
