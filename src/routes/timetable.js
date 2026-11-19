@@ -136,7 +136,7 @@ async function setup(env,term,canManage=false){
       WHERE academic_term_id=? AND status='enrolled' AND TRIM(COALESCE(grade_level,''))<>'' AND TRIM(COALESCE(classroom,''))<>''
       GROUP BY grade_level,classroom ORDER BY grade_level,classroom`).bind(term.id).all(),
     env.DB.prepare(`SELECT p.id,p.full_name,p.subjects,p.homeroom_classroom FROM personnel_records p
-      LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))
+      LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive'))
       ORDER BY p.full_name`).all(),
     plan(env,term.id,"published"),plan(env,term.id,"draft")
   ]);
@@ -188,7 +188,7 @@ async function saveSlot(request,env,term,user){
   const [knownRoom,teacher]=await Promise.all([
     env.DB.prepare("SELECT 1 FROM student_enrollments WHERE academic_term_id=? AND grade_level=? AND classroom=? AND status='enrolled' LIMIT 1").bind(term.id,grade,room).first(),
     env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id
-      WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).bind(teacherId).first()
+      WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive'))`).bind(teacherId).first()
   ]);
   if(!knownRoom||!teacher)return reply({error:"ไม่พบห้องเรียนหรือครูในทะเบียน กรุณานำเข้าข้อมูลก่อน"},400);
   // วิชาที่ฝ่ายวัดผลกำหนดครูผู้สอนไว้แล้ว ต้องลงด้วยครูผู้สอนของวิชานั้นเท่านั้น (กิจกรรม เช่น แนะแนว ลูกเสือ ลงได้อิสระ)
@@ -306,7 +306,7 @@ async function coverage(env,date,teacherId,special=false){
     WHERE (e.plan_id=? OR e.plan_id IN (SELECT plan_id FROM substitute_manual_plans WHERE absence_date=?)) AND e.weekday=? AND e.teacher_id=? ORDER BY e.period,e.grade_level,e.classroom`)
     .bind(date,published.id,date,day,teacherId).all();
   const {results:teachers}=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id
-    WHERE p.status='active' AND p.id<>? AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) ORDER BY p.full_name`).bind(teacherId).all();
+    WHERE p.status='active' AND p.id<>? AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive')) ORDER BY p.full_name`).bind(teacherId).all();
   const {results:busy}=await env.DB.prepare(`SELECT teacher_id AS id,period FROM timetable_entries WHERE plan_id=? AND weekday=?
     UNION SELECT substitute_teacher_id AS id,period FROM substitute_assignments WHERE absence_date=?
     UNION SELECT a.teacher_id AS id,e.period FROM substitute_absences a
@@ -393,7 +393,7 @@ async function dayContext(env,date,extras){
   const {results:saved}=await env.DB.prepare(`SELECT substitute_teacher_id AS id,period FROM substitute_assignments WHERE absence_date=?`).bind(date).all();
   const {results:absRows}=await env.DB.prepare(`SELECT ab.teacher_id,ab.reason,p.full_name FROM substitute_absences ab JOIN personnel_records p ON p.id=ab.teacher_id WHERE ab.absence_date=?`).bind(date).all();
   const leaves=(await (await leaveAbsences(env,date)).json()).leave_requests||[];
-  const {results:people}=await env.DB.prepare(`SELECT p.id,p.full_name,u.role FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active'`).all();
+  const {results:people}=await env.DB.prepare(`SELECT p.id,p.full_name,u.role,p.personnel_type FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active'`).all();
   const names=new Map(people.map(p=>[p.id,p.full_name]));
   // ครูที่ไม่อยู่: ใบลา → บันทึกไว้แล้ว → เพิ่มเอง
   const absent=new Map();
@@ -412,7 +412,7 @@ async function dayContext(env,date,extras){
     .bind(date,term.start_date,term.end_date).all();
   const termById=new Map(termRows.map(r=>[r.id,r]));
   // ครูที่จัดสอนแทนได้: ครู/เจ้าหน้าที่ที่มีคาบในตารางสอน และไม่ได้อยู่ในรายชื่อครูที่ไม่อยู่
-  const pool=people.filter(p=>bands.has(p.id)&&(p.role==null||p.role==='teacher'||p.role==='staff')&&!absent.has(p.id)).map(p=>({id:p.id,full_name:p.full_name,bands:[...bands.get(p.id)],
+  const pool=people.filter(p=>bands.has(p.id)&&(p.role==null||p.role==='teacher'||p.role==='staff'||(p.role==='superadmin'&&p.personnel_type!=='executive'))&&!absent.has(p.id)).map(p=>({id:p.id,full_name:p.full_name,bands:[...bands.get(p.id)],
     week_count:loadById.get(p.id)?.week||0,month_count:loadById.get(p.id)?.month||0,term_count:termById.get(p.id)?.term_count||0,day_count:termById.get(p.id)?.day_count||0,last_date:termById.get(p.id)?.last_date||null}));
   return {date,term,entries,absent,busy,pool};
 }
@@ -486,7 +486,7 @@ async function prepareManualLessons(request,env,user){
   const periods=Array.isArray(body?.periods)?[...new Set(body.periods)]:[];
   if(!validDate(date)||!weekday(date)||!teacherId||!/^อ\.[1-3]$/.test(grade)||!room||room.length>20||!periods.length||periods.some(p=>!Number.isInteger(p)||p<1||p>6))return reply({error:"เลือกครู ระดับอนุบาล ห้อง และคาบ 1–6 ให้ถูกต้อง"},400);
   const ctx=await dayContext(env,date,new Map());if(ctx.error)return ctx.error;
-  const person=await env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).bind(teacherId).first();
+  const person=await env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.id=? AND p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive'))`).bind(teacherId).first();
   if(!person)return reply({error:"ไม่พบครูที่เลือก"},400);
   if(ctx.entries.some(e=>e.teacher_id===teacherId&&!/^อ|อนุบาล/.test(e.grade_level)))return reply({error:"กำหนดคาบเองสำหรับครูอนุบาลที่ไม่มีตารางสอนเท่านั้น"},400);
   if(ctx.entries.some(e=>e.teacher_id===teacherId&&periods.includes(e.period)))return reply({error:"มีคาบของครูในช่วงที่เลือกแล้ว กรุณาใช้คาบเดิม"},409);
@@ -510,7 +510,7 @@ async function saveSpecial(request,env,user){
     return reply({error:"ระบุเรื่อง ผู้ไม่ว่าง และรายการสอนแทนให้ถูกต้อง"},400);
   const ctx=await dayContext(env,body.date,new Map());if(ctx.error)return ctx.error;
   const {results:people}=await env.DB.prepare(`SELECT p.id FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id
-    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff'))`).all();
+    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive'))`).all();
   const ids=new Set(people.map(p=>p.id)),seen=new Set(),rows=[];
   if(unavailable.some(id=>!ids.has(Number(id))))return reply({error:"รายชื่อผู้ไม่ว่างไม่ถูกต้อง"},400);
   for(const item of items){
@@ -557,7 +557,7 @@ async function teachersForDay(env,date){
     (SELECT ab.reason FROM substitute_absences ab WHERE ab.teacher_id=p.id AND ab.absence_date=?) AS absence_reason
     FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id LEFT JOIN timetable_entries e ON e.teacher_id=p.id AND e.weekday=?
       AND (e.plan_id=? OR e.plan_id IN (SELECT plan_id FROM substitute_manual_plans WHERE absence_date=?))
-    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) GROUP BY p.id ORDER BY p.full_name`).bind(date,day,published.id,date).all();
+    WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive')) GROUP BY p.id ORDER BY p.full_name`).bind(date,day,published.id,date).all();
   return reply({date,teachers:results});
 }
 async function assignmentDetail(env,id){
@@ -704,7 +704,7 @@ export async function handleTimetableRoute(request,env,pathname,method){
     if(pathname==="/api/substitutes/leaves"&&method==="GET")return leaveAbsences(env,url.searchParams.get("date"));
     if(pathname==="/api/substitutes/manual-lessons"&&method==="POST")return prepareManualLessons(request,env,user);
     if(pathname==="/api/substitutes/special/people"&&method==="GET"){
-      const {results}=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff')) ORDER BY p.full_name`).all();return reply({teachers:results});
+      const {results}=await env.DB.prepare(`SELECT p.id,p.full_name FROM personnel_records p LEFT JOIN users u ON u.id=p.user_id WHERE p.status='active' AND (p.user_id IS NULL OR u.role IN ('teacher','staff') OR (u.role='superadmin' AND COALESCE(p.personnel_type,'')<>'executive')) ORDER BY p.full_name`).all();return reply({teachers:results});
     }
     if(pathname==="/api/substitutes/special/save"&&method==="POST")return saveSpecial(request,env,user);
     if(pathname==="/api/substitutes/day-plan"&&method==="POST")return dayPlan(request,env);
