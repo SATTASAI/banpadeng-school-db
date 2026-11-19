@@ -350,6 +350,11 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
     deputy=approvers.find(p=>p.id===preferred?.id)||approvers[0];
     reviewers=approvers.flatMap(p=>p.user_ids.map(user_id=>({user_id,kind:'deputy'})));
     approverName=deputy.full_name;approverPosition=deputy.position;
+   }else if(people.some(p=>isDeputy(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)))){
+    // ใบลาของรอง ผอ. ข้ามช่องรอง ผอ. (ผู้ตรวจสอบ) ส่งถึง ผอ. คนเดียว ไม่ให้รอง ผอ. ตรวจ/ลงนามใบลาของตนเอง
+    deputy=null;
+    reviewers=director.user_ids.map(user_id=>({user_id,kind:'director'}));
+    approverName=director.full_name;approverPosition=director.position;
    }else{
     deputy=await designatedDeputy(env,people)||people.find(p=>p.id===row.deputy_personnel_id&&isDeputy(p));
     if(!deputy)return fail('กรุณาตั้งค่ารองผู้อำนวยการที่รับผิดชอบฝ่ายบุคลากรก่อนรับทราบ',409);
@@ -360,13 +365,13 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
     env.DB.prepare(`UPDATE leave_requests SET workflow_stage='forwarded',forwarded_by=?,forwarded_at=?,forward_token=?,personnel_note=?,
      deputy_personnel_id=?,deputy_name=?,deputy_position=?,director_name=?,director_position=?,
      acknowledged_by=COALESCE(acknowledged_by,?),acknowledged_at=COALESCE(acknowledged_at,?)
-     WHERE id=? AND status='pending' AND workflow_stage IN ('submitted','acknowledged')`).bind(user.id,now,token,body.note===undefined?row.personnel_note:note,deputy.id,deputy.full_name,deputy.position,approverName,approverPosition,user.id,now,id),
+     WHERE id=? AND status='pending' AND workflow_stage IN ('submitted','acknowledged')`).bind(user.id,now,token,body.note===undefined?row.personnel_note:note,deputy?.id??null,deputy?.full_name??null,deputy?.position??null,approverName,approverPosition,user.id,now,id),
     ...reviewers.map(r=>env.DB.prepare(`INSERT OR IGNORE INTO leave_reviewers(leave_id,user_id,kind)
      SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,r.user_id,r.kind,id,token)),
     ...(row.workflow_stage==='submitted'?[env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'acknowledged',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)").bind(id,user.id,note,id,token)]:[]),
-    env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'forwarded',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,user.id,applicantIsDirector?`ใบลาของผู้อำนวยการ ส่งถึงรองผู้อำนวยการที่ได้รับมอบสิทธิ์ (${deputy.full_name})`:`ส่งถึง ${director.full_name} และ ${deputy.full_name}`,id,token),
-    ...(applicantIsDirector?[]:[env.DB.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) SELECT 1,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?) ON CONFLICT(id) DO UPDATE SET deputy_personnel_id=excluded.deputy_personnel_id').bind(deputy.id,id,token)]),
-    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'forward','leave_request',?,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)").bind(user.id,id,JSON.stringify({director_personnel_id:director.id,deputy_personnel_id:deputy.id}),id,token)
+    env.DB.prepare(`INSERT INTO leave_events(leave_id,actor_id,action,note) SELECT ?,?,'forwarded',? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)`).bind(id,user.id,applicantIsDirector?`ใบลาของผู้อำนวยการ ส่งถึงรองผู้อำนวยการที่ได้รับมอบสิทธิ์ (${deputy.full_name})`:deputy?`ส่งถึง ${director.full_name} และ ${deputy.full_name}`:`ใบลาของรองผู้อำนวยการ ส่งถึง ${director.full_name}`,id,token),
+    ...(applicantIsDirector||!deputy?[]:[env.DB.prepare('INSERT INTO leave_settings(id,deputy_personnel_id) SELECT 1,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?) ON CONFLICT(id) DO UPDATE SET deputy_personnel_id=excluded.deputy_personnel_id').bind(deputy.id,id,token)]),
+    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'forward','leave_request',?,? WHERE EXISTS(SELECT 1 FROM leave_requests WHERE id=? AND forward_token=?)").bind(user.id,id,JSON.stringify({director_personnel_id:director.id,deputy_personnel_id:deputy?.id??null}),id,token)
    ]);
    return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
   }
@@ -383,7 +388,8 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
    if(!quota.ok)return fail(`อนุมัติไม่ได้: จำนวนครั้งการลากลุ่มนี้ที่อนุมัติแล้วครบ ${quota.max} ครั้งใน${quota.period.name||'ภาคเรียนนี้'}แล้ว`,409);
    const enforce=approving&&quota.max!=null;
    const applicantIsDirector=people.some(p=>isDirector(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
-   const signingDeputy=applicantIsDirector?null:people.find(p=>isDeputy(p)&&p.id===row.deputy_personnel_id)||await designatedDeputy(env,people);
+   const applicantIsDeputy=people.some(p=>isDeputy(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
+   const signingDeputy=applicantIsDirector||applicantIsDeputy?null:people.find(p=>isDeputy(p)&&p.id===row.deputy_personnel_id)||await designatedDeputy(env,people);
    // ลายเซ็นคัดลอกในฐานข้อมูลด้วยซับคิวรี — ไม่ส่งข้อมูลภาพไปในคำสั่ง (เดิมลายเซ็น ผอ.+รอง ผอ. ทำให้คำสั่งเกินเพดาน D1 100 KB จนอนุมัติไม่ได้)
    await ensureSignatures(env);
    const deputySigner=approving&&signingDeputy?Number(signingDeputy.user_ids[0]):null;
