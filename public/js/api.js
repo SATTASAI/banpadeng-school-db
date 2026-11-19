@@ -171,6 +171,9 @@ const ROLE_LABELS = {
 (() => { const css=document.createElement('link');css.rel='stylesheet';css.href='/css/global-notifications.css';document.head.append(css);
  const script=document.createElement('script');script.src='/js/global-notifications.js';document.head.append(script); })();
 
+// Long how-to text collapses into (i) icons shown on hover/tap.
+(() => {const script=document.createElement("script");script.src="/js/help-tips.js";document.head.append(script);})();
+
 // Admin-only test cleanup controls across the workspace.
 (() => {const css=document.createElement("link");css.rel="stylesheet";css.href="/css/admin-cleanup.css";document.head.append(css);const script=document.createElement("script");script.src="/js/admin-cleanup.js";document.head.append(script);})();
 
