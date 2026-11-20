@@ -301,7 +301,9 @@ function openMoney(r){
 }
 $('mClose').onclick=()=>$('moneyModal').hidden=true;
 $('mSave').onclick=async()=>{
+  const btn=$('mSave');if(btn.disabled)return;
   showErr('mError','');const files=[...$('mPhotos').files];
+  const label0=btn.textContent;btn.disabled=true;btn.textContent='กำลังบันทึก...';
   try{
     if(editingMoney){
       await apiRequest('/api/merit/money/'+editingMoney.id,{method:'PATCH',body:{found_date:$('mDate').value,amount:$('mAmount').value,place:$('mPlace').value,detail:$('mDetail').value}});
@@ -314,6 +316,7 @@ $('mSave').onclick=async()=>{
     }
     $('moneyModal').hidden=true;await load();
   }catch(e){showErr('mError',e.message)}
+  finally{btn.disabled=false;btn.textContent=label0}
 };
 
 // ---------- ส่งออก PDF / XLSX (ตามตัวกรองที่แสดงอยู่) ----------
