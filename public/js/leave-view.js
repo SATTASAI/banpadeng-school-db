@@ -13,7 +13,7 @@
    ({submitted:'รอหัวหน้าฝ่ายบุคลากรรับทราบ',acknowledged:'หัวหน้าฝ่ายรับทราบแล้ว',forwarded:'ส่งต่อผู้บริหารแล้ว'})[r.workflow_stage]||'รอดำเนินการ';
   target.textContent='';
   for(const [label,value] of [['เลขที่ใบลา',r.id],['ผู้ยื่น',r.full_name],['ประเภท',types[r.leave_type]||r.leave_type],
-   ['วันที่ลา',`${r.start_date} ถึง ${r.end_date}`],['จำนวนวัน',r.leave_days??'—'],['เหตุผล',r.reason||'—'],['สถานะ',status],...(r.over_quota?[['หมายเหตุ','⚠️ ลาเกินเกณฑ์จำนวนครั้งของภาคเรียน']]:[])]){
+   ['วันที่ลา',`${r.start_date} ถึง ${r.end_date}`],['จำนวนวัน',r.leave_days??'—'],['เหตุผล',r.reason||'—'],['สถานะ',status],...(Number(r.over_quota)===1&&['pending','approved'].includes(r.status)?[['หมายเหตุ','⚠️ ลาเกินเกณฑ์จำนวนครั้งของภาคเรียน']]:[])]){
    const row=document.createElement('div'),name=document.createElement('span'),data=document.createElement('span');
    row.className='row';name.className='label';data.className='value';name.textContent=label;data.textContent=String(value);
    row.append(name,data);target.append(row);

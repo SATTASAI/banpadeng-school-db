@@ -26,7 +26,7 @@ async function listSelect(env){
  const cols=results.map(c=>c.name).filter(n=>!heavyColumns.has(n)&&/^[a-z_]+$/.test(n));
  const sql=select.replace('SELECT r.*,',`SELECT ${cols.map(c=>'r.'+c).join(',')},`);listSelectCache.set(env.DB,sql);return sql;
 }
-const quotaName=g=>g==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ';
+const quotaName=g=>g==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ ';
 const leaveInputTypes=['sick','personal','maternity','paternity','lenient','other'];
 const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
 // Additive subtypes retain the existing CHECK constraint shared with other systems.

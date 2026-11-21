@@ -16,7 +16,7 @@
    const data=await apiRequest('/api/leave-allowance?date='+encodeURIComponent($('fStart').value||$('fDate').value));
    if(version!==allowanceVersion)return;
    if(!data.period){$('leaveAllowance').textContent=data.message;return;}
-   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining??'ไม่จำกัด'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง นับเฉพาะใบที่อนุมัติแล้ว ระบบตรวจสิทธิ์อีกครั้งเมื่อ ผอ. อนุมัติ ลาป่วย ลาคลอด และลาช่วยภริยาคลอดบุตรไม่ใช้เพดานจำนวนครั้งลาทั่วไป</p>`;
+   $('leaveAllowance').innerHTML=`<p>สิทธิ์ลา ${esc(data.period.name)} ปีการศึกษา ${esc(data.period.year_be)} (${esc(data.period.from)} ถึง ${esc(data.period.to)})</p><table><thead><tr><th>ประเภท</th><th>กำหนด (ครั้ง)</th><th>อนุมัติแล้ว</th><th>รอพิจารณา</th><th>ยื่นได้อีก (ครั้ง)</th></tr></thead><tbody>${data.types.map(r=>`<tr><td>${esc(quotaLabels[r.leave_type])}</td><td>${r.max_count??'ไม่จำกัด'}</td><td>${r.approved}</td><td>${r.pending}</td><td>${r.remaining===null?'ไม่จำกัด':r.remaining>0?r.remaining:'<span class="leave-over-badge">ครบเกณฑ์แล้ว</span>'}</td></tr>`).join('')}</tbody></table><p class="muted">นับรวมบัญชีที่ผูกบุคลากรเดียวกัน ใบลาหนึ่งใบ = หนึ่งครั้ง นับเฉพาะใบที่อนุมัติแล้ว ยื่นเกินเกณฑ์ได้โดยต้องยืนยัน ระบบจะแจ้งหัวหน้าฝ่ายบุคลากร รอง ผอ. และ ผอ. และทำเครื่องหมายลาเกินเกณฑ์ ลาป่วย ลาคลอด และลาช่วยภริยาคลอดบุตรไม่ใช้เพดานจำนวนครั้งลาทั่วไป</p>`;
   }catch(e){if(version===allowanceVersion)$('leaveAllowance').textContent='โหลดสิทธิ์ลาไม่สำเร็จ: '+e.message;}
  }
  $('saveLeaveLimits').onclick=async()=>{
@@ -44,13 +44,14 @@
     ${r.can_decide?`<button class="btn btn-primary" data-action="approved" data-id="${Number(r.id)}" ${decisionDisabled}>อนุญาต</button><button class="btn btn-ghost" data-action="rejected" data-id="${Number(r.id)}" ${decisionDisabled}>ไม่อนุญาต</button>`:''}`;
  }
  // ทะเบียน/ประวัติ: การ์ดย่อเรียงหลายคอลัมน์ กด "รายละเอียด" เพื่อดูเต็ม
- const overBadge=r=>r.over_quota?'<span class="leave-over-badge" title="ลาเกินเกณฑ์จำนวนครั้งของภาคเรียน">⚠️ ลาเกินเกณฑ์</span>':'';
+ const isOver=r=>Number(r?.over_quota)===1&&['pending','approved'].includes(r.status);
+ const overBadge=r=>isOver(r)?'<span class="leave-over-badge" title="ลาเกินเกณฑ์จำนวนครั้งของภาคเรียน">⚠️ ลาเกินเกณฑ์</span>':'';
  // ป๊อบอัพเตือนครูก่อนยื่นใบลาที่เกินเกณฑ์ — ยืนยันแล้วจึงส่ง (ระบบแจ้งหัวหน้าฝ่ายบุคลากร รอง ผอ. และ ผอ.)
  function overQuotaPopup(info){
   return new Promise(resolve=>{
    const box=document.createElement('div');box.className='leave-over-modal';box.setAttribute('role','dialog');box.setAttribute('aria-modal','true');
    box.innerHTML=`<div class="leave-over-card"><div class="leave-over-icon">⚠️</div><h3>ลาเกินเกณฑ์</h3>
-    <p>${esc(info.group==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ')}ที่อนุมัติแล้วใน${esc(info.period||'ภาคเรียนนี้')} <b>${Number(info.used)} ครั้ง</b> ครบเกณฑ์ <b>${Number(info.max)} ครั้ง</b> แล้ว</p>
+    <p>${esc(info.group==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ')} ที่อนุมัติแล้วใน${esc(info.period||'ภาคเรียนนี้')} <b>${Number(info.used)} ครั้ง</b> ครบเกณฑ์ <b>${Number(info.max)} ครั้ง</b> แล้ว</p>
     <p>ยื่นต่อได้ แต่ระบบจะแจ้งเตือนหัวหน้าฝ่ายบุคลากร รอง ผอ. และ ผอ. ว่าลาเกินเกณฑ์ และหาก ผอ. อนุมัติ ใบลานี้จะถูกทำเครื่องหมาย “ลาเกินเกณฑ์” ในทะเบียน สถิติ และใบลาที่พิมพ์</p>
     <div class="leave-over-actions"><button type="button" class="btn btn-ghost" data-over="no">ยกเลิก</button><button type="button" class="btn btn-primary" data-over="yes">ยืนยันยื่นใบลา</button></div></div>`;
    const done=v=>{box.remove();document.removeEventListener('keydown',esc_);resolve(v);};
@@ -64,7 +65,7 @@
   const label=r.status==='approved'?'อนุญาตแล้ว':r.status==='rejected'?'ไม่อนุญาต':r.status==='cancelled'?'ยกเลิก':stages[r.workflow_stage]||'รอดำเนินการ';
   return `<article class="leave-mini lm-${st}" id="leave-${Number(r.id)}">
    <div class="lm-top"><strong title="${esc(r.full_name)}">${esc(r.full_name)}</strong><span class="lm-status">${esc(label)}</span></div>
-   <div class="lm-type">${esc(types[r.leave_type])} · <b>${esc(r.leave_days??'')}</b> วัน</div>${r.over_quota?`<div class="lm-over">${overBadge(r)}</div>`:''}
+   <div class="lm-type">${esc(types[r.leave_type])} · <b>${esc(r.leave_days??'')}</b> วัน</div>${isOver(r)?`<div class="lm-over">${overBadge(r)}</div>`:''}
    <div class="lm-date">${esc(r.start_date)}${r.end_date&&r.end_date!==r.start_date?' – '+esc(r.end_date):''}</div>
    <div class="lm-more" role="tooltip"><p><b>เหตุผล:</b> ${esc(r.reason||'ไม่ระบุ')}</p>${r.acknowledged_name?`<p><b>รับทราบ:</b> ${esc(r.acknowledged_name)} · ${esc(r.acknowledged_at)}</p>`:''}${r.deputy_name?`<p><b>ส่งต่อ:</b> ${esc(r.director_name)} และ ${esc(r.deputy_name)}</p>`:''}${r.reviewer_comment?`<p><b>ความเห็น:</b> ${esc(r.reviewer_comment)}</p>`:''}</div>
    <div class="lm-actions"><button class="lm-open" data-detail="${Number(r.id)}">รายละเอียด ›</button><button class="lm-file" data-export="docx" data-id="${Number(r.id)}">Word</button><button class="lm-file" data-export="pdf" data-id="${Number(r.id)}">PDF</button>${!approvalView&&r.can_cancel?`<button class="lm-file" data-action="cancel" data-id="${Number(r.id)}">ยกเลิก</button>`:''}</div>
@@ -209,7 +210,7 @@
   const {leave_request:r,events}=await apiRequest('/api/leave-requests/'+id);detailId=id;
   $('detailSection').hidden=false;
   const last=r.last_leave;
-  $('detailPanel').innerHTML=`${r.over_quota?`<div class="leave-over-banner">⚠️ <b>ลาเกินเกณฑ์</b> — ${r.status==='approved'?'ผู้อำนวยการอนุมัติให้ลาแม้เกินเกณฑ์จำนวนครั้งของภาคเรียน':'ใบลานี้เกินเกณฑ์จำนวนครั้งของภาคเรียน (นับจากใบที่อนุมัติแล้ว) หากอนุมัติจะบันทึกเป็นการลาเกินเกณฑ์'}</div>`:''}<div class="leave-details">${[
+  $('detailPanel').innerHTML=`${isOver(r)?`<div class="leave-over-banner">⚠️ <b>ลาเกินเกณฑ์</b> — ${r.status==='approved'?'ผู้อำนวยการอนุมัติให้ลาแม้เกินเกณฑ์จำนวนครั้งของภาคเรียน':'ใบลานี้เกินเกณฑ์จำนวนครั้งของภาคเรียน (นับจากใบที่อนุมัติแล้ว) หากอนุมัติจะบันทึกเป็นการลาเกินเกณฑ์'}</div>`:''}<div class="leave-details">${[
    ['ชื่อ',r.full_name],['ตำแหน่ง',r.position],['วันที่เขียน',r.request_date],['ประเภท',types[r.leave_type]],['เหตุผล',r.reason||'—'],['หมายเหตุ',r.applicant_note||'—'],...(r.leave_type==='lenient'?[['มอบหมายคาบสอนแทนให้แก่',r.substitute_teacher||'—']]:[]),['วันลา',`${r.start_date} ถึง ${r.end_date} (${r.leave_days} วัน)`],['ที่อยู่ระหว่างลา',r.contact_address||'—'],['เบอร์ติดต่อ',r.contact_phone||'—'],['การลาครั้งล่าสุด',last?`${types[last.leave_type]} ${last.start_date} ถึง ${last.end_date}`:'ไม่มีรายการที่อนุมัติในระบบ'],['บันทึกหัวหน้าฝ่าย',r.personnel_note||'—']
   ].map(([label,value])=>`<div><strong>${esc(label)}:</strong> ${esc(value)}</div>`).join('')}</div>
   <p class="muted">${r.leave_type==='lenient'?'สถิติลาอนุโลมแยกต่างหาก ไม่นับรวมปีงบประมาณ':'สถิติปีงบประมาณ'} ${esc(r.statistics_period.from)} ถึง ${esc(r.statistics_period.to)}</p>
