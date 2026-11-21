@@ -6,11 +6,18 @@
 
 ## การอัปเดตรายครั้ง — เริ่ม 8 พฤศจิกายน 2569
 
-**แพทช์ล่าสุด: 1.4.4**
+**แพทช์ล่าสุด: 1.4.5**
 
 ตั้งแต่เริ่มใช้กติกานี้ ทุกชุดการแก้ไขที่เสร็จและ merge หรือ push เข้าสาขาหลักต้องเพิ่มเลขแพทช์ทันที
 งานเล็กและกลางเพิ่มเลขส่วนที่สาม ส่วนงานใหญ่เพิ่มเลขส่วนที่สองและเริ่มเลขย่อยใหม่
 ยังสรุปรวมทุกแพทช์รายสัปดาห์จันทร์–อาทิตย์ตามเวลาไทย โดยเก็บประวัติฐาน 1.0 ด้านล่างไว้ตามเดิม
+
+### Patch 1.4.5 — 22 พฤศจิกายน 2569
+
+- **ขนาด:** เล็ก (เอกสาร)
+- **รีโปที่แก้ไข:** [ระบบโรงเรียน #227](https://github.com/SATTASAI/banpadeng-school-db/pull/227), [students-report #56](https://github.com/SATTASAI/students-report/pull/56), [publicservice #25](https://github.com/SATTASAI/publicservice/pull/25), [bpdactivity #7](https://github.com/SATTASAI/bpdactivity/pull/7), [teaching-media #8](https://github.com/SATTASAI/teaching-media/pull/8), [evaluatesystem #7](https://github.com/SATTASAI/evaluatesystem/pull/7), [school-cooperative #15](https://github.com/SATTASAI/school-cooperative/pull/15), [School Notify #16](https://github.com/SATTASAI/school-notify/pull/16), [school-announcement #11](https://github.com/SATTASAI/school-announcement/pull/11), [bpd_timetable #6](https://github.com/SATTASAI/bpd_timetable/pull/6), [school-bank-appsscript #15](https://github.com/SATTASAI/school-bank-appsscript/pull/15)
+- เพิ่ม `AGENTS.md` มาตรฐานในทุกรีโประบบโรงเรียน: คำสั่ง test/dev, โครงสร้างไฟล์, ตารางที่เขียนได้ในฐานกลาง, business rules, ความปลอดภัย/secrets, จุดห้ามแตะ, ระบบที่เชื่อมกัน, deploy, กติกาแพทช์กลาง และ checklist ก่อน merge
+- ชุดเดียวกันเพิ่มในรีโปที่ไม่เชื่อมระบบนี้ (บันทึกอ้างอิง ไม่นับในขอบเขต): [banpadeng-school-banksaving #4](https://github.com/SATTASAI/banpadeng-school-banksaving/pull/4), [watbot-db #21](https://github.com/watbot0022-lang/watbot-db/pull/21), [bpd-document-converter #1](https://github.com/SATTASAI/bpd-document-converter/pull/1), [banpadeng-school-public #1](https://github.com/SATTASAI/banpadeng-school-public/pull/1)
 
 ### Patch 1.4.4 — 18 พฤศจิกายน 2569
 
