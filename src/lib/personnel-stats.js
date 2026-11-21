@@ -78,14 +78,17 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
   const userFilter = onlyUserId ? JSON.stringify(ownPerson ? [...personByUser].filter(([, pid]) => pid === ownPerson).map(([uid]) => uid) : [Number(onlyUserId)]) : null;
   // วันลาที่อนุมัติ นับเฉพาะส่วนที่อยู่ในช่วงเวลา ตามสัดส่วนจำนวนวันลาที่ยื่น (สูตรเดียวกับแดชบอร์ด)
   const holidays=await leaveCalendar(env);
-  const { results:stored }=await env.DB.prepare(`SELECT r.user_id,r.leave_type,r.leave_subtype,r.status,r.start_date,r.end_date,r.leave_days,u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
-    WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))`)
-    .bind(range.start,range.end,userFilter,userFilter).all();
+  // over_quota (ลาเกินเกณฑ์) เพิ่มโดย ensureLeaveData — ฐานข้อมูลที่ยังไม่มีคอลัมน์ถือว่าไม่เกินเกณฑ์
+  const leaveSql=extra=>`SELECT r.user_id,r.leave_type,r.leave_subtype,r.status,r.start_date,r.end_date,r.leave_days${extra},u.full_name FROM leave_requests r JOIN users u ON u.id=r.user_id
+    WHERE r.end_date>=? AND r.start_date<=? AND (? IS NULL OR r.user_id IN (SELECT value FROM json_each(?)))`;
+  let stored;
+  try{({results:stored}=await env.DB.prepare(leaveSql(',r.over_quota')).bind(range.start,range.end,userFilter,userFilter).all());}
+  catch(e){if(!/no such column/i.test(String(e?.message)))throw e;({results:stored}=await env.DB.prepare(leaveSql('')).bind(range.start,range.end,userFilter,userFilter).all());}
   // ใบลาหนึ่งใบนับหนึ่งครั้งในช่วงที่เป็นวันเริ่มลา ส่วนจำนวนวันนับตามส่วนที่อยู่ในช่วง (กฎเดียวกับหน้าการลา/ใบลา)
   const results=stored.map(r=>({...r,leave_type:r.leave_subtype||r.leave_type,request_count:r.start_date>=range.start&&r.start_date<=range.end?1:0,
     days:r.status==='approved'?effectiveLeaveDays(r,holidays,range.start,range.end):0}));
   const blank = (key, name, position) => ({ key, name, position: position || '', pending: 0, rejected: 0, approved_times: 0, approved_days: 0,
-    sick_personal_times: 0, sick_personal_days: 0, lenient_times:0,lenient_days:0,
+    sick_personal_times: 0, sick_personal_days: 0, lenient_times:0,lenient_days:0,over_quota_times:0,
     by_type: Object.fromEntries(Object.keys(LEAVE_TYPES).map((t) => [t, { times: 0, days: 0 }])) });
   const rows = new Map();
   if (!onlyUserId) for (const p of people) rows.set(`p${p.id}`, blank(`p${p.id}`, p.full_name, p.position));
@@ -102,6 +105,7 @@ export async function leaveStatistics(env, { fiscalYear, period, onlyUserId = nu
     else if (r.status === 'rejected') row.rejected += n;
     else if (r.status === 'approved') {
       if(type==='lenient'){row.lenient_times+=n;row.lenient_days+=days;}else{row.approved_times += n; row.approved_days += days;}
+      if (Number(r.over_quota) === 1) row.over_quota_times += n;
       row.by_type[type].times += n; row.by_type[type].days += days;
       if (type === 'sick' || type === 'personal') { row.sick_personal_times += n; row.sick_personal_days += days; }
     }

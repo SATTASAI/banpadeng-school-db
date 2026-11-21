@@ -34,7 +34,7 @@ export async function createLeaveAccessUrl(env, messageKey, recipientId) {
 export async function readLeaveAccess(env, token) {
   if(typeof token!=='string'||!/^([a-f0-9]{64})$/.test(token))return null;
   await ensureSchema(env);
-  return env.DB.prepare(`SELECT r.id,r.leave_type,r.leave_subtype,r.reason,r.start_date,r.end_date,r.leave_days,
+  return env.DB.prepare(`SELECT r.id,r.leave_type,r.leave_subtype,r.reason,r.start_date,r.end_date,r.leave_days,r.over_quota,
     r.status,r.workflow_stage,r.created_at,u.full_name
     FROM leave_line_access a JOIN leave_requests r ON r.id=a.leave_id
     JOIN users u ON u.id=r.user_id JOIN users recipient ON recipient.id=a.recipient_user_id

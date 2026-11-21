@@ -111,7 +111,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  FROM project_balance_notifications n JOIN project_balance_requests r ON r.id=n.request_id JOIN projects p ON p.id=r.project_id WHERE n.user_id=?
  UNION ALL
  SELECT 'leave:'||r.id||':'||CASE WHEN r.status<>'pending' THEN r.status WHEN r.workflow_stage='forwarded' THEN 'forwarded' ELSE 'pending' END,'การลา: '||u.full_name,
- CASE r.status WHEN 'pending' THEN CASE WHEN r.workflow_stage='forwarded' THEN 'หัวหน้าฝ่ายบุคลากรรับทราบแล้ว ส่งข้อมูลให้ผู้อำนวยการพิจารณาและรองผู้อำนวยการรับทราบ' ELSE 'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ' END WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
+ CASE WHEN r.over_quota=1 THEN '⚠️ ลาเกินเกณฑ์ · ' ELSE '' END||CASE r.status WHEN 'pending' THEN CASE WHEN r.workflow_stage='forwarded' THEN 'หัวหน้าฝ่ายบุคลากรรับทราบแล้ว ส่งข้อมูลให้ผู้อำนวยการพิจารณาและรองผู้อำนวยการรับทราบ' ELSE 'มีคำขอลารอหัวหน้าฝ่ายบุคลากรรับทราบ' END WHEN 'approved' THEN 'คำขอลาได้รับอนุมัติแล้ว' ELSE 'คำขอลาไม่ได้รับอนุมัติ' END,
  COALESCE(r.approved_at,r.reviewer_at,r.forwarded_at,r.created_at),'/leave.html?request='||r.id,NULL,NULL,
  CASE WHEN (?=1 AND r.status='pending' AND r.workflow_stage IN ('submitted','acknowledged')) OR (r.user_id=? AND r.status IN ('approved','rejected')) OR
  (?=1 AND r.status='pending' AND r.workflow_stage='forwarded' AND EXISTS(
