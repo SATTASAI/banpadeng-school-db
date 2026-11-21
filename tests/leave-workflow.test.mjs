@@ -102,6 +102,12 @@ test('over-quota leave needs confirmation, is flagged, notifies reviewers and st
  assert.equal(list.leave_requests.find(r=>r.id===secondId).over_quota,1);
  assert.equal(list.leave_requests.find(r=>r.id===first.id).over_quota,0);
  assert.equal(env.raw.prepare('SELECT over_quota FROM leave_requests WHERE id=?').get(thirdId).over_quota,1);
+ // a rejected over-quota leave is no longer announced as over quota
+ await call(env,'/api/leave-requests/'+thirdId,'PATCH',{action:'acknowledge'},3);
+ assert.equal((await call(env,'/api/leave-requests/'+thirdId,'PATCH',{action:'decide',status:'rejected'},4)).status,200);
+ const teacherNotes=(await (await call(env,'/api/notifications','GET',undefined,2)).json()).notifications;
+ assert.equal(teacherNotes.find(n=>n.message_key==='leave:'+thirdId+':rejected')?.body?.includes('ลาเกินเกณฑ์')??teacherNotes.find(n=>n.message_key==='leave:'+thirdId+':rejected')?.message?.includes('ลาเกินเกณฑ์'),false);
+ assert(teacherNotes.some(n=>n.message_key==='leave:'+secondId+':approved'&&JSON.stringify(n).includes('ลาเกินเกณฑ์')));
  // Sick leave is never over the quota.
  const sick=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-09',end_date:'2026-10-09'},2)).json();
  assert.equal(sick.over_quota,false);

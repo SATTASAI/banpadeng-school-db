@@ -27,3 +27,13 @@ test('paternity exports a distinct title, selected type and working-day units in
  const xml=e.docxFiles(leave)['word/document.xml'];assert.match(xml,/แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร/);assert.match(xml,/วันทำการ/);
  const pdf=JSON.stringify(e.pdfDefinition(leave));assert.match(pdf,/แบบใบลาไปช่วยเหลือภริยาที่คลอดบุตร/);assert.match(pdf,/วันทำการ/);
 });
+
+test('an approved over-quota leave carries the over-quota note in Word and PDF; a rejected one does not',()=>{
+ const over={...r,status:'approved',over_quota:1};
+ assert.match(e.model(over).decisionNote,/ลาเกินเกณฑ์/);
+ assert.match(e.docxFiles(over)['word/document.xml'],/ลาเกินเกณฑ์/);
+ assert(JSON.stringify(e.pdfDefinition(over)).includes('ลาเกินเกณฑ์'));
+ assert.equal(e.pdfDefinition(over).content.length>0,true);
+ assert.equal(e.model({...over,status:'rejected'}).decisionNote,'');
+ assert.equal(e.model({...r,status:'approved',over_quota:0}).decisionNote,'');
+});
