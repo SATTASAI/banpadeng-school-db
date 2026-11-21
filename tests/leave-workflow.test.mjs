@@ -73,22 +73,38 @@ test('personnel head cannot acknowledge own leave; superadmin acknowledges it in
  assert.equal(env.raw.prepare('SELECT workflow_stage FROM leave_requests WHERE id=?').get(id).workflow_stage,'forwarded');
 });
 
-test('quota is re-checked at approval; pending leaves do not consume a turn',async()=>{
+test('over-quota leave needs confirmation, is flagged, notifies reviewers and stays flagged after approval',async()=>{
  const {env}=await setup();
  await call(env,'/api/leave-settings','PATCH',{limits:[{leave_type:'general',max_count:1},{leave_type:'lenient',max_count:2}]});
  const personal={...form,leave_type:'personal'};
  const first=await (await call(env,'/api/leave-requests','POST',personal,2)).json();
+ assert.equal(first.over_quota,false);
+ // pending leaves do not consume a turn
  const second=await call(env,'/api/leave-requests','POST',{...personal,start_date:'2026-10-07',end_date:'2026-10-07'},2);assert.equal(second.status,201);
  const {id:secondId}=await second.json();
  for(const id of [first.id,secondId])assert.equal((await call(env,'/api/leave-requests/'+id,'PATCH',{action:'acknowledge'},3)).status,200);
  assert.equal((await call(env,'/api/leave-requests/'+first.id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
- const denied=await call(env,'/api/leave-requests/'+secondId,'PATCH',{action:'decide',status:'approved'},4);assert.equal(denied.status,409);
- assert.match((await denied.json()).error,/ครบ 1 ครั้ง/);
- assert.equal((await call(env,'/api/leave-requests/'+secondId,'PATCH',{action:'decide',status:'rejected'},4)).status,200);
- // Sick leave is never blocked by the quota.
- const sick=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-08',end_date:'2026-10-08'},2)).json();
- await call(env,'/api/leave-requests/'+sick.id,'PATCH',{action:'acknowledge'},3);
- assert.equal((await call(env,'/api/leave-requests/'+sick.id,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ // approving the first one flags the remaining pending leave
+ assert.equal(env.raw.prepare('SELECT over_quota FROM leave_requests WHERE id=?').get(secondId).over_quota,1);
+ // a new leave over the quota needs confirmation first
+ const third={...personal,start_date:'2026-10-08',end_date:'2026-10-08'};
+ const warn=await call(env,'/api/leave-requests','POST',third,2);assert.equal(warn.status,409);
+ const info=await warn.json();assert.equal(info.code,'LEAVE_OVER_QUOTA');assert.equal(info.used,1);assert.equal(info.max,1);
+ const confirmed=await call(env,'/api/leave-requests','POST',{...third,confirm_over_quota:true},2);assert.equal(confirmed.status,201);
+ const {id:thirdId,over_quota}=await confirmed.json();assert.equal(over_quota,true);
+ // the personnel head sees the over-quota warning in notifications
+ const notes=await (await call(env,'/api/notifications','GET',undefined,3)).json();
+ assert(JSON.stringify(notes).includes('ลาเกินเกณฑ์'));
+ // the director may still approve; the leave stays marked as over quota
+ assert.equal((await call(env,'/api/leave-requests/'+secondId,'PATCH',{action:'decide',status:'approved'},4)).status,200);
+ assert.equal(env.raw.prepare('SELECT status,over_quota FROM leave_requests WHERE id=?').get(secondId).over_quota,1);
+ const list=await (await call(env,'/api/leave-requests','GET',undefined,2)).json();
+ assert.equal(list.leave_requests.find(r=>r.id===secondId).over_quota,1);
+ assert.equal(list.leave_requests.find(r=>r.id===first.id).over_quota,0);
+ assert.equal(env.raw.prepare('SELECT over_quota FROM leave_requests WHERE id=?').get(thirdId).over_quota,1);
+ // Sick leave is never over the quota.
+ const sick=await (await call(env,'/api/leave-requests','POST',{...form,start_date:'2026-10-09',end_date:'2026-10-09'},2)).json();
+ assert.equal(sick.over_quota,false);
 });
 
 test('personnel head and superadmin edit or delete any leave with a reason; not their own; teachers cannot',async()=>{

@@ -7,7 +7,7 @@ import {ensureLinePersonalSchema,linkedLineAccounts} from '../lib/line-personal.
 import {ensureLineFeedSchema,DEFAULT_LEAVE_LINE_TEMPLATE,validLeaveLineTemplate} from '../lib/line-feed.js';
 import {unreadNotificationsFor} from './notifications.js';
 import {readLeaveAccess} from '../lib/leave-access.js';
-import {leaveTypes,leaveLimits,leaveAllowance,leavePeriod,ownerClause,quotaGroupSql,quotaGroupOf,quotaCheck} from '../lib/leave-allowance.js';
+import {leaveTypes,leaveLimits,leaveAllowance,leavePeriod,ownerClause,quotaGroupSql,quotaGroupOf,quotaCheck,refreshOverQuota} from '../lib/leave-allowance.js';
 
 const headers={'Cache-Control':'private, no-store'};
 const json=(data,status=200)=>jsonResponse(data,status,headers);
@@ -26,6 +26,7 @@ async function listSelect(env){
  const cols=results.map(c=>c.name).filter(n=>!heavyColumns.has(n)&&/^[a-z_]+$/.test(n));
  const sql=select.replace('SELECT r.*,',`SELECT ${cols.map(c=>'r.'+c).join(',')},`);listSelectCache.set(env.DB,sql);return sql;
 }
+const quotaName=g=>g==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ';
 const leaveInputTypes=['sick','personal','maternity','paternity','lenient','other'];
 const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
 // Additive subtypes retain the existing CHECK constraint shared with other systems.
@@ -212,6 +213,8 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
      new Set(body.limits.map(r=>r?.leave_type)).size!==leaveTypes.length||body.limits.some(r=>!r||!leaveTypes.includes(r.leave_type)||
      !(r.max_count===null||(Number.isSafeInteger(r.max_count)&&r.max_count>=0&&r.max_count<=10000))))return fail('ระบุจำนวนครั้งเป็นจำนวนเต็ม 0–10000 หรือเว้นว่างเพื่อไม่จำกัด ให้ครบทุกประเภท');
     await env.DB.batch(body.limits.map(r=>env.DB.prepare('INSERT INTO leave_term_limits(leave_type,max_count) VALUES(?,?) ON CONFLICT(leave_type) DO UPDATE SET max_count=excluded.max_count').bind(r.leave_type,r.max_count)));
+    const {results:pendingUsers}=await env.DB.prepare("SELECT DISTINCT user_id FROM leave_requests WHERE status='pending'").all();
+    for(const r of pendingUsers)await refreshOverQuota(env,r.user_id).catch(()=>{});
     return json({ok:true,limits:await leaveLimits(env)});
    }
    if(body&&Object.hasOwn(body,'line_template')){
@@ -304,19 +307,17 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
   const applicantNote=text(body.applicant_note,2000),substituteTeacher=body.leave_type==='lenient'?text(body.substitute_teacher,500):'';
   if(body.leave_type==='lenient'&&!substituteTeacher)return fail('กรุณาระบุผู้ที่ได้รับมอบหมายคาบสอนแทน');
   await ensureSignatures(env);
-  const quotaGroup=quotaGroupOf(body.leave_type);
+  // ลาเกินเกณฑ์ได้ แต่ต้องยืนยันก่อน และระบบติดธงไว้แจ้งเตือนหัวหน้าฝ่ายบุคลากร รอง ผอ. และ ผอ.
+  const quota=await quotaCheck(env,{leave_type:body.leave_type,user_id:user.id,start_date:body.start_date});
+  if(!quota.ok&&body.confirm_over_quota!==true)return json({error:`ลาเกินเกณฑ์: ${quotaName(quota.group)}ที่อนุมัติแล้ว ${quota.used} ครั้ง ครบเกณฑ์ ${quota.max} ครั้งใน${quota.period.name||'ภาคเรียนนี้'}แล้ว`,code:'LEAVE_OVER_QUOTA',over_quota:true,group:quota.group,used:quota.used,max:quota.max,period:quota.period.name||''},409);
   const results=await env.DB.batch([
-   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id,applicant_note,substitute_teacher,teacher_signature)
-    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,${signatureSql} WHERE
-    (SELECT max_count FROM leave_term_limits WHERE leave_type=?) IS NULL OR
-    (SELECT COUNT(*) FROM leave_requests WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved')
-    < (SELECT max_count FROM leave_term_limits WHERE leave_type=?)`).bind(user.id,storedType(body.leave_type),reason,body.start_date,body.end_date,position,date,days,address,phone,storedSubtype(body.leave_type),deputyForNotice?.id??null,applicantNote,substituteTeacher,user.id,user.id,user.id,quotaGroup,user.id,user.id,quotaGroup,period.from,period.to,quotaGroup),
+   env.DB.prepare(`INSERT INTO leave_requests(user_id,leave_type,reason,start_date,end_date,position,request_date,leave_days,contact_address,contact_phone,leave_subtype,deputy_personnel_id,applicant_note,substitute_teacher,over_quota,teacher_signature)
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,${signatureSql})`).bind(user.id,storedType(body.leave_type),reason,body.start_date,body.end_date,position,date,days,address,phone,storedSubtype(body.leave_type),deputyForNotice?.id??null,applicantNote,substituteTeacher,quota.ok?0:1,user.id,user.id,user.id),
    env.DB.prepare("INSERT INTO leave_events(leave_id,actor_id,action) SELECT last_insert_rowid(),?,'submitted' WHERE changes()>0").bind(user.id),
    env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'create','leave_request',leave_id,? FROM leave_events WHERE id=last_insert_rowid() AND changes()>0").bind(user.id,JSON.stringify({leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date}))
   ]);
-  if(!results[0].meta.changes)return fail('จำนวนครั้งการลากลุ่มนี้ที่อนุมัติแล้วครบตามเงื่อนไขภาคเรียนแล้ว',409);
   const newId=results[0].meta.last_row_id;
-  return json({id:newId},201);
+  return json({id:newId,over_quota:!quota.ok},201);
  }
  if(id&&method==='PATCH') {
   const body=await request.json().catch(()=>null);if(!body)return fail('รูปแบบข้อมูลไม่ถูกต้อง');
@@ -384,8 +385,8 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
    if(Number(row.user_id)===Number(user.id)||Number(row.applicant_personnel_id)===Number(person.id))return fail('ไม่สามารถอนุมัติการลาของตนเองได้',403);
    const approving=body.status==='approved';
    // ตรวจจำนวนครั้งอีกครั้งตอนอนุมัติ (นับเฉพาะใบที่อนุมัติแล้ว)
+   // ลาเกินเกณฑ์อนุมัติได้ ระบบตรึงธง "ลาเกินเกณฑ์" ไว้กับใบลา (นับใหม่ในคำสั่งเดียวกัน)
    const quota=approving?await quotaCheck(env,row,id):{ok:true};
-   if(!quota.ok)return fail(`อนุมัติไม่ได้: จำนวนครั้งการลากลุ่มนี้ที่อนุมัติแล้วครบ ${quota.max} ครั้งใน${quota.period.name||'ภาคเรียนนี้'}แล้ว`,409);
    const enforce=approving&&quota.max!=null;
    const applicantIsDirector=people.some(p=>isDirector(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
    const applicantIsDeputy=people.some(p=>isDeputy(p)&&(p.user_ids.map(Number).includes(Number(row.user_id))||p.id===Number(row.applicant_personnel_id)));
@@ -396,12 +397,14 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
    const approverSql=approving?signatureSql:'NULL',deputySql=deputySigner?signatureSql:'NULL';
    const signatureBinds=[...(approving?[user.id,user.id,user.id]:[]),...(deputySigner?[deputySigner,deputySigner,deputySigner]:[])];
    try{
-   return await change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,approver_signature=${approverSql},deputy_signature=${deputySql},deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?)
+   const res=await change(`UPDATE leave_requests SET status=?,workflow_stage='completed',approved_by=?,approved_at=?,decision_note=?,decision_name=?,decision_position=?,approver_signature=${approverSql},deputy_signature=${deputySql},deputy_name=COALESCE(deputy_name,?),deputy_position=COALESCE(deputy_position,?),
+    over_quota=CASE WHEN ?=0 THEN over_quota WHEN (SELECT COUNT(*) FROM leave_requests q WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved' AND id<>?)>=? THEN 1 ELSE 0 END
     WHERE id=? AND status='pending' AND workflow_stage='forwarded'
-    AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))
-    AND (?=0 OR (SELECT COUNT(*) FROM leave_requests q WHERE ${ownerClause} AND ${quotaGroupSql}=? AND start_date BETWEEN ? AND ? AND status='approved' AND id<>?)<?)`,
-    [body.status,user.id,now,note,person.full_name,person.position,...signatureBinds,signingDeputy?.full_name??null,signingDeputy?.position??null,id,director?1:0,person.id,
-     enforce?1:0,row.user_id,row.user_id,quota.group??'',quota.period?.from??'',quota.period?.to??'',id,quota.max??0],body.status);
+    AND (?=1 OR EXISTS(SELECT 1 FROM leave_approval_delegations WHERE personnel_id=?))`,
+    [body.status,user.id,now,note,person.full_name,person.position,...signatureBinds,signingDeputy?.full_name??null,signingDeputy?.position??null,
+     enforce?1:0,row.user_id,row.user_id,quota.group??'',quota.period?.from??'',quota.period?.to??'',id,quota.max??0,id,director?1:0,person.id],body.status);
+   if(approving)await refreshOverQuota(env,row.user_id).catch(()=>{});
+   return res;
    }catch(e){
     // บันทึกความล้มเหลวไว้ตรวจย้อนหลัง (เดิมล้มแบบเงียบ ไม่มีร่องรอยว่าเคยกด)
     await env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) VALUES(?,'decide_failed','leave_request',?,?)")
@@ -424,7 +427,11 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'edit','leave_request',?,? WHERE changes()>0")
      .bind(user.id,id,JSON.stringify({before:{leave_type:row.leave_subtype||row.leave_type,start_date:row.start_date,end_date:row.end_date,leave_days:row.leave_days},after:{leave_type:body.leave_type,start_date:body.start_date,end_date:body.end_date,leave_days:days},note}))];
    const results=await env.DB.batch(statements);
-   return results[0].meta.changes?json({ok:true}):fail('ข้อมูลใบลาเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
+   if(!results[0].meta.changes)return fail('ข้อมูลใบลาเปลี่ยนแล้ว กรุณาโหลดข้อมูลใหม่',409);
+   // แก้ใบที่อนุมัติแล้ว: คำนวณธงลาเกินเกณฑ์ใหม่ตามประเภท/วันที่ใหม่
+   if(row.status==='approved'){const q=await quotaCheck(env,{...row,leave_type:body.leave_type,leave_subtype:null,start_date:body.start_date},id);await env.DB.prepare('UPDATE leave_requests SET over_quota=? WHERE id=?').bind(q.ok?0:1,id).run();}
+   await refreshOverQuota(env,row.user_id).catch(()=>{});
+   return json({ok:true});
   }
   return fail('การดำเนินการไม่ถูกต้อง');
  }
@@ -439,6 +446,7 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
     env.DB.prepare('DELETE FROM leave_requests WHERE id=? AND status=?').bind(id,row.status),
     env.DB.prepare("INSERT INTO audit_logs(user_id,action,resource,resource_id,details) SELECT ?,'delete','leave_request',?,? WHERE changes()>0").bind(user.id,id,JSON.stringify({reason,snapshot}))
    ]);
+   if(results[0].meta.changes&&row.status==='approved')await refreshOverQuota(env,row.user_id).catch(()=>{});
    return results[0].meta.changes?json({ok:true}):fail('สถานะคำขอเปลี่ยนแล้ว',409);
   }
   if(row.user_id!==user.id)return fail('เฉพาะผู้ยื่นคำขอ หัวหน้าฝ่ายบุคลากร หรือผู้ดูแลระบบ',403);

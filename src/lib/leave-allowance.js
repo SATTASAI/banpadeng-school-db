@@ -40,3 +40,11 @@ export async function quotaCheck(env,row,excludeId=null){
   .bind(row.user_id,row.user_id,group,period.from,period.to,excludeId??-1).first();
  return {ok:Number(used.n)<limit.max_count,group,period,max:limit.max_count,used:Number(used.n)};
 }
+
+// ใบลาที่ยังรออนุมัติ: ตั้งธงลาเกินเกณฑ์ใหม่ตามจำนวนครั้งที่อนุมัติแล้วล่าสุด (ใบที่อนุมัติแล้วตรึงธงไว้ตอนอนุมัติ)
+export async function refreshOverQuota(env,userId){
+ const {results}=await env.DB.prepare(`SELECT id,user_id,leave_type,leave_subtype,start_date,over_quota FROM leave_requests WHERE ${ownerClause} AND status='pending'`).bind(userId,userId).all();
+ const updates=[];
+ for(const r of results){const q=await quotaCheck(env,r,r.id);const flag=q.ok?0:1;if(Number(r.over_quota)!==flag)updates.push(env.DB.prepare('UPDATE leave_requests SET over_quota=? WHERE id=?').bind(flag,r.id));}
+ if(updates.length)await env.DB.batch(updates);
+}

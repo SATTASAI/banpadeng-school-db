@@ -23,6 +23,7 @@ body{background:inherit}.st-page{max-width:1240px;margin:auto;padding:24px}.st-h
 .st-zero{color:#b7c5d1}.st-note{font-size:13px;color:var(--color-text-muted);margin:10px 2px}.st-error{display:none;padding:12px;border-radius:12px;background:#fff2f2;color:#9e3131;margin-bottom:12px}
 @media(max-width:820px){.st-page{padding:14px}.st-grid{grid-template-columns:1fr}}
 @media print{.st-filters,.st-actions,.app-topbar{display:none!important}.st-page{padding:0}.st-table{overflow:visible;border:0}.st-table table{min-width:0;font-size:11pt}}
+.st-over-chip{background:#fde8e8!important;color:#b3261e!important;border-color:#f2b8b5!important}
 </style></head>
 <body>
 <main class="st-page">
@@ -76,8 +77,8 @@ const flagged=r=>r.sick_personal_times>Number($('limitTimes').value||Infinity)||
 function render(){
   if(!data)return;const s=data.summary,types=Object.entries(data.types);
   $('lead').textContent=`${data.scope==='self'?'สถิติการลาของฉัน':'สถิติการลาครูและบุคลากรรายบุคคล'} · ${new Date(data.start+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} – ${new Date(data.end+'T00:00:00').toLocaleDateString('th-TH',{dateStyle:'medium'})} · นับเฉพาะใบลาที่อนุมัติแล้ว`;
-  const list=rows(),flags=data.people.filter(flagged).length;
-  $('cards').innerHTML=[['ลาจริง (ครั้ง/ปีงบประมาณ)',s.approved_times],['ลาจริง (วัน/ปีงบประมาณ)',num(s.approved_days)],['ลาอนุโลม (แยกต่างหาก)',(s.lenient_times||0)+' ครั้ง · '+num(s.lenient_days||0)+' วัน'],['ผู้ที่มีการลา',`${s.people_with_leave} / ${s.people}`],['เฉลี่ยวันลาต่อคน',num(s.people?s.approved_days/s.people:0)],['รออนุมัติ',s.pending,'warn'],['เกินเกณฑ์ ป่วย+กิจ',flags,flags?'warn':'']]
+  const list=rows(),flags=data.people.filter(flagged).length,overPeople=data.people.filter(r=>r.over_quota_times).length,overTimes=data.people.reduce((n,r)=>n+(r.over_quota_times||0),0);
+  $('cards').innerHTML=[['ลาจริง (ครั้ง/ปีงบประมาณ)',s.approved_times],['ลาจริง (วัน/ปีงบประมาณ)',num(s.approved_days)],['ลาอนุโลม (แยกต่างหาก)',(s.lenient_times||0)+' ครั้ง · '+num(s.lenient_days||0)+' วัน'],['ผู้ที่มีการลา',`${s.people_with_leave} / ${s.people}`],['เฉลี่ยวันลาต่อคน',num(s.people?s.approved_days/s.people:0)],['รออนุมัติ',s.pending,'warn'],['เกินเกณฑ์ ป่วย+กิจ',flags,flags?'warn':''],['ลาเกินเกณฑ์ (ผอ. อนุมัติ)',overPeople+' คน · '+overTimes+' ครั้ง',overTimes?'warn':'']]
     .map(([l,v,c=''])=>`<div class="st-card ${c}"><span>${l}</span><strong>${v}</strong></div>`).join('');
   const maxType=Math.max(1,...data.by_type.map(t=>t.days));
   $('byType').innerHTML=data.by_type.map(t=>`<div class="st-bar"><span>${esc(t.label)}</span><i style="width:${t.days/maxType*100}%"></i><em>${t.times} ครั้ง · ${num(t.days)} วัน</em></div>`).join('');
@@ -85,14 +86,14 @@ function render(){
   $('monthly').innerHTML=data.monthly.length?data.monthly.map(m=>`<div class="st-bar"><span>${monthLabel(m.month)}</span><i style="width:${m.times/maxMonth*100}%;background:#35a165"></i><em>${m.times} ครั้ง</em></div>`).join(''):'<p class="st-note">ยังไม่มีการลาที่อนุมัติในช่วงนี้</p>';
   $('thead').innerHTML=`<tr><th rowspan="2">ที่</th><th rowspan="2">ชื่อ-สกุล / ตำแหน่ง</th>${types.map(([,l])=>`<th colspan="2">${esc(l)}</th>`).join('')}<th colspan="2">รวม</th><th colspan="2">ป่วย+กิจ</th><th rowspan="2">รอ<br>อนุมัติ</th></tr><tr>${types.map(()=>'<th>ครั้ง</th><th>วัน</th>').join('')}<th>ครั้ง</th><th>วัน</th><th>ครั้ง</th><th>วัน</th></tr>`;
   const cell=v=>`<td class="${Number(v)?'':'st-zero'}">${num(v)}</td>`;
-  $('rows').innerHTML=list.map((r,i)=>`<tr class="${flagged(r)?'st-flag':''}"><td>${i+1}</td><td><b>${esc(r.name)}</b><small>${esc(r.position||'')}</small>${flagged(r)?'<span class="st-flag-chip">เกินเกณฑ์ ป่วย+กิจ</span>':''}</td>
+  $('rows').innerHTML=list.map((r,i)=>`<tr class="${flagged(r)?'st-flag':''}"><td>${i+1}</td><td><b>${esc(r.name)}</b><small>${esc(r.position||'')}</small>${flagged(r)?'<span class="st-flag-chip">เกินเกณฑ์ ป่วย+กิจ</span>':''}${r.over_quota_times?`<span class="st-flag-chip st-over-chip">⚠️ ลาเกินเกณฑ์ ${r.over_quota_times} ครั้ง</span>`:''}</td>
     ${types.map(([k])=>cell(r.by_type[k].times)+cell(r.by_type[k].days)).join('')}${cell(r.approved_times)}${cell(r.approved_days)}${cell(r.sick_personal_times)}${cell(r.sick_personal_days)}${cell(r.pending)}</tr>`).join('')
     ||`<tr><td colspan="${types.length*2+7}">ไม่พบข้อมูล</td></tr>`;
 }
 $('exportCsv').onclick=()=>{
   if(!data)return;const types=Object.entries(data.types);
-  const head=['ที่','ชื่อ-สกุล','ตำแหน่ง',...types.flatMap(([,l])=>[l+' (ครั้ง)',l+' (วัน)']),'รวม (ครั้ง)','รวม (วัน)','ป่วย+กิจ (ครั้ง)','ป่วย+กิจ (วัน)','รออนุมัติ','เกินเกณฑ์'];
-  const body=rows().map((r,i)=>[i+1,r.name,r.position,...types.flatMap(([k])=>[r.by_type[k].times,r.by_type[k].days]),r.approved_times,r.approved_days,r.sick_personal_times,r.sick_personal_days,r.pending,flagged(r)?'ใช่':'']);
+  const head=['ที่','ชื่อ-สกุล','ตำแหน่ง',...types.flatMap(([,l])=>[l+' (ครั้ง)',l+' (วัน)']),'รวม (ครั้ง)','รวม (วัน)','ป่วย+กิจ (ครั้ง)','ป่วย+กิจ (วัน)','รออนุมัติ','เกินเกณฑ์','ลาเกินเกณฑ์ (ครั้ง)'];
+  const body=rows().map((r,i)=>[i+1,r.name,r.position,...types.flatMap(([k])=>[r.by_type[k].times,r.by_type[k].days]),r.approved_times,r.approved_days,r.sick_personal_times,r.sick_personal_days,r.pending,flagged(r)?'ใช่':'',r.over_quota_times||0]);
   const csv=[[`สถิติวันลา ${$('period').selectedOptions[0].text} ปีงบประมาณ ${data.fiscal_year} (${data.start} ถึง ${data.end})`],head,...body].map(r=>r.map(v=>{const t=String(v??'');return /[",\n]/.test(t)?`"${t.replace(/"/g,'""')}"`:t}).join(',')).join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));a.download=`สถิติวันลา-${data.fiscal_year}-${data.period}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 };
