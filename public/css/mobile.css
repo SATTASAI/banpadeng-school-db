@@ -276,3 +276,11 @@
 
 /* Keyboard open in the chat: hide the floating bar so the chat fills the space above the keyboard. */
 @media(max-width:720px){.mobile-chat-open.chat-keyboard .mobile-tabbar,.mobile-chat-open.chat-keyboard .mobile-tabbar.ig-bar{display:none}.chat-keyboard .mobile-chat-panel{border-radius:0;transition:none}.mobile-chat-open.chat-keyboard .layout{visibility:hidden}.mobile-chat-open.chat-keyboard{background:#f2f2f7}}
+
+/* เมนูมือถือ: เลื่อนเข้า/ออกแบบ iOS (spring curve) + ฉากหลังจางตาม · รองรับการปัดลากจาก drawer-swipe.js */
+@media(max-width:720px){
+ .layout>.sidebar{transition:transform .42s cubic-bezier(.32,.72,0,1),visibility 0s linear .42s;will-change:transform;backface-visibility:hidden}
+ .mobile-nav-open .layout>.sidebar{transition:transform .42s cubic-bezier(.32,.72,0,1),visibility 0s}
+ .mobile-nav-backdrop{transition:opacity .38s cubic-bezier(.32,.72,0,1)}
+}
+@media(max-width:720px) and (prefers-reduced-motion:reduce){.layout>.sidebar,.mobile-nav-open .layout>.sidebar,.mobile-nav-backdrop{transition:none}}
