@@ -273,3 +273,6 @@
  .msp-item:hover:not([disabled]){background:#eef6ff}
  @keyframes mspPop{from{transform:scale(.95);opacity:0}to{transform:none;opacity:1}}
 }
+
+/* Keyboard open in the chat: hide the floating bar so the chat fills the space above the keyboard. */
+@media(max-width:720px){.mobile-chat-open.chat-keyboard .mobile-tabbar,.mobile-chat-open.chat-keyboard .mobile-tabbar.ig-bar{display:none}.chat-keyboard .mobile-chat-panel{border-radius:0}}

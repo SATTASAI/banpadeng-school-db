@@ -209,8 +209,11 @@
     const keyboardInset = Math.max(0, window.innerHeight - top - height);
     document.documentElement.style.setProperty('--chat-keyboard-inset', keyboardInset + 'px');
     // The floating bar sits above the bottom edge (margin + safe area), so end the panel at the bar's top, not at height - barHeight.
-    const barRect = bar.getBoundingClientRect();
-    const bottom = barRect.height ? Math.min(top + height, barRect.top) : top + height - 84;
+    // Typing: hide the tab bar (like iOS apps) and give the chat the whole visible area above the keyboard.
+    const typing = keyboardInset > 80;
+    document.body.classList.toggle('chat-keyboard', typing);
+    const barRect = typing ? null : bar.getBoundingClientRect();
+    const bottom = typing ? top + height : barRect.height && barRect.top > top ? Math.min(top + height, barRect.top) : top + height - 84;
     chatPanel.style.top = top + 'px';
     chatPanel.style.height = Math.max(0, bottom - top) + 'px';
   };
@@ -266,7 +269,7 @@
     chatPanel.setAttribute('aria-hidden', 'true');
     chatPanel.inert = true;
     chatButton.setAttribute('aria-expanded', 'false');
-    document.body.classList.remove('mobile-chat-open');
+    document.body.classList.remove('mobile-chat-open', 'chat-keyboard');
     if (background) background.inert = backgroundWasInert;
     setActive(previousTab);
     refreshMessages();
