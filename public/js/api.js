@@ -241,3 +241,13 @@ function workingFiscalYear(){
   window.addEventListener("pagehide", stop);
   if (document.visibilityState === "visible") start();
 })();
+
+// ดึงลงเพื่อรีเฟรชบนจอสัมผัส (ทุกหน้าที่โหลด api.js)
+(() => {
+  if (typeof document === "undefined" || typeof document.querySelector !== "function" || typeof document.createElement !== "function") return;
+  if (document.querySelector('script[src="/js/pull-refresh.js"]')) return;
+  const script = document.createElement("script");
+  script.src = "/js/pull-refresh.js";
+  script.defer = true;
+  (document.head || document.documentElement).appendChild(script);
+})();
