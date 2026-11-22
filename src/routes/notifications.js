@@ -10,7 +10,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access','official_duties'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access','official_duties','anonymous_feedback'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -78,8 +78,10 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  )`:'';
  // ไปราชการ: ผอ. รอรับทราบ · ฝ่ายบุคคลจัดสอนแทน · ผู้บันทึกได้รับแจ้งเมื่อ ผอ. รับทราบ
  const duties=tables.has('official_duties');
- const dutyCte=duties?`, duty_messages AS (
- SELECT 'duty:'||d.id||':pending','ไปราชการ: '||u.full_name,'รอ ผอ. รับทราบ · '||d.title||' · '||d.start_date||CASE WHEN d.end_date<>d.start_date THEN ' ถึง '||d.end_date ELSE '' END,
+ // ข้อเสนอแนะไม่ระบุชื่อ: แจ้งแอดมิน (รวมใน CTE เดียวกับไปราชการเพื่อไม่เพิ่มจำนวน term ของ messages)
+ const feedbackFeed=tables.has('anonymous_feedback')&&isAdmin(user);
+ const dutyTerms=[];
+ if(duties)dutyTerms.push(` SELECT 'duty:'||d.id||':pending','ไปราชการ: '||u.full_name,'รอ ผอ. รับทราบ · '||d.title||' · '||d.start_date||CASE WHEN d.end_date<>d.start_date THEN ' ถึง '||d.end_date ELSE '' END,
  d.created_at,'/leave.html?duty='||d.id,NULL,d.user_id,1
  FROM official_duties d JOIN users u ON u.id=d.user_id WHERE ?=1 AND d.status='pending' AND d.user_id<>?
  UNION ALL
@@ -88,7 +90,11 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  FROM official_duties d JOIN users u ON u.id=d.user_id WHERE ?=1 AND d.status<>'cancelled' AND d.user_id<>? AND d.end_date>=date('now','+7 hours')
  UNION ALL
  SELECT 'duty:'||d.id||':ack','ไปราชการ','ผอ. รับทราบการไปราชการแล้ว · '||d.title,d.acknowledged_at,'/leave.html?duty='||d.id,NULL,d.acknowledged_by,1
- FROM official_duties d WHERE d.user_id=? AND d.status='acknowledged' AND COALESCE(d.acknowledged_by,0)<>d.user_id
+ FROM official_duties d WHERE d.user_id=? AND d.status='acknowledged' AND COALESCE(d.acknowledged_by,0)<>d.user_id`);
+ if(feedbackFeed)dutyTerms.push(`SELECT 'feedback:'||f.id,'ข้อเสนอแนะใหม่ (ไม่ระบุชื่อ)',substr(f.message,1,120),f.created_at,'/feedback.html',NULL,NULL,1
+ FROM anonymous_feedback f WHERE f.created_at>=datetime('now','-30 days')`);
+ const dutyCte=dutyTerms.length?`, duty_messages AS (
+ ${dutyTerms.join('\n UNION ALL\n ')}
  )`:'';
  const supervision=tertiaryTerms.length>0;
  const tertiary=supervision?`, tertiary_messages AS (
@@ -138,7 +144,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  SELECT 'procurement:'||n.id,'จัดซื้อจัดจ้าง: '||c.subject,n.message,n.created_at,'/procurement.html?case='||c.id,n.read_at,NULL,1
  FROM procurement_notifications n JOIN procurement_cases c ON c.id=n.case_id WHERE n.user_id=?
  ${extra.map(x=>'UNION ALL\n '+x).join('\n ')}
- )${tertiary}${transferCte}${dutyCte}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}${transfers?' UNION ALL SELECT * FROM transfer_messages':''}${duties?' UNION ALL SELECT * FROM duty_messages':''}
+ )${tertiary}${transferCte}${dutyCte}, messages AS (SELECT * FROM primary_messages UNION ALL SELECT * FROM secondary_messages${supervision?' UNION ALL SELECT * FROM tertiary_messages':''}${transfers?' UNION ALL SELECT * FROM transfer_messages':''}${dutyTerms.length?' UNION ALL SELECT * FROM duty_messages':''}
  ) SELECT m.* FROM messages m WHERE (m.read_at IS NULL AND NOT EXISTS(SELECT 1 FROM notification_reads r WHERE r.user_id=? AND r.message_key=m.message_key))${forLine?" OR m.message_key LIKE 'leave:%'":''}${forLine||forDelivery?" OR m.message_key LIKE 'license:%'":''}${forDelivery?" OR m.message_key LIKE 'transfer-notice:%'":''}`;
  const executive=['executive','superadmin'].includes(user.role)?1:0;
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,

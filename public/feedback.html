@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ข้อเสนอแนะ (ไม่ระบุชื่อ) — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
+<link rel="stylesheet" href="/css/style.css">
+<style>
+body{background:inherit}.fb-page{max-width:760px;margin:auto;padding:24px}.fb-page h1{margin:0;color:#163e67}.lead{margin:6px 0 18px;color:#607991;font-size:14px}
+.fb-card{padding:18px;border:1px solid #d5e2ed;border-radius:18px;background:#fff}
+.fb-anon{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;margin-bottom:14px;border-radius:14px;background:#eef7f1;color:#1f6a40;font-size:14px;line-height:1.6}
+.fb-anon svg{flex-shrink:0;width:20px;height:20px;margin-top:2px}
+.fb-card textarea{width:100%;min-height:150px;box-sizing:border-box;padding:12px 14px;border:1px solid #cfdfec;border-radius:14px;font:inherit;font-size:16px;line-height:1.6;resize:vertical;color:#203047;background:#fafcfe}
+.fb-card textarea:focus{outline:none;border-color:#6aa2dc;box-shadow:0 0 0 3px #1e5fc01a;background:#fff}
+.fb-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}
+.fb-count{font-size:12px;color:#8496a8}
+.fb-send{border:0;border-radius:12px;background:#1e5fc0;color:#fff;font:inherit;font-weight:600;padding:10px 22px;cursor:pointer}.fb-send:disabled{opacity:.5;cursor:default}
+.notice{padding:12px 14px;border:1px solid #cfdfec;background:#f3f9fd;border-radius:12px;margin-top:12px}.notice.error{color:#9e3131;background:#fff2f2;border-color:#f1cfcf}.notice.ok{color:#1f6a40;background:#eef7f1;border-color:#cde8d7}
+.fb-section{margin-top:28px}.fb-section h2{font-size:18px;color:#1c507c;margin:0 0 10px}
+.fb-list{display:grid;gap:10px}.fb-item{padding:14px 16px;border:1px solid #d5e2ed;border-radius:14px;background:#fff}
+.fb-item p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#203047;line-height:1.65}.fb-item time{display:block;margin-top:8px;font-size:12px;color:#8496a8}
+.fb-empty{padding:14px 16px;border:1px dashed #cfdfec;border-radius:14px;color:#607991;background:#fafcfe}
+@media(max-width:600px){.fb-page{padding:14px}}
+html[data-theme=dark] .fb-card,html[data-theme=dark] .fb-item{background:#16202d;border-color:#2a3a4e}
+html[data-theme=dark] .fb-card textarea{background:#101923;border-color:#2a3a4e;color:#e3eaf3}
+html[data-theme=dark] .fb-item p{color:#e3eaf3}html[data-theme=dark] .fb-page h1,html[data-theme=dark] .fb-section h2{color:#cfe0f3}
+html[data-theme=dark] .fb-anon{background:#173226;color:#a9e2c0}
+</style></head><body>
+<main class="fb-page">
+ <h1>ข้อเสนอแนะ</h1>
+ <p class="lead">บอกสิ่งที่อยากให้โรงเรียนหรือระบบปรับปรุง ข้อความส่งถึงผู้ดูแลระบบเท่านั้น</p>
+ <form class="fb-card" id="form">
+  <div class="fb-anon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="m9 12 2 2 4-4"/></svg><span><b>ไม่ระบุชื่อ</b> — ระบบไม่บันทึกว่าใครเป็นผู้ส่ง และเวลาที่ส่งจะถูกปัดเป็นรายชั่วโมง ส่งได้วันละ 5 ครั้ง</span></div>
+  <label class="sr-only" for="message" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)">ข้อเสนอแนะ</label>
+  <textarea id="message" maxlength="2000" placeholder="พิมพ์ข้อเสนอแนะ…" required></textarea>
+  <div class="fb-row"><span class="fb-count" id="count">0/2000</span><button class="fb-send" id="send" type="submit" disabled>ส่งข้อเสนอแนะ</button></div>
+  <div class="notice" id="status" role="status" hidden></div>
+ </form>
+ <section class="fb-section" id="inbox" hidden><h2>ข้อเสนอแนะที่ได้รับ</h2><div class="fb-list" id="list"></div></section>
+</main>
+<script src="/js/api.js"></script><script>
+(()=>{const $=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const fmt=t=>{const d=new Date(String(t).replace(' ','T')+'Z');return isNaN(d)?esc(t):d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})+' (โดยประมาณ)'};
+const status=(text,kind)=>{$('status').hidden=!text;$('status').textContent=text||'';$('status').className='notice'+(kind?' '+kind:'')};
+const update=()=>{const n=$('message').value.trim().length;$('count').textContent=$('message').value.length+'/2000';$('send').disabled=!n};
+$('message').addEventListener('input',()=>{update();status('')});
+async function load(){
+ const data=await apiRequest('/api/feedback');
+ if(!data.canRead)return;
+ $('inbox').hidden=false;
+ $('list').innerHTML=data.items.length?data.items.map(f=>`<article class="fb-item"><p>${esc(f.message)}</p><time>${fmt(f.created_at)}</time></article>`).join(''):'<div class="fb-empty">ยังไม่มีข้อเสนอแนะ</div>';
+}
+$('form').addEventListener('submit',async e=>{
+ e.preventDefault();const message=$('message').value.trim();if(!message)return;
+ $('send').disabled=true;status('กำลังส่ง…');
+ try{await apiRequest('/api/feedback',{method:'POST',body:JSON.stringify({message})});$('message').value='';update();status('ส่งข้อเสนอแนะแล้ว ขอบคุณที่ช่วยให้โรงเรียนดีขึ้น','ok');load().catch(()=>{});}
+ catch(err){status(err.message||'ส่งไม่สำเร็จ','error');update();}
+});
+(async()=>{try{const auth=await apiRequest('/api/auth/me');if(!auth.user){location.href='/login.html?next=/feedback.html';return}await load()}catch(e){status(e.message,'error')}})();
+})();</script></body></html>
