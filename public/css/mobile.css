@@ -275,4 +275,4 @@
 }
 
 /* Keyboard open in the chat: hide the floating bar so the chat fills the space above the keyboard. */
-@media(max-width:720px){.mobile-chat-open.chat-keyboard .mobile-tabbar,.mobile-chat-open.chat-keyboard .mobile-tabbar.ig-bar{display:none}.chat-keyboard .mobile-chat-panel{border-radius:0}}
+@media(max-width:720px){.mobile-chat-open.chat-keyboard .mobile-tabbar,.mobile-chat-open.chat-keyboard .mobile-tabbar.ig-bar{display:none}.chat-keyboard .mobile-chat-panel{border-radius:0;transition:none}.mobile-chat-open.chat-keyboard .layout{visibility:hidden}.mobile-chat-open.chat-keyboard{background:#f2f2f7}}
