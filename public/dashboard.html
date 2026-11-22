@@ -416,6 +416,41 @@
   .stat-cell, .stat-cell:nth-child(n) { border:0 !important; border-radius:14px; background:#fff; box-shadow:-3px -3px 8px rgba(255,255,255,.9),4px 4px 10px rgba(184,201,219,.5); transition:background .2s,transform .2s,box-shadow .2s; }
   .stat-cell:hover,.stat-cell:focus-visible { background:linear-gradient(135deg,#3DD6A8,#109A78); transform:translateY(-2px); box-shadow:0 8px 18px rgba(16,154,120,.3); outline:none; }
   .stat-cell:hover svg,.stat-cell:hover .stat-num,.stat-cell:hover .stat-label,.stat-cell:focus-visible svg,.stat-cell:focus-visible .stat-num,.stat-cell:focus-visible .stat-label { color:#fff; }
+
+  /* แดชบอร์ดภาพรวม: สิ่งที่ต้องทำบนสุด · การ์ดสรุป · ส่วนรายละเอียดพับได้ · ตัวเลขกระชับ */
+  .stat-panel { margin-top:12px; }
+  .stat-cell { padding:9px 12px; }
+  .stat-num { font-size:19px; }
+  .stat-label { font-size:12px; }
+  .todo-card { margin-bottom:14px; }
+  .todo-card .quick-actions { margin-top:12px; }
+  .todo-card .card-head { display:flex; align-items:baseline; gap:8px; }
+  .todo-total { font-size:12.5px; font-weight:600; color:var(--color-danger); }
+  .todo-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-top:4px; }
+  .todo-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background:#fff4f2; border:1px solid #f6d6d1; color:inherit; text-decoration:none; transition:transform .15s,box-shadow .15s; }
+  .todo-item:hover, .todo-item:focus-visible { transform:translateY(-1px); box-shadow:0 6px 14px rgba(200,70,55,.12); outline:none; }
+  .todo-count { flex:none; min-width:30px; padding:2px 8px; border-radius:999px; background:var(--color-danger); color:#fff; font-weight:700; font-size:13px; text-align:center; }
+  .todo-label { flex:1; min-width:0; font-size:13.5px; font-weight:600; color:var(--color-text); }
+  .todo-go { color:var(--color-text-muted); font-size:18px; line-height:1; }
+  .todo-empty { padding:10px 12px; border-radius:12px; background:#eef7f1; color:#1f6a40; font-weight:600; font-size:13.5px; }
+  .dash-cols-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .dash-fold { margin-top:14px !important; border:1px solid var(--color-border); border-radius:var(--radius-lg); background:rgba(255,255,255,.80); padding:0 16px; }
+  .dash-fold > .dash-fold-head { list-style:none; cursor:pointer; margin:0; padding:13px 0; }
+  .dash-fold > .dash-fold-head::-webkit-details-marker { display:none; }
+  .dash-fold-chev { flex:none; width:9px; height:9px; border:solid var(--color-text-muted); border-width:0 2px 2px 0; transform:rotate(45deg); transition:transform .2s; margin-right:4px; }
+  .dash-fold[open] .dash-fold-chev { transform:rotate(-135deg); }
+  .dash-fold[open] { padding-bottom:16px; }
+  @media (max-width:1100px){ .dash-cols-3 { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:720px){
+    .stat-panel { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; padding:2px 2px 6px; }
+    .stat-panel::-webkit-scrollbar { display:none; }
+    .stat-cell, .stat-cell:nth-child(n) { flex:0 0 auto; min-width:104px; scroll-snap-align:start; }
+    .dash-cols-3 { grid-template-columns:1fr; }
+    .todo-list { grid-template-columns:1fr; }
+  }
+  html[data-theme="dark"] .todo-item { background:#2a1d1d; border-color:#4a2c2c; }
+  html[data-theme="dark"] .todo-empty { background:#173226; color:#a9e2c0; }
+  html[data-theme="dark"] .dash-fold { background:rgba(22,32,45,.8); }
 </style>
 <style>/* เมนูพับตามหมวด (premium) */
 .sidebar nav>[data-sec]:not(.sec-on){display:none!important}
@@ -583,27 +618,19 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
 
       <div class="dash-panel" data-panel="overview" role="tabpanel">
         <div class="dash-notice" id="balanceNotice" hidden></div>
-        <section class="dashboard-section" id="workCalendarSection">
-          <div class="section-head"><div><h3 style="margin:0">ปฏิทินปฏิบัติงาน</h3><p>วันหยุดจากระบบผลการเรียน · ดูอย่างเดียว</p></div></div>
-          <div id="workCalendar"></div>
-        </section>
-        <section class="dashboard-section" id="studentTransferSection">
-  <div class="section-head"><div><h3 style="margin:0">ทะเบียนย้ายเข้า–ย้ายออก</h3><p>คำร้องทุกปีการศึกษา · ยอดอนุมัติจากทะเบียนคำร้อง</p></div><div><a class="inline-link" href="/transfer-notices.html">หลักฐานแจ้งเบื้องต้น / QR Code</a> · <a class="inline-link" href="/dmcreport/">เปิดทะเบียน →</a></div></div>
-  <div class="budget-summary-grid stat-row" id="studentTransferSummary"></div>
-</section>
-        <div class="dash-cols">
-          <section class="snapshot-card" id="attendanceCard">
-            <div class="card-head"><h3>การมาเรียน</h3><button type="button" class="link-btn" data-goto-tab="students">รายละเอียด →</button></div>
-            <div id="attendanceMini"><p class="muted-line">กำลังโหลด...</p></div>
-          </section>
-          <section class="snapshot-card">
-            <div class="card-head"><h3>การแจ้งเตือนสำคัญ</h3></div>
-            <div class="alert-list" id="alertList"></div>
+        <section class="snapshot-card todo-card" id="todoCard">
+            <div class="card-head"><h3>สิ่งที่ต้องทำ</h3><span class="todo-total" id="todoTotal"></span></div>
+            <div class="todo-list" id="alertList"></div>
             <div class="quick-actions">
               <a class="btn btn-primary" href="#tasks" data-dashboard-page="tasks">ติดตามงาน</a>
               <a class="btn btn-ghost" href="#leave" data-dashboard-page="leave">ตรวจคำขอลา</a>
               <a class="btn btn-ghost" href="#reports" data-dashboard-page="reports">เปิดรายงาน</a>
             </div>
+          </section>
+        <div class="dash-cols dash-cols-3">
+          <section class="snapshot-card" id="attendanceCard">
+            <div class="card-head"><h3>การมาเรียน</h3><button type="button" class="link-btn" data-goto-tab="students">รายละเอียด →</button></div>
+            <div id="attendanceMini"><p class="muted-line">กำลังโหลด...</p></div>
           </section>
           <section class="snapshot-card">
             <div class="card-head"><h3>งบประมาณโครงการ</h3><button type="button" class="link-btn" data-goto-tab="budget">รายละเอียด →</button></div>
@@ -614,6 +641,14 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
             <div id="personnelMini"></div>
           </section>
         </div>
+        <details class="dashboard-section dash-fold" id="workCalendarSection">
+          <summary class="section-head dash-fold-head"><div><h3 style="margin:0">ปฏิทินปฏิบัติงาน</h3><p>วันหยุดจากระบบผลการเรียน · ดูอย่างเดียว</p></div><span class="dash-fold-chev" aria-hidden="true"></span></summary>
+          <div id="workCalendar"></div>
+        </details>
+        <details class="dashboard-section dash-fold" id="studentTransferSection">
+          <summary class="section-head dash-fold-head"><div><h3 style="margin:0">ทะเบียนย้ายเข้า–ย้ายออก</h3><p>คำร้องทุกปีการศึกษา · ยอดอนุมัติจากทะเบียนคำร้อง</p></div><div><a class="inline-link" href="/transfer-notices.html">หลักฐานแจ้งเบื้องต้น / QR Code</a> · <a class="inline-link" href="/dmcreport/">เปิดทะเบียน →</a></div><span class="dash-fold-chev" aria-hidden="true"></span></summary>
+  <div class="budget-summary-grid stat-row" id="studentTransferSummary"></div>
+</details>
       </div>
 
       <div class="dash-panel" data-panel="students" role="tabpanel" hidden>
@@ -1370,15 +1405,20 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
         counts[licenseStatus(item.days_remaining).color]++;
         return counts;
       }, { green: 0, orange: 0, red: 0 });
-      const alertRow = (label, count, text = count) => `<div class="alert-item${Number(count) ? "" : " zero"}"><span>${label}</span><span class="alert-count">${text}</span></div>`;
-      document.getElementById("alertList").innerHTML = [
-        alertRow("งานเลยกำหนด", data.overdue_tasks),
-        alertRow("คำขอลารอดำเนินการ", data.pending_leave_requests),
-        alertRow("รายการเบิกจ่ายรอตรวจสอบ/จ่าย", data.pending_project_expenses, `${data.pending_project_expenses} · ${formatMoney(data.pending_project_expense_amount)}`),
-        alertRow("พัสดุคงเหลือต่ำ/ต้องติดตาม", data.inventory_low_stock_count + data.inventory_attention_count),
-        alertRow("รายการยืมพัสดุเลยกำหนด", data.inventory_overdue_borrow_count),
-        document.body.classList.contains("viewer-mode") ? "" : alertRow("ใบประกอบที่ต้องติดตามภายใน 180 วัน", licenseCounts.orange + licenseCounts.red),
+      // สิ่งที่ต้องทำ: แสดงเฉพาะรายการที่มีค้าง กดแล้วไปหน้านั้น
+      const todo = (label, count, href, text = count, attr = "") => Number(count) > 0 ? `<a class="todo-item" href="${href}"${attr}><span class="todo-count">${text}</span><span class="todo-label">${label}</span><span class="todo-go" aria-hidden="true">›</span></a>` : "";
+      const todoCounts = [data.overdue_tasks, data.pending_leave_requests, data.pending_project_expenses, data.inventory_low_stock_count + data.inventory_attention_count, data.inventory_overdue_borrow_count, document.body.classList.contains("viewer-mode") ? 0 : licenseCounts.orange + licenseCounts.red];
+      const todoHtml = [
+        todo("งานเลยกำหนด", todoCounts[0], "/tasks.html"),
+        todo("คำขอลารอดำเนินการ", todoCounts[1], "/leave.html"),
+        todo("เบิกจ่ายรอตรวจสอบ/จ่าย", todoCounts[2], "/budget.html", `${todoCounts[2]} · ${formatMoney(data.pending_project_expense_amount)}`),
+        todo("พัสดุคงเหลือต่ำ/ต้องติดตาม", todoCounts[3], "/inventory.html"),
+        todo("ยืมพัสดุเลยกำหนด", todoCounts[4], "/inventory.html"),
+        todo("ใบประกอบต้องต่ออายุใน 180 วัน", todoCounts[5], "#", todoCounts[5], ' data-goto-tab="personnel"'),
       ].join("");
+      const todoTotal = todoCounts.filter((n) => Number(n) > 0).length;
+      document.getElementById("todoTotal").textContent = todoTotal ? `${todoTotal} เรื่อง` : "";
+      document.getElementById("alertList").innerHTML = todoHtml || '<div class="todo-empty">ไม่มีงานค้าง เรียบร้อยดี ✓</div>';
 
       document.getElementById("licenseGreenCount").textContent = licenseCounts.green;
       document.getElementById("licenseOrangeCount").textContent = licenseCounts.orange;
