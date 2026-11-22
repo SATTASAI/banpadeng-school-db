@@ -197,7 +197,7 @@
   const chatButton = bar.querySelector('[data-tab=messages]');
   chatButton.setAttribute('aria-controls', chatPanel.id);
   chatButton.setAttribute('aria-expanded', 'false');
-  let chatOpen = false, chatLoaded = false, chatConnecting = false, chatTimeout, previousTab = 'home';
+  let chatTyping = false, chatOpen = false, chatLoaded = false, chatConnecting = false, chatTimeout, previousTab = 'home';
   const background = document.querySelector('.layout');
   let backgroundWasInert = false;
   const sendChatVisibility = () => chatFrame.contentWindow?.postMessage({ type: 'school-chat-visibility', visible: chatOpen }, chatOrigin);
@@ -210,12 +210,14 @@
     document.documentElement.style.setProperty('--chat-keyboard-inset', keyboardInset + 'px');
     // The floating bar sits above the bottom edge (margin + safe area), so end the panel at the bar's top, not at height - barHeight.
     // Typing: hide the tab bar (like iOS apps) and give the chat the whole visible area above the keyboard.
-    const typing = keyboardInset > 80;
+    const typing = chatTyping || keyboardInset > 80;
     document.body.classList.toggle('chat-keyboard', typing);
     const barRect = typing ? null : bar.getBoundingClientRect();
-    const bottom = typing ? top + height : barRect.height && barRect.top > top ? Math.min(top + height, barRect.top) : top + height - 84;
+    let bottom = typing ? top + height : barRect.height && barRect.top > top ? Math.min(top + height, barRect.top) : top + height - 84;
+    // Never let a bad viewport reading collapse the room and reveal the page behind it.
+    if (bottom - top < 200) bottom = top + height;
     chatPanel.style.top = top + 'px';
-    chatPanel.style.height = Math.max(0, bottom - top) + 'px';
+    chatPanel.style.height = Math.max(200, bottom - top) + 'px';
   };
   const chatError = (text) => {
     chatLoaded = false;
@@ -269,6 +271,7 @@
     chatPanel.setAttribute('aria-hidden', 'true');
     chatPanel.inert = true;
     chatButton.setAttribute('aria-expanded', 'false');
+    chatTyping = false;
     document.body.classList.remove('mobile-chat-open', 'chat-keyboard');
     if (background) background.inert = backgroundWasInert;
     setActive(previousTab);
@@ -281,6 +284,10 @@
       chatLoaded = true;
       chatStatus.hidden = true;
       sendChatVisibility();
+    } else if (event.data?.type === 'school-chat-focus' || event.data?.type === 'school-chat-blur') {
+      chatTyping = event.data.type === 'school-chat-focus';
+      // The keyboard animates in and out; re-measure while it settles.
+      for (const ms of [0, 120, 300, 600]) setTimeout(positionChat, ms);
     } else if (event.data?.type === 'school-chat-read') refreshMessages();
     else if (event.data?.type === 'school-chat-error') {
       clearTimeout(chatTimeout);
