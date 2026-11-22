@@ -12,6 +12,7 @@ import { workScopeCondition } from "./lib/work-scopes.js";
 import {handleDepartmentStaffRoute, ensureDepartmentStaff} from './routes/department-staff.js';
 import {handleNavVisibilityRoute} from './routes/nav-visibility.js';
 import {handleShortcutsRoute} from './routes/shortcuts.js';
+import {handleFeedbackRoute} from './routes/feedback.js';
 import {handleLeaveRoute} from './routes/leave.js';
 import {handleOfficialDutyRoute} from './routes/official-duty.js';
 import {handleSupervisionRoute,supervisionMaintenance} from './routes/supervision.js';
@@ -4876,6 +4877,8 @@ const app = {
       if (navVisibilityResponse) return navVisibilityResponse;
       const shortcutsResponse = await handleShortcutsRoute(request, env, pathname, method);
       if (shortcutsResponse) return shortcutsResponse;
+      const feedbackResponse = await handleFeedbackRoute(request, env, pathname, method);
+      if (feedbackResponse) return feedbackResponse;
       const personnelResponse = await handlePersonnelRoute(request, env, pathname, method);
       if (personnelResponse) return personnelResponse;
       const correspondenceResponse = await handleCorrespondenceRoute(request, env, pathname, method);
