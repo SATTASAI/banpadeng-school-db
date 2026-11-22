@@ -245,9 +245,12 @@ function workingFiscalYear(){
 // ดึงลงเพื่อรีเฟรชบนจอสัมผัส (ทุกหน้าที่โหลด api.js)
 (() => {
   if (typeof document === "undefined" || typeof document.querySelector !== "function" || typeof document.createElement !== "function") return;
-  if (document.querySelector('script[src="/js/pull-refresh.js"]')) return;
-  const script = document.createElement("script");
-  script.src = "/js/pull-refresh.js";
-  script.defer = true;
-  (document.head || document.documentElement).appendChild(script);
+  // ดึงลงเพื่อรีเฟรช + ปัดจากขอบซ้ายเพื่อเปิดเมนู
+  for (const src of ["/js/pull-refresh.js", "/js/drawer-swipe.js"]) {
+    if (document.querySelector(`script[src="${src}"]`)) continue;
+    const script = document.createElement("script");
+    script.src = src;
+    script.defer = true;
+    (document.head || document.documentElement).appendChild(script);
+  }
 })();

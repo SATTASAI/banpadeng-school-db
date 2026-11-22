@@ -719,7 +719,11 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
     const enabled=open&&!!phoneScreen?.matches;
     document.body.classList.toggle('mobile-nav-open',enabled);
     mobileMenuButton.setAttribute('aria-expanded',String(enabled));
-    document.getElementById('mobileNavBackdrop').hidden=!enabled;
+    // ฉากหลังค่อยๆ จางเข้า/ออกพร้อมเมนู
+    const backdrop=document.getElementById('mobileNavBackdrop');
+    clearTimeout(backdrop._fade);
+    if(enabled){if(backdrop.hidden){backdrop.style.opacity='0';backdrop.hidden=false;void backdrop.offsetWidth;}backdrop.style.opacity='';}
+    else if(!backdrop.hidden){backdrop.style.opacity='0';backdrop._fade=setTimeout(()=>{if(!document.body.classList.contains('mobile-nav-open')){backdrop.hidden=true;}backdrop.style.opacity='';},380);}
     document.querySelector('.content-area').inert=enabled;
     mobileNav.inert=!!phoneScreen?.matches&&!enabled;
     if(enabled)document.getElementById('mobileMenuClose').focus();
@@ -1661,7 +1665,7 @@ html[data-theme="dark"] .sec-head.sec-dot::after{box-shadow:0 0 0 2px #162230}
     window.location.href = "/login.html";
   });
 </script>
-<script src="/js/nav-sections.js"></script>
+<script src="/js/nav-sections.js"></script><script src="/js/drawer-swipe.js" defer></script>
 <script src="/js/mobile-shell.js"></script>
 <script src="/js/web-push.js"></script>
 <script>window.BpdPush&&BpdPush.loginPopup().then((shown)=>{if(!shown)return BpdPush.banner(document.getElementById("overviewWrap"))}).catch(()=>{});</script>
