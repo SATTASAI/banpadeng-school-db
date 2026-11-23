@@ -26,6 +26,9 @@ async function listSelect(env){
  const cols=results.map(c=>c.name).filter(n=>!heavyColumns.has(n)&&/^[a-z_]+$/.test(n));
  const sql=select.replace('SELECT r.*,',`SELECT ${cols.map(c=>'r.'+c).join(',')},`);listSelectCache.set(env.DB,sql);return sql;
 }
+// ตัวย่อภาษาไทย (เช่น รพ. ต.ค. จ.) ห้ามใช้ในช่องที่ลงใบลา — ข้อความไทยปกติไม่มีจุดตามหลังตัวอักษรไทย
+const thaiAbbreviations=value=>[...new Set((String(value||'').match(/[\u0E01-\u0E59]+\.(?:[\u0E01-\u0E59]+\.)*/g)||[]).map(t=>t.length>10?'…'+t.slice(-10):t))];
+const abbreviationError=(label,list)=>`ห้ามใช้ตัวย่อใน${label} กรุณาเขียนเต็ม: ${list.join(', ')}`;
 const quotaName=g=>g==='lenient'?'ลาอนุโลม':'ลากิจ/ลาอื่น ๆ ';
 const leaveInputTypes=['sick','personal','maternity','paternity','lenient','other'];
 const typeLabels={sick:'ลาป่วย',personal:'ลากิจส่วนตัว',maternity:'ลาคลอดบุตร',paternity:'ลาไปช่วยเหลือภริยาที่คลอดบุตร',lenient:'ลาอนุโลม',other:'อื่น ๆ'};
@@ -299,6 +302,7 @@ export async function handleLeaveRoute(request,env,pathname,method,drive=null) {
   if(days===null)return fail(spanError(body.leave_type));
   const position=text(body.position,200),address=text(body.contact_address,1000),phone=text(body.contact_phone,100);
   if(!position||!address||!phone)return fail('กรุณาระบุตำแหน่ง ที่อยู่ระหว่างลา และเบอร์ติดต่อ');
+  for(const [label,value] of [['เหตุผลการลา',reason],['ที่อยู่ที่ติดต่อได้ระหว่างลา',address]]){const list=thaiAbbreviations(value);if(list.length)return fail(abbreviationError(label,list));}
   const date=body.request_date||today();if(!validDate(date))return fail('วันที่เขียนใบลาไม่ถูกต้อง');
   // Remember the responsible deputy; notifications to executives start after acknowledgement.
   const deputyForNotice=await designatedDeputy(env,people);

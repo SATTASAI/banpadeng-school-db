@@ -445,3 +445,13 @@ test('deputy own leave skips the deputy reviewer slot: director alone reviews, s
  assert.equal(row.status,'approved');assert.equal(row.deputy_name,null);assert.equal(row.deputy_signature,null);
  assert.equal(env.raw.prepare('SELECT deputy_personnel_id FROM leave_settings WHERE id=1').get().deputy_personnel_id!=null,true);
 });
+
+test('leave reason and contact address reject Thai abbreviations because they are printed on the form',async()=>{
+ const {env}=await setup();
+ const bad=await call(env,'/api/leave-requests','POST',{...form,reason:'ไปรพ.แก่งกระจาน'},2);
+ assert.equal(bad.status,400);assert.match((await bad.json()).error,/ห้ามใช้ตัวย่อในเหตุผลการลา.*ไปรพ\./);
+ const addr=await call(env,'/api/leave-requests','POST',{...form,contact_address:'ต.ป่าเด็ง อ.แก่งกระจาน จ.เพชรบุรี'},2);
+ assert.equal(addr.status,400);assert.match((await addr.json()).error,/ที่อยู่.*ต\., อ\., จ\./);
+ const ok=await call(env,'/api/leave-requests','POST',{...form,reason:'ไปโรงพยาบาล ลา 1.5 วัน',contact_address:'ตำบลป่าเด็ง อำเภอแก่งกระจาน จังหวัดเพชรบุรี'},2);
+ assert.equal(ok.status,201);
+});

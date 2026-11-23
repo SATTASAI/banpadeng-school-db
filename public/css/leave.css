@@ -81,3 +81,11 @@ html[data-theme="dark"] .leave-over-card{background:#172231;color:#e6edf5;border
 html[data-theme="dark"] .leave-over-card h3{color:#ff8a80}
 html[data-theme="dark"] .leave-over-badge{background:rgba(255,107,97,.16);color:#ffb4ab;border-color:rgba(255,107,97,.45)}
 html[data-theme="dark"] .leave-over-banner{background:rgba(255,107,97,.12);color:#ffcdc8;border-color:rgba(255,107,97,.4)}
+.leave-abbr-help{display:block;margin-top:4px;font-size:12px}
+.leave-abbr-error{display:block;margin-top:4px;font-size:13px;font-weight:700;color:#b3261e}
+html[data-theme="dark"] .leave-abbr-error{color:#ffb4ab}
+.leave-abbr-error .leave-abbr-fix,.leave-abbr-error .leave-abbr-unknown{display:inline-block;margin:4px 6px 0 0;padding:4px 10px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid #f2b8b5;background:#fff1f0;color:#8c1d18}
+.leave-abbr-error .leave-abbr-fix{cursor:pointer;border-color:#9cc3ec;background:#eef6ff;color:#1a4f8b}
+.leave-abbr-error .leave-abbr-fix s{opacity:.7}
+html[data-theme="dark"] .leave-abbr-error .leave-abbr-fix{background:#1c2a3c;color:#cfe3ff;border-color:#35557a}
+html[data-theme="dark"] .leave-abbr-error .leave-abbr-unknown{background:rgba(255,107,97,.12);color:#ffcdc8;border-color:rgba(255,107,97,.4)}
