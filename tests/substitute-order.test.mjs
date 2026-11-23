@@ -6,7 +6,7 @@ test('substitute orders export the chosen date, sorted assignments and Thai date
  const order=e.order(rows,meta);assert.equal(order.rows[0][0],'๑');assert.match(order.introduction,/๒๕๖๙/);assert.match(order.issued,/๓ ตุลาคม/);assert.equal(order.number,'ที่ ๑๒๓/๒๕๖๙');assert(!/\d/.test(JSON.stringify(order)));
  const files=e.docxFiles(rows,meta);assert(files['[Content_Types].xml'].includes('wordprocessingml.document.main+xml'));
  assert.match(files['word/document.xml'],/ภาษาไทย &amp; อ่าน/);assert.match(files['word/document.xml'],/ครู ข &lt;ทดสอบ&gt;/);assert.match(files['word/document.xml'],/w:tblHeader/);assert.match(files['word/document.xml'],/ผู้อำนวยการตัวอย่าง/);
- const pdf=e.pdfDefinition(rows,meta),tables=pdf.content.filter(x=>x.stack).map(x=>x.stack[1].table);assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(tables.length,2);assert.equal(tables[0].headerRows,1);assert.equal(tables[0].body.length,2);assert.equal(tables[1].body[1][1].text,'๑');
+ const pdf=e.pdfDefinition(rows,meta),tables=pdf.content.filter(x=>x.stack?.[1]?.table).map(x=>x.stack[1].table);assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(tables.length,2);assert.equal(tables[0].headerRows,1);assert.equal(tables[0].body.length,2);assert.equal(tables[1].body[1][1].text,'๑');
  assert.throws(()=>e.order([],meta),/ยังไม่มีรายการ/);
  assert.equal(rows[0].period,3);
 });
@@ -72,4 +72,11 @@ test('orders make one table per absent teacher and group each substitute teacher
  const xml=e.docxFiles(list,meta)['word/document.xml'];
  assert.equal((xml.match(/<w:tbl>/g)||[]).length,2);assert.match(xml,/w:vMerge w:val="restart"/);assert.match(xml,/ครูที่ไม่อยู่ /);
  assert(!xml.includes('ครูที่ไม่อยู่</w:t>'),'no absent-teacher column header');
+});
+
+test('the closing from "ทั้งนี้" to the director signature stays together on one page',()=>{
+ const pdf=e.pdfDefinition(rows,meta),closing=pdf.content.at(-1);
+ assert.equal(closing.unbreakable,true);assert.match(closing.stack[0].text,/^ทั้งนี้/);assert.equal(closing.stack.at(-1).text,'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง');
+ const xml=e.docxFiles(rows,meta)['word/document.xml'],tail=xml.slice(xml.indexOf('ทั้งนี้')-400);
+ assert.equal((tail.match(/<w:keepNext\/>/g)||[]).length,5);
 });
