@@ -6,7 +6,7 @@ test('substitute orders export the chosen date, sorted assignments and Thai date
  const order=e.order(rows,meta);assert.equal(order.rows[0][0],'๑');assert.match(order.introduction,/๒๕๖๙/);assert.match(order.issued,/๓ ตุลาคม/);assert.equal(order.number,'ที่ ๑๒๓/๒๕๖๙');assert(!/\d/.test(JSON.stringify(order)));
  const files=e.docxFiles(rows,meta);assert(files['[Content_Types].xml'].includes('wordprocessingml.document.main+xml'));
  assert.match(files['word/document.xml'],/ภาษาไทย &amp; อ่าน/);assert.match(files['word/document.xml'],/ครู ข &lt;ทดสอบ&gt;/);assert.match(files['word/document.xml'],/w:tblHeader/);assert.match(files['word/document.xml'],/ผู้อำนวยการตัวอย่าง/);
- const pdf=e.pdfDefinition(rows,meta),table=pdf.content.find(x=>x.table).table;assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(table.headerRows,1);assert.equal(table.body.length,3);assert.equal(table.body[1][0].text,'๑');
+ const pdf=e.pdfDefinition(rows,meta),tables=pdf.content.filter(x=>x.stack).map(x=>x.stack[1].table);assert.equal(pdf.defaultStyle.font,'Sarabun');assert.equal(tables.length,2);assert.equal(tables[0].headerRows,1);assert.equal(tables[0].body.length,2);assert.equal(tables[1].body[1][1].text,'๑');
  assert.throws(()=>e.order([],meta),/ยังไม่มีรายการ/);
  assert.equal(rows[0].period,3);
 });
@@ -54,4 +54,22 @@ test('orders state leave reasons, cite the statute, and embed the director e-sig
 test('special orders share the same template and use their own title instead of a leave reason',()=>{
  const regular=e.order(rows,meta),special=e.order([{...rows[0],assignment_kind:'special',special_title:'เข้าร่วมกิจกรรมโรงเรียน',leave_reason:'เหตุจากใบลาเดิม'}],meta);
  assert.equal(special.subject,regular.subject);assert.match(special.introduction,/เข้าร่วมกิจกรรมโรงเรียน/);assert.doesNotMatch(special.introduction,/เหตุจากใบลาเดิม/);assert.equal(special.rows[0].length,regular.rows[0].length);
+});
+
+test('orders make one table per absent teacher and group each substitute teacher once with merged rows',()=>{
+ const list=[
+  {period:4,grade_level:'ป.1',classroom:'1',subject:'คอมพิวเตอร์',absent_name:'นายพงศ์พล',substitute_name:'นางพรรณราย'},
+  {period:3,grade_level:'ป.1',classroom:'3',subject:'คอมพิวเตอร์',absent_name:'นายพงศ์พล',substitute_name:'นายธีรภัทร'},
+  {period:5,grade_level:'ป.1',classroom:'1',subject:'คอมพิวเตอร์',absent_name:'นายพงศ์พล',substitute_name:'นางพรรณราย'},
+  {period:2,grade_level:'ป.4',classroom:'1',subject:'วิทยาศาสตร์',absent_name:'นายภาณุวัฒน์',substitute_name:'นางสาววรรณมาศ'}];
+ const o=e.order(list,meta);
+ assert.equal(JSON.stringify(o.groups.map(g=>[g.name,g.count])),JSON.stringify([['นายพงศ์พล','จำนวน ๓ คาบ'],['นายภาณุวัฒน์','จำนวน ๑ คาบ']]));
+ const g=o.groups[0].rows;
+ assert.equal(JSON.stringify(g.map(r=>[r.first,r.cells[0],r.cells[1]])),JSON.stringify([[true,'นายธีรภัทร','๓'],[true,'นางพรรณราย','๔'],[false,'นางพรรณราย','๕']]));
+ const pdf=e.pdfDefinition(list,meta),t=pdf.content.filter(x=>x.stack)[0].stack[1].table;
+ assert.equal(t.body[0].map(c=>c.text).join('|'),'ครูสอนแทน|คาบ|ชั้น/ห้อง|วิชา');
+ assert.equal(t.body[2][0].rowSpan,2);assert.equal(t.body[1][0].rowSpan,1);assert.equal(JSON.stringify(t.body[3][0]),'{}');
+ const xml=e.docxFiles(list,meta)['word/document.xml'];
+ assert.equal((xml.match(/<w:tbl>/g)||[]).length,2);assert.match(xml,/w:vMerge w:val="restart"/);assert.match(xml,/ครูที่ไม่อยู่ /);
+ assert(!xml.includes('ครูที่ไม่อยู่</w:t>'),'no absent-teacher column header');
 });
