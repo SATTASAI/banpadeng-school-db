@@ -245,12 +245,37 @@
  for(const id of ['fStart','fEnd']){$(id).oninput=days;$(id).onchange=()=>{days();if(id==='fStart')loadAllowance();};}
  $('fDate').onchange=()=>{if(!$('fStart').value)loadAllowance();};
  const requiredFields=[['fType','ประเภทการลา'],['fDate','วันที่เขียนใบลา'],['fPosition','ตำแหน่ง'],['fReason','เหตุผลการลา'],['fStart','วันที่เริ่มลา'],['fEnd','วันที่สิ้นสุดการลา'],['fDays','จำนวนวันลา'],['fPhone','เบอร์ติดต่อ'],['fAddress','ที่อยู่ระหว่างลา']];
+ // ห้ามใช้ตัวย่อในเหตุผลและที่อยู่ เพราะข้อความลงใบลาอัตโนมัติ
+ const thaiAbbreviations=value=>globalThis.ThaiAbbreviations?.find(value)||[...new Set((String(value||'').match(/[\u0E01-\u0E59]+\.(?:[\u0E01-\u0E59]+\.)*/g)||[]))].map(abbr=>({abbr,suggestion:''}));
+ const abbreviationFields=[['fReason','เหตุผลการลา'],['fAddress','ที่อยู่ที่ติดต่อได้ระหว่างลา']];
+ const abbrLabel=list=>[...new Set(list.map(x=>x.abbr))].join(', ');
+ // แสดงตัวย่อที่พบ พร้อมปุ่มคำเต็มที่แนะนำ (กดแล้วแทนในช่องกรอก)
+ function showAbbreviations(id){
+  const list=thaiAbbreviations($(id).value),hint=$(id+'Abbr');
+  if(hint){
+   hint.hidden=!list.length;
+   hint.innerHTML=list.length?(list.some(x=>x.suggestion)?'พบตัวย่อ — กดคำแนะนำเพื่อแทนเป็นคำเต็ม':'พบตัวย่อ — กรุณาเขียนเป็นคำเต็ม')+'<br>'+list.map((x,n)=>x.suggestion?`<button type="button" class="leave-abbr-fix" data-abbr-field="${id}" data-abbr-index="${n}"><s>${esc(x.abbr)}</s> → ${esc(x.suggestion)}</button>`:`<span class="leave-abbr-unknown">${esc(x.abbr)}</span>`).join(''):'';
+  }
+  if(list.length)$(id).setAttribute('aria-invalid','true');else $(id).removeAttribute('aria-invalid');
+  return list;
+ }
+ for(const [id] of abbreviationFields){
+  $(id).oninput=()=>showAbbreviations(id);
+  const hint=$(id+'Abbr');
+  if(hint)hint.onclick=e=>{
+   const b=e.target.closest?.('[data-abbr-index]');if(!b)return;
+   const item=thaiAbbreviations($(id).value)[Number(b.dataset.abbrIndex)];
+   if(!item?.suggestion||!globalThis.ThaiAbbreviations)return;
+   $(id).value=globalThis.ThaiAbbreviations.apply($(id).value,item);showAbbreviations(id);$(id).focus();
+  };
+ }
  function validateForm(){
   for(const [id,label] of requiredFields){
    $(id).removeAttribute('aria-invalid');
    if(!$(id).value.trim()){submitError('กรุณาระบุ'+label,id);return false;}
    if($(id).validity?.badInput||$(id).validity?.typeMismatch){submitError('กรุณาตรวจสอบ'+label,id);return false;}
   }
+  for(const [id,label] of abbreviationFields){const list=showAbbreviations(id);if(list.length){submitError('ห้ามใช้ตัวย่อใน'+label+' กรุณาเขียนเต็ม: '+abbrLabel(list),id);return false;}}
   const start=$('fStart').value,end=$('fEnd').value,count=Number($('fDays').value);
   if(end<start){submitError('วันที่สิ้นสุดการลาต้องไม่อยู่ก่อนวันที่เริ่มลา','fEnd');return false;}
   const span=daysValid?Number($('fDays').max):Math.round((Date.parse(end)-Date.parse(start))/86400000)+1;
