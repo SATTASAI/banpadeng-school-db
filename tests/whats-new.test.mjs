@@ -10,7 +10,15 @@ test("whats-new pop-up is loaded by api.js on every page", () => {
   assert.match(api, /src="\/js\/whats-new\.js"/);
 });
 
-test("pop-up shows at most 3 unread updates, once per device, news only", () => {
+test("pop-up shows on every app launch until hidden until the next update", () => {
+  assert.match(src, /sessionStorage/);
+  assert.match(src, /ไม่แสดงจนกว่าจะมีอัพเดทใหม่/);
+  assert.match(src, /hide\.addEventListener\("click", \(\) => close\(true\)\)/);
+  assert.match(src, /ok\.addEventListener\("click", \(\) => close\(false\)\)/);
+  assert.match(src, /if \(forever\) markSeen/);
+});
+
+test("pop-up shows at most 3 unread updates, news only", () => {
   assert.match(src, /const MAX = 3;/);
   assert.match(src, /\.slice\(0, MAX\)/);
   assert.match(src, /localStorage/);
