@@ -188,6 +188,9 @@ const ROLE_LABELS = {
 (() => { const css=document.createElement('link');css.rel='stylesheet';css.href='/css/global-notifications.css';document.head.append(css);
  const script=document.createElement('script');script.src='/js/global-notifications.js';document.head.append(script); })();
 
+// Feature-update pop-up, shown once per device after sign-in.
+(() => {const script=document.createElement("script");script.src="/js/whats-new.js";document.head.append(script);})();
+
 // Long how-to text collapses into (i) icons shown on hover/tap.
 (() => {const script=document.createElement("script");script.src="/js/help-tips.js";document.head.append(script);})();
 
