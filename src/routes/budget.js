@@ -7,6 +7,7 @@ import { PROCUREMENT_ROLES } from "./procurement.js";
 import { INSURANCE_ROLES } from "./student-insurance.js";
 import { SCHOLARSHIP_ROLES } from "./scholarships.js";
 import { MERIT_ROLES } from "./student-merit.js";
+import { syncSignoffAssignees } from "./project-signoffs.js";
 import { FINANCE_ROLES, FINANCE_ROLE_SQL, isFinanceMember } from "../lib/finance-roles.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
@@ -456,7 +457,8 @@ async function saveRoleAssignment(request, env) {
     ON CONFLICT(role_key,department) DO UPDATE SET user_id=excluded.user_id,assigned_by=excluded.assigned_by,assigned_at=datetime('now')`)
     .bind(roleKey, definition.scoped ? department : "", userId, user.id).run();
   await audit(env, user, "assign_role", null, { role_key: roleKey, department, user_id: userId }, request);
-  return jsonResponse({ ok: true });
+  const reassigned = await syncSignoffAssignees(env, roleKey, definition.scoped ? department : "", userId, user);
+  return jsonResponse({ ok: true, reassigned });
 }
 
 async function createIncome(request, env) {
