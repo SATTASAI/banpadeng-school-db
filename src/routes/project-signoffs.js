@@ -79,6 +79,32 @@ export function nextAfter(signoffs, phase, afterOrder = 0) {
   return { step: phase === 1 ? "finance_queue" : "director_approval", signoff: null };
 }
 
+// เปลี่ยน "ตั้งค่าผู้อนุมัติ" (หัวหน้าฝ่าย/รอง ผอ.) แล้ว: ขั้นที่ยังไม่ลงนามของคำขอที่รออยู่ใช้ผู้อนุมัติคนใหม่
+// ขั้นที่ถึงคิวแล้วแจ้งผู้อนุมัติคนใหม่ทันที · ไม่ย้ายให้ผู้ขอเอง และไม่แตะขั้นที่ลงนาม/ข้ามไปแล้ว
+const STEP_KEYS_BY_ROLE = { department_head: ["dept_head", "budget_head"], deputy_director: ["dept_deputy", "budget_deputy"] };
+export async function syncSignoffAssignees(env, roleKey, department, userId, actor) {
+  const keys = STEP_KEYS_BY_ROLE[roleKey];
+  if (!keys || !department) return 0;
+  const { results } = await env.DB.prepare(`SELECT s.id,s.expense_id,s.step_key,s.status FROM project_expense_signoffs s
+    JOIN project_expenses e ON e.id=s.expense_id JOIN projects p ON p.id=e.project_id
+    WHERE e.workflow_version=2 AND e.status='pending' AND s.status IN ('pending','waiting') AND COALESCE(s.assigned_user_id,0)<>? AND e.created_by<>?
+    AND ((s.step_key=? AND COALESCE(p.management_area,p.department)=?) OR (s.step_key=? AND ?='budget'))`)
+    .bind(userId, userId, keys[0], department, keys[1], department).all().catch(() => ({ results: [] }));
+  for (const row of results) {
+    const statements = [env.DB.prepare("UPDATE project_expense_signoffs SET assigned_user_id=? WHERE id=? AND status IN ('pending','waiting')").bind(userId, row.id)];
+    if (row.status === "pending") {
+      const token = crypto.randomUUID(), label = SIGNOFF_STEPS.find((d) => d.key === row.step_key).label;
+      statements.push(
+        env.DB.prepare(`INSERT INTO project_workflow_events(token,expense_id,project_id,event_type,message,actor_id)
+          SELECT ?,e.id,e.project_id,'reassign',?,? FROM project_expenses e WHERE e.id=?`).bind(token, `มีคำขอเบิกจ่ายรอ${label}พิจารณา`, actor?.id || null, row.expense_id),
+        env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+          SELECT ?,u.id,'director' FROM users u WHERE u.id=? AND u.status='active' AND u.deleted_at IS NULL`).bind(token, userId));
+    }
+    await env.DB.batch(statements);
+  }
+  return results.length;
+}
+
 // statements บันทึกผลขั้น (ใช้ร่วมกับ event token เดียวกับการเปลี่ยนสถานะคำขอ)
 export function markSignoff(env, token, expenseId, stepKey, status, user, decision = null, note = null) {
   return env.DB.prepare(`UPDATE project_expense_signoffs SET status=?,decision=?,note=?,acted_by=?,acted_at=datetime('now')

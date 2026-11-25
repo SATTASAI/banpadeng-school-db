@@ -118,3 +118,19 @@ test('owners hear about a return by a reviewer',async()=>{
   const token=env.raw.prepare('SELECT token FROM project_workflow_events WHERE expense_id=? ORDER BY rowid DESC LIMIT 1').get(id).token;
   for(const user of [2,5])assert.ok(env.raw.prepare('SELECT 1 FROM project_notifications WHERE user_id=? AND event_token=?').get(user,token));
 });
+
+test('changing a department head moves unsigned steps of pending requests to the new head',async()=>{
+  const env=await fixture();addApprovers(env);
+  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(12,'newhead@test','x','x','นางหัวหน้า ใหม่','teacher')`);
+  const id=(await call(env,2,'requests','POST',payload())).body.id;
+  await action(env,2,id,'submit');
+  const {handleBudgetRoute}=await import('../src/routes/budget.js');
+  const token=await signJWT({sub:1},secret);
+  const r=new Request('https://school.test/api/budget/roles',{method:'PUT',headers:{Cookie:'bpd_session='+token,'Content-Type':'application/json'},body:JSON.stringify({role_key:'department_head',department:'academic',user_id:12})});
+  const res=await handleBudgetRoute(r,env,'/api/budget/roles','PUT');
+  assert.equal(res.status,200);assert.equal((await res.json()).reassigned,1);
+  assert.equal(env.raw.prepare("SELECT assigned_user_id FROM project_expense_signoffs WHERE expense_id=? AND step_key='dept_head'").get(id).assigned_user_id,12);
+  assert.ok(env.raw.prepare("SELECT 1 FROM project_notifications n JOIN project_workflow_events v ON v.token=n.event_token WHERE v.expense_id=? AND v.event_type='reassign' AND n.user_id=12").get(id));
+  assert.equal((await action(env,7,id,'review_approve',{plan_status:'in_plan'})).status,403);
+  assert.equal((await action(env,12,id,'review_approve',{plan_status:'in_plan'})).status,200);
+});
