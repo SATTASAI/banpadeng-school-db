@@ -8,6 +8,7 @@ import { INSURANCE_ROLES } from "./student-insurance.js";
 import { SCHOLARSHIP_ROLES } from "./scholarships.js";
 import { MERIT_ROLES } from "./student-merit.js";
 import { syncSignoffAssignees } from "./project-signoffs.js";
+import { thaiDateText } from "../lib/thai-time.js";
 import { FINANCE_ROLES, FINANCE_ROLE_SQL, isFinanceMember } from "../lib/finance-roles.js";
 
 const STATUSES = ["draft", "pending", "approved", "paid", "rejected", "cancelled"];
@@ -591,7 +592,7 @@ async function printableFinancialReport(request, env) {
 }
 
 const money = (value) => Number(value || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const thaiDate = (value) => value ? new Date(String(value).includes("T") ? value : `${value}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" }) : "";
+const thaiDate = (value) => thaiDateText(value);
 
 async function printableDocument(request, env, id) {
   const user = await currentUser(request, env);

@@ -115,7 +115,7 @@ export async function handleBackupExport(request, env, pathname) {
     try { download = await fetch(signedUrl.toString()); }
     catch { throw new ExportFailure("download_connection"); }
     if (!download.ok || !download.body) throw new ExportFailure("download_response", download.status);
-    const filename = `banpadeng-d1-${new Date().toISOString().slice(0, 10)}.sql`;
+    const filename = `banpadeng-d1-${new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10)}.sql`;
     await env.DB.prepare("INSERT INTO backup_registry (backup_type, file_name, created_by) VALUES ('d1_sql_download', ?, ?)")
       .bind(filename, user.id).run();
     await env.DB.prepare("INSERT INTO audit_logs (user_id, action, resource, details, ip_address) VALUES (?, 'download', 'd1_backup', ?, ?)")
