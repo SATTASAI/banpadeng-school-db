@@ -90,3 +90,31 @@ test('supplementary documents notify the current reviewer and finance exactly on
  const users=env.raw.prepare('SELECT user_id FROM project_notifications WHERE event_token=?').all(events[0].token).map(r=>r.user_id);
  assert(users.includes(7));assert(users.includes(3));assert(!users.includes(4));
 });
+
+test('budget request notifies the whole approval chain on submit and owners at every step',async()=>{
+  const env=await fixture();addApprovers(env);
+  const id=(await call(env,2,'requests','POST',payload())).body.id;
+  const latest=()=>env.raw.prepare('SELECT token FROM project_workflow_events WHERE expense_id=? ORDER BY rowid DESC LIMIT 1').get(id).token;
+  const audienceOf=(user,token=latest())=>env.raw.prepare('SELECT audience FROM project_notifications WHERE user_id=? AND event_token=?').get(user,token)?.audience;
+  assert.equal((await action(env,2,id,'submit')).status,200);
+  assert.equal(audienceOf(7),'director');
+  for(const user of [8,9,10,6])assert.equal(audienceOf(user),'notice');
+  assert.equal(audienceOf(3),'notice_finance');assert.equal(audienceOf(5),'notice');assert.equal(audienceOf(2),undefined);
+  assert.equal((await action(env,7,id,'review_approve',{plan_status:'in_plan'})).status,200);
+  assert.equal(audienceOf(8),'director');assert.equal(audienceOf(2),'notice');assert.equal(audienceOf(5),'notice');assert.equal(audienceOf(7),undefined);
+  assert.equal((await action(env,8,id,'review_approve')).status,200);assert.equal(audienceOf(2),'notice');
+  assert.equal((await action(env,3,id,'receive')).status,200);
+  assert.equal((await action(env,3,id,'complete')).status,200);assert.equal(audienceOf(9),'director');assert.equal(audienceOf(2),'notice');
+  assert.equal((await action(env,9,id,'review_approve')).status,200);
+  assert.equal((await action(env,10,id,'review_approve')).status,200);assert.equal(audienceOf(6),'director');assert.equal(audienceOf(5),'notice');
+  assert.equal((await action(env,6,id,'approve')).status,200);assert.equal(audienceOf(2),'owners');assert.equal(audienceOf(5),'notice');
+});
+
+test('owners hear about a return by a reviewer',async()=>{
+  const env=await fixture();addApprovers(env);
+  const id=(await call(env,2,'requests','POST',payload())).body.id;
+  await action(env,2,id,'submit');
+  assert.equal((await action(env,7,id,'review_return',{review_note:'แก้รายการ'})).status,200);
+  const token=env.raw.prepare('SELECT token FROM project_workflow_events WHERE expense_id=? ORDER BY rowid DESC LIMIT 1').get(id).token;
+  for(const user of [2,5])assert.ok(env.raw.prepare('SELECT 1 FROM project_notifications WHERE user_id=? AND event_token=?').get(user,token));
+});

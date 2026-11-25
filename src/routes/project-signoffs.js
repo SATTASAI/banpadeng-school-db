@@ -54,7 +54,7 @@ export async function buildSignoffChain(env, row, department, token) {
   const statements = [env.DB.prepare(`DELETE FROM project_expense_signoffs WHERE expense_id=?${guard}`).bind(row.id, token),
     ...rows.map((r) => env.DB.prepare(`INSERT INTO project_expense_signoffs(expense_id,step_key,step_order,assigned_user_id,status)
       SELECT ?,?,?,?,? WHERE EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)`).bind(row.id, r.key, r.order, r.user_id, r.status, token))];
-  return { statements, first };
+  return { statements, first, rows };
 }
 
 export async function budgetSnapshot(env, row) {
