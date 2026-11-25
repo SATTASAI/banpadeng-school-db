@@ -150,6 +150,22 @@ function eventStatements(env, token, expenseId, eventType, message, user, audien
   return statements;
 }
 
+// แจ้งเพื่อทราบ (กระดิ่ง + Web Push ไม่ส่ง LINE): ผู้เกี่ยวข้องในลำดับอนุมัติตั้งแต่ส่งคำขอ และผู้รับผิดชอบโครงการทุกขั้นที่ผ่าน
+// ต้องต่อท้ายหลังผู้รับหลักของ event เดียวกัน (INSERT OR IGNORE คงสิทธิ์/ลิงก์ของผู้รับหลักไว้)
+function noticeStatement(env, token, userIds, audience = "notice") {
+  const ids = [...new Set(userIds.map(Number).filter((id) => Number.isInteger(id) && id > 0))];
+  if (!ids.length) return null;
+  return env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+    SELECT e.token,u.id,? FROM project_workflow_events e JOIN users u ON u.status='active' AND u.deleted_at IS NULL
+    AND u.id IN (${ids.join(",")}) AND u.id<>COALESCE(e.actor_id,0) WHERE e.token=?`).bind(audience, token);
+}
+function ownersNoticeStatement(env, token) {
+  return env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
+    SELECT e.token,u.id,'notice' FROM project_workflow_events e JOIN project_expenses x ON x.id=e.expense_id
+    JOIN users u ON u.status='active' AND u.deleted_at IS NULL AND u.id<>COALESCE(e.actor_id,0)
+    AND (u.id=x.created_by OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=u.id)) WHERE e.token=?`).bind(token);
+}
+
 export async function notifyBudgetSupportingDocument(env, user, documentId) {
   const row = await env.DB.prepare("SELECT expense_id,title FROM budget_supporting_documents WHERE id=?").bind(documentId).first();
   if (!row) return;
@@ -306,7 +322,7 @@ async function action(request, env, user, id) {
   const row = await env.DB.prepare("SELECT * FROM project_expenses WHERE id=? AND workflow_version=2").bind(id).first();
   if (!row) return jsonResponse({ error: "ไม่พบคำขอ" },404);
   let sql, args, audience = "owners", message, stepCondition = null;
-  const token = crypto.randomUUID(), extra = [];
+  const token = crypto.randomUUID(), extra = [], notices = [];
   if (kind === "submit") {
     if (Number(row.created_by) !== Number(user.id) || !await ownsProject(env,user,row.project_id)) return jsonResponse({ error: "ไม่มีสิทธิ์ส่งคำขอนี้" },403);
     const item = await env.DB.prepare("SELECT COUNT(*) AS n,ROUND(SUM(amount),2) AS total FROM budget_request_items WHERE expense_id=?").bind(id).first();
@@ -319,6 +335,10 @@ async function action(request, env, user, id) {
     args = [firstStep, await budgetSnapshot(env, row), id];
     if (chain.first) { audience = [chain.first.user_id]; message = `มีคำขอเบิกจ่ายรอ${chain.first.label}พิจารณา`; }
     else { audience = "finance"; message = "มีคำขอเบิกจ่ายใหม่ รอเจ้าหน้าที่รับเรื่อง"; }
+    // แจ้งทุกคนในลำดับอนุมัติให้ทราบตั้งแต่ส่ง (จะแจ้งซ้ำเมื่อถึงคิวของแต่ละคน)
+    const { results: financeStaff } = await env.DB.prepare(`SELECT a.user_id FROM budget_role_assignments a WHERE a.role_key IN ${FINANCE_ROLE_SQL} AND a.department=''`).all();
+    notices.push(noticeStatement(env, token, [...chain.rows.filter((r) => r.status !== "skipped" && r.user_id).map((r) => r.user_id), ...await budgetDirectorIds(env)]),
+      noticeStatement(env, token, financeStaff.map((r) => r.user_id), "notice_finance"), ownersNoticeStatement(env, token));
   } else if (["review_approve", "review_return", "review_reject"].includes(kind)) {
     // ขั้นพิจารณาของหัวหน้าฝ่าย / รอง ผอ. ตามแบบบันทึกขออนุมัติ
     const def = REVIEW_STEPS.find((s) => s.step === row.current_step);
@@ -342,6 +362,7 @@ async function action(request, env, user, id) {
       if (next.signoff) { audience = [next.signoff.assigned_user_id]; message += ` รอ${SIGNOFF_STEPS.find((s) => s.key === next.signoff.step_key).label}พิจารณา`; }
       else if (next.step === "finance_queue") { audience = "finance"; message += " รอเจ้าหน้าที่การเงินรับเรื่อง"; }
       else { audience = await budgetDirectorIds(env); message += " เสนอผู้อำนวยการอนุมัติ"; }
+      notices.push(ownersNoticeStatement(env, token));
     } else {
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);
       const back = kind === "review_return";
@@ -372,6 +393,7 @@ async function action(request, env, user, id) {
       extra.push(env.DB.prepare(`INSERT OR IGNORE INTO project_notifications(event_token,user_id,audience)
         SELECT e.token,u.id,'owners' FROM project_workflow_events e JOIN project_expenses x ON x.id=e.expense_id
         JOIN users u ON u.id=x.created_by AND u.status='active' AND u.deleted_at IS NULL WHERE e.token=?`).bind(token));
+      notices.push(ownersNoticeStatement(env, token));
     } else {
       const note = clean(body.review_note);
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);
@@ -399,6 +421,7 @@ async function action(request, env, user, id) {
       args = [next.step, id];
       if (next.signoff) { audience = [next.signoff.assigned_user_id]; message = `เจ้าหน้าที่ตรวจเอกสารแล้ว รอ${SIGNOFF_STEPS.find((s) => s.key === next.signoff.step_key).label}พิจารณา`; }
       else { message = "เจ้าหน้าที่ตรวจเอกสารแล้ว เสนอผู้อำนวยการอนุมัติ"; audience = directors; }
+      notices.push(ownersNoticeStatement(env, token));
     } else if (["return","reject"].includes(kind)) {
       if (row.current_step === "director_approval") return jsonResponse({ error: "รายการนี้รอผู้อำนวยการพิจารณา" },409);
       if (isReviewStep(row.current_step)) return jsonResponse({ error: "รายการนี้รอหัวหน้าฝ่าย/รองผู้อำนวยการพิจารณา" },409);
@@ -423,7 +446,7 @@ async function action(request, env, user, id) {
     ? eventStatements(env,token,id,kind,message,user,audience,"e.status='pending' AND e.current_step=?",[stepCondition])
     : eventStatements(env,token,id,kind,message,user,audience,conditions[kind]);
   // The event is the transaction marker. Do not depend on changes() across D1 statements.
-  const results=await env.DB.batch([events[0],env.DB.prepare(sql+' AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)').bind(...args,token),...extra,...events.slice(1)]);
+  const results=await env.DB.batch([events[0],env.DB.prepare(sql+' AND EXISTS(SELECT 1 FROM project_workflow_events WHERE token=?)').bind(...args,token),...extra,...events.slice(1),...notices.filter(Boolean)]);
   if (!results[1].meta.changes) return jsonResponse({ error: "สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่" },409);
   return jsonResponse({ ok: true });
 }
