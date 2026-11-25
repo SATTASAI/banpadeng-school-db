@@ -1,9 +1,10 @@
-/* Feature-update pop-up shown once per device to signed-in staff. Add new entries to the top of UPDATES. */
+/* Feature-update pop-up shown once per device to signed-in staff. Add new entries to the top of UPDATES; set paused: true to hold one back. */
 (() => {
   if (window.parent !== window || /\/(index|login|register|forgot-password|reset-password|pending)\.html$/.test(location.pathname) || location.pathname === "/") return;
   const UPDATES = [
     {
       id: "2026-11-disbursement-trial",
+      paused: true, // พักไว้ก่อนตามที่ผู้ดูแลสั่ง (1.4.40)
       badge: "ช่วงทดลอง",
       title: "ระบบเบิกจ่ายงบประมาณโครงการ ใช้งานได้แล้ว",
       items: [
@@ -17,7 +18,7 @@
   const KEY = "bpd-whats-new-seen";
   const seen = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
   const markSeen = (id) => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), id])].slice(-30))); } catch {} };
-  const next = UPDATES.find((u) => !seen().includes(u.id));
+  const next = UPDATES.find((u) => !u.paused && !seen().includes(u.id));
   if (!next) return;
 
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
