@@ -134,3 +134,13 @@ test('changing a department head moves unsigned steps of pending requests to the
   assert.equal((await action(env,7,id,'review_approve',{plan_status:'in_plan'})).status,403);
   assert.equal((await action(env,12,id,'review_approve',{plan_status:'in_plan'})).status,200);
 });
+
+test('memo shows finance staff 1 as the finance officer before anyone signs',async()=>{
+  const env=await fixture();addApprovers(env);
+  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(13,'fin1@test','x','x','นางสาวการเงิน หนึ่ง','staff');
+    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('finance_staff_1','',13,1);`);
+  const id=(await call(env,2,'requests','POST',payload())).body.id;
+  await action(env,2,id,'submit');
+  const doc=await memo(env,2,id);
+  assert.match(doc.text,/นางสาวการเงิน หนึ่ง/);
+});
