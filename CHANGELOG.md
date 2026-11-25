@@ -6,11 +6,17 @@
 
 ## การอัปเดตรายครั้ง — เริ่ม 8 พฤศจิกายน 2569
 
-**แพทช์ล่าสุด: 1.4.28**
+**แพทช์ล่าสุด: 1.4.29**
 
 ตั้งแต่เริ่มใช้กติกานี้ ทุกชุดการแก้ไขที่เสร็จและ merge หรือ push เข้าสาขาหลักต้องเพิ่มเลขแพทช์ทันที
 งานเล็กและกลางเพิ่มเลขส่วนที่สาม ส่วนงานใหญ่เพิ่มเลขส่วนที่สองและเริ่มเลขย่อยใหม่
 ยังสรุปรวมทุกแพทช์รายสัปดาห์จันทร์–อาทิตย์ตามเวลาไทย โดยเก็บประวัติฐาน 1.0 ด้านล่างไว้ตามเดิม
+
+### Patch 1.4.29 — 25 พฤศจิกายน 2569
+
+- **ขนาด:** กลาง (ไอคอนแอปทุกระบบ + ระบบธนาคาร)
+- ไอคอนแอปชุดใหม่ (โลโก้โรงเรียน + ตัวย่อระบบ) ทั้ง 7 ระบบ: รายงานผลการเรียน ([students-report#58](https://github.com/SATTASAI/students-report/pull/58)), ศิลปหัตถกรรม ([handicraftandart#33](https://github.com/SATTASAI/handicraftandart/pull/33)), ฝ่ายปกครอง ([publicservice#36](https://github.com/SATTASAI/publicservice/pull/36)), SCHOOL SYSTEM ([banpadeng-school-db#243](https://github.com/SATTASAI/banpadeng-school-db/pull/243)), แจ้งเตือน ([school-notify#21](https://github.com/SATTASAI/school-notify/pull/21)), ภาพกิจกรรม ([bpdactivity#8](https://github.com/SATTASAI/bpdactivity/pull/8), [#9](https://github.com/SATTASAI/bpdactivity/pull/9)), ธนาคาร ([school-bank-appsscript#18](https://github.com/SATTASAI/school-bank-appsscript/pull/18), [#19](https://github.com/SATTASAI/school-bank-appsscript/pull/19))
+- ระบบธนาคาร: รวมซอร์ส Worker ตัวที่ใช้งานจริงเข้า main ของ school-bank-appsscript ([#17](https://github.com/SATTASAI/school-bank-appsscript/pull/17)) และเขียน README ใหม่ (สถานะจริง, ขั้นตอน deploy ผ่าน branch `migration/cloudflare-ui-parity`) ([#20](https://github.com/SATTASAI/school-bank-appsscript/pull/20))
 
 ### Patch 1.4.28 — 24 พฤศจิกายน 2569
 
