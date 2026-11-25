@@ -1,25 +1,22 @@
-/* Feature-update pop-up shown once per device to signed-in staff. Add new entries to the top of UPDATES; set paused: true to hold one back. */
+/* Feature-update pop-up shown once per device to signed-in staff.
+   กติกาข่าว: เพิ่มที่ต้นรายการ UPDATES · 1 รายการ = 1 เรื่อง รวบอัพเดทย่อยเป็นหัวข้อสั้น + 1 ประโยค (ไม่เกิน ~100 ตัวอักษร)
+   pop-up แสดงข่าวที่ยังไม่ได้อ่านครั้งละไม่เกิน 3 เรื่อง · paused: true = พักข่าวไว้ */
 (() => {
   if (window.parent !== window || /\/(index|login|register|forgot-password|reset-password|pending)\.html$/.test(location.pathname) || location.pathname === "/") return;
+  const MAX = 3;
   const UPDATES = [
     {
       id: "2026-11-disbursement-trial",
       paused: true, // พักไว้ก่อนตามที่ผู้ดูแลสั่ง (1.4.40)
-      badge: "ช่วงทดลอง",
-      title: "ระบบเบิกจ่ายงบประมาณโครงการ ใช้งานได้แล้ว",
-      items: [
-        "ยื่นคำขอเบิกจ่ายงบประมาณโครงการผ่านระบบได้",
-        "คำขอส่งต่อให้ผู้อนุมัติตามลำดับขั้นจนถึง ผอ. พร้อมแจ้งเตือนทุกขั้นตอน",
-        "ติดตามได้ว่าเอกสารอยู่ขั้นตอนใด และเปิดดูบันทึกข้อความได้",
-      ],
-      note: "ระบบอยู่ในช่วงทดลองใช้งาน หากพบปัญหาหรือข้อมูลไม่ถูกต้อง กรุณาแจ้งผู้ดูแลระบบ",
+      title: "ระบบเบิกจ่ายโครงการ (ช่วงทดลอง)",
+      text: "ยื่นคำขอ อนุมัติตามลำดับถึง ผอ. และติดตามสถานะเอกสารได้ในระบบ",
     },
   ];
   const KEY = "bpd-whats-new-seen";
   const seen = () => { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; } };
-  const markSeen = (id) => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), id])].slice(-30))); } catch {} };
-  const next = UPDATES.find((u) => !u.paused && !seen().includes(u.id));
-  if (!next) return;
+  const markSeen = (ids) => { try { localStorage.setItem(KEY, JSON.stringify([...new Set([...seen(), ...ids])].slice(-30))); } catch {} };
+  const news = UPDATES.filter((u) => !u.paused && !seen().includes(u.id)).slice(0, MAX);
+  if (!news.length) return;
 
   const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
   function show() {
@@ -27,19 +24,18 @@
     const style = el("style");
     style.textContent = `.wn-backdrop{position:fixed;inset:0;background:#0f233866;display:flex;align-items:center;justify-content:center;padding:18px;z-index:3000}
 .wn-card{background:#fff;color:#263c50;border-radius:18px;box-shadow:0 20px 55px #1d3a5a40;width:min(440px,100%);max-height:calc(100vh - 36px);overflow:auto;padding:22px 22px 18px;font:inherit}
-.wn-top{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}.wn-tag{font-size:13px;color:#2b5f8c;background:#e8f2fb;border-radius:999px;padding:3px 10px}
-.wn-badge{font-size:13px;color:#974007;background:#fff2df;border:1px solid #f6b366;border-radius:999px;padding:2px 10px}
-.wn-card h2{font-size:20px;line-height:1.4;margin:0 0 10px}.wn-card ul{margin:0 0 12px;padding-left:20px;line-height:1.7}.wn-note{font-size:14px;color:#5b6f82;background:#f5f8fb;border-radius:12px;padding:10px 12px;margin:0 0 16px}
+.wn-tag{display:inline-block;font-size:13px;color:#2b5f8c;background:#e8f2fb;border-radius:999px;padding:3px 10px;margin-bottom:12px}
+.wn-list{list-style:none;margin:0 0 16px;padding:0;display:grid;gap:10px}.wn-list li{background:#f5f8fb;border-radius:12px;padding:10px 12px}
+.wn-list strong{display:block;font-size:16px;line-height:1.45}.wn-list span{display:block;font-size:14px;line-height:1.55;color:#5b6f82;margin-top:2px}
 .wn-ok{display:block;width:100%;min-height:46px;border:0;border-radius:12px;background:#2b6cb0;color:#fff;font:inherit;font-weight:600;cursor:pointer}.wn-ok:focus-visible{outline:3px solid #9cc7ef;outline-offset:2px}`;
     const backdrop = el("div", "wn-backdrop"); backdrop.id = "whatsNewPopup";
     const card = el("section", "wn-card"); card.setAttribute("role", "dialog"); card.setAttribute("aria-modal", "true"); card.setAttribute("aria-labelledby", "whatsNewTitle");
-    const top = el("div", "wn-top"); top.append(el("span", "wn-tag", "อัพเดทฟีเจอร์ใหม่")); if (next.badge) top.append(el("span", "wn-badge", next.badge));
-    const title = el("h2", "", next.title); title.id = "whatsNewTitle";
-    const list = el("ul"); next.items.forEach((t) => list.append(el("li", "", t)));
+    const tag = el("span", "wn-tag", "อัพเดทฟีเจอร์ใหม่"); tag.id = "whatsNewTitle";
+    const list = el("ul", "wn-list"); news.forEach((u) => { const li = el("li"); li.append(el("strong", "", u.title), el("span", "", u.text)); list.append(li); });
     const ok = el("button", "wn-ok", "รับทราบ"); ok.type = "button";
-    card.append(top, title, list); if (next.note) card.append(el("p", "wn-note", next.note)); card.append(ok);
+    card.append(tag, list, ok);
     backdrop.append(card); document.head.append(style); document.body.append(backdrop);
-    const close = () => { markSeen(next.id); backdrop.remove(); document.removeEventListener("keydown", onKey); };
+    const close = () => { markSeen(news.map((u) => u.id)); backdrop.remove(); document.removeEventListener("keydown", onKey); };
     const onKey = (e) => { if (e.key === "Escape") close(); };
     ok.addEventListener("click", close); document.addEventListener("keydown", onKey); ok.focus();
   }
