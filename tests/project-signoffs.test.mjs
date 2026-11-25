@@ -155,3 +155,21 @@ test('memo shows the finance-review officer for budget and general department pr
   const doc=await memo(env,2,id);
   assert.match(doc.text,/\( การเงิน \)/);assert.doesNotMatch(doc.text,/นางสาวการเงิน หนึ่ง/);
 });
+
+test('disbursement tracking: requester sees own requests, deputies of any department and the director see all',async()=>{
+  const env=await fixture();addApprovers(env);
+  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(14,'gdep@test','x','x','นายรอง ทั่วไป','teacher');
+    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('deputy_director','general',14,1);`);
+  const id=(await call(env,2,'requests','POST',payload())).body.id;
+  assert.equal((await call(env,2,'tracking')).body.requests.length,0,'drafts are not tracked');
+  await action(env,2,id,'submit');
+  await action(env,7,id,'review_approve',{plan_status:'in_plan'});
+  const mine=(await call(env,2,'tracking')).body;
+  assert.equal(mine.scope,'mine');assert.equal(mine.requests.length,1);
+  const r=mine.requests[0];assert.equal(r.current_step,'dept_deputy_review');
+  assert.deepEqual(r.steps.map(s=>[s.step_key,s.status]).slice(0,2),[['dept_head','approved'],['dept_deputy','pending']]);
+  assert.equal(r.steps[0].acted_name,'นายหัวหน้า วิชาการ');assert.ok(r.last_event_at);
+  assert.equal((await call(env,4,'tracking')).body.requests.length,0);
+  for(const user of [14,6,1]){const b=(await call(env,user,'tracking')).body;assert.equal(b.scope,'all',String(user));assert.equal(b.requests.length,1);}
+  assert.equal((await memo(env,14,id)).status,200);assert.equal((await memo(env,4,id)).status,403);
+});

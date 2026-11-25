@@ -451,6 +451,28 @@ async function action(request, env, user, id) {
   return jsonResponse({ ok: true });
 }
 
+// ติดตามเอกสารเบิกจ่าย: ผอ./รอง ผอ. (ทุกฝ่าย) และผู้ดูแลเห็นทุกคำขอ ผู้ขอเห็นเฉพาะคำขอของตัวเอง/โครงการที่รับผิดชอบ
+async function canTrackAll(env, user) {
+  if (isAdmin(user) || (await budgetDirectorIds(env)).includes(Number(user.id))) return true;
+  return Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE user_id=? AND role_key IN ('deputy_director','director_approval') LIMIT 1").bind(user.id).first());
+}
+async function tracking(env, user) {
+  const all = await canTrackAll(env, user);
+  const { results: requests } = await env.DB.prepare(`SELECT e.id,e.request_no,e.project_id,e.amount,e.status,e.current_step,e.priority,e.request_purpose,e.submitted_at,e.created_at,
+      e.finance_received_at,e.paid_at,e.returned_at,e.review_note,e.created_by,p.name AS project_name,COALESCE(p.management_area,p.department) AS department,u.full_name AS requester_name,
+      (SELECT MAX(v.created_at) FROM project_workflow_events v WHERE v.expense_id=e.id) AS last_event_at
+    FROM project_expenses e JOIN projects p ON p.id=e.project_id LEFT JOIN users u ON u.id=e.created_by
+    WHERE e.workflow_version=2 AND e.status<>'draft' ${all ? "" : "AND (e.created_by=? OR EXISTS(SELECT 1 FROM project_owners o WHERE o.project_id=e.project_id AND o.user_id=?))"}
+    ORDER BY CASE WHEN e.status IN ('paid','rejected') THEN 1 ELSE 0 END,COALESCE(e.submitted_at,e.created_at) DESC,e.id DESC LIMIT 300`)
+    .bind(...(all ? [] : [user.id, user.id])).all();
+  const signoffs = await rowsByIds(env, requests.map((e) => e.id), (ph) => `SELECT s.expense_id,s.step_key,s.step_order,s.status,s.acted_at,s.note,a.full_name AS assigned_name,b.full_name AS acted_name
+    FROM project_expense_signoffs s LEFT JOIN users a ON a.id=s.assigned_user_id LEFT JOIN users b ON b.id=s.acted_by WHERE s.expense_id IN (${ph}) ORDER BY s.expense_id,s.step_order`);
+  const label = Object.fromEntries(SIGNOFF_STEPS.map((s) => [s.key, s.label]));
+  const byId = new Map(requests.map((e) => [e.id, { ...e, steps: [] }]));
+  for (const s of signoffs) byId.get(s.expense_id)?.steps.push({ ...s, label: label[s.step_key] || s.step_key });
+  return jsonResponse({ scope: all ? "all" : "mine", requests: [...byId.values()] });
+}
+
 export async function handleProjectWorkflowRoute(request, env, pathname, method) {
   if (!pathname.startsWith("/api/project-documents")) return null;
   const user = await getCurrentUser(request,env);
@@ -458,6 +480,7 @@ export async function handleProjectWorkflowRoute(request, env, pathname, method)
   await ensureProjectWorkflowSchema(env);
   try {
     if (pathname === "/api/project-documents/overview" && method === "GET") return await overview(request,env,user);
+    if (pathname === "/api/project-documents/tracking" && method === "GET") return await tracking(env,user);
     if (pathname === "/api/project-documents/requests" && method === "POST") return await saveDraft(request,env,user);
     let match = pathname.match(/^\/api\/project-documents\/requests\/(\d+)$/);
     if (match && method === "PATCH") return await saveDraft(request,env,user,Number(match[1]));
@@ -466,7 +489,7 @@ export async function handleProjectWorkflowRoute(request, env, pathname, method)
       const id = Number(match[1]), row = await env.DB.prepare("SELECT project_id,created_by,status FROM project_expenses WHERE id=? AND workflow_version=2").bind(id).first();
       if (!row) return jsonResponse({ error: "ไม่พบคำขอ" },404);
       const allowed = Number(row.created_by) === Number(user.id) || await ownsProject(env,user,row.project_id) || await canManageProjectFinance(env,user)
-        || (await budgetDirectorIds(env)).includes(Number(user.id))
+        || await canTrackAll(env,user)
         || Boolean(await env.DB.prepare("SELECT 1 FROM project_expense_signoffs WHERE expense_id=? AND assigned_user_id=?").bind(id,user.id).first())
         || Boolean(await env.DB.prepare("SELECT 1 FROM budget_role_assignments WHERE user_id=? AND role_key IN ('procurement_officer','procurement_officer_2','procurement_head')").bind(user.id).first());
       if (!allowed) return jsonResponse({ error: "ไม่มีสิทธิ์ดูเอกสารนี้" },403);

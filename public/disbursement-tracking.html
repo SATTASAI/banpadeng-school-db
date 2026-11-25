@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ติดตามเอกสารเบิกจ่าย — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
+<link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/project-workflow.css">
+<style>
+.tk-page{max-width:1100px;margin:auto}.tk-page h1{margin:0}.tk-lead{margin:6px 0 14px;color:var(--color-text-muted)}
+.tk-tools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.tk-tools input{flex:1 1 220px;min-width:0;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;font:inherit}
+.tk-filter{padding:8px 14px;border:1px solid var(--color-border);border-radius:999px;background:#fff;font:inherit;cursor:pointer;color:#1c507c}.tk-filter[aria-pressed="true"]{background:#1c507c;color:#fff;border-color:#1c507c}
+.tk-list{display:grid;gap:12px}.tk-empty{padding:22px;text-align:center;color:var(--color-text-muted);border:1px dashed var(--color-border);border-radius:16px}
+.tk-card{padding:16px 18px;border:1px solid var(--color-border);border-radius:16px;background:rgba(255,255,255,.92);box-shadow:0 8px 22px #376b8a0d}
+.tk-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 12px;align-items:flex-start}.tk-head h2{margin:0;font-size:16px;color:#1c507c}
+.tk-meta{color:var(--color-text-muted);font-size:14px;margin-top:2px}.tk-amount{font-weight:700;white-space:nowrap}
+.tk-now{margin:10px 0 4px;padding:8px 12px;border-radius:12px;background:#fff6ea;color:#8a4b0f;font-size:14px}.tk-now.done{background:#eaf7f0;color:#1f6b47}.tk-now.stop{background:#fdecec;color:#9b2c2c}
+.tk-steps{list-style:none;margin:10px 0 0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:8px}
+.tk-step{position:relative;padding:9px 10px 9px 34px;border-radius:12px;background:#f4f7fa;font-size:13px;line-height:1.35;color:#5b6b78}
+.tk-step b{display:block;font-size:13px;color:#33475a}.tk-step small{display:block}
+.tk-step::before{content:"";position:absolute;left:10px;top:11px;width:16px;height:16px;border-radius:50%;border:2px solid #b9c6d1;background:#fff;box-sizing:border-box}
+.tk-step.ok{background:#eaf7f0}.tk-step.ok::before{content:"✓";border:0;background:#2f9466;color:#fff;font-size:11px;line-height:16px;text-align:center}
+.tk-step.now{background:#fff1dc;box-shadow:inset 0 0 0 2px #f0b35b}.tk-step.now::before{border-color:#e08a1e;background:#e08a1e}
+.tk-step.stop{background:#fdecec}.tk-step.stop::before{content:"!";border:0;background:#c24141;color:#fff;font-size:11px;line-height:16px;text-align:center;font-weight:700}
+.tk-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.tk-actions .btn{width:auto;flex:0 0 auto}
+@media (max-width:640px){.tk-steps{grid-template-columns:1fr}.tk-actions .btn{flex:1 1 auto}}
+</style>
+</head>
+<body><div class="app-shell"><div class="app-topbar"><div class="brand"><div class="brand-mark"><img src="/logo.jpg" alt="ตราโรงเรียน"></div>โรงเรียนบ้านป่าเด็ง</div><div class="app-user"><a href="/finance-requests.html">← ขอเบิกจ่ายและจัดซื้อจัดจ้าง</a></div></div>
+<main class="app-main wf-page tk-page">
+  <h1>ติดตามเอกสารเบิกจ่าย</h1>
+  <p class="tk-lead" id="lead">กำลังโหลด...</p>
+  <div class="tk-tools">
+    <input id="q" type="search" placeholder="ค้นหาเลขคำขอ โครงการ หรือผู้ขอ" aria-label="ค้นหา">
+    <button class="tk-filter" data-filter="active" aria-pressed="true">กำลังดำเนินการ</button>
+    <button class="tk-filter" data-filter="done" aria-pressed="false">เสร็จสิ้น</button>
+    <button class="tk-filter" data-filter="stopped" aria-pressed="false">ส่งกลับ/ไม่อนุมัติ</button>
+    <button class="tk-filter" data-filter="all" aria-pressed="false">ทั้งหมด</button>
+  </div>
+  <div class="tk-list" id="list"><div class="tk-empty">กำลังโหลด...</div></div>
+</main></div>
+<script src="/js/api.js"></script>
+<script>
+(async()=>{
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const money=v=>Number(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const toDate=v=>{if(!v)return null;const s=String(v);const d=new Date(/[zZ]$|[+-]\d\d:?\d\d$/.test(s)?s.replace(' ','T'):s.replace(' ','T')+'Z');return isNaN(d)?null:d};
+  const when=v=>{const d=toDate(v);return d?d.toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'numeric',month:'short',year:'2-digit',hour:'2-digit',minute:'2-digit'})+' น.':''};
+  const daysSince=v=>{const d=toDate(v);return d?Math.max(0,Math.floor((Date.now()-d.getTime())/864e5)):null};
+  const depts={academic:'ฝ่ายวิชาการ',early_childhood:'ฝ่ายปฐมวัย',budget:'ฝ่ายงบประมาณ',personnel:'ฝ่ายบุคคล',general:'ฝ่ายบริหารทั่วไป',administration:'ฝ่ายบริหาร'};
+  const states={returned:'ส่งกลับให้แก้ไข',dept_head_review:'รอหัวหน้าฝ่ายพิจารณา',dept_deputy_review:'รอรองผู้อำนวยการผู้ดูแลฝ่ายพิจารณา',budget_head_review:'รอหัวหน้าฝ่ายงบประมาณรับทราบ',budget_deputy_review:'รอรองผู้อำนวยการฝ่ายงบประมาณพิจารณา',finance_queue:'รอเจ้าหน้าที่การเงินรับเรื่อง',finance_processing:'เจ้าหน้าที่การเงินกำลังตรวจเอกสาร',director_approval:'รอผู้อำนวยการอนุมัติ',finance_ready:'ผู้อำนวยการอนุมัติแล้ว รอยืนยันการเบิกจ่าย',completed:'เบิกจ่ายเรียบร้อยแล้ว',rejected:'ไม่อนุมัติ'};
+  const groupOf=e=>e.status==='paid'||e.current_step==='completed'?'done':['returned','rejected'].includes(e.status)||['returned','rejected'].includes(e.current_step)?'stopped':'active';
+  const me=await apiRequest('/api/auth/me');if(!me.user){location.href='/login.html';return}
+  const data=await apiRequest('/api/project-documents/tracking');
+  document.getElementById('lead').textContent=data.scope==='all'?'คำขอเบิกจ่ายทุกฝ่ายในโรงเรียน ดูได้ว่าแต่ละคำขออยู่ขั้นตอนใด ใครลงนามแล้ว และรอใครพิจารณาอยู่':'คำขอเบิกจ่ายของคุณ ดูได้ว่าอยู่ขั้นตอนใด ใครลงนามแล้ว และรอใครพิจารณาอยู่';
+  let filter='active';
+  function steps(e){
+    const out=[`<li class="tk-step ok"><b>ส่งคำขอ</b><small>${esc(e.requester_name||'')}</small><small>${esc(when(e.submitted_at||e.created_at))}</small></li>`];
+    for(const s of (e.steps||[]).filter(s=>s.status!=='skipped')){
+      const cls=s.status==='approved'?'ok':s.status==='pending'&&groupOf(e)==='active'?'now':['returned','rejected'].includes(s.status)?'stop':'';
+      const who=s.acted_name||s.assigned_name||'';
+      const note=s.status==='approved'?when(s.acted_at):cls==='now'?'กำลังรอ':cls==='stop'?(s.status==='rejected'?'ไม่อนุมัติ':'ส่งกลับแก้ไข')+(s.acted_at?' · '+when(s.acted_at):''):'ยังไม่ถึงคิว';
+      out.push(`<li class="tk-step ${cls}"><b>${esc(s.label)}</b><small>${esc(who)}</small><small>${esc(note)}</small></li>`);
+    }
+    out.push(`<li class="tk-step ${e.status==='paid'?'ok':e.current_step==='finance_ready'?'now':''}"><b>เบิกจ่าย</b><small>${e.status==='paid'?esc(when(e.paid_at)):e.current_step==='finance_ready'?'กำลังรอ':'ยังไม่ถึงคิว'}</small></li>`);
+    return out.join('');
+  }
+  function nowLine(e){
+    const g=groupOf(e),label=states[e.current_step]||states[e.status]||e.status;
+    if(g==='done')return `<div class="tk-now done">✓ ${esc(label)}${e.paid_at?' · '+esc(when(e.paid_at)):''}</div>`;
+    if(g==='stopped')return `<div class="tk-now stop">${esc(label)}${e.review_note?' — '+esc(e.review_note):''}</div>`;
+    const pending=(e.steps||[]).find(s=>s.status==='pending'),who=pending?.assigned_name?` (${pending.assigned_name})`:'',days=daysSince(e.last_event_at||e.submitted_at);
+    return `<div class="tk-now">ตอนนี้: <b>${esc(label)}</b>${esc(who)}${days!==null?` · รอมาแล้ว ${days?days+' วัน':'ไม่ถึง 1 วัน'}`:''}</div>`;
+  }
+  function render(){
+    const q=document.getElementById('q').value.trim().toLowerCase();
+    const rows=(data.requests||[]).filter(e=>(filter==='all'||groupOf(e)===filter)&&(!q||[e.request_no,e.project_name,e.requester_name,e.request_purpose].join(' ').toLowerCase().includes(q)));
+    document.getElementById('list').innerHTML=rows.map(e=>`<article class="tk-card">
+      <div class="tk-head"><div><h2>${esc(e.request_no||'คำขอ #'+e.id)} · ${esc(e.project_name)}</h2>
+        <div class="tk-meta">${esc(depts[e.department]||e.department||'')} · ผู้ขอ ${esc(e.requester_name||'-')}${e.request_purpose?' · '+esc(e.request_purpose):''}</div></div>
+        <div class="tk-amount">${money(e.amount)} บาท</div></div>
+      ${nowLine(e)}<ol class="tk-steps">${steps(e)}</ol>
+      <div class="tk-actions"><a class="btn btn-ghost" href="/api/project-documents/requests/${Number(e.id)}/memo" target="_blank" rel="noopener">ดูบันทึกข้อความ</a>${Number(e.created_by)===Number(me.user.id)?`<a class="btn btn-ghost" href="/project-documents.html?project=${Number(e.project_id)}">ไปที่คำขอ</a>`:''}</div>
+    </article>`).join('')||'<div class="tk-empty">ไม่มีคำขอในหมวดนี้</div>';
+  }
+  document.querySelectorAll('.tk-filter').forEach(b=>b.addEventListener('click',()=>{filter=b.dataset.filter;document.querySelectorAll('.tk-filter').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));render()}));
+  document.getElementById('q').addEventListener('input',render);
+  render();
+})().catch(e=>{document.getElementById('list').innerHTML=`<div class="tk-empty">${String(e.message).replace(/[<>&]/g,'')}</div>`});
+</script></body></html>
