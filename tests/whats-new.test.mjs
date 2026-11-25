@@ -21,3 +21,8 @@ test("latest update announces disbursement trial, once per device, news only", (
 });
 
 test("whats-new script parses", () => { new Function(src); });
+
+test("disbursement announcement is paused but pop-up mechanism remains", () => {
+  assert.match(src, /id: "2026-11-disbursement-trial",\n\s+paused: true/);
+  assert.match(src, /!u\.paused/);
+});
