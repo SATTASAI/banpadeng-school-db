@@ -21,7 +21,7 @@ test('menu destinations are unique, concise, and implemented; budget tabs remain
  // คำขอฝั่งผู้ขออยู่ใน ระบบสนับสนุน; ฝ่ายงบประมาณรับเรื่องที่เมนู บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง (ทะเบียนเบิกจ่าย/จัดซื้อเป็นแท็บในหน้านั้น)
  assert(n.groups.budget.some(i=>i.url==='/finance-register.html'&&i.label==='บันทึกเบิกจ่ายและจัดซื้อจัดจ้าง'));
  assert(!n.groups.budget.some(i=>['/procurement.html','/budget.html?view=requests','/budget.html?view=disbursements'].includes(i.url)));
- assert.deepEqual(plain(n.groups['finance-requests'].map(i=>i.url)),['/finance-requests.html?view=overview','/project-documents.html','/procurement.html?mine=1','/budget.html?view=requests']);
+ assert.deepEqual(plain(n.groups['finance-requests'].map(i=>i.url)),['/finance-requests.html?view=overview','/project-documents.html','/disbursement-tracking.html','/procurement.html?mine=1','/budget.html?view=requests']);
  const support=html.split('ระบบสนับสนุน</div>')[1].split('บริหารระบบ</div>')[0];
  assert(support.includes('data-page="maintenance"')&&support.includes('data-page="finance-requests"'));
  assert(!n.groups.general.some(i=>i.url==='/maintenance.html'));
