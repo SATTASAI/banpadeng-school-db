@@ -201,3 +201,11 @@ table.sv-grid.sv-sched{table-layout:auto;min-width:760px}
  .sv-sched .s-lb{display:inline}
  .sv-scroll:has(.sv-sched){overflow:visible;border:0;background:none}
 }
+
+/* ภาพการนิเทศของผู้นิเทศ (ไม่เกิน 2 ภาพ) */
+.sv-visit-photos{margin-top:10px}
+.sv-visit-photos .sv-thumbs{grid-template-columns:repeat(auto-fill,minmax(110px,140px))}
+.sv-vp-add{display:flex;align-items:center;justify-content:center;cursor:pointer;border:1.5px dashed #9fbdd6;background:#f5f9fd;color:#1e5fc0;text-align:center}
+.sv-vp-add span{display:flex;flex-direction:column;align-items:center;font-size:26px;line-height:1}
+.sv-vp-add small{font-size:12px;margin-top:4px}
+.sv-vp-add.loading{pointer-events:none;color:#607991}.sv-vp-add.loading span{font-size:12px}

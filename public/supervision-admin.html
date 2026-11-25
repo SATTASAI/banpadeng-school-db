@@ -27,10 +27,12 @@ function renderTabs(){
 async function load(){if(state.perm.evaluate||state.perm.view_all){const d=await apiRequest('/api/supervision/requests?scope=all');state.list=d.requests;state.director=d.director?{...d.director,signatures:d.signatures||{}}:{name:'',position:'',signatures:d.signatures||{}};}}
 async function render(reload=true){
  try{
-  if(reload)await load();renderTabs();
+  if(reload)await load();renderTabs();U.bindVisitPhotos($('view'),onVisitPhoto);
   await ({requests:viewRequests,evaluate:viewEvaluate,results:viewResults,summary:viewSummary,evaluators:viewEvaluators,away:viewAway})[state.view]();
  }catch(e){$('view').innerHTML=`<div class="sv-notice error">${esc(e.message)}</div>`;}
 }
+// ภาพการนิเทศ: อัปเดตรายการในหน่วยความจำแล้ววาดหน้าปัจจุบันใหม่ (ไม่โหลดข้อมูลใหม่ เพื่อไม่ให้แบบประเมินที่กรอกค้างหาย)
+const onVisitPhoto=(id,change)=>{U.applyVisitPhotos(state.list.find(x=>x.id===id),change);render(false);};
 /* ---------- คำขอนิเทศ ---------- */
 function clashFor(r){return state.list.find(x=>x.id!==r.id&&x.supervisor_user_id===me()&&['confirmed','evaluated'].includes(x.status)&&x.visit_date===r.visit_date&&x.period===r.period);}
 function reqRow(r){
@@ -88,6 +90,7 @@ function viewEvaluate(){
  $('view').innerHTML=`<section class="sv-card" style="display:flex;flex-direction:column;gap:14px">${sel}
   <div class="sv-info"><div><span>ครูผู้รับการนิเทศ</span>${esc(r.teacher_name)}</div><div><span>วันที่ / คาบ</span>${U.date(r.visit_date)} · คาบ ${r.period}</div><div><span>วิชา / ชั้น</span>${esc(r.subject)}${U.classLabel(r)?' · '+esc(U.classLabel(r)):''}</div><div><span>ประเภท</span>${esc(r.type_label)}</div>
   ${r.topic?`<div style="grid-column:1/-1"><span>หัวข้อที่ครูต้องการรับข้อเสนอแนะ</span>${esc(r.topic)}</div>`:''}</div>
+  ${U.visitPhotos(r)}
   ${r.evidence?(r.evidence.submitted_at?U.evidence(r):`<div class="sv-notice warn">รอครูส่งลิงก์คลิปและภาพการสอน${r.evidence.due_date?` (กำหนด ${U.date(r.evidence.due_date)})`:''} ระบบจะแจ้งเตือนเมื่อครูส่ง จึงบันทึกคะแนนได้</div>${U.evidence(r)}`):''}</section>
   <div class="sv-eval" style="margin-top:16px"><section class="sv-card"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:baseline"><h2 style="margin:0;color:#163e67;font-size:19px">แบบประเมิน${esc(state.perm.form.label.replace('นิเทศ',''))}</h2><span class="sv-hint">ด้านที่ 1–3: 3 = ดีมาก · 2 = พอใช้ · 1 = ควรปรับปรุง · ด้านที่ 4: ปฏิบัติ 2 / ไม่ปฏิบัติ 0</span></div>
   <div>${secs.map((sec,si)=>`${sec.label!==secs[si-1]?.label?`<h3 style="margin:16px 0 4px;color:#163e67;font-size:16px">${esc(sec.label)}</h3>`:''}${sec.group?`<h4 style="margin:10px 0 2px;color:#33506b;font-size:14.5px">${esc(sec.group)}</h4>`:''}`+sec.items.map((q,k)=>{const i=n++;return `<div class="sv-item"><div class="q"><span class="n">${k+1}</span><span>${esc(q)}</span></div><div class="sv-scale${sec.options.length===2?' two':''}" role="radiogroup" aria-label="${esc(q)}">${sec.options.map(v=>`<input type="radio" name="s${i}" id="s${i}v${v}" value="${v}"${d.scores[i]===v?' checked':''}><label for="s${i}v${v}" title="${esc(sec.labels?.[v]||'')}">${sec.options.length===2?esc(sec.labels[v]):v}</label>`).join('')}</div></div>`;}).join('')).join('')}</div>

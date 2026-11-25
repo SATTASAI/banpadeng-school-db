@@ -6,7 +6,7 @@ import {DatabaseSync} from 'node:sqlite';
 import worker from '../src/index.js';
 import {signJWT} from '../src/lib/crypto.js';
 import {ensureBudgetSchema} from '../src/routes/budget.js';
-import {summarizeScores,qualityLevel,slotStarted,supervisionMaintenance} from '../src/routes/supervision.js';
+import {summarizeScores,qualityLevel,slotStarted,supervisionMaintenance,handleSupervisionRoute,VISIT_PHOTO_MAX} from '../src/routes/supervision.js';
 // Drive ปลอม: ตั้งค่าครบแต่เรียกเครือข่ายไม่ได้ (ทดสอบเส้นทางล้มเหลว/ลบซ้ำ)
 const DRIVE={GOOGLE_DRIVE_CLIENT_ID:'x',GOOGLE_DRIVE_CLIENT_SECRET:'x',GOOGLE_DRIVE_REFRESH_TOKEN:'x',GOOGLE_DRIVE_FOLDER_ID:'x'};
 
@@ -431,4 +431,35 @@ test('registration stays closed before the open date for teachers, superadmin ma
  assert.equal(registrationClosed(env,{role:'teacher'},{date:'2026-11-02',minutes:0}),false);
  assert.equal(registrationClosed(env,{role:'superadmin'},{date:'2026-10-30',minutes:0}),false);
  assert.equal(registrationClosed({},{role:'teacher'},{date:'2026-10-30',minutes:0}),true);
+});
+
+test('visit photos: only the accepting supervisor uploads (max 2) to Drive; teacher sees them; release purges',async()=>{
+ const {env}=await school();
+ const drive=[],removed=[];
+ const services={validate:async f=>f&&f.size?{mimeType:f.type}:{error:'ไม่มีไฟล์'},upload:async(e,f,rid,name)=>{drive.push(name);return {id:'drv-'+drive.length};},
+  read:async()=>new Blob(['img']).stream(),remove:async(e,id)=>{removed.push(id);}};
+ const send=async(path,method,user,body)=>{const token=await signJWT({sub:user},env.JWT_SECRET);
+  const r=await handleSupervisionRoute(new Request('https://school.test'+path,{method,headers:{Cookie:`bpd_session=${token}`},body}),env,path,method,services);return {status:r.status,body:r.headers.get('Content-Type')?.includes('json')?await r.json():await r.text()};};
+ const photo=()=>{const fd=new FormData();fd.append('file',new File([new Uint8Array([0xff,0xd8,0xff,1,2,3])],'p.jpg',{type:'image/jpeg'}));return fd;};
+ const id=(await ok(env,'/api/supervision/requests','POST',manual,2)).request.id;
+ assert.equal((await send(`/api/supervision/visit-photos/${id}`,'POST',5,photo())).status,403,'not accepted yet');
+ await ok(env,`/api/supervision/requests/${id}/accept`,'POST',{},5);
+ assert.equal((await send(`/api/supervision/visit-photos/${id}`,'POST',6,photo())).status,403,'another evaluator');
+ assert.equal((await send(`/api/supervision/visit-photos/${id}`,'POST',2,photo())).status,403,'the teacher');
+ for(let i=0;i<VISIT_PHOTO_MAX;i++)assert.equal((await send(`/api/supervision/visit-photos/${id}`,'POST',5,photo())).status,201);
+ assert.equal((await send(`/api/supervision/visit-photos/${id}`,'POST',5,photo())).status,409,'max 2');
+ assert.equal(drive.length,2);
+ const sup=(await ok(env,'/api/supervision/requests?scope=all','GET',undefined,5)).requests.find(x=>x.id===id);
+ assert.equal(sup.visit_photos.length,2);assert.equal(sup.can_upload_photos,true);
+ const teacher=(await ok(env,'/api/supervision/requests?scope=mine','GET',undefined,2)).requests.find(x=>x.id===id);
+ assert.equal(teacher.visit_photos.length,2);assert.ok(!teacher.can_upload_photos);
+ const fid=teacher.visit_photos[0].id;
+ assert.equal((await send(`/api/supervision/visit-photos/files/${fid}`,'GET',2)).status,200,'teacher can view');
+ assert.equal((await send(`/api/supervision/visit-photos/files/${fid}`,'GET',3)).status,404,'other teacher cannot');
+ assert.equal((await send(`/api/supervision/visit-photos/files/${fid}`,'DELETE',2)).status,404,'teacher cannot delete');
+ assert.equal((await send(`/api/supervision/visit-photos/files/${fid}`,'DELETE',5)).status,200);
+ assert.deepEqual(removed,['drv-1']);
+ await ok(env,`/api/supervision/requests/${id}/release`,'POST',{},5);
+ assert.equal(env.raw.prepare('SELECT COUNT(*) n FROM supervision_visit_photos').get().n,0,'release purges');
+
 });
