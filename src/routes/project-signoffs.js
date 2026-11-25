@@ -152,9 +152,12 @@ export async function memoDocument(env, id) {
   const signed = (key) => so[key]?.status === "approved";
   const at = (key) => so[key]?.acted_at;
   const financeRow = so.finance;
-  // ชื่อก่อนลงนาม: เจ้าหน้าที่การเงิน 1 → 2 → ผู้รับผิดชอบฝ่ายการเงิน (ผู้รับผิดชอบฝ่ายฯ มักเป็นรอง ผอ.ฝ่ายงบประมาณซึ่งลงนามอีกช่อง)
-  const financeName = financeRow?.acted_name || (row.finance_received_by ? (await env.DB.prepare("SELECT full_name FROM users WHERE id=?").bind(row.finance_received_by).first())?.full_name : "")
-    || (await env.DB.prepare(`SELECT u.full_name FROM budget_role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_key IN ${FINANCE_ROLE_SQL} AND a.department='' ORDER BY CASE a.role_key WHEN 'finance_staff_1' THEN 0 WHEN 'finance_staff_2' THEN 1 ELSE 2 END LIMIT 1`).first().catch(() => null))?.full_name || "";
+  // ชื่อก่อนลงนาม: โครงการฝ่ายงบประมาณ/บริหารทั่วไป ใช้ผู้รับผิดชอบฝ่ายการเงิน (finance_review)
+  // ฝ่ายอื่นใช้เจ้าหน้าที่การเงิน 1 → 2 → ผู้รับผิดชอบฝ่ายการเงิน · ลงนามแล้วใช้ชื่อผู้ลงนามจริง
+  const reviewFirst = ["budget", "general"].includes(row.department);
+  const financeByRole = async () => (await env.DB.prepare(`SELECT u.full_name FROM budget_role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_key IN ${FINANCE_ROLE_SQL} AND a.department='' ORDER BY CASE a.role_key WHEN ? THEN 0 WHEN 'finance_staff_1' THEN 1 WHEN 'finance_staff_2' THEN 2 ELSE 3 END LIMIT 1`).bind(reviewFirst ? "finance_review" : "finance_staff_1").first().catch(() => null))?.full_name || "";
+  const receivedName = async () => row.finance_received_by ? (await env.DB.prepare("SELECT full_name FROM users WHERE id=?").bind(row.finance_received_by).first())?.full_name || "" : "";
+  const financeName = financeRow?.acted_name || (reviewFirst ? (await financeByRole() || await receivedName()) : (await receivedName() || await financeByRole()));
   const directorSigned = so.director ? signed("director") : Boolean(row.approved_by);
   const directorName = so.director?.acted_name || (row.approved_by ? (await env.DB.prepare("SELECT full_name FROM users WHERE id=?").bind(row.approved_by).first())?.full_name : "") || so.director?.assigned_name || await roleName("director_approval", "");
   const procurementName = await roleName("procurement_officer", "");
