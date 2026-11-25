@@ -57,7 +57,7 @@
   }
   function download(blob,name) {const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
   async function exportFile(rows,o,keys) {
-    const data=groups(rows,o.group),name='students-'+new Date().toISOString().slice(0,10);
+    const data=groups(rows,o.group),name='students-'+new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
     if(o.format==='xlsx') {
       const x=await library('XLSX','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'),book=x.utils.book_new();
       data.forEach(([label,list],i)=>{const sheet=x.utils.aoa_to_sheet(table(list,keys));sheet['!cols']=keys.map(k=>({wch:k==='full_name'?36:18}));x.utils.book_append_sheet(book,sheet,`${i+1} ${label}`.replace(/[\\/*?:\[\]]/g,' ').slice(0,31));});

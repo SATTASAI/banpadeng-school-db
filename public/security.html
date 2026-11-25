@@ -88,7 +88,7 @@
         if(!blob.size)throw new Error("ไฟล์สำรองว่างเปล่า กรุณาลองอีกครั้ง");
         state.textContent="กำลังดาวน์โหลดไฟล์...";
         const url=URL.createObjectURL(blob),link=document.createElement("a");
-        link.href=url;link.download=`banpadeng-d1-${new Date().toISOString().slice(0,10)}.sql`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+        link.href=url;link.download=`banpadeng-d1-${new Date(Date.now()+7*3600e3).toISOString().slice(0,10)}.sql`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
         state.textContent="ดาวน์โหลดสำเร็จ โปรดตรวจสอบว่าไฟล์อยู่ในเครื่อง";await load();
       }catch(error){state.textContent=error.message}finally{button.disabled=false}
     }

@@ -2,6 +2,7 @@
 // ผูกกับคำขอเบิกจ่ายโครงการ (project_expenses workflow_version=2):
 // คำขอเบิกจ่าย → รายงานขอซื้อ/ขอจ้าง → หัวหน้าเจ้าหน้าที่ (ถ้ากำหนด) → ผู้อำนวยการอนุมัติ
 // → ใบสั่งซื้อ/สั่งจ้าง → ส่งมอบ → ผู้ตรวจรับครบทุกคน → เข้าทะเบียนพัสดุอัตโนมัติ → การเงินเบิกจ่ายต่อ
+import { thaiDateText } from "../lib/thai-time.js";
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { FINANCE_ROLE_SQL } from "../lib/finance-roles.js";
 import { money, sumMoney, multiplyMoney } from "../lib/project-finance.js";
@@ -38,7 +39,7 @@ const validDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || "") && !Number.isNaN(Da
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 const moneyText = (value) => Number(value || 0).toLocaleString("th-TH", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const thaiDate = (value) => value ? new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" }) : "";
+const thaiDate = (value) => thaiDateText(value);
 function today() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }

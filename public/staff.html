@@ -278,7 +278,7 @@
           s.license_expiry_date ? ["ใบประกอบหมดอายุ", s.license_expiry_date] : null,
         ].filter(Boolean);
         // แถบสี: ใบประกอบหมดอายุ = เทาน้ำเงิน · เหลือไม่ถึง 6 เดือน = น้ำเงินม่วง · ไม่ได้ปฏิบัติงาน = เทาอ่อน · ปกติ = มิ้นต์
-        const today = new Date().toISOString().slice(0, 10), soon = new Date(Date.now() + 183 * 864e5).toISOString().slice(0, 10);
+        const today = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10), soon = new Date(Date.now() + 7 * 3600e3 + 183 * 864e5).toISOString().slice(0, 10);
         const st = s.employment_status && s.employment_status !== "working" ? "st-off" : !s.license_expiry_date ? "st-work" : s.license_expiry_date < today ? "st-no" : s.license_expiry_date < soon ? "st-warn" : "st-ok";
         return `
           <article class="staff-row pm-card ${st}" data-staff-id="${s.id}">

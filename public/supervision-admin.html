@@ -179,7 +179,7 @@ function termLine(list){
 const thDate=s=>U.parse(s).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'});
 function printDoc(doc,kind){
  const who=state.teacher==='all'?'':' '+(state.list.find(r=>String(r.teacher_user_id)===state.teacher)?.teacher_name||'');
- const stamp=new Date().toISOString().slice(0,10);
+ const stamp=new Date(Date.now()+7*3600e3).toISOString().slice(0,10);
  if(doc==='forms'){const list=filteredDone();return U.printForms(list,{director:state.director,roundOf:r=>roundOf(r,state.list),title:`แบบนิเทศการสอน${who||' รวมทั้งหมด'} ${stamp}`},kind);}
  if(doc==='summary'){
   const list=filteredDone();if(!list.length)return U.toast('ยังไม่มีผลการนิเทศให้พิมพ์',true);
@@ -251,7 +251,7 @@ function exportSummary(){
  [...d.done].sort((a,b)=>a.teacher_name.localeCompare(b.teacher_name,'th')||a.visit_date.localeCompare(b.visit_date)).forEach(r=>{const e=r.evaluation;
   lines.push([r.teacher_name,r.teacher_position,r.visit_date,r.period,r.type_label,r.subject,U.classLabel(r),e.evaluator_name,e.total,Number(e.percent).toFixed(2),e.level,e.suggestion].map(q).join(','));});
  const blob=new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),a=document.createElement('a');
- a.href=URL.createObjectURL(blob);a.download=`ประเมินผลการนิเทศ-${new Date().toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+ a.href=URL.createObjectURL(blob);a.download=`ประเมินผลการนิเทศ-${new Date(Date.now()+7*3600e3).toISOString().slice(0,10)}.csv`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 /* ---------- วันไม่ว่างของผู้ประเมิน ---------- */
 async function viewAway(){

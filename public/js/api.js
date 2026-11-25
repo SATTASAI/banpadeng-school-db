@@ -1,3 +1,20 @@
+// เวลาไทยทั้งระบบ: แสดงวันเวลาเป็นเขตเวลา Asia/Bangkok เสมอ แม้เครื่องผู้ใช้ตั้งเขตเวลาอื่น
+// (ถ้าโค้ดระบุ timeZone เองจะใช้ค่าที่ระบุ)
+(() => {
+  const TZ = "Asia/Bangkok";
+  if (window.__bpdThaiTime) return; window.__bpdThaiTime = true;
+  const withTz = (o) => (o && o.timeZone ? o : { ...(o || {}), timeZone: TZ });
+  for (const name of ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"]) {
+    const orig = Date.prototype[name];
+    Date.prototype[name] = function (locales, options) { return orig.call(this, locales, withTz(options)); };
+  }
+  const Orig = Intl.DateTimeFormat;
+  function ThaiDateTimeFormat(locales, options) { return new Orig(locales, withTz(options)); }
+  ThaiDateTimeFormat.prototype = Orig.prototype;
+  ThaiDateTimeFormat.supportedLocalesOf = Orig.supportedLocalesOf.bind(Orig);
+  Intl.DateTimeFormat = ThaiDateTimeFormat;
+})();
+
 // ทำให้หน้าที่เปิดอยู่ภายในพื้นที่ทำงานซ้อนใช้ layout แบบกะทัดรัด
 if (window.parent !== window) {
   document.documentElement.classList.add("embedded");
