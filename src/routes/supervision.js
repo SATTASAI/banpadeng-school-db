@@ -107,6 +107,12 @@ export function ensureSupervisionSchema(env){
    drive_file_id TEXT NOT NULL,file_name TEXT NOT NULL,mime_type TEXT NOT NULL,file_size INTEGER NOT NULL,
    uploaded_by INTEGER NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
   env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_evidence_request ON supervision_evidence_files(request_id)'),
+  // ภาพที่ผู้นิเทศถ่ายเป็นหลักฐานตอนเข้านิเทศ (ไม่เกิน 2 ภาพต่อการนิเทศ เก็บใน Google Drive โฟลเดอร์ "ภาพการนิเทศ")
+  env.DB.prepare(`CREATE TABLE IF NOT EXISTS supervision_visit_photos (
+   id INTEGER PRIMARY KEY AUTOINCREMENT,request_id INTEGER NOT NULL REFERENCES supervision_requests(id) ON DELETE CASCADE,
+   drive_file_id TEXT NOT NULL,file_name TEXT NOT NULL,mime_type TEXT NOT NULL,file_size INTEGER NOT NULL,
+   uploaded_by INTEGER NOT NULL REFERENCES users(id),created_at TEXT NOT NULL DEFAULT(datetime('now')))`),
+  env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_supervision_visit_photos_request ON supervision_visit_photos(request_id)'),
   // ไฟล์ Drive ที่ลบไม่สำเร็จ — Cron ลองลบซ้ำ ไม่ให้ภาพค้างใน Drive
   env.DB.prepare(`CREATE TABLE IF NOT EXISTS supervision_drive_trash (
    drive_file_id TEXT PRIMARY KEY,attempts INTEGER NOT NULL DEFAULT 0,last_error TEXT,created_at TEXT NOT NULL DEFAULT(datetime('now')))`)
@@ -383,7 +389,7 @@ async function listRequests(env,user,url,perms){
  const scope=url.searchParams.get('scope')==='all'?'all':'mine';
  if(scope==='mine'){
   const {results}=await env.DB.prepare(`${SELECT} WHERE r.teacher_user_id=? AND r.status<>'cancelled' ORDER BY r.visit_date DESC,r.period`).bind(user.id).all();
-  const director=await directorOf(env),requests=await withEvidence(env,results.map(r=>shape(r,{withResult:true})));
+  const director=await directorOf(env),requests=await withVisitPhotos(env,await withEvidence(env,results.map(r=>shape(r,{withResult:true}))),user,perms);
   return reply({scope,director,requests,signatures:await approverSignatures(env,requests,director)});
  }
  if(!perms.evaluate&&!perms.view_all)return fail('เฉพาะฝ่ายบริหาร ฝ่ายวิชาการ หรือผู้มีสิทธิ์ประเมิน',403);
@@ -402,7 +408,7 @@ async function listRequests(env,user,url,perms){
   // รายการที่ตนเองถอนการรับแล้วและยังรอผู้รับใหม่ — ไม่ค้างในแท็บคำขอของผู้ที่ถอน
   out.released_by_me=out.status==='pending'&&released.has(out.id);
   out.hidden_for_me=out.released_by_me&&!out.overdue&&someoneElse(r);return out;});
- const director=await directorOf(env),requests=await withEvidence(env,list);
+ const director=await directorOf(env),requests=await withVisitPhotos(env,await withEvidence(env,list),user,perms);
  return reply({scope,director,requests,signatures:await approverSignatures(env,requests,director)});
 }
 // ลายเซ็นผู้ลงนาม (ผู้นิเทศ + ผอ.) สำหรับพิมพ์แบบนิเทศ — เฉพาะรายการที่มีผลประเมินแล้ว
@@ -423,6 +429,7 @@ async function act(request,env,user,id,action,perms,services){
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='cancelled',cancelled_at=datetime('now'),cancelled_by=?,updated_at=datetime('now') WHERE id=? AND status IN ('pending','confirmed')").bind(user.id,id).run();
   if(!r.meta.changes)return fail('สถานะเปลี่ยนแล้ว กรุณาโหลดใหม่',409);
   await purgeEvidence(env,id,services);
+  await purgeVisitPhotos(env,id,services);
   const to=row.supervisor_user_id?[row.supervisor_user_id]:await evaluatorIds(env);
   const notes=notifyStatements(env,to,id,`${row.teacher_name} ยกเลิกคำขอ${COMBINED_LABEL} ${slotLabel(row)}`,user.id);
   if(notes.length)await env.DB.batch(notes);
@@ -452,6 +459,8 @@ async function act(request,env,user,id,action,perms,services){
  if(action==='release'){
   const r=await env.DB.prepare("UPDATE supervision_requests SET status='pending',supervisor_user_id=NULL,accepted_at=NULL,updated_at=datetime('now') WHERE id=? AND status='confirmed' AND supervisor_user_id=?").bind(id,user.id).run();
   if(!r.meta.changes)return fail('ถอนการรับได้เฉพาะรายการที่ยังไม่ประเมิน',409);
+  // ภาพที่ผู้นิเทศคนเดิมถ่ายไว้ไม่ใช่หลักฐานของผู้รับคนใหม่
+  await purgeVisitPhotos(env,id,services);
   // แจ้งไม่ว่างไว้แต่ครูยังไม่ได้ส่งอะไร → ล้างคำขอหลักฐาน ผู้รับคนใหม่เลือกเองว่าจะไปนิเทศหรือขอคลิปและภาพ
   if(row.evidence_requested_at&&!row.evidence_submitted_at&&!Number((await env.DB.prepare('SELECT COUNT(*) n FROM supervision_evidence_files WHERE request_id=?').bind(id).first()).n))
    await env.DB.prepare('UPDATE supervision_requests SET evidence_requested_at=NULL,evidence_requested_by=NULL,evidence_note=NULL,evidence_due_date=NULL,evidence_reminded_on=NULL,evidence_overdue_notified=NULL WHERE id=?').bind(id).run();
@@ -679,6 +688,71 @@ async function deleteEvidenceImage(env,user,fileId,services){
  return reply({ok:true});
 }
 
+// ---------- ภาพการนิเทศของผู้นิเทศ (ไม่เกิน 2 ภาพ) ----------
+// อัปโหลด/ลบได้เฉพาะผู้ที่รับนิเทศรายการนั้น (ผอ. รอง ผอ. กรรมการนิเทศ) · ดูได้: ผู้นิเทศ ครูที่ถูกนิเทศ และผู้เห็นผลทุกคน
+export const VISIT_PHOTO_MAX=2;
+const visitPhotoUrl=id=>`/api/supervision/visit-photos/files/${id}`;
+async function withVisitPhotos(env,list,user,perms){
+ const ids=list.filter(r=>r.status==='confirmed'||r.status==='evaluated').map(r=>r.id);
+ if(!ids.length)return list;
+ const by=new Map(list.map(r=>[r.id,r]));
+ for(let i=0;i<ids.length;i+=80){const part=ids.slice(i,i+80);
+  const {results}=await env.DB.prepare(`SELECT id,request_id,file_name,created_at FROM supervision_visit_photos WHERE request_id IN (${part.map(()=>'?').join(',')}) ORDER BY id`).bind(...part).all();
+  for(const f of results){const r=by.get(Number(f.request_id));if(!r)continue;(r.visit_photos||=[]).push({id:f.id,file_name:f.file_name,url:visitPhotoUrl(f.id),created_at:f.created_at});}}
+ for(const r of list){
+  const see=perms.view_all||r.supervisor_user_id===user.id||r.teacher_user_id===user.id;
+  if(!see){delete r.visit_photos;continue;}
+  r.visit_photos||=[];
+  r.can_upload_photos=perms.evaluate&&r.supervisor_user_id===user.id&&(r.status==='confirmed'||r.status==='evaluated');
+ }
+ return list;
+}
+async function uploadVisitPhoto(request,env,user,id,perms,services){
+ const row=await loadRequest(env,id);
+ if(!row||row.status==='cancelled')return fail('ไม่พบรายการนิเทศ',404);
+ if(!perms.evaluate||row.supervisor_user_id!==user.id)return fail('อัปโหลดภาพได้เฉพาะผู้นิเทศที่รับนิเทศรายการนี้',403);
+ if(row.status!=='confirmed'&&row.status!=='evaluated')return fail('รายการนี้ยังไม่ได้รับนิเทศ',409);
+ if(!services?.upload)return fail('ยังไม่ได้ตั้งค่าการจัดเก็บภาพใน Google Drive',503);
+ const n=Number((await env.DB.prepare('SELECT COUNT(*) n FROM supervision_visit_photos WHERE request_id=?').bind(id).first()).n);
+ if(n>=VISIT_PHOTO_MAX)return fail(`แนบภาพการนิเทศได้ไม่เกิน ${VISIT_PHOTO_MAX} ภาพ`,409);
+ const form=await request.formData().catch(()=>null),file=form?.get('file');
+ const check=await services.validate(file,'supervision_evidence');
+ if(check.error)return fail(check.error);
+ if(!IMAGE_MIMES.has(check.mimeType))return fail('แนบได้เฉพาะภาพ JPG, PNG หรือ WEBP');
+ const name=`ภาพการนิเทศ-${id}-${Date.now()}.${check.mimeType==='image/png'?'png':check.mimeType==='image/webp'?'webp':'jpg'}`;
+ let drive;
+ try{drive=await services.upload(env,file,id,name,check.mimeType);}catch(e){return fail(e.message||'อัปโหลดภาพไม่สำเร็จ',502);}
+ // นับและเพิ่มในคำสั่งเดียว กันอัปโหลดพร้อมกันเกิน 2 ภาพ
+ const ins=await env.DB.prepare(`INSERT INTO supervision_visit_photos(request_id,drive_file_id,file_name,mime_type,file_size,uploaded_by)
+  SELECT ?,?,?,?,?,? WHERE (SELECT COUNT(*) FROM supervision_visit_photos WHERE request_id=?)<?`).bind(id,drive.id,name,check.mimeType,file.size,user.id,id,VISIT_PHOTO_MAX).run();
+ if(!ins.meta.changes){await removeDrive(env,drive.id,services);return fail(`แนบภาพการนิเทศได้ไม่เกิน ${VISIT_PHOTO_MAX} ภาพ`,409);}
+ const fid=ins.meta.last_row_id;
+ return reply({ok:true,file:{id:fid,file_name:name,url:visitPhotoUrl(fid)}},201);
+}
+async function visitPhotoFile(env,fileId){
+ return env.DB.prepare('SELECT f.*,r.teacher_user_id,r.supervisor_user_id,r.status FROM supervision_visit_photos f JOIN supervision_requests r ON r.id=f.request_id WHERE f.id=?').bind(fileId).first();
+}
+async function readVisitPhoto(env,user,fileId,perms,services){
+ const f=await visitPhotoFile(env,fileId);
+ if(!f||!(f.teacher_user_id===user.id||f.supervisor_user_id===user.id||perms.view_all))return fail('ไม่พบภาพ หรือไม่มีสิทธิ์ดู',404);
+ if(!services?.read)return fail('ยังไม่ได้ตั้งค่าการจัดเก็บภาพใน Google Drive',503);
+ try{return new Response(await services.read(env,f.drive_file_id),{headers:{'Content-Type':f.mime_type,'Cache-Control':'private, max-age=604800, immutable','X-Content-Type-Options':'nosniff'}});}
+ catch(e){return fail(e.message||'เปิดภาพไม่สำเร็จ',502);}
+}
+async function deleteVisitPhoto(env,user,fileId,perms,services){
+ const f=await visitPhotoFile(env,fileId);
+ if(!f||!perms.evaluate||f.supervisor_user_id!==user.id)return fail('ไม่พบภาพ หรือไม่ใช่ภาพการนิเทศของคุณ',404);
+ await env.DB.prepare('DELETE FROM supervision_visit_photos WHERE id=?').bind(fileId).run();
+ await removeDrive(env,f.drive_file_id,services);
+ return reply({ok:true});
+}
+async function purgeVisitPhotos(env,requestId,services){
+ const {results}=await env.DB.prepare('SELECT id,drive_file_id FROM supervision_visit_photos WHERE request_id=?').bind(requestId).all();
+ if(!results.length)return;
+ await env.DB.prepare('DELETE FROM supervision_visit_photos WHERE request_id=?').bind(requestId).run();
+ for(const f of results)await removeDrive(env,f.drive_file_id,services);
+}
+
 export async function handleSupervisionRoute(request,env,pathname,method,services=null){
  if(!pathname.startsWith('/api/supervision/'))return null;
  const user=await getCurrentUser(request,env);
@@ -700,6 +774,11 @@ export async function handleSupervisionRoute(request,env,pathname,method,service
  const file=pathname.match(/^\/api\/supervision\/evidence\/files\/(\d+)$/);
  if(file&&method==='GET')return readEvidenceImage(env,user,Number(file[1]),perms,services);
  if(file&&method==='DELETE')return deleteEvidenceImage(env,user,Number(file[1]),services);
+ const vp=pathname.match(/^\/api\/supervision\/visit-photos\/(\d+)$/);
+ if(vp&&method==='POST')return uploadVisitPhoto(request,env,user,Number(vp[1]),perms,services);
+ const vf=pathname.match(/^\/api\/supervision\/visit-photos\/files\/(\d+)$/);
+ if(vf&&method==='GET')return readVisitPhoto(env,user,Number(vf[1]),perms,services);
+ if(vf&&method==='DELETE')return deleteVisitPhoto(env,user,Number(vf[1]),perms,services);
  const ua=pathname.match(/^\/api\/supervision\/unavailability(?:\/(\d+))?$/);
  if(ua)return unavailability(request,env,user,method,ua[1]?Number(ua[1]):null,perms);
  const ev=pathname.match(/^\/api\/supervision\/evaluators(?:\/(\d+))?$/);

@@ -56,6 +56,48 @@
    <div><span class="sv-hint">ภาพการสอน/สื่อการสอน (${e.files.length}/10)</span>${imgs?`<div class="sv-thumbs">${imgs}</div>`:' <span style="color:#8aa0b4">ยังไม่มีภาพ</span>'}</div>
    ${e.submitted_at?`<small class="sv-hint">ครูส่งหลักฐานเมื่อ ${stamp(e.submitted_at)}</small>`:e.due_date?`<small class="sv-hint">กำหนดส่ง ${date(e.due_date,true)}</small>`:''}</div>`;
  }
+ // ภาพการนิเทศที่ผู้นิเทศถ่ายเป็นหลักฐาน (ไม่เกิน 2 ภาพ) — ผู้นิเทศเพิ่ม/ลบได้, ครูและผู้เห็นผลดูได้
+ const VISIT_MAX=2;
+ function visitPhotos(r){
+  if(!Array.isArray(r?.visit_photos))return '';
+  const list=r.visit_photos,edit=!!r.can_upload_photos;
+  if(!list.length&&!edit)return '';
+  const imgs=list.map(f=>`<figure class="sv-thumb"><a href="${esc(f.url)}" target="_blank" rel="noopener"><img src="${esc(f.url)}" alt="ภาพการนิเทศ" loading="lazy"></a>${edit?`<button type="button" class="sv-thumb-del" data-vp-del="${f.id}" data-vp-req="${r.id}" aria-label="ลบภาพ">×</button>`:''}</figure>`).join('');
+  const add=edit&&list.length<VISIT_MAX?`<label class="sv-thumb sv-vp-add" title="เพิ่มภาพ"><input type="file" accept="image/*" data-vp-up="${r.id}" hidden><span>＋<small>เพิ่มภาพ</small></span></label>`:'';
+  return `<div class="sv-visit-photos" data-vp-box="${r.id}"><div class="sv-hint">ภาพการนิเทศ (${list.length}/${VISIT_MAX})${edit?' · ผู้นิเทศถ่ายเป็นหลักฐาน แสดงท้ายแบบนิเทศที่พิมพ์':''}</div>${imgs||add?`<div class="sv-thumbs">${imgs}${add}</div>`:''}</div>`;
+ }
+ // ย่อภาพจากกล้อง ≤1600 px และ JPEG ≤1.9 MB ก่อนอัปโหลด
+ async function shrinkImage(file){
+  let src,w,h,done=()=>{};
+  if(typeof createImageBitmap==='function'){try{const b=await createImageBitmap(file);src=b;w=b.width;h=b.height;done=()=>b.close?.();}catch{}}
+  if(!src){const url=URL.createObjectURL(file),img=new Image();try{img.src=url;await img.decode();src=img;w=img.naturalWidth;h=img.naturalHeight;done=()=>URL.revokeObjectURL(url);}catch{URL.revokeObjectURL(url);}}
+  if(!src){if(/^image\/(jpeg|png|webp)$/i.test(file.type)&&file.size<=2*1024*1024)return file;throw new Error('เปิดภาพไม่ได้ กรุณาเลือกภาพ JPG หรือ PNG');}
+  const k=Math.min(1,1600/Math.max(w,h)),c=document.createElement('canvas');c.width=Math.round(w*k);c.height=Math.round(h*k);c.getContext('2d').drawImage(src,0,0,c.width,c.height);done();
+  for(const q of [0.82,0.7,0.55]){const b=await new Promise(res=>c.toBlob(res,'image/jpeg',q));if(b&&b.size<=1.9*1024*1024)return new File([b],'visit.jpg',{type:'image/jpeg'});}
+  throw new Error('ภาพใหญ่เกินไป');
+ }
+ // ผูกปุ่มเพิ่ม/ลบภาพการนิเทศในพื้นที่ root ครั้งเดียว · onChange(requestId, photos) ให้หน้าอัปเดตข้อมูลแล้ววาดใหม่
+ function bindVisitPhotos(root,onChange){
+  if(!root||root.__vpBound)return;root.__vpBound=true;
+  root.addEventListener('change',async ev=>{
+   const input=ev.target.closest?.('[data-vp-up]');if(!input||!input.files?.[0])return;
+   const id=Number(input.dataset.vpUp),label=input.closest('label');label?.classList.add('loading');if(label)label.querySelector('span').textContent='กำลังอัปโหลด…';
+   try{const fd=new FormData();fd.append('file',await shrinkImage(input.files[0]));const res=await apiRequest(`/api/supervision/visit-photos/${id}`,{method:'POST',body:fd});onChange?.(id,{add:res.file});toast('เพิ่มภาพการนิเทศแล้ว');}
+   catch(x){toast(x.message||'อัปโหลดภาพไม่สำเร็จ',true);onChange?.(id,{});}
+  });
+  root.addEventListener('click',async ev=>{
+   const del=ev.target.closest?.('[data-vp-del]');if(!del)return;ev.preventDefault();
+   if(!confirm('ลบภาพการนิเทศนี้?'))return;del.disabled=true;
+   try{await apiRequest(`/api/supervision/visit-photos/files/${del.dataset.vpDel}`,{method:'DELETE'});onChange?.(Number(del.dataset.vpReq),{remove:Number(del.dataset.vpDel)});}
+   catch(x){del.disabled=false;toast(x.message||'ลบภาพไม่สำเร็จ',true);}
+  });
+ }
+ // ใช้ผลจาก bindVisitPhotos อัปเดตรายการในหน่วยความจำ
+ function applyVisitPhotos(r,change){
+  if(!r)return;r.visit_photos||=[];
+  if(change.add)r.visit_photos.push(change.add);
+  if(change.remove)r.visit_photos=r.visit_photos.filter(f=>f.id!==change.remove);
+ }
  function result(r,focus,{word}={}){
   const e=r.evaluation;if(!e)return '';
   return `<article class="sv-res${focus?' focus':''}" id="r-${r.id}"><div class="sv-res-head"><div><h2>${esc(r.teacher_name)}</h2>
@@ -67,6 +109,7 @@
     <div class="sv-sc"><span>${no}. ${esc(it.label)}</span>${mx===2&&it.group?`<span class="sv-done ${Number(it.score)?'on':''}">${Number(it.score)?'✓ ปฏิบัติ':'✗ ไม่ปฏิบัติ'}</span>`:`<span class="sv-dots" aria-label="${it.score} จาก ${mx}">${Array.from({length:mx},(_,k)=>`<i${k+1<=it.score?' class="on"':''}></i>`).join('')}</span>`}<b>${it.score}</b></div>`;}).join('')}</div>
    <div><div style="font-weight:600;color:#33506b;margin-bottom:6px">ข้อเสนอแนะเพื่อพัฒนา</div><div class="sv-sugg">${e.suggestion?esc(e.suggestion):'<span style="color:#8aa0b4">ผู้นิเทศไม่ได้ระบุข้อเสนอแนะ</span>'}</div>
    ${r.topic?`<p class="sv-hint" style="margin-top:10px">หัวข้อที่ครูขอรับข้อเสนอแนะ: ${esc(r.topic)}</p>`:''}</div></div>
+   ${visitPhotos(r)?`<div style="padding:0 18px">${visitPhotos(r)}</div>`:''}
    <div class="sv-res-foot"><span>ผู้นิเทศ: ${esc(e.evaluator_name)}${e.evaluator_position?` (${esc(e.evaluator_position)})`:''}</span><span>บันทึกผลเมื่อ ${stamp(e.evaluated_at)}</span><button type="button" class="sv-btn sm" data-print="${r.id}">พิมพ์แบบนิเทศ${word?' (PDF)':''}</button>${word?`<button type="button" class="sv-btn sm" data-print-word="${r.id}">Word</button>`:''}</div></article>`;
  }
  // ---------- เอกสารพิมพ์: PDF (หน้าต่างพิมพ์ → บันทึกเป็น PDF) และ Word (.doc) ----------
@@ -80,6 +123,13 @@ table.crit{width:auto;margin:2px 0}table.crit td{border:0;padding:0 8px 0 0;font
 table.list th,table.list td{font-size:13px}table.wk td{height:58px;font-size:12.5px}table.wk .it{margin-bottom:3px}table.wk .off{color:#666;text-align:center}.sm{font-size:12px;color:#333}`;
  const WORD_CSS=`body{font-family:'TH Sarabun New';font-size:15pt}h1{font-size:20pt}th,td{font-size:14pt}table.list th,table.list td{font-size:13pt}table.wk td{font-size:12pt}table.crit td{font-size:13pt}.sm{font-size:12pt}`;
  function output(kind,title,body,{landscape}={}){
+  if(kind==='word'&&/<img class="vp" src="/.test(body)){
+   // Word เปิดภาพจากระบบเองไม่ได้ (ต้องล็อกอิน) — ฝังภาพเป็น data URL ก่อนดาวน์โหลด
+   const urls=[...new Set([...body.matchAll(/<img class="vp" src="([^"]+)"/g)].map(m=>m[1]))];
+   Promise.all(urls.map(async u=>{try{const b=await (await fetch(u.replace(/&amp;/g,'&'),{credentials:'same-origin'})).blob();return [u,await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b);})];}catch{return [u,null];}}))
+    .then(pairs=>{let out=body;for(const [u,d] of pairs)if(d)out=out.split(`src="${u}"`).join(`src="${d}"`);output(kind,title,out.replace(/<img class="vp"/g,'<img class="vp-done"'),{landscape});});
+   return;
+  }
   if(kind==='word'){
    const size=landscape?'29.7cm 21cm':'21cm 29.7cm';
    const html=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>${esc(title)}</title>
@@ -92,7 +142,7 @@ table.list th,table.list td{font-size:13px}table.wk td{height:58px;font-size:12.
   const html=`<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
 <style>@page{size:A4 ${landscape?'landscape':'portrait'};margin:14mm 15mm}${DOC_CSS}@media screen{body{padding:20px;max-width:${landscape?1120:820}px;margin:auto}}</style></head><body>${body}
-<script>document.fonts&&document.fonts.ready.then(()=>setTimeout(()=>print(),200));<\/script></body></html>`;
+<script>Promise.all([document.fonts?document.fonts.ready:0,...[...document.images].map(i=>i.complete?0:new Promise(r=>{i.onload=i.onerror=r;}))]).then(()=>setTimeout(()=>print(),200));<\/script></body></html>`;
   const w=window.open('','_blank');if(!w){toast('เบราว์เซอร์บล็อกหน้าต่างพิมพ์ กรุณาอนุญาตป๊อปอัป',true);return;}
   w.document.open();w.document.write(html);w.document.close();
  }
@@ -131,7 +181,13 @@ ${BRK}
 <p style="margin:8px 0 2px"><b>ข้อเสนอแนะของผู้นิเทศ</b></p><div class="sugg">${e.suggestion?esc(e.suggestion):''}</div>
 <table class="sign"><tr><td>ลงชื่อ .................................<br>(${esc(r.teacher_name)})<br>ผู้รับการนิเทศ${r.teacher_position?` · ${esc(r.teacher_position)}`:''}</td>
 <td>ลงชื่อ ${sign(e.evaluator_user_id)}<br>(${esc(e.evaluator_name)})<br>ผู้นิเทศ${e.evaluator_position?` · ${esc(e.evaluator_position)}`:''}</td>
-${sameDir?'':`<td>ลงชื่อ ${sign(director?.user_id)}<br>(${director?.name?esc(director.name):'.................................'})<br>${esc(director?.position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง')}</td>`}</tr></table>`;
+${sameDir?'':`<td>ลงชื่อ ${sign(director?.user_id)}<br>(${director?.name?esc(director.name):'.................................'})<br>${esc(director?.position||'ผู้อำนวยการโรงเรียนบ้านป่าเด็ง')}</td>`}</tr></table>${photoPage(r)}`;
+ }
+ // ภาพประกอบท้ายแบบนิเทศ (ภาพการนิเทศของผู้นิเทศ) — ขึ้นหน้าใหม่
+ function photoPage(r){
+  const list=Array.isArray(r.visit_photos)?r.visit_photos:[];if(!list.length)return '';
+  return `${BRK}<h1 style="font-size:18px">ภาพประกอบการนิเทศการสอน</h1><div class="c sm">${esc(r.teacher_name)} · วันที่ ${TH(parse(r.visit_date).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'}))} คาบที่ ${TH(r.period)}</div>
+<table class="photos" style="margin-top:10px">${list.map((f,i)=>`<tr><td class="c" style="border:0;padding:6px 0"><img class="vp" src="${esc(location.origin+f.url)}" alt="ภาพการนิเทศ ${i+1}" style="max-width:100%;max-height:105mm;width:auto;height:auto;border:1px solid #999"><div class="sm">ภาพที่ ${TH(i+1)}</div></td></tr>`).join('')}</table>`;
  }
  function printForm(r,opts={},kind='pdf'){
   if(!r?.evaluation)return;
@@ -155,5 +211,5 @@ ${sameDir?'':`<td>ลงชื่อ ${sign(director?.user_id)}<br>(${director?.
   const t=document.createElement('div');t.className='sv-toast'+(error?' err':'');t.textContent=message;box.appendChild(t);
   while(box.children.length>3)box.firstChild.remove();setTimeout(()=>t.remove(),error?5500:3800);
  }
- root.SupervisionUI={printForm,printForms,output,TH,BANDS,bandOf,bandKey,bandTag,bandLegend,evidence,evidenceTag,STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
+ root.SupervisionUI={visitPhotos,bindVisitPhotos,applyVisitPhotos,shrinkImage,printForm,printForms,output,TH,BANDS,bandOf,bandKey,bandTag,bandLegend,evidence,evidenceTag,STATUS,DAYS,esc,date,shortDate,stamp,pill,overdue,classLabel,level,pct,stats,details,result,modal,close,toast,parse};
 })(typeof window==='undefined'?globalThis:window);
