@@ -14,6 +14,16 @@
 .lb-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff;max-height:66vh}
 .lb-table{width:100%;border-collapse:collapse}.lb-table th,.lb-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px}.lb-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0}.lb-table tr:last-child td{border-bottom:0}.lb-table .num{text-align:right;font-variant-numeric:tabular-nums;width:40px}
 .lb-cap{font-size:13px;color:var(--color-text-muted);margin:-4px 0 10px}.lb-muted{color:var(--color-text-muted)}
+.lb-mlist{display:none;list-style:none;margin:0;padding:0;gap:8px}
+.lb-mlist li{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;padding:10px 12px;border:1px solid var(--color-border);border-radius:14px;background:#fff}
+.lb-mlist .no{grid-row:span 2;align-self:center;min-width:26px;height:26px;border-radius:50%;background:#eef4fb;color:#315C86;font-size:12px;display:grid;place-items:center;font-variant-numeric:tabular-nums}
+.lb-mlist b{font-size:15px;color:var(--color-forest-900);font-weight:600}.lb-mlist small{font-size:13px;color:var(--color-text-muted)}
+@media(max-width:640px){
+  .tw-head{align-items:stretch}.tw-actions{width:100%}.tw-actions .tw-term{flex:1}.tw-actions .tw-term select{min-width:0;width:100%}.tw-actions .btn{flex:1 1 100%;width:100%!important}
+  .lb-tabs{display:grid;grid-template-columns:1fr 1fr}.lb-tabs button{padding:10px}
+  .lb-row>select,.lb-row>input{flex:1 1 100%;width:100%;min-width:0;font-size:16px;padding:10px 12px}
+  .lb-wrap{display:none}.lb-mlist{display:grid}
+}
 </style>
 </head>
 <body>
@@ -27,6 +37,7 @@
   <div class="lb-row"><select id="pick"></select><input type="search" id="q" placeholder="ค้นหาชื่อ / เลขประจำตัว (ทั้งโรงเรียน)" autocomplete="off"></div>
   <p class="lb-cap" id="caption"></p>
   <div class="lb-wrap"><table class="lb-table"><thead id="head"></thead><tbody id="rows"><tr><td class="lb-muted">กำลังโหลด…</td></tr></tbody></table></div>
+  <ul class="lb-mlist" id="mlist"><li class="lb-muted">กำลังโหลด…</li></ul>
 </main>
 <script src="/js/api.js"></script>
 <script src="/js/learning-base-export.js"></script>
@@ -64,6 +75,7 @@ function render(){
   const showBase=q||tab==='room',showRoom=q||tab==='base';
   $('head').innerHTML=`<tr><th class="num">ที่</th>${showRoom?'<th>ชั้น/ห้อง</th>':''}<th>เลขประจำตัว</th><th>ชื่อ–นามสกุล</th>${showBase?'<th>ฐานการเรียนรู้</th>':''}</tr>`;
   $('rows').innerHTML=rows.map((s,i)=>`<tr><td class="num">${i+1}</td>${showRoom?`<td>${esc(room(s))}</td>`:''}<td>${esc(s.student_code)}</td><td>${esc(s.full_name)}</td>${showBase?`<td>${s.base?esc(s.base):'<span class="lb-muted">ยังไม่มีฐาน</span>'}</td>`:''}</tr>`).join('')||`<tr><td colspan="5" class="lb-muted">${q?'ไม่พบนักเรียน':'ยังไม่มีรายชื่อ'}</td></tr>`;
+  $('mlist').innerHTML=rows.map((s,i)=>`<li><span class="no">${i+1}</span><b>${esc(s.full_name)}</b><small>${[showRoom?esc(room(s)):'',esc(s.student_code),showBase?(s.base?esc(s.base):'ยังไม่มีฐาน'):''].filter(Boolean).join(' · ')}</small></li>`).join('')||`<li class="lb-muted">${q?'ไม่พบนักเรียน':'ยังไม่มีรายชื่อ'}</li>`;
   const m=rows.filter(s=>s.gender==='M').length,f=rows.filter(s=>s.gender==='F').length;
   const base=tab==='base'&&!q?d.bases.find(b=>String(b.id)===v):null;
   $('caption').textContent=`${q?'ผลค้นหา ':''}${rows.length}${base?.capacity?` / ${base.capacity}`:''} คน · ชาย ${m} · หญิง ${f}`;
