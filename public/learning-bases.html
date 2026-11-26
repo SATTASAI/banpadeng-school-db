@@ -11,7 +11,10 @@
 <style>
 .lb-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}.lb-tabs button{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;color:#315C86;cursor:pointer}.lb-tabs button.on{background:#183153;color:#fff;border-color:#183153}
 .lb-box{border:1px solid var(--color-border);border-radius:14px;background:#fff;padding:14px;margin-bottom:14px}.lb-box h2{font-size:17px;margin:0 0 10px;color:var(--color-forest-900)}
-.lb-methods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}.lb-methods label{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;cursor:pointer;font-size:14px}.lb-methods label:has(input:checked){border-color:#2D7FD3;background:#f2f8ff}
+.lb-methods{display:flex;flex-wrap:wrap;gap:8px}.lb-methods label{position:relative;display:flex;gap:8px;align-items:center;padding:8px 10px 8px 12px;border:1px solid var(--color-border);border-radius:12px;cursor:pointer;font-size:14px;white-space:nowrap}.lb-methods label:has(input[type=radio]:checked){border-color:#2D7FD3;background:#f2f8ff}
+.lb-info{width:20px;height:20px;border-radius:50%;border:0;background:#e8f2fd;color:#2D7FD3;font:700 12px/20px inherit;padding:0;cursor:help;flex:none}.lb-info:focus-visible{outline:2px solid #9cc7ef}
+.lb-tip{display:none;position:absolute;left:0;top:calc(100% + 6px);z-index:5;width:max-content;max-width:min(260px,80vw);white-space:normal;background:#183153;color:#fff;font-size:13px;line-height:1.5;padding:8px 10px;border-radius:10px;box-shadow:0 8px 24px rgba(20,40,70,.2)}
+.lb-info:hover+.lb-tip,.lb-info:focus+.lb-tip{display:block}
 .lb-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.lb-row select,.lb-row input[type=search]{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}.lb-row .btn{width:auto}
 .lb-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff;max-height:64vh}
 .lb-table{width:100%;border-collapse:collapse}.lb-table th,.lb-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}.lb-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0;z-index:1}.lb-table tr:last-child td{border-bottom:0}
@@ -75,6 +78,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
 const gradeNo=g=>{const m=String(g??'').match(/([1-6])/);return m?Number(m[1]):0};
 let d=null,members=new Map(),preview=null,draft=[],tab='auto';
+const SHORT={balanced:'คละเท่ากัน',random:'สุ่ม',by_grade:'ตามชั้น',whole_room:'ยกห้อง',keep_previous:'ฐานเดิม'};
 const can=()=>!!d?.permissions?.manage;
 const showError=msg=>{const e=$('error');e.textContent=msg||'';e.style.display=msg?'block':'none'};
 
@@ -87,7 +91,7 @@ async function load(year){
     draft=d.bases.map(b=>({...b}));preview=null;$('previewBox').hidden=true;
     $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current_year?' (ปีปัจจุบัน)':''}</option>`).join('');$('year').value=String(d.academic_year);
     if(!can()&&['auto','settings'].includes(tab))tab='overview';
-    $('methods').innerHTML=Object.entries(d.methods).map(([k,v],i)=>`<label><input type="radio" name="method" value="${k}"${i?'':' checked'}><span>${esc(v)}</span></label>`).join('');
+    $('methods').innerHTML=Object.entries(d.methods).map(([k,v],i)=>`<label><input type="radio" name="method" value="${k}"${i?'':' checked'}><span>${esc(SHORT[k]||k)}</span><button type="button" class="lb-info" aria-label="${esc(v)}">!</button><span class="lb-tip" role="tooltip">${esc(v)}</span></label>`).join('');
     render();
   }catch(e){showError(e.message)}
 }
@@ -140,13 +144,14 @@ async function runAuto(apply,seed){
     const map=new Map();for(const [sid,m] of members){if(r.scope==='unassigned'||(r.kept&&m.locked&&$('keepLocked').checked))map.set(sid,m.base_id)}
     for(const a of r.assignments)map.set(a.student_id,a.base_id);
     $('previewHead').innerHTML=summaryHead;$('previewBody').innerHTML=summaryRows(map,false);
-    $('previewTitle').textContent='ตัวอย่างผลการจัด: '+d.methods[r.method];
+    $('previewTitle').textContent='ตัวอย่างผลการจัด: '+(SHORT[r.method]||r.method);
     $('previewInfo').textContent=`จัด ${r.placed} คน · คงไว้ ${r.kept} คน${r.unplaced?` · ไม่มีฐานที่ว่าง/รับชั้นนี้ ${r.unplaced} คน`:''}`;
     $('previewBox').hidden=false;$('previewBox').scrollIntoView({behavior:'smooth',block:'start'});
   }catch(e){showError(e.message)}
 }
 $('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b)return;if(tab==='settings')readDraft();tab=b.dataset.tab;render()});
 $('year').addEventListener('change',()=>load($('year').value));
+$('methods').addEventListener('click',e=>{const b=e.target.closest('.lb-info');if(b){e.preventDefault();b.focus()}});
 $('previewBtn').addEventListener('click',()=>runAuto(false));
 $('rerollBtn').addEventListener('click',()=>runAuto(false));
 $('applyBtn').addEventListener('click',()=>{if(!preview)return;const msg=preview.scope==='all'?'บันทึกผลนี้แทนการจัดเดิมทั้งหมด'+($('keepLocked').checked?' (ยกเว้นคนที่จัดเอง)':'')+' ใช่ไหม':'บันทึกผลนี้ให้นักเรียนที่ยังไม่มีฐาน ใช่ไหม';if(confirm(msg))runAuto(true,preview.seed)});
