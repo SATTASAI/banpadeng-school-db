@@ -1,3 +1,4 @@
+import {GRADES_URL} from '../lib/grade-owned.js';
 import {ensureFinanceQueueNotifications} from './project-workflow.js';
 import {FINANCE_ROLE_SQL} from '../lib/finance-roles.js';
 import {ensureProcurementSchema} from './procurement.js';
@@ -10,7 +11,7 @@ const ready=new WeakSet();
 async function ensure(env){if(ready.has(env.DB))return;await env.DB.prepare(`CREATE TABLE IF NOT EXISTS notification_reads (
  user_id INTEGER NOT NULL REFERENCES users(id),message_key TEXT NOT NULL,read_at TEXT NOT NULL DEFAULT(datetime('now')),PRIMARY KEY(user_id,message_key))`).run();ready.add(env.DB);}
 // ตารางของโมดูลที่สร้างเมื่อเปิดใช้ครั้งแรก — รวมเข้า feed เฉพาะเมื่อมีตารางแล้ว
-const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access','official_duties','anonymous_feedback'];
+const OPTIONAL_TABLES=['substitute_assignments','substitute_cancellations','substitute_absences','timetable_entries','personnel_accounts','personnel_records','correspondence_records','supervision_notifications','supervision_requests','security_notifications','maintenance_requests','maintenance_updates','department_staff','student_transfer_notices','student_transfer_access','official_duties','anonymous_feedback','gr_student_match_reviews'];
 export async function optionalFeedTables(env){
  const {results}=await env.DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN (${OPTIONAL_TABLES.map(()=>'?').join(',')})`).bind(...OPTIONAL_TABLES).all();
  return new Set(results.map(r=>r.name));
@@ -66,16 +67,24 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  }
  // Preliminary notices share the registry permission boundary. Keep a separate
  // CTE so D1 compound-select limits do not grow with the other optional feeds.
- const transfers=!forLine&&tables.has('student_transfer_notices')&&tables.has('student_transfer_access');
- const transferCte=transfers?`, transfer_messages AS (
+ const transferNotices=!forLine&&tables.has('student_transfer_notices')&&tables.has('student_transfer_access');
+ // นำเข้ารายชื่อนักเรียน (DMC) ที่ระบบเกรด: ข้อมูลไม่ตรงหลายช่อง → แจ้งผู้ดูแลระบบจนกว่าจะตรวจ (ไม่แสดงชื่อนักเรียนในแจ้งเตือน)
+ // รวมไว้ใน CTE เดียวกับแจ้งย้าย เพื่อไม่ให้จำนวน compound select ของ D1 เกิน
+ const studentMatch=tables.has('gr_student_match_reviews')&&user.role==='superadmin';
+ const matchSql=`SELECT 'student-match:'||r.id,'ข้อมูลนักเรียนไม่ตรงกับทะเบียน',
+ 'นำเข้ารายชื่อ เลขประจำตัว '||COALESCE(json_extract(r.payload,'$.code'),'-')||' ข้อมูลไม่ตรงหลายช่อง · ตรวจที่ระบบรายงานผลการเรียน',r.created_at,'${GRADES_URL}/admin.html#matches',NULL,r.created_by,1
+ FROM gr_student_match_reviews r WHERE r.status='pending'`;
+ const transfers=transferNotices||studentMatch;
+ const transferCte=!transfers?'':!transferNotices?`, transfer_messages AS (${matchSql})`:`, transfer_messages AS (
  SELECT 'transfer-notice:'||n.id,'แจ้งย้าย'||CASE n.direction WHEN 'in' THEN 'เข้า' ELSE 'ออก' END||'ใหม่',
  'ผู้ปกครองแจ้งย้ายเบื้องต้น · '||n.student_name||' · กรุณาตรวจสอบข้อมูล',
  n.created_at,'/dmcreport/?view=notices',NULL,NULL,0
  FROM student_transfer_notices n JOIN users me ON me.id=?
  WHERE n.acknowledged_at IS NULL AND me.status='active' AND me.deleted_at IS NULL
  AND me.role IS NOT NULL AND me.role NOT IN ('','viewer')
- AND (me.role='superadmin' OR EXISTS(SELECT 1 FROM student_transfer_access a WHERE a.user_id=me.id))
- )`:'';
+ AND (me.role='superadmin' OR EXISTS(SELECT 1 FROM student_transfer_access a WHERE a.user_id=me.id))${studentMatch?`
+ UNION ALL ${matchSql}`:''}
+ )`;
  // ไปราชการ: ผอ. รอรับทราบ · ฝ่ายบุคคลจัดสอนแทน · ผู้บันทึกได้รับแจ้งเมื่อ ผอ. รับทราบ
  const duties=tables.has('official_duties');
  // ข้อเสนอแนะไม่ระบุชื่อ: แจ้งแอดมิน (รวมใน CTE เดียวกับไปราชการเพื่อไม่เพิ่มจำนวน term ของ messages)
@@ -150,7 +159,7 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  return {sql,values:[user.role==='superadmin'?1:0,user.id,isAdmin(user)?1:0,user.id,
  personnelHead?1:0,user.id,executive,user.id,
  user.role==='superadmin'?1:0,personnelHead?1:0,user.id,executive,user.id,
- user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,...(transfers?[user.id]:[]),...(duties?[director?1:0,user.id,personnelMember?1:0,user.id,user.id]:[]),user.id]};
+ user.id,user.id,director?1:0,user.id,user.id,...extraValues,...tertiaryValues,...(transferNotices?[user.id]:[]),...(duties?[director?1:0,user.id,personnelMember?1:0,user.id,user.id]:[]),user.id]};
 }
 // รายการแจ้งเตือนที่ยังไม่อ่านของผู้ใช้หนึ่งคน (ใช้ร่วมกับการส่ง LINE)
 export async function unreadNotificationsFor(env,user,limit=50,{forLine=false,forDelivery=false}={}){

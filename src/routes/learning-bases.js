@@ -346,35 +346,48 @@ export function similarity(a, b) {
   return 1 - prev[y.length] / Math.max(x.length, y.length);
 }
 
-// จับคู่แถวในไฟล์กับทะเบียนนักเรียน: เลขประจำตัว → ชื่อตรงกัน (ห้องเดียวกันก่อน) → ชื่อใกล้เคียงในห้องเดียวกัน
-export function matchImportRows(rows, students) {
-  const byCode = new Map(students.filter((s) => s.student_code).map((s) => [String(s.student_code).trim(), s]));
-  const byName = new Map();
-  for (const s of students) { const k = personKey(s.full_name); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(s); }
+// จับคู่แถวในไฟล์กับทะเบียนนักเรียน — ตรวจหลายช่อง ไม่จับคู่จากช่องเดียว (คำสั่งผู้ใช้ 26 พ.ย. 2569)
+// ช่อง: เลขประจำตัว, ชื่อ–นามสกุล, เพศ (คำนำหน้า), ชั้น (ตามปีของไฟล์), ห้อง (เฉพาะปีปัจจุบัน — ตรงนับ ไม่ตรงไม่นับเป็นขัด)
+// อัตโนมัติเมื่อ ตรง ≥ 3 ช่อง ไม่มีช่องขัดกัน และมีเลขประจำตัวหรือชื่อตรง · นอกนั้นให้ผู้นำเข้าเลือก (แสดงช่องที่ตรง/ไม่ตรง)
+export const MATCH_LABELS = { code: "เลขประจำตัว", name: "ชื่อ–นามสกุล", gender: "เพศ", grade: "ชั้น", room: "ห้อง" };
+const prefixGender = (v) => { const t = String(v ?? "").trim(); return /^(เด็กชาย|ด\.\s?ช|นาย|ชาย|ช$|m$)/i.test(t) ? "M" : /^(เด็กหญิง|ด\.\s?ญ|นางสาว|น\.ส|นาง|หญิง|ญ$|f$)/i.test(t) ? "F" : ""; };
+export function compareImportRow(file, s, shift = 0) {
+  const matched = [], conflicts = [];
+  const fc = String(file.code || "").trim(), sc = String(s.student_code || "").trim();
+  if (fc && sc) (fc === sc ? matched : conflicts).push("code");
+  const fn = personKey(file.name), sn = personKey(s.full_name);
+  if (fn && sn) { const x = similarity(fn, sn); if (x === 1) matched.push("name"); else if (x < 0.85) conflicts.push("name"); }
+  const fg = prefixGender(file.gender), sg = genderOf(s.gender, s.full_name);
+  if (fg && sg) (fg === sg ? matched : conflicts).push("gender");
+  const fgr = gradeNumber(file.grade_level), sgr = gradeNumber(s.grade_level);
+  if (fgr && sgr) (fgr - sgr === shift ? matched : conflicts).push("grade");
+  if (shift === 0 && fgr === sgr && file.classroom && roomKey(file.grade_level, file.classroom) === roomKey(s.grade_level, s.classroom)) matched.push("room");
+  const strong = matched.includes("code") || matched.includes("name");
+  return { matched, conflicts, auto: matched.length >= 3 && !conflicts.length && strong };
+}
+export function matchImportRows(rows, students, { shift = 0 } = {}) {
+  const brief = (s, c) => ({ id: s.id, student_code: s.student_code, full_name: s.full_name, room: `${s.grade_level || ""}/${s.classroom || ""}`, status: s.status,
+    matched: c.matched, conflicts: c.conflicts, score: Math.round(similarity(c.key, personKey(s.full_name)) * 100) });
   const byRoom = new Map();
   for (const s of students) { const k = roomKey(s.grade_level, s.classroom); if (!byRoom.has(k)) byRoom.set(k, []); byRoom.get(k).push(s); }
-  const brief = (s) => ({ id: s.id, student_code: s.student_code, full_name: s.full_name, room: `${s.grade_level || ""}/${s.classroom || ""}`, status: s.status });
-  const used = new Set();
   const out = rows.map((r) => {
     const name = [r.title, r.first_name, r.last_name].filter(Boolean).join(" ").trim() || String(r.full_name || "").trim();
-    const room = roomKey(r.grade_level, r.classroom);
     const base = { row: r.row, name, grade_level: r.grade_level, classroom: r.classroom, base: String(r.base || "").replace(/\s+/g, " ").trim() };
     if (!base.base) return { ...base, status: "no_base" };
-    const code = String(r.student_code || "").trim();
-    if (code && byCode.has(code)) return { ...base, status: "exact", student: brief(byCode.get(code)) };
-    const same = byName.get(personKey(name)) || [];
-    const pickSame = same.filter((s) => roomKey(s.grade_level, s.classroom) === room);
-    const exact = pickSame.length === 1 ? pickSame[0] : same.length === 1 ? same[0] : null;
-    if (exact) return { ...base, status: "exact", student: brief(exact) };
-    const key = personKey(name);
-    const candidates = (pickSame.length > 1 ? pickSame : byRoom.get(room) || [])
-      .map((s) => ({ s, score: similarity(key, personKey(s.full_name)) }))
-      .filter((x) => x.score >= 0.6).sort((a, b) => b.score - a.score).slice(0, 3)
-      .map((x) => ({ ...brief(x.s), score: Math.round(x.score * 100) }));
+    const file = { code: r.student_code, name, gender: r.title || r.gender, grade_level: r.grade_level, classroom: r.classroom };
+    const key = personKey(name), code = String(r.student_code || "").trim();
+    // ชั้น/ห้องในทะเบียนที่ควรเป็นของปีไฟล์นี้ (ปีก่อน = ชั้นต่ำกว่า)
+    const pool = new Map();
+    for (const s of students) if ((code && String(s.student_code || "").trim() === code) || (key && personKey(s.full_name) === key)) pool.set(s.id, s);
+    const near = shift === 0 ? (byRoom.get(roomKey(r.grade_level, r.classroom)) || []) : students.filter((s) => gradeNumber(s.grade_level) === (gradeNumber(r.grade_level) || 0) - shift);
+    for (const s of near) if (similarity(key, personKey(s.full_name)) >= 0.6) pool.set(s.id, s);
+    const scored = [...pool.values()].map((s) => ({ s, c: { ...compareImportRow(file, s, shift), key } }));
+    const auto = scored.filter((x) => x.c.auto);
+    if (auto.length === 1) return { ...base, status: "exact", student: brief(auto[0].s, auto[0].c) };
+    const candidates = scored.sort((a, b) => b.c.matched.length - a.c.matched.length || a.c.conflicts.length - b.c.conflicts.length).slice(0, 3).map((x) => brief(x.s, x.c));
     return { ...base, status: candidates.length ? "fuzzy" : "none", candidates };
   });
-  for (const r of out) if (r.status === "exact") used.add(r.student.id);
-  // ตัวเลือกใกล้เคียงที่ถูกจับคู่ตรงตัวไปแล้วกับแถวอื่น ไม่ต้องเสนอซ้ำ
+  const used = new Set(out.filter((r) => r.status === "exact").map((r) => r.student.id));
   for (const r of out) if (r.status === "fuzzy") { r.candidates = r.candidates.filter((c) => !used.has(c.id)); if (!r.candidates.length) r.status = "none"; }
   return out;
 }
@@ -390,8 +403,10 @@ async function handleImport(request, env, user) {
   if (year > current) return jsonResponse({ error: "นำเข้าได้เฉพาะปีปัจจุบันหรือปีก่อนหน้า" }, 400);
   const rows = Array.isArray(body?.rows) ? body.rows : [];
   if (!rows.length || rows.length > 1500) return jsonResponse({ error: "ไม่มีข้อมูล หรือเกิน 1,500 แถว" }, 400);
-  const { results: all } = await env.DB.prepare("SELECT id, student_code, full_name, grade_level, classroom, status FROM students").all();
-  if (body.mode === "match") return jsonResponse({ ok: true, academic_year: year, rows: matchImportRows(rows, all || []) });
+  let all;
+  try { ({ results: all } = await env.DB.prepare("SELECT s.id, s.student_code, s.full_name, s.grade_level, s.classroom, s.status, d.gender FROM students s LEFT JOIN student_details d ON d.student_id = s.id").all()); }
+  catch { ({ results: all } = await env.DB.prepare("SELECT id, student_code, full_name, grade_level, classroom, status, NULL AS gender FROM students").all()); }
+  if (body.mode === "match") return jsonResponse({ ok: true, academic_year: year, labels: MATCH_LABELS, rows: matchImportRows(rows, all || [], { shift: year - current }) });
   if (body.mode !== "save") return jsonResponse({ error: "mode ไม่ถูกต้อง" }, 400);
   const ids = new Set((all || []).map((s) => s.id));
   const clean = [], seen = new Set();

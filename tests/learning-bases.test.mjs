@@ -221,7 +221,7 @@ test("API blocks repeating a past base (by lineage even after rename, or by same
   assert.equal((await api(env, 1, "/api/learning-bases/auto", "POST", { academic_year: 2569, method: "keep_previous" })).status, 400);
 });
 
-test("import matching: code, exact name (same room first), fuzzy only within the same room", () => {
+test("import matching checks several fields: ≥3 match, no conflicts, and code or name must match", () => {
   const students = [
     { id: 1, student_code: "100", full_name: "เด็กชายสมชาย ใจดี", grade_level: "ป.2", classroom: "1" },
     { id: 2, student_code: "101", full_name: "เด็กหญิงมาลี ศรีสุข", grade_level: "ป.2", classroom: "1" },
@@ -241,7 +241,11 @@ test("import matching: code, exact name (same room first), fuzzy only within the
   assert.equal(r[2].status, "fuzzy"); assert.equal(r[2].candidates[0].id, 4);
   assert.equal(r[3].status, "none"); // คนชื่อคล้ายอยู่คนละห้อง — ไม่เสนอ
   assert.equal(r[4].status, "no_base");
-  assert.equal(r[5].student.id, 2);
+  // เลขประจำตัวตรงอย่างเดียว แต่ชื่อ/ชั้นขัดกัน → ไม่จับคู่อัตโนมัติ ให้ผู้นำเข้าเลือก
+  assert.equal(r[5].status, "fuzzy"); assert.equal(r[5].candidates[0].id, 2);
+  assert.ok(r[5].candidates[0].conflicts.includes("name"));
+  // ชื่อใกล้เคียง + เพศ + ชั้น + ห้องตรง ก็ยังไม่อัตโนมัติ (ต้องมีเลขประจำตัวหรือชื่อตรง)
+  assert.deepEqual([...r[2].candidates[0].matched].sort(), ["gender", "grade", "room"]);
   assert(similarity("ธนพล", "ธนพน") > 0.7);
 });
 
