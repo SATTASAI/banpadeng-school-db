@@ -1,9 +1,8 @@
 // จัดนักเรียนเข้าฐานการเรียนรู้ (ฝ่ายบริหารทั่วไป) — ข้อมูลรายปีการศึกษา ป.1–6
-// ดู: สมาชิกฝ่ายบริหารทั่วไป ผู้บริหาร และผู้ดูแลระบบ · แก้ไข: สมาชิกฝ่ายบริหารทั่วไป + admin (superadmin/executive)
+// ดู: ครูและบุคลากรทุกคน (ยกเว้นบัญชีผู้ชมภายนอก) · แก้ไข: สมาชิกฝ่ายบริหารทั่วไป + admin (superadmin/executive)
 // ข้อมูลอยู่ในตาราง learning_bases / learning_base_members ของ system เท่านั้น (grades ไม่อ่าน/ไม่แสดง)
 import { getCurrentUser, isAdmin, jsonResponse } from "../lib/auth.js";
 import { ensureDepartmentStaff, belongsToDepartment } from "./department-staff.js";
-import { visibleDepartments } from "./nav-visibility.js";
 import { ASSIGN_METHODS, assignLearningBases } from "../lib/learning-base-assign.js";
 
 // ชื่อฐานตั้งต้น (จากไฟล์รายชื่อฐานการเรียนรู้ ปีการศึกษา 2569) — แก้ไขชื่อได้ที่หน้าเว็บ
@@ -82,9 +81,8 @@ async function isGeneralMember(env, user) {
 export async function learningBasePermissions(env, user) {
   if (!user?.role || user.role === "viewer") return { view: false, manage: false };
   if (isAdmin(user)) return { view: true, manage: true };
-  if (await isGeneralMember(env, user)) return { view: true, manage: true };
-  const v = await visibleDepartments(env, user).catch(() => ({ departments: [] }));
-  return { view: (v.departments || []).includes("general"), manage: false };
+  // ครูและบุคลากรทุกคนดูรายชื่อได้ (หน้า ระบบสนับสนุน → ฐานการเรียนรู้) · แก้ไขเฉพาะฝ่ายบริหารทั่วไป
+  return { view: true, manage: await isGeneralMember(env, user) };
 }
 
 async function audit(env, user, action, details) {
@@ -308,7 +306,7 @@ export async function handleLearningBasesRoute(request, env, pathname, method) {
   const user = await getCurrentUser(request, env);
   if (!user || !user.role) return jsonResponse({ error: "กรุณาเข้าสู่ระบบ" }, 401);
   const perm = await learningBasePermissions(env, user);
-  if (!perm.view) return jsonResponse({ error: "เฉพาะฝ่ายบริหารทั่วไป ผู้บริหาร และผู้ดูแลระบบ" }, 403);
+  if (!perm.view) return jsonResponse({ error: "ไม่มีสิทธิ์ดูข้อมูลนี้" }, 403);
   await ensureLearningBaseSchema(env);
   if (pathname === "/api/learning-bases" && method === "GET") return handleList(request, env, user, perm);
   if (!perm.manage) return jsonResponse({ error: "แก้ไขได้เฉพาะฝ่ายบริหารทั่วไปและผู้ดูแลระบบ" }, 403);

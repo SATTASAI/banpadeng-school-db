@@ -78,14 +78,16 @@ function environment() {
   db.exec(`CREATE TABLE users(id INTEGER PRIMARY KEY,email TEXT,full_name TEXT,role TEXT,status TEXT,created_at TEXT,deleted_at TEXT);
     CREATE TABLE academic_years(id INTEGER PRIMARY KEY,year_be INTEGER,status TEXT);
     CREATE TABLE students(id INTEGER PRIMARY KEY,student_code TEXT UNIQUE,full_name TEXT,grade_level TEXT,classroom TEXT,status TEXT);
+    CREATE TABLE staff_profiles(user_id INTEGER PRIMARY KEY,position TEXT,subjects TEXT,phone TEXT,homeroom_classroom TEXT,license_expiry_date TEXT);
     CREATE TABLE audit_logs(id INTEGER PRIMARY KEY,user_id INTEGER,action TEXT,resource TEXT,resource_id INTEGER,details TEXT,ip_address TEXT);
-    INSERT INTO users VALUES (1,'a@example.invalid','ผู้ดูแล','superadmin','active','2026-01-01',NULL),(2,'v@example.invalid','ภายนอก','viewer','active','2026-01-01',NULL);
+    INSERT INTO users VALUES (1,'a@example.invalid','ผู้ดูแล','superadmin','active','2026-01-01',NULL),(2,'v@example.invalid','ภายนอก','viewer','active','2026-01-01',NULL),(3,'t@example.invalid','ครู','teacher','active','2026-01-01',NULL);
     INSERT INTO academic_years VALUES (5,2569,'active');
     INSERT INTO students VALUES (10,'0010','เด็กชายหนึ่ง','ป.1','1','enrolled'),(11,'0011','เด็กหญิงสอง','ป.1','1','enrolled'),
       (12,'0012','เด็กชายสาม','ป.6','2','enrolled'),(13,'0013','เด็กหญิงย้าย','ป.6','2','transferred'),(14,'0014','อนุบาล','อ.2','1','enrolled');`);
-  const wrap = (sql) => { let values = []; const stmt = db.prepare(sql);
-    return { bind(...a) { values = a; return this; }, async first() { return stmt.get(...values) || null; }, async all() { return { results: stmt.all(...values) }; },
-      async run() { const r = stmt.run(...values); return { meta: { changes: r.changes } }; }, _sync() { stmt.run(...values); } }; };
+  // prepare ตอนรันจริง (เหมือน D1) — batch สร้างตารางแล้วสร้าง index ต่อได้
+  const wrap = (sql) => { let values = []; const stmt = () => db.prepare(sql);
+    return { bind(...a) { values = a; return this; }, async first() { return stmt().get(...values) || null; }, async all() { return { results: stmt().all(...values) }; },
+      async run() { const r = stmt().run(...values); return { meta: { changes: r.changes } }; }, _sync() { stmt().run(...values); } }; };
   return { db, JWT_SECRET: secret, DB: { prepare: wrap, async batch(list) { db.exec("BEGIN"); try { list.forEach((s) => s._sync()); db.exec("COMMIT"); } catch (e) { db.exec("ROLLBACK"); throw e; } } } };
 }
 async function api(env, userId, path, method = "GET", body) {
@@ -142,4 +144,43 @@ test("external viewer has no access; page and menu are wired", async () => {
   assert.equal(n.parentFor("learning-bases", "/learning-bases.html"), "general");
   assert(fs.existsSync("public/learning-bases.html"));
   assert(fs.readFileSync("src/index.js", "utf8").includes("handleLearningBasesRoute(request, env, pathname, method)"));
+});
+
+test("every teacher can view the list but only general department/admin can edit", async () => {
+  const env = environment();
+  await api(env, 1, "/api/learning-bases");
+  const r = await api(env, 3, "/api/learning-bases");
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(r.data.permissions.manage, false);
+  assert.equal(r.data.bases.length, 18);
+  assert.equal((await api(env, 3, "/api/learning-bases/auto", "POST", { academic_year: 2569, method: "balanced" })).status, 403);
+  // ครูในฝ่ายบริหารทั่วไปแก้ไขได้
+  env.db.prepare("UPDATE personnel_records SET departments = 'ฝ่ายบริหารทั่วไป' WHERE user_id = 3").run();
+  assert.equal((await api(env, 3, "/api/learning-bases")).data.permissions.manage, true);
+});
+
+test("export builds base, room and summary sections; menu is under support", () => {
+  const ctx = vm.createContext({ URL }); vm.runInContext(fs.readFileSync("public/js/learning-base-export.js", "utf8"), ctx);
+  const X = ctx.LearningBaseExport;
+  const data = { academic_year: 2569, bases: [{ id: 1, name: "ดนตรีไทย", capacity: 2 }, { id: 2, name: "Barber", capacity: null }],
+    students: [{ id: 1, student_code: "1", full_name: "เด็กชายเอ", grade_level: "ป.2", classroom: "1", gender: "M" },
+      { id: 2, student_code: "2", full_name: "เด็กหญิงบี", grade_level: "ป.1", classroom: "2", gender: "F" },
+      { id: 3, student_code: "3", full_name: "เด็กหญิงซี", grade_level: "ป.1", classroom: "2", gender: "F" }],
+    members: [{ student_id: 1, base_id: 1 }, { student_id: 2, base_id: 1 }] };
+  const base = X.buildSections("base", data);
+  assert.deepEqual([...base.map((s) => s.sheet)], ["ดนตรีไทย", "Barber", "ยังไม่มีฐาน"]);
+  assert.equal(base[0].table.length, 3);
+  assert.equal(base[0].table[1][3], "เด็กหญิงบี"); // เรียง ป.1 ก่อน ป.2
+  const room = X.buildSections("room", data);
+  assert.deepEqual([...room.map((s) => s.sheet)], ["ป.1/2", "ป.2/1"]);
+  assert.equal(room[0].table[2][3], "ยังไม่มีฐาน");
+  const sum = X.buildSections("summary", data)[0].table;
+  assert.deepEqual([...sum[1]], ["ดนตรีไทย", "1", "1", "0", "0", "0", "0", "1", "1", "2", "2"]);
+  assert.equal(sum.at(-1)[9], "3");
+  assert.equal(X.pdfDefinition(base).content.length, 12);
+  const n = (() => { const c = vm.createContext({ URL }); vm.runInContext(fs.readFileSync("public/js/navigation-catalog.js", "utf8"), c); return c.SchoolNavigation; })();
+  assert.equal(n.routes["learning-base-list"], "/learning-base-list.html");
+  const html = fs.readFileSync("public/dashboard.html", "utf8");
+  assert(html.split("ระบบสนับสนุน</div>")[1].split("บริหารระบบ</div>")[0].includes('data-page="learning-base-list"'));
+  for (const page of ["public/learning-base-list.html", "public/learning-bases.html"]) assert(fs.readFileSync(page, "utf8").includes("/js/learning-base-export.js"));
 });
