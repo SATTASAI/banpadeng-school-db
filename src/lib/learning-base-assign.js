@@ -1,5 +1,5 @@
 // จัดนักเรียนเข้าฐานการเรียนรู้อัตโนมัติ (ฟังก์ชันล้วน ไม่แตะฐานข้อมูล — ทดสอบได้)
-// students: [{id, grade, room, gender:'M'|'F'|'', prev_base_name?}]
+// students: [{id, grade, room, gender:'M'|'F'|'', blocked?: Set(base_id)}] — blocked = ฐานที่เคยอยู่มาแล้ว (ห้ามซ้ำจนจบ ป.6)
 // bases:    [{id, name, capacity:null|number, grades:[1..6]}]
 // fixed:    Map(student_id → base_id) ที่คงไว้ (คนที่จัดเอง/คนที่มีฐานแล้วเมื่อจัดเฉพาะคนที่ยังไม่มีฐาน) — นับเป็นที่นั่งที่ใช้แล้ว
 // คืน { assignments: Map(student_id → base_id), unplaced: [student_id] }
@@ -8,8 +8,7 @@ export const ASSIGN_METHODS = {
   balanced: "คละชั้น ห้อง และเพศ ให้ทุกฐานเท่ากัน",
   random: "สุ่มเท่ากันทุกฐาน (ไม่สนชั้น/ห้อง)",
   by_grade: "ชั้นเดียวกันอยู่ฐานเดียวกันมากที่สุด",
-  whole_room: "ทั้งห้องเข้าฐานเดียวกัน (ห้องใหญ่เกินที่รับแบ่งไปฐานถัดไป)",
-  keep_previous: "คงฐานเดิมจากปีก่อน แล้วคละคนที่เหลือ",
+  whole_room: "ทั้งห้องเข้าฐานเดียวกัน (ห้องใหญ่เกินที่รับ หรือมีคนเคยอยู่ฐานนั้น แบ่งไปฐานถัดไป)",
 };
 
 export function seededRandom(seed) {
@@ -39,7 +38,8 @@ export function assignLearningBases({ students, bases, fixed = new Map(), method
   const avg = Math.max(1, Math.ceil(total / Math.max(1, bases.length)));
   const cap = (b) => (Number.isInteger(b.capacity) && b.capacity > 0 ? b.capacity : Infinity);
   const target = (b) => (cap(b) === Infinity ? avg : cap(b));
-  const eligible = (s) => bases.filter((b) => b.grades.includes(s.grade) && state.get(b.id).count < cap(b));
+  const allowed = (s, b) => b.grades.includes(s.grade) && !(s.blocked && s.blocked.has(b.id));
+  const eligible = (s) => bases.filter((b) => allowed(s, b) && state.get(b.id).count < cap(b));
   const assignments = new Map(), unplaced = [];
   const place = (s, b) => {
     const st = state.get(b.id); st.count++; bump(st.grade, s.grade); bump(st.room, `${s.grade}|${s.room}`); bump(st.gender, s.gender);
@@ -105,18 +105,12 @@ export function assignLearningBases({ students, bases, fixed = new Map(), method
         // ฐานที่เหลือที่ว่างมากสุด (ไม่กำหนดจำนวนรับ = ฐานที่คนน้อยสุด)
         const b = pick(options, [(x) => state.get(x.id).count - target(x), (x) => Math.floor(load(x) * 1000)]);
         const room_left = cap(b) === Infinity ? rest.length : cap(b) - state.get(b.id).count;
-        rest.slice(0, room_left).forEach((s) => place(s, b));
-        rest = rest.slice(room_left);
+        const take = rest.filter((s) => allowed(s, b)).slice(0, room_left);   // คนที่เคยอยู่ฐานนี้ไปฐานถัดไป
+        take.forEach((s) => place(s, b));
+        const taken = new Set(take);
+        rest = rest.filter((s) => !taken.has(s));
       }
     }
-  } else if (method === "keep_previous") {
-    const byName = new Map(bases.map((b) => [String(b.name).trim(), b]));
-    const rest = [];
-    for (const s of pool) {
-      const b = byName.get(String(s.prev_base_name || "").trim());
-      if (b && b.grades.includes(s.grade) && state.get(b.id).count < cap(b)) place(s, b); else rest.push(s);
-    }
-    balancedPlace(rest);
   }
   // ซ่อมคนที่ยังไม่มีที่: ย้ายคนในฐานที่เต็ม (ที่รับชั้นของคนนี้) ไปฐานอื่นที่ยังว่างและรับชั้นของเขา แล้วใส่คนนี้แทน
   const unplace = (s, bid) => {
@@ -124,15 +118,17 @@ export function assignLearningBases({ students, bases, fixed = new Map(), method
     const rk = `${s.grade}|${s.room}`; st.room.set(rk, st.room.get(rk) - 1); st.gender.set(s.gender, st.gender.get(s.gender) - 1);
     assignments.delete(s.id);
   };
+  const fixedIds = new Set(fixed.keys());
   const still = [];
   for (const sid of unplaced) {
     const s = studentById.get(sid);
     let done = false;
-    for (const b of bases.filter((x) => x.grades.includes(s.grade))) {
+    for (const b of bases.filter((x) => allowed(s, x))) {
       for (const [tid, bid] of assignments) {
         if (bid !== b.id) continue;
         const t = studentById.get(tid);
-        const to = bases.find((c) => c.id !== b.id && c.grades.includes(t.grade) && state.get(c.id).count < cap(c));
+        if (fixedIds.has(tid)) continue;
+        const to = bases.find((c) => c.id !== b.id && allowed(t, c) && state.get(c.id).count < cap(c));
         if (!to) continue;
         unplace(t, b.id); place(t, to); place(s, b); done = true; break;
       }

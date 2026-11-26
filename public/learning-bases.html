@@ -44,7 +44,7 @@
         <label><input type="checkbox" id="keepLocked" checked> คงคนที่จัดเองไว้</label>
         <button class="btn btn-primary" type="button" id="previewBtn">ดูตัวอย่าง</button>
       </div>
-      <p class="lb-note">ทุกวิธีเคารพจำนวนรับและชั้นที่แต่ละฐานรับ (ตั้งที่แท็บ ตั้งค่าฐาน) · ดูตัวอย่างก่อน แล้วกดบันทึก</p>
+      <p class="lb-note">ทุกวิธีเคารพจำนวนรับและชั้นที่แต่ละฐานรับ (ตั้งที่แท็บ ตั้งค่าฐาน) และไม่จัดให้ซ้ำฐานที่นักเรียนเคยอยู่จนจบ ป.6 · ดูตัวอย่างก่อน แล้วกดบันทึก</p>
     </div>
     <div class="lb-box" id="previewBox" hidden><h2 id="previewTitle">ตัวอย่างผลการจัด</h2>
       <div class="lb-wrap"><table class="lb-table"><thead id="previewHead"></thead><tbody id="previewBody"></tbody></table></div>
@@ -79,7 +79,7 @@ const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
 const gradeNo=g=>{const m=String(g??'').match(/([1-6])/);return m?Number(m[1]):0};
 let d=null,members=new Map(),preview=null,draft=[],tab='auto';
-const SHORT={balanced:'คละเท่ากัน',random:'สุ่ม',by_grade:'ตามชั้น',whole_room:'ยกห้อง',keep_previous:'ฐานเดิม'};
+const SHORT={balanced:'คละเท่ากัน',random:'สุ่ม',by_grade:'ตามชั้น',whole_room:'ยกห้อง'};
 const can=()=>!!d?.permissions?.manage;
 const showError=msg=>{const e=$('error');e.textContent=msg||'';e.style.display=msg?'block':'none'};
 
@@ -123,9 +123,10 @@ function renderList(){
   fr.innerHTML='<option value="">ทุกห้อง</option>'+rooms.map(r=>`<option>${esc(r)}</option>`).join('');fr.value=vr;
   const q=$('q').value.trim().toLowerCase();
   const rows=d.students.filter(s=>{const m=members.get(s.id);if(vb==='none'?m:vb&&String(m?.base_id)!==vb)return false;if(vr&&`${s.grade_level}/${s.classroom}`!==vr)return false;return !q||String(s.full_name).toLowerCase().includes(q)||String(s.student_code).includes(q)});
-  const opts=s=>'<option value="">— ยังไม่มีฐาน —</option>'+d.bases.filter(b=>b.grades.includes(gradeNo(s.grade_level))).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  const hist=s=>(d.history||{})[s.id];
+  const opts=s=>'<option value="">— ยังไม่มีฐาน —</option>'+d.bases.filter(b=>b.grades.includes(gradeNo(s.grade_level))&&!(hist(s)?.blocked||[]).includes(b.id)).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
   const nameOf=new Map(d.bases.map(b=>[b.id,b.name]));
-  $('list').innerHTML=rows.map((s,i)=>{const m=members.get(s.id);const cell=can()?`<select data-student="${s.id}">${opts(s)}</select>`:(m?esc(nameOf.get(m.base_id)||''):'<span class="lb-muted">ยังไม่มีฐาน</span>');return `<tr><td class="num">${i+1}</td><td>${esc(s.grade_level)}/${esc(s.classroom)}</td><td>${esc(s.full_name)}</td><td>${cell}${m&&m.locked?' <span class="lb-lock" title="จัดเอง">🔒</span>':''}</td></tr>`}).join('')||'<tr><td colspan="4" class="lb-muted">ไม่พบนักเรียน</td></tr>';
+  $('list').innerHTML=rows.map((s,i)=>{const m=members.get(s.id);const cell=can()?`<select data-student="${s.id}">${opts(s)}</select>`:(m?esc(nameOf.get(m.base_id)||''):'<span class="lb-muted">ยังไม่มีฐาน</span>');return `<tr><td class="num">${i+1}</td><td>${esc(s.grade_level)}/${esc(s.classroom)}</td><td>${esc(s.full_name)}${hist(s)?.past?.length?`<div class="lb-muted" style="font-size:12px">เคยอยู่: ${hist(s).past.map(p=>`${esc(p.name)} (${p.year})`).join(', ')}</div>`:''}</td><td>${cell}${m&&m.locked?' <span class="lb-lock" title="จัดเอง">🔒</span>':''}</td></tr>`}).join('')||'<tr><td colspan="4" class="lb-muted">ไม่พบนักเรียน</td></tr>';
   if(can())$('list').querySelectorAll('select').forEach(sel=>{sel.value=String(members.get(Number(sel.dataset.student))?.base_id||'')});
 }
 function renderSettings(){
