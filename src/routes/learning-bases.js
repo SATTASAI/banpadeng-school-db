@@ -329,6 +329,102 @@ async function handleSetMember(request, env, user) {
   return jsonResponse({ ok: true });
 }
 
+// ---------- นำเข้าผลการจัดฐานจาก Excel (ศูนย์นำเข้าข้อมูล) ----------
+const PREFIX_RE = /^(เด็กชาย|เด็กหญิง|ด\.\s?ช\.|ด\.\s?ญ\.|นางสาว|น\.ส\.|นาย|นาง)\s*/;
+export const personKey = (v) => String(v ?? "").trim().replace(PREFIX_RE, "").replace(/[\s.]+/g, "").toLowerCase();
+const roomKey = (grade, room) => `${gradeNumber(grade) || String(grade ?? "").trim()}|${String(room ?? "").trim().replace(/^0+(?=\d)/, "")}`;
+export function similarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const x = [...a], y = [...b];
+  let prev = Array.from({ length: y.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= x.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= y.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return 1 - prev[y.length] / Math.max(x.length, y.length);
+}
+
+// จับคู่แถวในไฟล์กับทะเบียนนักเรียน: เลขประจำตัว → ชื่อตรงกัน (ห้องเดียวกันก่อน) → ชื่อใกล้เคียงในห้องเดียวกัน
+export function matchImportRows(rows, students) {
+  const byCode = new Map(students.filter((s) => s.student_code).map((s) => [String(s.student_code).trim(), s]));
+  const byName = new Map();
+  for (const s of students) { const k = personKey(s.full_name); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(s); }
+  const byRoom = new Map();
+  for (const s of students) { const k = roomKey(s.grade_level, s.classroom); if (!byRoom.has(k)) byRoom.set(k, []); byRoom.get(k).push(s); }
+  const brief = (s) => ({ id: s.id, student_code: s.student_code, full_name: s.full_name, room: `${s.grade_level || ""}/${s.classroom || ""}`, status: s.status });
+  const used = new Set();
+  const out = rows.map((r) => {
+    const name = [r.title, r.first_name, r.last_name].filter(Boolean).join(" ").trim() || String(r.full_name || "").trim();
+    const room = roomKey(r.grade_level, r.classroom);
+    const base = { row: r.row, name, grade_level: r.grade_level, classroom: r.classroom, base: String(r.base || "").replace(/\s+/g, " ").trim() };
+    if (!base.base) return { ...base, status: "no_base" };
+    const code = String(r.student_code || "").trim();
+    if (code && byCode.has(code)) return { ...base, status: "exact", student: brief(byCode.get(code)) };
+    const same = byName.get(personKey(name)) || [];
+    const pickSame = same.filter((s) => roomKey(s.grade_level, s.classroom) === room);
+    const exact = pickSame.length === 1 ? pickSame[0] : same.length === 1 ? same[0] : null;
+    if (exact) return { ...base, status: "exact", student: brief(exact) };
+    const key = personKey(name);
+    const candidates = (pickSame.length > 1 ? pickSame : byRoom.get(room) || [])
+      .map((s) => ({ s, score: similarity(key, personKey(s.full_name)) }))
+      .filter((x) => x.score >= 0.6).sort((a, b) => b.score - a.score).slice(0, 3)
+      .map((x) => ({ ...brief(x.s), score: Math.round(x.score * 100) }));
+    return { ...base, status: candidates.length ? "fuzzy" : "none", candidates };
+  });
+  for (const r of out) if (r.status === "exact") used.add(r.student.id);
+  // ตัวเลือกใกล้เคียงที่ถูกจับคู่ตรงตัวไปแล้วกับแถวอื่น ไม่ต้องเสนอซ้ำ
+  for (const r of out) if (r.status === "fuzzy") { r.candidates = r.candidates.filter((c) => !used.has(c.id)); if (!r.candidates.length) r.status = "none"; }
+  return out;
+}
+
+// POST /api/learning-bases/import
+//   { academic_year, mode:"match", rows:[{row, grade_level, classroom, title, first_name, last_name, student_code?, base}] } → ผลจับคู่
+//   { academic_year, mode:"save", rows:[{student_id, base, grade_level, classroom}] } → บันทึก (สร้างฐานที่ยังไม่มีในปีนั้น)
+async function handleImport(request, env, user) {
+  const body = await readJson(request);
+  const current = await activeYear(env);
+  const year = parseYear(body?.academic_year);
+  if (!year) return jsonResponse({ error: "กรุณาระบุปีการศึกษา" }, 400);
+  if (year > current) return jsonResponse({ error: "นำเข้าได้เฉพาะปีปัจจุบันหรือปีก่อนหน้า" }, 400);
+  const rows = Array.isArray(body?.rows) ? body.rows : [];
+  if (!rows.length || rows.length > 1500) return jsonResponse({ error: "ไม่มีข้อมูล หรือเกิน 1,500 แถว" }, 400);
+  const { results: all } = await env.DB.prepare("SELECT id, student_code, full_name, grade_level, classroom, status FROM students").all();
+  if (body.mode === "match") return jsonResponse({ ok: true, academic_year: year, rows: matchImportRows(rows, all || []) });
+  if (body.mode !== "save") return jsonResponse({ error: "mode ไม่ถูกต้อง" }, 400);
+  const ids = new Set((all || []).map((s) => s.id));
+  const clean = [], seen = new Set();
+  for (const r of rows) {
+    const sid = Number(r?.student_id), name = String(r?.base || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!ids.has(sid) || !name || seen.has(sid)) continue;
+    seen.add(sid); clean.push({ student_id: sid, name, grade_level: String(r.grade_level ?? "").trim() || null, classroom: String(r.classroom ?? "").trim() || null });
+  }
+  if (!clean.length) return jsonResponse({ error: "ไม่มีแถวที่บันทึกได้" }, 400);
+  if (year === current) await seedYear(env, year, user.id);
+  const { results: existing } = await env.DB.prepare("SELECT id, name, active FROM learning_bases WHERE academic_year = ?").bind(year).all();
+  const byName = new Map((existing || []).map((b) => [nameKey(b.name), b]));
+  const missing = [...new Set(clean.map((r) => r.name))].filter((n) => !byName.has(nameKey(n)));
+  const reopen = [...new Set(clean.map((r) => byName.get(nameKey(r.name))).filter((b) => b && !b.active).map((b) => b.id))];
+  const prep = [
+    ...missing.map((n, i) => env.DB.prepare("INSERT INTO learning_bases (academic_year, name, sort_order, updated_by) VALUES (?,?,?,?)").bind(year, n, 900 + i, user.id)),
+    ...reopen.map((id) => env.DB.prepare("UPDATE learning_bases SET active = 1, updated_at = datetime('now') WHERE id = ?").bind(id)),
+  ];
+  if (prep.length) await env.DB.batch(prep);
+  const { results: bases } = await env.DB.prepare("SELECT id, name FROM learning_bases WHERE academic_year = ?").bind(year).all();
+  const idOf = new Map((bases || []).map((b) => [nameKey(b.name), b.id]));
+  const grouped = new Map();
+  for (const r of clean) { const k = `${r.grade_level}|${r.classroom}`; if (!grouped.has(k)) grouped.set(k, []); grouped.get(k).push(r); }
+  const statements = [];
+  for (const list of grouped.values()) {
+    // snapshot ชั้น/ห้อง ตามไฟล์ (ปีนั้น) · ล็อกไว้ไม่ให้จัดอัตโนมัติทับ
+    statements.push(...insertMembers(env, year, list.map((r) => ({ student_id: r.student_id, base_id: idOf.get(nameKey(r.name)), grade_level: r.grade_level, classroom: r.classroom })), "import", 1, user.id));
+  }
+  await env.DB.batch(statements);
+  await audit(env, user, "import_members", { academic_year: year, saved: clean.length, new_bases: missing.length });
+  return jsonResponse({ ok: true, saved: clean.length, new_bases: missing });
+}
+
 export async function handleLearningBasesRoute(request, env, pathname, method) {
   if (!pathname.startsWith("/api/learning-bases")) return null;
   const user = await getCurrentUser(request, env);
@@ -341,5 +437,6 @@ export async function handleLearningBasesRoute(request, env, pathname, method) {
   if (pathname === "/api/learning-bases/bases" && method === "PUT") return handleSaveBases(request, env, user);
   if (pathname === "/api/learning-bases/auto" && method === "POST") return handleAuto(request, env, user);
   if (pathname === "/api/learning-bases/members" && method === "PUT") return handleSetMember(request, env, user);
+  if (pathname === "/api/learning-bases/import" && method === "POST") return handleImport(request, env, user);
   return jsonResponse({ error: "ไม่พบเส้นทาง" }, 404);
 }

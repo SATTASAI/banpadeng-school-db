@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { DatabaseSync } from "node:sqlite";
 import { signJWT } from "../src/lib/crypto.js";
 import { assignLearningBases, ASSIGN_METHODS } from "../src/lib/learning-base-assign.js";
-import { handleLearningBasesRoute, gradeNumber, genderOf, DEFAULT_BASES } from "../src/routes/learning-bases.js";
+import { handleLearningBasesRoute, gradeNumber, genderOf, DEFAULT_BASES, matchImportRows, similarity } from "../src/routes/learning-bases.js";
 
 // นักเรียนจำลอง 6 ชั้น × 2 ห้อง × 10 คน (ชาย/หญิงสลับ)
 function fakeStudents() {
@@ -219,4 +219,56 @@ test("API blocks repeating a past base (by lineage even after rename, or by same
     assert.notEqual(got.get(10), barber.id, method);
   }
   assert.equal((await api(env, 1, "/api/learning-bases/auto", "POST", { academic_year: 2569, method: "keep_previous" })).status, 400);
+});
+
+test("import matching: code, exact name (same room first), fuzzy only within the same room", () => {
+  const students = [
+    { id: 1, student_code: "100", full_name: "เด็กชายสมชาย ใจดี", grade_level: "ป.2", classroom: "1" },
+    { id: 2, student_code: "101", full_name: "เด็กหญิงมาลี ศรีสุข", grade_level: "ป.2", classroom: "1" },
+    { id: 3, student_code: "102", full_name: "เด็กหญิงมาลี ศรีสุข", grade_level: "ป.3", classroom: "2" },
+    { id: 4, student_code: "103", full_name: "เด็กชายธนพล วงศ์ดี", grade_level: "ป.4", classroom: "1" },
+  ];
+  const r = matchImportRows([
+    { row: 2, grade_level: "ป.2", classroom: "1", title: "เด็กชาย", first_name: "สมชาย", last_name: "ใจดี", base: "ดนตรีไทย" },
+    { row: 3, grade_level: "ป.3", classroom: "2", title: "เด็กหญิง", first_name: "มาลี", last_name: "ศรีสุข", base: "Barber" },
+    { row: 4, grade_level: "ป.4", classroom: "1", title: "ด.ช.", first_name: "ธนพน", last_name: "วงศ์ดี", base: "Barber" },
+    { row: 5, grade_level: "ป.2", classroom: "1", first_name: "ธนพน", last_name: "วงศ์ดี", base: "Barber" },
+    { row: 6, grade_level: "ป.2", classroom: "1", first_name: "ใครก็ได้", base: "" },
+    { row: 7, grade_level: "ป.9", classroom: "9", first_name: "x", base: "y", student_code: "101" },
+  ], students);
+  assert.equal(r[0].status, "exact"); assert.equal(r[0].student.id, 1);
+  assert.equal(r[1].status, "exact"); assert.equal(r[1].student.id, 3);
+  assert.equal(r[2].status, "fuzzy"); assert.equal(r[2].candidates[0].id, 4);
+  assert.equal(r[3].status, "none"); // คนชื่อคล้ายอยู่คนละห้อง — ไม่เสนอ
+  assert.equal(r[4].status, "no_base");
+  assert.equal(r[5].student.id, 2);
+  assert(similarity("ธนพล", "ธนพน") > 0.7);
+});
+
+test("import saves locked members for the year, creates missing bases, feeds the no-repeat rule", async () => {
+  const env = environment();
+  await api(env, 1, "/api/learning-bases");
+  let r = await api(env, 1, "/api/learning-bases/import", "POST", { academic_year: 2568, mode: "match", rows: [
+    { row: 2, grade_level: "ป.5", classroom: "2", title: "เด็กชาย", first_name: "สาม", base: "ฐานเก่า" }] });
+  assert.equal(r.data.rows[0].status, "exact");
+  r = await api(env, 1, "/api/learning-bases/import", "POST", { academic_year: 2568, mode: "save", rows: [{ student_id: 12, base: "ฐานเก่า", grade_level: "ป.5", classroom: "2" }, { student_id: 10, base: "ดนตรีไทย", grade_level: "ป.0", classroom: "1" }] });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.deepEqual(r.data.new_bases, ["ฐานเก่า", "ดนตรีไทย"]);
+  // ปี 2569: นักเรียน 10 ห้ามเข้า ดนตรีไทย (ชื่อเดียวกัน)
+  const list = (await api(env, 1, "/api/learning-bases")).data;
+  const thai = list.bases.find((b) => b.name === "ดนตรีไทย");
+  assert.deepEqual(list.history["10"].blocked, [thai.id]);
+  // นำเข้าปีปัจจุบัน → ล็อกไว้
+  r = await api(env, 1, "/api/learning-bases/import", "POST", { academic_year: 2569, mode: "save", rows: [{ student_id: 11, base: "ดนตรีไทย", grade_level: "ป.1", classroom: "1" }] });
+  assert.equal(r.data.saved, 1);
+  const m = env.db.prepare("SELECT locked, method FROM learning_base_members WHERE student_id = 11 AND academic_year = 2569").get();
+  assert.equal(m.locked, 1); assert.equal(m.method, "import");
+  assert.equal((await api(env, 1, "/api/learning-bases/import", "POST", { academic_year: 2571, mode: "match", rows: [{ row: 1 }] })).status, 400);
+  assert.equal((await api(env, 3, "/api/learning-bases/import", "POST", { academic_year: 2569, mode: "match", rows: [{ row: 1 }] })).status, 403);
+});
+
+test("import center offers the learning-base template with the file's column names", () => {
+  const html = fs.readFileSync("public/import-center.html", "utf8");
+  for (const label of ["ชั้น", "ห้อง", "คำนำหน้าชื่อ", "ชื่อ", "นามสกุล", "ฐานการเรียนรู้"]) assert(html.includes(`"${label}"`));
+  assert(html.includes('endpoint:"learning_bases"'));
 });
