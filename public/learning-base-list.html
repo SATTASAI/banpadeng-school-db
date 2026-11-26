@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ฐานการเรียนรู้ — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+.lb-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px}.lb-tabs button{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;color:#315C86;cursor:pointer}.lb-tabs button.on{background:#183153;color:#fff;border-color:#183153}
+.lb-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}.lb-row select,.lb-row input{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}.lb-row input{flex:1;min-width:180px}
+.lb-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff;max-height:66vh}
+.lb-table{width:100%;border-collapse:collapse}.lb-table th,.lb-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px}.lb-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0}.lb-table tr:last-child td{border-bottom:0}.lb-table .num{text-align:right;font-variant-numeric:tabular-nums;width:40px}
+.lb-cap{font-size:13px;color:var(--color-text-muted);margin:-4px 0 10px}.lb-muted{color:var(--color-text-muted)}
+</style>
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1>ฐานการเรียนรู้</h1><p>รายชื่อนักเรียน ป.1–6 แยกตามฐานการเรียนรู้และแยกห้อง</p></div>
+    <div class="tw-actions"><label class="tw-term">ปีการศึกษา<select id="year" style="min-width:120px"></select></label><button class="btn btn-primary" type="button" id="exportBtn" style="width:auto">พิมพ์ PDF / Excel</button></div>
+  </header>
+  <div class="tw-error" id="error" role="alert"></div>
+  <nav class="lb-tabs" id="tabs"><button type="button" data-tab="base" class="on">แยกฐาน</button><button type="button" data-tab="room">แยกห้อง</button></nav>
+  <div class="lb-row"><select id="pick"></select><input type="search" id="q" placeholder="ค้นหาชื่อ / เลขประจำตัว (ทั้งโรงเรียน)" autocomplete="off"></div>
+  <p class="lb-cap" id="caption"></p>
+  <div class="lb-wrap"><table class="lb-table"><thead id="head"></thead><tbody id="rows"><tr><td class="lb-muted">กำลังโหลด…</td></tr></tbody></table></div>
+</main>
+<script src="/js/api.js"></script>
+<script src="/js/learning-base-export.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
+const gradeNo=g=>{const m=String(g??'').match(/([1-6])/);return m?Number(m[1]):0};
+const room=s=>`${s.grade_level||''}/${s.classroom||''}`;
+let d=null,list=[],tab='base';
+async function load(year){
+  $('error').style.display='none';
+  try{
+    d=await apiRequest('/api/learning-bases'+(year?`?academic_year=${encodeURIComponent(year)}`:''));
+    const baseOf=new Map(d.members.map(m=>[m.student_id,m.base_id])),names=new Map(d.bases.map(b=>[b.id,b.name]));
+    list=d.students.map(s=>({...s,base_id:baseOf.get(s.id)??null,base:names.get(baseOf.get(s.id))||''}))
+      .sort((a,b)=>gradeNo(a.grade_level)-gradeNo(b.grade_level)||cmp(a.classroom,b.classroom)||cmp(a.student_code,b.student_code)||cmp(a.full_name,b.full_name));
+    $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current_year?' (ปีปัจจุบัน)':''}</option>`).join('');$('year').value=String(d.academic_year);
+    fillPick();render();
+  }catch(e){$('error').textContent=e.message;$('error').style.display='block'}
+}
+function fillPick(){
+  const opts=tab==='base'
+    ?[...d.bases.map(b=>[String(b.id),`${b.name} (${list.filter(s=>s.base_id===b.id).length})`]),...(list.some(s=>!s.base)?[['none',`ยังไม่มีฐาน (${list.filter(s=>!s.base).length})`]]:[])]
+    :[...new Set(list.map(room))].map(r=>[r,`${r} (${list.filter(s=>room(s)===r).length})`]);
+  $('pick').innerHTML=opts.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')||'<option value="">— ไม่มีข้อมูล —</option>';
+}
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===tab));
+  const q=$('q').value.trim().toLowerCase(),v=$('pick').value;
+  $('pick').disabled=!!q;
+  let rows=q?list.filter(s=>String(s.full_name).toLowerCase().includes(q)||String(s.student_code).includes(q))
+    :tab==='base'?list.filter(s=>v==='none'?!s.base:String(s.base_id)===v):list.filter(s=>room(s)===v);
+  const showBase=q||tab==='room',showRoom=q||tab==='base';
+  $('head').innerHTML=`<tr><th class="num">ที่</th>${showRoom?'<th>ชั้น/ห้อง</th>':''}<th>เลขประจำตัว</th><th>ชื่อ–นามสกุล</th>${showBase?'<th>ฐานการเรียนรู้</th>':''}</tr>`;
+  $('rows').innerHTML=rows.map((s,i)=>`<tr><td class="num">${i+1}</td>${showRoom?`<td>${esc(room(s))}</td>`:''}<td>${esc(s.student_code)}</td><td>${esc(s.full_name)}</td>${showBase?`<td>${s.base?esc(s.base):'<span class="lb-muted">ยังไม่มีฐาน</span>'}</td>`:''}</tr>`).join('')||`<tr><td colspan="5" class="lb-muted">${q?'ไม่พบนักเรียน':'ยังไม่มีรายชื่อ'}</td></tr>`;
+  const m=rows.filter(s=>s.gender==='M').length,f=rows.filter(s=>s.gender==='F').length;
+  const base=tab==='base'&&!q?d.bases.find(b=>String(b.id)===v):null;
+  $('caption').textContent=`${q?'ผลค้นหา ':''}${rows.length}${base?.capacity?` / ${base.capacity}`:''} คน · ชาย ${m} · หญิง ${f}`;
+}
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b||!d)return;tab=b.dataset.tab;fillPick();render()});
+$('pick').addEventListener('change',render);$('q').addEventListener('input',render);
+$('year').addEventListener('change',()=>load($('year').value));
+$('exportBtn').addEventListener('click',()=>{if(d)LearningBaseExport.open(d)});
+load();
+})();
+</script>
+</body></html>

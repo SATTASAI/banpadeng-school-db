@@ -31,7 +31,7 @@
 <main class="tw-page">
   <header class="tw-head">
     <div><h1>จัดฐานการเรียนรู้</h1><p>จัดนักเรียน ป.1–6 เข้าฐานการเรียนรู้รายปีการศึกษา — รายชื่อดึงจากทะเบียนนักเรียนอัตโนมัติ</p></div>
-    <div class="tw-actions"><label class="tw-term">ปีการศึกษา<select id="year" style="min-width:120px"></select></label></div>
+    <div class="tw-actions"><label class="tw-term">ปีการศึกษา<select id="year" style="min-width:120px"></select></label><button class="btn btn-primary" type="button" id="exportBtn" style="width:auto">พิมพ์ PDF / Excel</button></div>
   </header>
   <div class="tw-error" id="error" role="alert"></div>
   <section id="cards" class="tw-cards"></section>
@@ -71,6 +71,7 @@
   </section>
 </main>
 <script src="/js/api.js"></script>
+<script src="/js/learning-base-export.js"></script>
 <script>
 (()=>{
 const $=id=>document.getElementById(id);
@@ -151,6 +152,7 @@ async function runAuto(apply,seed){
 }
 $('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b)return;if(tab==='settings')readDraft();tab=b.dataset.tab;render()});
 $('year').addEventListener('change',()=>load($('year').value));
+$('exportBtn').addEventListener('click',()=>{if(d)LearningBaseExport.open(d)});
 $('methods').addEventListener('click',e=>{const b=e.target.closest('.lb-info');if(b){e.preventDefault();b.focus()}});
 $('previewBtn').addEventListener('click',()=>runAuto(false));
 $('rerollBtn').addEventListener('click',()=>runAuto(false));
