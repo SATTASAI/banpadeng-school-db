@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>จัดฐานการเรียนรู้ — โรงเรียนบ้านป่าเด็ง</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#1E5FC0" />
+<meta name="apple-mobile-web-app-title" content="บ้านป่าเด็ง" />
+<link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/teaching-works.css">
+<style>
+.lb-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 14px}.lb-tabs button{border:1px solid var(--color-border);background:#fff;border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;color:#315C86;cursor:pointer}.lb-tabs button.on{background:#183153;color:#fff;border-color:#183153}
+.lb-box{border:1px solid var(--color-border);border-radius:14px;background:#fff;padding:14px;margin-bottom:14px}.lb-box h2{font-size:17px;margin:0 0 10px;color:var(--color-forest-900)}
+.lb-methods{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}.lb-methods label{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px;cursor:pointer;font-size:14px}.lb-methods label:has(input:checked){border-color:#2D7FD3;background:#f2f8ff}
+.lb-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}.lb-row select,.lb-row input[type=search]{padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;background:#fff}.lb-row .btn{width:auto}
+.lb-wrap{overflow:auto;border:1px solid var(--color-border);border-radius:14px;background:#fff;max-height:64vh}
+.lb-table{width:100%;border-collapse:collapse}.lb-table th,.lb-table td{padding:6px 10px;border-bottom:1px solid var(--color-border);text-align:left;font-size:13px;vertical-align:middle}.lb-table th{background:#f6f9fc;font-weight:600;position:sticky;top:0;z-index:1}.lb-table tr:last-child td{border-bottom:0}
+.lb-table .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.lb-table select{padding:4px 6px;border:1px solid var(--color-border);border-radius:8px;font:inherit;font-size:13px;max-width:220px}
+.lb-table input[type=text],.lb-table input[type=number]{padding:5px 8px;border:1px solid var(--color-border);border-radius:8px;font:inherit;font-size:13px;width:100%;min-width:140px}.lb-table input[type=number]{min-width:70px;width:80px}
+.lb-grades{display:flex;gap:4px;flex-wrap:wrap}.lb-grades label{font-size:12px;border:1px solid var(--color-border);border-radius:8px;padding:2px 6px;cursor:pointer;white-space:nowrap}.lb-grades label:has(input:checked){background:#e8f2fd;border-color:#2D7FD3}
+.lb-full{color:#a33a49;font-weight:600}.lb-muted{color:var(--color-text-muted)}.lb-lock{font-size:12px;color:#8a6d1f}
+.lb-mini{border:0;background:none;cursor:pointer;font:inherit;color:#315C86;padding:2px 6px}.lb-mini:disabled{opacity:.3;cursor:default}
+#overview tr[data-base]{cursor:pointer}#overview tr[data-base]:hover td{background:#f2f8ff}
+.lb-note{font-size:13px;color:var(--color-text-muted);margin:6px 0 0}
+</style>
+</head>
+<body>
+<main class="tw-page">
+  <header class="tw-head">
+    <div><h1>จัดฐานการเรียนรู้</h1><p>จัดนักเรียน ป.1–6 เข้าฐานการเรียนรู้รายปีการศึกษา — รายชื่อดึงจากทะเบียนนักเรียนอัตโนมัติ</p></div>
+    <div class="tw-actions"><label class="tw-term">ปีการศึกษา<select id="year" style="min-width:120px"></select></label></div>
+  </header>
+  <div class="tw-error" id="error" role="alert"></div>
+  <section id="cards" class="tw-cards"></section>
+  <nav class="lb-tabs" id="tabs"><button type="button" data-tab="auto" class="on">จัดอัตโนมัติ</button><button type="button" data-tab="overview">ภาพรวมฐาน</button><button type="button" data-tab="list">รายชื่อนักเรียน</button><button type="button" data-tab="settings">ตั้งค่าฐาน</button></nav>
+
+  <section data-panel="auto">
+    <div class="lb-box"><h2>วิธีจัด</h2><div class="lb-methods" id="methods"></div>
+      <div class="lb-row">
+        <select id="scope"><option value="all">จัดใหม่ทั้งหมด</option><option value="unassigned">จัดเฉพาะคนที่ยังไม่มีฐาน</option></select>
+        <label><input type="checkbox" id="keepLocked" checked> คงคนที่จัดเองไว้</label>
+        <button class="btn btn-primary" type="button" id="previewBtn">ดูตัวอย่าง</button>
+      </div>
+      <p class="lb-note">ทุกวิธีเคารพจำนวนรับและชั้นที่แต่ละฐานรับ (ตั้งที่แท็บ ตั้งค่าฐาน) · ดูตัวอย่างก่อน แล้วกดบันทึก</p>
+    </div>
+    <div class="lb-box" id="previewBox" hidden><h2 id="previewTitle">ตัวอย่างผลการจัด</h2>
+      <div class="lb-wrap"><table class="lb-table"><thead id="previewHead"></thead><tbody id="previewBody"></tbody></table></div>
+      <div class="lb-row"><button class="btn btn-primary" type="button" id="applyBtn">บันทึกการจัดนี้</button><button class="btn btn-ghost" type="button" id="rerollBtn">สุ่มใหม่</button><span id="previewInfo" class="lb-muted"></span></div>
+    </div>
+  </section>
+
+  <section data-panel="overview" hidden>
+    <div class="lb-wrap"><table class="lb-table"><thead id="overviewHead"></thead><tbody id="overview"></tbody></table></div>
+  </section>
+
+  <section data-panel="list" hidden>
+    <div class="lb-row" style="margin-top:0;margin-bottom:10px"><select id="fBase"></select><select id="fRoom"></select><input type="search" id="q" placeholder="ค้นหาชื่อ / เลขประจำตัว" autocomplete="off" style="flex:1;min-width:180px"></div>
+    <div class="lb-wrap"><table class="lb-table"><thead><tr><th style="width:40px">#</th><th>ชั้น/ห้อง</th><th>ชื่อ–นามสกุล</th><th>ฐานการเรียนรู้</th></tr></thead><tbody id="list"></tbody></table></div>
+    <p class="lb-note">เปลี่ยนฐานรายคน = ล็อกไว้ (🔒) การจัดอัตโนมัติจะไม่ทับถ้าติ๊ก "คงคนที่จัดเองไว้"</p>
+  </section>
+
+  <section data-panel="settings" hidden>
+    <div class="lb-box"><h2>ฐานการเรียนรู้ปีนี้</h2>
+      <div class="lb-wrap" style="max-height:none"><table class="lb-table"><thead><tr><th style="width:36px">#</th><th>ชื่อฐาน</th><th>จำนวนรับ</th><th>ชั้นที่รับ</th><th></th></tr></thead><tbody id="baseRows"></tbody></table></div>
+      <div class="lb-row"><button class="btn btn-ghost" type="button" id="addBase">+ เพิ่มฐาน</button><span class="lb-muted">ตั้งจำนวนรับทุกฐาน</span><input type="number" id="capAll" min="1" max="999" style="width:80px;padding:8px;border:1px solid var(--color-border);border-radius:10px"><button class="btn btn-ghost" type="button" id="capAllBtn">ใช้กับทุกฐาน</button><button class="btn btn-primary" type="button" id="saveBases">บันทึกฐาน</button></div>
+      <p class="lb-note">จำนวนรับเว้นว่าง = ไม่จำกัด · ลบฐาน = ปิดฐาน และนักเรียนในฐานนั้นกลับเป็น "ยังไม่มีฐาน"</p>
+    </div>
+  </section>
+</main>
+<script src="/js/api.js"></script>
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'th',{numeric:true});
+const gradeNo=g=>{const m=String(g??'').match(/([1-6])/);return m?Number(m[1]):0};
+let d=null,members=new Map(),preview=null,draft=[],tab='auto';
+const can=()=>!!d?.permissions?.manage;
+const showError=msg=>{const e=$('error');e.textContent=msg||'';e.style.display=msg?'block':'none'};
+
+async function load(year){
+  showError('');
+  try{
+    d=await apiRequest('/api/learning-bases'+(year?`?academic_year=${encodeURIComponent(year)}`:''));
+    d.students.sort((a,b)=>gradeNo(a.grade_level)-gradeNo(b.grade_level)||cmp(a.classroom,b.classroom)||cmp(a.full_name,b.full_name));
+    members=new Map(d.members.map(m=>[m.student_id,m]));
+    draft=d.bases.map(b=>({...b}));preview=null;$('previewBox').hidden=true;
+    $('year').innerHTML=d.years.map(y=>`<option value="${y}">${y}${y===d.current_year?' (ปีปัจจุบัน)':''}</option>`).join('');$('year').value=String(d.academic_year);
+    if(!can()&&['auto','settings'].includes(tab))tab='overview';
+    $('methods').innerHTML=Object.entries(d.methods).map(([k,v],i)=>`<label><input type="radio" name="method" value="${k}"${i?'':' checked'}><span>${esc(v)}</span></label>`).join('');
+    render();
+  }catch(e){showError(e.message)}
+}
+function counts(map){
+  const c=new Map(d.bases.map(b=>[b.id,{n:0,g:[0,0,0,0,0,0,0],m:0,f:0}]));
+  const byId=new Map(d.students.map(s=>[s.id,s]));
+  for(const [sid,bid] of map){const x=c.get(bid),s=byId.get(sid);if(!x||!s)continue;x.n++;x.g[gradeNo(s.grade_level)]++;if(s.gender==='M')x.m++;else if(s.gender==='F')x.f++;}
+  return c;
+}
+const memberMap=()=>new Map([...members].filter(([sid])=>d.students.some(s=>s.id===sid)).map(([sid,m])=>[sid,m.base_id]));
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b=>{b.classList.toggle('on',b.dataset.tab===tab);b.hidden=!can()&&['auto','settings'].includes(b.dataset.tab)});
+  document.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==tab);
+  const total=d.students.length,assigned=memberMap().size;
+  $('cards').innerHTML=`<div class="tw-card"><span>นักเรียน ป.1–6</span><strong>${total}</strong></div><div class="tw-card"><span>จัดแล้ว</span><strong style="color:#1f7a50">${assigned}</strong><span class="tw-bar"><b style="width:${total?Math.round(assigned/total*100):0}%"></b></span></div><div class="tw-card"><span>ยังไม่มีฐาน</span><strong style="color:#a33a49">${total-assigned}</strong></div><div class="tw-card"><span>จำนวนฐาน</span><strong>${d.bases.length}</strong></div>`;
+  renderOverview();renderList();renderSettings();
+}
+const summaryHead='<tr><th>ฐานการเรียนรู้</th><th class="num">จำนวน / รับ</th>'+[1,2,3,4,5,6].map(g=>`<th class="num">ป.${g}</th>`).join('')+'<th class="num">ชาย / หญิง</th></tr>';
+function summaryRows(map,clickable){
+  const c=counts(map);
+  return d.bases.map(b=>{const x=c.get(b.id),full=b.capacity&&x.n>=b.capacity;return `<tr${clickable?` data-base="${b.id}"`:''}><td>${esc(b.name)}<div class="lb-muted" style="font-size:12px">รับ ${b.grades.length===6?'ทุกชั้น':b.grades.map(g=>'ป.'+g).join(' ')}</div></td><td class="num${full?' lb-full':''}">${x.n} / ${b.capacity??'ไม่จำกัด'}</td>${[1,2,3,4,5,6].map(g=>`<td class="num">${x.g[g]||'<span class="lb-muted">–</span>'}</td>`).join('')}<td class="num">${x.m} / ${x.f}</td></tr>`}).join('')||'<tr><td colspan="9" class="lb-muted">ยังไม่มีฐาน</td></tr>';
+}
+function renderOverview(){$('overviewHead').innerHTML=summaryHead;$('overview').innerHTML=summaryRows(memberMap(),true)}
+function renderList(){
+  const fb=$('fBase'),fr=$('fRoom'),vb=fb.value,vr=fr.value;
+  fb.innerHTML='<option value="">ทุกฐาน</option><option value="none">ยังไม่มีฐาน</option>'+d.bases.map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');fb.value=vb;
+  const rooms=[...new Set(d.students.map(s=>`${s.grade_level}/${s.classroom}`))];
+  fr.innerHTML='<option value="">ทุกห้อง</option>'+rooms.map(r=>`<option>${esc(r)}</option>`).join('');fr.value=vr;
+  const q=$('q').value.trim().toLowerCase();
+  const rows=d.students.filter(s=>{const m=members.get(s.id);if(vb==='none'?m:vb&&String(m?.base_id)!==vb)return false;if(vr&&`${s.grade_level}/${s.classroom}`!==vr)return false;return !q||String(s.full_name).toLowerCase().includes(q)||String(s.student_code).includes(q)});
+  const opts=s=>'<option value="">— ยังไม่มีฐาน —</option>'+d.bases.filter(b=>b.grades.includes(gradeNo(s.grade_level))).map(b=>`<option value="${b.id}">${esc(b.name)}</option>`).join('');
+  const nameOf=new Map(d.bases.map(b=>[b.id,b.name]));
+  $('list').innerHTML=rows.map((s,i)=>{const m=members.get(s.id);const cell=can()?`<select data-student="${s.id}">${opts(s)}</select>`:(m?esc(nameOf.get(m.base_id)||''):'<span class="lb-muted">ยังไม่มีฐาน</span>');return `<tr><td class="num">${i+1}</td><td>${esc(s.grade_level)}/${esc(s.classroom)}</td><td>${esc(s.full_name)}</td><td>${cell}${m&&m.locked?' <span class="lb-lock" title="จัดเอง">🔒</span>':''}</td></tr>`}).join('')||'<tr><td colspan="4" class="lb-muted">ไม่พบนักเรียน</td></tr>';
+  if(can())$('list').querySelectorAll('select').forEach(sel=>{sel.value=String(members.get(Number(sel.dataset.student))?.base_id||'')});
+}
+function renderSettings(){
+  $('baseRows').innerHTML=draft.map((b,i)=>`<tr data-i="${i}"><td class="num">${i+1}</td><td><input type="text" data-f="name" value="${esc(b.name)}" maxlength="80"></td><td><input type="number" data-f="capacity" min="1" max="999" value="${b.capacity??''}" placeholder="ไม่จำกัด"></td><td><div class="lb-grades">${[1,2,3,4,5,6].map(g=>`<label><input type="checkbox" data-g="${g}"${b.grades.includes(g)?' checked':''}> ป.${g}</label>`).join('')}</div></td><td style="white-space:nowrap"><button class="lb-mini" data-act="up"${i?'':' disabled'} title="เลื่อนขึ้น">▲</button><button class="lb-mini" data-act="down"${i<draft.length-1?'':' disabled'} title="เลื่อนลง">▼</button><button class="lb-mini" data-act="del" title="ลบฐาน" style="color:#a33a49">ลบ</button></td></tr>`).join('');
+}
+function readDraft(){
+  $('baseRows').querySelectorAll('tr').forEach(tr=>{const b=draft[Number(tr.dataset.i)];b.name=tr.querySelector('[data-f=name]').value;const c=tr.querySelector('[data-f=capacity]').value.trim();b.capacity=c?Number(c):null;b.grades=[...tr.querySelectorAll('[data-g]')].filter(x=>x.checked).map(x=>Number(x.dataset.g))});
+}
+async function runAuto(apply,seed){
+  showError('');
+  const method=document.querySelector('input[name=method]:checked')?.value;
+  const body={academic_year:d.academic_year,method,scope:$('scope').value,keep_locked:$('keepLocked').checked,seed,apply};
+  try{
+    const r=await apiRequest('/api/learning-bases/auto',{method:'POST',body});
+    if(apply){await load(d.academic_year);tab='overview';render();alert(`บันทึกแล้ว: จัด ${r.placed} คน${r.unplaced?` · ไม่มีที่ว่าง ${r.unplaced} คน`:''}`);return}
+    preview=r;
+    const map=new Map();for(const [sid,m] of members){if(r.scope==='unassigned'||(r.kept&&m.locked&&$('keepLocked').checked))map.set(sid,m.base_id)}
+    for(const a of r.assignments)map.set(a.student_id,a.base_id);
+    $('previewHead').innerHTML=summaryHead;$('previewBody').innerHTML=summaryRows(map,false);
+    $('previewTitle').textContent='ตัวอย่างผลการจัด: '+d.methods[r.method];
+    $('previewInfo').textContent=`จัด ${r.placed} คน · คงไว้ ${r.kept} คน${r.unplaced?` · ไม่มีฐานที่ว่าง/รับชั้นนี้ ${r.unplaced} คน`:''}`;
+    $('previewBox').hidden=false;$('previewBox').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){showError(e.message)}
+}
+$('tabs').addEventListener('click',e=>{const b=e.target.closest('button[data-tab]');if(!b)return;if(tab==='settings')readDraft();tab=b.dataset.tab;render()});
+$('year').addEventListener('change',()=>load($('year').value));
+$('previewBtn').addEventListener('click',()=>runAuto(false));
+$('rerollBtn').addEventListener('click',()=>runAuto(false));
+$('applyBtn').addEventListener('click',()=>{if(!preview)return;const msg=preview.scope==='all'?'บันทึกผลนี้แทนการจัดเดิมทั้งหมด'+($('keepLocked').checked?' (ยกเว้นคนที่จัดเอง)':'')+' ใช่ไหม':'บันทึกผลนี้ให้นักเรียนที่ยังไม่มีฐาน ใช่ไหม';if(confirm(msg))runAuto(true,preview.seed)});
+['change','input'].forEach(ev=>{$('fBase').addEventListener(ev,renderList);$('fRoom').addEventListener(ev,renderList)});$('q').addEventListener('input',renderList);
+$('overview').addEventListener('click',e=>{const tr=e.target.closest('tr[data-base]');if(!tr)return;tab='list';render();$('fBase').value=tr.dataset.base;renderList()});
+$('list').addEventListener('change',async e=>{
+  const sel=e.target.closest('select[data-student]');if(!sel)return;
+  const body={academic_year:d.academic_year,student_id:Number(sel.dataset.student),base_id:sel.value?Number(sel.value):null};
+  try{await apiRequest('/api/learning-bases/members',{method:'PUT',body})}
+  catch(err){if(err.status===409||/เต็มแล้ว/.test(err.message)){if(!confirm(err.message+' — ต้องการเพิ่มเกินจำนวนรับใช่ไหม')){renderList();return}try{await apiRequest('/api/learning-bases/members',{method:'PUT',body:{...body,force:true}})}catch(e2){showError(e2.message);renderList();return}}else{showError(err.message);renderList();return}}
+  if(body.base_id)members.set(body.student_id,{student_id:body.student_id,base_id:body.base_id,locked:1});else members.delete(body.student_id);
+  render();
+});
+$('baseRows').addEventListener('click',e=>{const b=e.target.closest('button[data-act]');if(!b)return;readDraft();const i=Number(b.closest('tr').dataset.i);
+  if(b.dataset.act==='up')[draft[i-1],draft[i]]=[draft[i],draft[i-1]];
+  else if(b.dataset.act==='down')[draft[i+1],draft[i]]=[draft[i],draft[i+1]];
+  else if(b.dataset.act==='del'){const n=[...members.values()].filter(m=>m.base_id===draft[i].id).length;if(n&&!confirm(`ฐาน "${draft[i].name}" มีนักเรียน ${n} คน — ลบแล้วนักเรียนจะกลับเป็น "ยังไม่มีฐาน" (มีผลเมื่อกดบันทึกฐาน)`))return;draft.splice(i,1)}
+  renderSettings()});
+$('addBase').addEventListener('click',()=>{readDraft();draft.push({id:null,name:'',capacity:null,grades:[1,2,3,4,5,6]});renderSettings();$('baseRows').querySelector('tr:last-child input')?.focus()});
+$('capAllBtn').addEventListener('click',()=>{readDraft();const v=$('capAll').value.trim();draft.forEach(b=>b.capacity=v?Number(v):null);renderSettings()});
+$('saveBases').addEventListener('click',async()=>{
+  readDraft();showError('');
+  try{const r=await apiRequest('/api/learning-bases/bases',{method:'PUT',body:{academic_year:d.academic_year,bases:draft.map(b=>({id:b.id,name:b.name,capacity:b.capacity,grades:b.grades}))}});
+    await load(d.academic_year);tab='settings';render();alert('บันทึกฐานแล้ว'+(r.released?` · นักเรียน ${r.released} คนกลับเป็น "ยังไม่มีฐาน"`:''))}
+  catch(e){showError(e.message)}
+});
+load();
+})();
+</script>
+</body></html>
