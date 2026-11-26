@@ -6,6 +6,7 @@ import {isSchoolDirector} from './student-deletion.js';
 import {budgetDirectorIds,canManageProjectFinance} from './project-workflow.js';
 import {supervisionPermissions} from './supervision.js';
 import {FINANCE_ROLE_SQL} from '../lib/finance-roles.js';
+import {GRADES_URL} from '../lib/grade-owned.js';
 
 const REVIEW_STEPS="('dept_head_review','dept_deputy_review','budget_head_review','budget_deputy_review')";
 
@@ -66,6 +67,10 @@ export async function pendingWorkFor(env,user){
   count(env,"SELECT COUNT(*) n FROM student_delete_requests WHERE status='pending'"));
  if(admin)add('transfers','คำขอย้ายเข้า-ออกรอพิจารณา','/dmcreport/',
   count(env,"SELECT COUNT(*) n FROM student_transfer_requests WHERE status IN ('pending','needs_documents')"));
+
+ // นำเข้ารายชื่อนักเรียน (ระบบเกรด): ข้อมูลไม่ตรงรอผู้ดูแลระบบตรวจ
+ if(superadmin)add('student-match','ข้อมูลนักเรียนไม่ตรงรอตรวจ',`${GRADES_URL}/admin.html#matches`,
+  count(env,"SELECT COUNT(*) n FROM gr_student_match_reviews WHERE status='pending'"));
 
  // แจ้งซ่อม: หัวหน้าฝ่ายบริหารทั่วไป (รอมอบหมาย/รอตรวจรับ) · ผู้รับมอบหมาย (กำลังซ่อม)
  add('maintenance','งานแจ้งซ่อมค้าง','/maintenance.html',

@@ -189,20 +189,21 @@ async function importLearningBases(valid){
   if(!/^\d{4}$/.test(year))throw new Error("ปีการศึกษาต้องเป็นตัวเลข 4 หลัก เช่น 2569");
   const rows=valid.map(r=>({row:r.row,...r.data}));
   const m=await apiRequest("/api/learning-bases/import",{method:"POST",body:{academic_year:year,mode:"match",rows}});
-  const picks=await reviewLearningBaseMatches(m.rows,year);
+  const picks=await reviewLearningBaseMatches(m.rows,year,m.labels||{});
   if(!picks)return null;
   const save=await apiRequest("/api/learning-bases/import",{method:"POST",body:{academic_year:year,mode:"save",rows:picks}});
   const skipped=m.rows.filter(r=>r.status==="none"||(r.status==="fuzzy"&&!picks.some(p=>p.row===r.row))).map(r=>`แถว ${r.row}: ${r.name} (${r.grade_level}/${r.classroom}) — ไม่ได้จับคู่กับทะเบียนนักเรียน`);
   if(save.new_bases?.length)skipped.unshift(`สร้างฐานใหม่ในปี ${year}: ${save.new_bases.join(", ")}`);
   return {saved:Number(save.saved||0),skipped};
 }
-function reviewLearningBaseMatches(rows,year){
+function reviewLearningBaseMatches(rows,year,labels){
+  const fl=list=>(list||[]).map(f=>labels[f]||f).join(", ");
   return new Promise(resolve=>{
     const exact=rows.filter(r=>r.status==="exact"),fuzzy=rows.filter(r=>r.status==="fuzzy"),none=rows.filter(r=>r.status==="none");
     const box=document.createElement("div");box.className="lbm";
     box.innerHTML=`<style>.lbm{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(21,35,50,.35)}.lbm>div{width:100%;max-width:720px;max-height:92vh;display:flex;flex-direction:column;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(20,40,70,.25)}.lbm header,.lbm footer{padding:16px 18px}.lbm header h3{margin:0}.lbm header p{margin:4px 0 0;color:var(--color-text-muted);font-size:13px}.lbm .bd{overflow:auto;padding:0 18px;display:grid;gap:8px}.lbm .it{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--color-border);border-radius:12px}.lbm .it b{font-size:14px}.lbm .it small{color:var(--color-text-muted)}.lbm select{width:100%;padding:8px 10px;border:1px solid var(--color-border);border-radius:10px;font:inherit;font-size:16px}.lbm h4{margin:10px 0 2px;font-size:14px}.lbm footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;border-top:1px solid var(--color-border)}.lbm footer .btn{width:auto}@media(max-width:640px){.lbm footer .btn{flex:1}}</style>
-    <div role="dialog" aria-modal="true"><header><h3>ตรวจการจับคู่รายชื่อ ปีการศึกษา ${esc(year)}</h3><p>ตรงกับทะเบียน ${exact.length} คน · ชื่อใกล้เคียง ${fuzzy.length} คน (เลือกด้านล่าง) · ไม่พบในทะเบียน ${none.length} คน (ข้าม)</p></header>
-    <div class="bd">${fuzzy.length?`<h4>ชื่อใกล้เคียงในห้องเดียวกัน — เลือกคนที่ถูกต้อง</h4>`+fuzzy.map(r=>`<div class="it"><b>${esc(r.name)}</b><small>ในไฟล์: ${esc(r.grade_level)}/${esc(r.classroom)} · ฐาน ${esc(r.base)}</small><select data-row="${r.row}"><option value="">ไม่บันทึกแถวนี้</option>${r.candidates.map((c,i)=>`<option value="${c.id}"${i===0&&c.score>=80?" selected":""}>${esc(c.full_name)} (${esc(c.room)}) · คล้าย ${c.score}%</option>`).join("")}</select></div>`).join(""):""}
+    <div role="dialog" aria-modal="true"><header><h3>ตรวจการจับคู่รายชื่อ ปีการศึกษา ${esc(year)}</h3><p>ตรงกับทะเบียนหลายช่อง ${exact.length} คน · ข้อมูลไม่ตรงพอ ${fuzzy.length} คน (เลือกด้านล่าง) · ไม่พบในทะเบียน ${none.length} คน (ข้าม)<br>จับคู่อัตโนมัติเฉพาะคนที่ตรง ≥ 3 ช่อง ไม่มีช่องขัดกัน และเลขประจำตัวหรือชื่อตรง</p></header>
+    <div class="bd">${fuzzy.length?`<h4>ข้อมูลไม่ตรงพอ — ตรวจแล้วเลือกคนที่ถูกต้อง</h4>`+fuzzy.map(r=>`<div class="it"><b>${esc(r.name)}</b><small>ในไฟล์: ${esc(r.grade_level)}/${esc(r.classroom)} · ฐาน ${esc(r.base)}</small><select data-row="${r.row}"><option value="">ไม่บันทึกแถวนี้</option>${r.candidates.map(c=>`<option value="${c.id}">${esc(c.full_name)} (${esc(c.room)}) · ตรง: ${esc(fl(c.matched)||"-")}${c.conflicts?.length?` · ไม่ตรง: ${esc(fl(c.conflicts))}`:""}</option>`).join("")}</select>${r.candidates.map(c=>`<small>${esc(c.full_name)} (${esc(c.room)}) — <span style="color:#1f7a50">ตรง: ${esc(fl(c.matched)||"-")}</span>${c.conflicts?.length?` · <span style="color:#a33a49">ไม่ตรง: ${esc(fl(c.conflicts))}</span>`:""}</small>`).join("")}</div>`).join(""):""}
     ${none.length?`<h4>ไม่พบในทะเบียนนักเรียน (จะข้าม)</h4>`+none.map(r=>`<div class="it"><b>${esc(r.name)}</b><small>${esc(r.grade_level)}/${esc(r.classroom)} · ฐาน ${esc(r.base)}</small></div>`).join(""):""}
     ${!fuzzy.length&&!none.length?'<p>ทุกแถวตรงกับทะเบียนนักเรียน</p>':""}</div>
     <footer><button class="btn btn-ghost" type="button" data-x>ยกเลิก</button><button class="btn btn-primary" type="button" data-ok>บันทึก</button></footer></div>`;
