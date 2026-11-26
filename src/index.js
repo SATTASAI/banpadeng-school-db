@@ -31,6 +31,7 @@ import { handleNotifications } from './routes/notifications.js';
 import { handlePendingWork } from './routes/pending-work.js';
 import { handleStudentDeletionRoute } from './routes/student-deletion.js';
 import { handleStudentInsuranceRoute } from './routes/student-insurance.js';
+import { handleLearningBasesRoute } from './routes/learning-bases.js';
 import { handleScholarshipRoute, handleScholarshipVendor } from './routes/scholarships.js';
 import { handleMeritRoute } from './routes/student-merit.js';
 import { handleTeacherRecordsRoute } from './routes/teacher-records.js';
@@ -4982,6 +4983,8 @@ const app = {
 
       const studentInsuranceResponse = await handleStudentInsuranceRoute(request, env, pathname, method);
       if (studentInsuranceResponse) return studentInsuranceResponse;
+      const learningBasesResponse = await handleLearningBasesRoute(request, env, pathname, method);
+      if (learningBasesResponse) return learningBasesResponse;
       const scholarshipResponse = await handleScholarshipRoute(request, env, pathname, method);
       if (scholarshipResponse) return scholarshipResponse;
       const meritResponse = await handleMeritRoute(request, env, pathname, method, TEACHING_WORKS_DRIVE);
