@@ -46,15 +46,25 @@ test("balanced spreads grades and gender evenly; same seed gives the same result
   }
 });
 
-test("whole_room keeps rooms together; by_grade groups a grade; keep_previous keeps last year's base", () => {
+test("whole_room keeps rooms together; by_grade groups a grade", () => {
   const students = fakeStudents();
   const room = assignLearningBases({ students, bases: bases(12), method: "whole_room", seed: 1 });
   for (let g = 1; g <= 6; g++) for (const r of ["1", "2"]) assert.equal(new Set(students.filter((s) => s.grade === g && s.room === r).map((s) => room.assignments.get(s.id))).size, 1);
   const grade = assignLearningBases({ students, bases: bases(6, { capacity: 20 }), method: "by_grade", seed: 1 });
   for (let g = 1; g <= 6; g++) assert.equal(new Set(students.filter((s) => s.grade === g).map((s) => grade.assignments.get(s.id))).size, 1);
-  const prev = students.map((s) => ({ ...s, prev_base_name: s.id <= 5 ? "ฐาน3" : "" }));
-  const keep = assignLearningBases({ students: prev, bases: bases(6), method: "keep_previous", seed: 1 });
-  for (let id = 1; id <= 5; id++) assert.equal(keep.assignments.get(id), 3);
+  assert(!("keep_previous" in ASSIGN_METHODS));
+});
+
+test("no method puts a student back into a base they attended before", () => {
+  const students = fakeStudents().map((s) => ({ ...s, blocked: new Set(s.id % 3 ? [1, 2] : [3]) }));
+  for (const method of Object.keys(ASSIGN_METHODS)) {
+    const { assignments, unplaced } = assignLearningBases({ students, bases: bases(6, { capacity: 22 }), method, seed: 11 });
+    assert.equal(unplaced.length, 0, method);
+    for (const s of students) assert(!s.blocked.has(assignments.get(s.id)), `${method} student ${s.id}`);
+  }
+  // ทุกฐานเคยอยู่หมดแล้ว → ไม่จัด (รายงานเป็นคนที่ไม่มีที่)
+  const r = assignLearningBases({ students: [{ id: 1, grade: 1, room: "1", gender: "M", blocked: new Set([1, 2]) }], bases: bases(2), method: "balanced", seed: 1 });
+  assert.deepEqual(r.unplaced, [1]);
 });
 
 test("fixed students count toward capacity; full bases leave students unplaced", () => {
@@ -183,4 +193,30 @@ test("export builds base, room and summary sections; menu is under support", () 
   const html = fs.readFileSync("public/dashboard.html", "utf8");
   assert(html.split("ระบบสนับสนุน</div>")[1].split("บริหารระบบ</div>")[0].includes('data-page="learning-base-list"'));
   for (const page of ["public/learning-base-list.html", "public/learning-bases.html"]) assert(fs.readFileSync(page, "utf8").includes("/js/learning-base-export.js"));
+});
+
+test("API blocks repeating a past base (by lineage even after rename, or by same name)", async () => {
+  const env = environment();
+  await api(env, 1, "/api/learning-bases?academic_year=2568"); // สร้างตาราง
+  env.db.exec(`INSERT INTO learning_bases (id, academic_year, name, grades, sort_order) VALUES (900, 2568, 'ดนตรีไทย', '1,2,3,4,5,6', 1), (901, 2568, 'Barber', '1,2,3,4,5,6', 2);
+    INSERT INTO learning_base_members (student_id, academic_year, base_id, grade_level, classroom) VALUES (12, 2568, 900, 'ป.5', '2'), (10, 2568, 901, 'อ.3', '1');`);
+  let r = await api(env, 1, "/api/learning-bases");
+  assert.deepEqual(r.data.bases.map((b) => b.name), ["ดนตรีไทย", "Barber"]); // ปีใหม่คัดลอกฐานจากปีก่อน
+  const [thai, barber] = r.data.bases;
+  assert.deepEqual(r.data.history["12"].blocked, [thai.id]);
+  // เปลี่ยนชื่อฐานปีนี้ ก็ยังนับว่าเป็นฐานเดิม
+  await api(env, 1, "/api/learning-bases/bases", "PUT", { academic_year: 2569, bases: [{ ...thai, name: "ดนตรีไทยสร้างสรรค์" }, barber] });
+  r = await api(env, 1, "/api/learning-bases/members", "PUT", { academic_year: 2569, student_id: 12, base_id: thai.id });
+  assert.equal(r.status, 400);
+  assert.match(r.data.error, /ห้ามซ้ำฐานเดิม/);
+  r = await api(env, 1, "/api/learning-bases/members", "PUT", { academic_year: 2569, student_id: 12, base_id: barber.id });
+  assert.equal(r.status, 200);
+  // จัดอัตโนมัติไม่ใส่ซ้ำ
+  for (const method of ["balanced", "random", "by_grade", "whole_room"]) {
+    const a = await api(env, 1, "/api/learning-bases/auto", "POST", { academic_year: 2569, method, keep_locked: false, seed: 3 });
+    const got = new Map(a.data.assignments.map((x) => [x.student_id, x.base_id]));
+    assert.notEqual(got.get(12), thai.id, method);
+    assert.notEqual(got.get(10), barber.id, method);
+  }
+  assert.equal((await api(env, 1, "/api/learning-bases/auto", "POST", { academic_year: 2569, method: "keep_previous" })).status, 400);
 });

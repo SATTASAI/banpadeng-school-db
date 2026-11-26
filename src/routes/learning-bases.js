@@ -31,6 +31,9 @@ export async function ensureLearningBaseSchema(env) {
       PRIMARY KEY (student_id, academic_year))`,
     "CREATE INDEX IF NOT EXISTS idx_learning_base_members_year ON learning_base_members(academic_year, base_id)",
   ]) await env.DB.prepare(sql).run();
+  // lineage_id = ฐานต้นทางปีแรก (คัดลอกข้ามปี) ใช้ตรวจ "ห้ามซ้ำฐานเดิมจนจบ ป.6" แม้เปลี่ยนชื่อฐาน
+  const { results: cols } = await env.DB.prepare("PRAGMA table_info(learning_bases)").all();
+  if (!(cols || []).some((c) => c.name === "lineage_id")) await env.DB.prepare("ALTER TABLE learning_bases ADD COLUMN lineage_id INTEGER").run();
   ready.add(env.DB);
 }
 
@@ -97,17 +100,35 @@ async function seedYear(env, year, userId) {
   const prev = await env.DB.prepare("SELECT MAX(academic_year) AS y FROM learning_bases WHERE academic_year < ?").bind(year).first();
   let rows;
   if (prev?.y) {
-    const { results } = await env.DB.prepare("SELECT name, capacity, grades, sort_order FROM learning_bases WHERE academic_year = ? AND active = 1 ORDER BY sort_order, id").bind(prev.y).all();
+    const { results } = await env.DB.prepare("SELECT name, capacity, grades, sort_order, COALESCE(lineage_id, id) AS lineage FROM learning_bases WHERE academic_year = ? AND active = 1 ORDER BY sort_order, id").bind(prev.y).all();
     rows = results || [];
   }
   if (!rows?.length) rows = DEFAULT_BASES.map((name, i) => ({ name, capacity: null, grades: ALL_GRADES.join(","), sort_order: i + 1 }));
-  await env.DB.batch(rows.map((r) => env.DB.prepare(`INSERT OR IGNORE INTO learning_bases (academic_year, name, capacity, grades, sort_order, updated_by) VALUES (?,?,?,?,?,?)`)
-    .bind(year, r.name, r.capacity ?? null, r.grades || ALL_GRADES.join(","), r.sort_order || 0, userId)));
+  await env.DB.batch(rows.map((r) => env.DB.prepare(`INSERT OR IGNORE INTO learning_bases (academic_year, name, capacity, grades, sort_order, lineage_id, updated_by) VALUES (?,?,?,?,?,?,?)`)
+    .bind(year, r.name, r.capacity ?? null, r.grades || ALL_GRADES.join(","), r.sort_order || 0, r.lineage ?? null, userId)));
 }
 
 async function loadBases(env, year) {
-  const { results } = await env.DB.prepare("SELECT id, name, capacity, grades, sort_order FROM learning_bases WHERE academic_year = ? AND active = 1 ORDER BY sort_order, id").bind(year).all();
-  return (results || []).map((b) => ({ id: b.id, name: b.name, capacity: b.capacity == null ? null : Number(b.capacity), grades: parseGrades(b.grades), sort_order: b.sort_order }));
+  const { results } = await env.DB.prepare("SELECT id, name, capacity, grades, sort_order, COALESCE(lineage_id, id) AS lineage FROM learning_bases WHERE academic_year = ? AND active = 1 ORDER BY sort_order, id").bind(year).all();
+  return (results || []).map((b) => ({ id: b.id, name: b.name, capacity: b.capacity == null ? null : Number(b.capacity), grades: parseGrades(b.grades), sort_order: b.sort_order, lineage: Number(b.lineage) }));
+}
+
+const nameKey = (v) => String(v ?? "").replace(/\s+/g, "").toLowerCase();
+// ห้ามซ้ำฐานเดิมจนจบ ป.6: ฐานปีนี้ที่นักเรียนเคยอยู่ในปีก่อน ๆ (จับคู่ฐานต้นทางหรือชื่อเดียวกัน)
+// คืน Map(student_id → { blocked:Set(base_id ปีนี้), past:[{year,name}] })
+async function pastBases(env, year, bases) {
+  const { results } = await env.DB.prepare(`SELECT m.student_id, m.academic_year, b.name, COALESCE(b.lineage_id, b.id) AS lineage
+    FROM learning_base_members m JOIN learning_bases b ON b.id = m.base_id WHERE m.academic_year < ? ORDER BY m.academic_year`).bind(year).all();
+  const byLineage = new Map(), byName = new Map();
+  for (const b of bases) { byLineage.set(b.lineage, b.id); byName.set(nameKey(b.name), b.id); }
+  const map = new Map();
+  for (const r of results || []) {
+    if (!map.has(r.student_id)) map.set(r.student_id, { blocked: new Set(), past: [] });
+    const x = map.get(r.student_id);
+    x.past.push({ year: Number(r.academic_year), name: r.name });
+    for (const id of [byLineage.get(Number(r.lineage)), byName.get(nameKey(r.name))]) if (id) x.blocked.add(id);
+  }
+  return map;
 }
 
 // นักเรียนปัจจุบัน ป.1–6 ที่กำลังศึกษา (ทะเบียนกลาง)
@@ -140,12 +161,19 @@ async function handleList(request, env, user, perm) {
   if (year === current) students = (await currentStudents(env)).map(publicStudent);
   else students = members.map((m) => ({ id: m.student_id, student_code: m.student_code, full_name: m.full_name, grade_level: m.grade_level, classroom: m.classroom, gender: genderOf(null, m.full_name) }));
   const { results: yearRows } = await env.DB.prepare("SELECT DISTINCT academic_year FROM learning_bases ORDER BY academic_year DESC").all();
+  // ผู้จัดฐาน: ฐานที่นักเรียนแต่ละคนเคยอยู่ (ซ่อนจากตัวเลือก เพราะห้ามซ้ำจนจบ ป.6)
+  let history;
+  if (perm.manage && year === current) {
+    history = {};
+    for (const [sid, x] of await pastBases(env, year, bases)) history[sid] = { blocked: [...x.blocked], past: x.past };
+  }
   return jsonResponse({
     academic_year: year, current_year: current,
     years: [...new Set([current, ...(yearRows || []).map((r) => Number(r.academic_year))])].sort((a, b) => b - a),
     bases, students,
     members: members.map((m) => ({ student_id: m.student_id, base_id: m.base_id, locked: Number(m.locked), method: m.method })),
     methods: ASSIGN_METHODS,
+    ...(history ? { history } : {}),
     permissions: { manage: perm.manage && year === current },
   });
 }
@@ -249,13 +277,8 @@ async function handleAuto(request, env, user) {
     if (!studentIds.has(m.student_id) || !baseIds.has(m.base_id)) continue;
     if (scope === "unassigned" || (keepLocked && Number(m.locked))) fixed.set(m.student_id, m.base_id);
   }
-  let prev = new Map();
-  if (method === "keep_previous") {
-    const { results } = await env.DB.prepare(`SELECT m.student_id, b.name FROM learning_base_members m JOIN learning_bases b ON b.id = m.base_id
-      WHERE m.academic_year = ?`).bind(year - 1).all();
-    prev = new Map((results || []).map((r) => [r.student_id, String(r.name)]));
-  }
-  const input = students.map((s) => ({ id: s.id, grade: s.grade, room: String(s.classroom ?? "").trim(), gender: s.sex, prev_base_name: prev.get(s.id) || "" }));
+  const history = await pastBases(env, year, bases);
+  const input = students.map((s) => ({ id: s.id, grade: s.grade, room: String(s.classroom ?? "").trim(), gender: s.sex, blocked: history.get(s.id)?.blocked }));
   const { assignments, unplaced } = assignLearningBases({ students: input, bases, fixed, method, seed });
   const result = { ok: true, seed, method, scope, placed: assignments.size, kept: fixed.size, unplaced: unplaced.length,
     assignments: [...assignments].map(([student_id, base_id]) => ({ student_id, base_id })), unplaced_ids: unplaced };
@@ -292,6 +315,11 @@ async function handleSetMember(request, env, user) {
   const base = (await loadBases(env, year)).find((b) => b.id === Number(body.base_id));
   if (!base) return jsonResponse({ error: "ไม่พบฐานการเรียนรู้" }, 404);
   if (!base.grades.includes(student.grade)) return jsonResponse({ error: `ฐาน "${base.name}" ไม่รับชั้น ป.${student.grade}` }, 400);
+  const past = (await pastBases(env, year, [base])).get(studentId);
+  if (past?.blocked.has(base.id)) {
+    const when = past.past.filter((p) => nameKey(p.name) === nameKey(base.name)).map((p) => p.year).join(", ");
+    return jsonResponse({ error: `นักเรียนเคยอยู่ฐาน "${base.name}" แล้ว${when ? ` (ปี ${when})` : ""} — ห้ามซ้ำฐานเดิมจนจบ ป.6`, repeat: true }, 400);
+  }
   if (base.capacity && !body.force) {
     const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM learning_base_members WHERE academic_year = ? AND base_id = ? AND student_id <> ?").bind(year, base.id, studentId).first();
     if (Number(row?.n) >= base.capacity) return jsonResponse({ error: `ฐาน "${base.name}" เต็มแล้ว (${base.capacity} คน)`, full: true }, 409);
