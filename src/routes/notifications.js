@@ -113,9 +113,9 @@ function feed(env,user,personnelHead,director,tables=new Set(),forLine=false,for
  // that limit, including the two optional message sources.
  const sql=`WITH primary_messages AS (
  SELECT 'project:'||n.id message_key,'โครงการ: '||p.name title,v.message message,v.created_at created_at,
- CASE WHEN v.event_type='receive' AND EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=n.user_id AND a.role_key IN ('procurement_officer','procurement_officer_2') AND a.department='') THEN '/procurement.html?expense='||v.expense_id WHEN n.audience IN ('finance','notice_finance') THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
+ CASE WHEN v.event_type='receive' AND EXISTS(SELECT 1 FROM budget_role_assignments a WHERE a.user_id=n.user_id AND a.role_key IN ('procurement_officer','procurement_officer_2') AND a.department='') THEN '/procurement.html?expense='||v.expense_id WHEN n.audience='notice_procurement' THEN '/api/project-documents/requests/'||v.expense_id||'/memo' WHEN n.audience IN ('finance','notice_finance') THEN '/budget.html?view=otherProjects&project='||p.id ELSE '/project-documents.html?project='||p.id END url,n.read_at read_at,
  v.actor_id actor_id,
- CASE WHEN n.audience IN ('notice','notice_finance') THEN 0 WHEN n.audience<>'finance' THEN 1
+ CASE WHEN n.audience IN ('notice','notice_finance','notice_procurement') THEN 0 WHEN n.audience<>'finance' THEN 1
   WHEN EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='' AND f.user_id=n.user_id) THEN 1
   WHEN NOT EXISTS(SELECT 1 FROM budget_role_assignments f WHERE f.role_key IN ${FINANCE_ROLE_SQL} AND f.department='') AND ?=1 THEN 1 ELSE 0 END line_ok
  FROM project_notifications n JOIN project_workflow_events v ON v.token=n.event_token JOIN projects p ON p.id=v.project_id WHERE n.user_id=?
