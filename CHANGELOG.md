@@ -17,7 +17,7 @@
 - **ขนาด:** เล็ก
 - คำขอเบิกจ่ายโครงการ: เมื่อ ผอ. อนุมัติ ส่งเอกสารให้**หัวหน้าเจ้าหน้าที่พัสดุ**ทางกระดิ่ง + Web Push (audience ใหม่ `notice_procurement` ลิงก์เปิดบันทึกข้อความ ไม่ส่ง LINE) · ไม่เพิ่มขั้นตอนใน flow
 - ข้อมูลจริง (ตามคำสั่ง): หัวหน้าเจ้าหน้าที่พัสดุ = นายวิภูสิต ตู้ประดับ, เจ้าหน้าที่พัสดุ = ครูสุภาพร หวานใจ คนเดียว (เอาเจ้าหน้าที่พัสดุคนที่ 2 ออก)
-- test เพิ่มใน `tests/project-signoffs.test.mjs` · เอกสาร `docs/project-disbursement-workflow.md`
+- test เพิ่มใน `tests/project-signoffs.test.mjs` · แก้ `tests/personnel-center.test.mjs` ให้ผ่านในวันเสาร์-อาทิตย์ (ลาวันนี้นับ 0 วันหยุด) · เอกสาร `docs/project-disbursement-workflow.md`
 
 ### Patch 1.4.53 — 27 พฤศจิกายน 2569
 
