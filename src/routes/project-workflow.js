@@ -394,6 +394,9 @@ async function action(request, env, user, id) {
         SELECT e.token,u.id,'owners' FROM project_workflow_events e JOIN project_expenses x ON x.id=e.expense_id
         JOIN users u ON u.id=x.created_by AND u.status='active' AND u.deleted_at IS NULL WHERE e.token=?`).bind(token));
       notices.push(ownersNoticeStatement(env, token));
+      // ส่งเอกสารที่ ผอ. อนุมัติแล้วให้หัวหน้าเจ้าหน้าที่พัสดุ (กระดิ่ง + Web Push ลิงก์ไปบันทึกข้อความ)
+      const {results:heads} = await env.DB.prepare("SELECT a.user_id FROM budget_role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_key='procurement_head' AND a.department='' AND u.status='active' AND u.deleted_at IS NULL").all();
+      notices.push(noticeStatement(env, token, heads.map((h) => h.user_id), "notice_procurement"));
     } else {
       const note = clean(body.review_note);
       if (!note) return jsonResponse({ error: "กรุณาระบุเหตุผล" },400);

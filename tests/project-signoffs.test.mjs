@@ -35,6 +35,8 @@ function addApprovers(env){env.raw.exec(`INSERT INTO users(id,email,password_has
 
 test('six-step memo approval follows approver settings and fills the printed form',async()=>{
   const env=await fixture();addApprovers(env);
+  env.raw.exec(`INSERT INTO users(id,email,password_hash,password_salt,full_name,role) VALUES(12,'phead@test','x','x','หัวหน้าพัสดุ','teacher');
+    INSERT INTO budget_role_assignments(role_key,department,user_id,assigned_by) VALUES('procurement_head','',12,1);`);
   const id=(await call(env,2,'requests','POST',payload())).body.id;
   assert.equal((await action(env,2,id,'submit')).status,200);
   const notified=user=>assert.ok(env.raw.prepare('SELECT 1 FROM project_notifications WHERE user_id=? AND event_token=(SELECT token FROM project_workflow_events WHERE expense_id=? ORDER BY rowid DESC LIMIT 1)').get(user,id));
@@ -58,6 +60,9 @@ test('six-step memo approval follows approver settings and fills the printed for
   assert.equal((await action(env,10,id,'review_approve')).status,200);
   assert.equal(step(),'director_approval');notified(6);
   assert.equal((await action(env,6,id,'approve')).status,200);notified(3);
+  // หลัง ผอ. อนุมัติ ส่งเอกสารให้หัวหน้าเจ้าหน้าที่พัสดุ (กระดิ่ง/Push ไม่ใช่ LINE) และเปิดบันทึกข้อความได้
+  assert.equal(env.raw.prepare("SELECT n.audience FROM project_notifications n JOIN project_workflow_events e ON e.token=n.event_token WHERE e.expense_id=? AND e.event_type='approve' AND n.user_id=12").get(id)?.audience,'notice_procurement');
+  assert.equal((await memo(env,12,id)).status,200);
   const doc=await memo(env,2,id);assert.equal(doc.status,200);
   for(const name of ['นายหัวหน้า วิชาการ','นางสาวรอง วิชาการ','การเงิน','นางหัวหน้า งบประมาณ','นายรอง งบประมาณ','ผู้อำนวยการ','นายพัสดุ ทดสอบ','อ่านคล่อง','สองร้อยบาทถ้วน'])assert.ok(doc.text.includes(name),name);
   assert.equal((await memo(env,4,id)).status,403);

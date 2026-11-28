@@ -60,7 +60,8 @@ test("personnel overview summarizes profile readiness and existing workflows", a
   assert.equal(body.summary.complete_profiles, 1);
   assert.equal(body.summary.incomplete_profiles, 2);
   assert.equal(body.summary.pending_leave, 1);
-  assert.equal(body.summary.absent_today, 1);
+  const weekend = [0, 6].includes(new Date(Date.now() + 7 * 3600e3).getUTCDay()); // วันหยุดเสาร์-อาทิตย์ไม่นับลา
+  assert.equal(body.summary.absent_today, weekend ? 0 : 1);
   assert.equal(body.summary.overdue_tasks, 1);
   assert.deepEqual(body.work_by_topic.project, { total: 2, completed: 1, overdue: 0 });
   assert.deepEqual(body.work_by_topic["5"], { total: 2, completed: 1, overdue: 1 });
